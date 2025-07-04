@@ -1,0 +1,32 @@
+<resources>
+    <string name="app_name">MRGQ PDF Viewer</string>
+    
+    <!-- Main Activity -->
+    <string name="no_pdf_files">PDF 파일이 없습니다\nDownload 폴더에 PDF 파일을 추가하세요</string>
+    <string name="server_running">서버 실행 중: %s</string>
+    <string name="server_stopped">서버 중지됨</string>
+    <string name="web_server">웹 서버</string>
+    
+    <!-- PDF Viewer -->
+    <string name="page_info">%d / %d</string>
+    <string name="loading_pdf">PDF 로딩 중...</string>
+    <string name="error_loading_pdf">PDF 파일을 열 수 없습니다</string>
+    
+    <!-- Permissions -->
+    <string name="permission_required">파일 접근 권한이 필요합니다</string>
+    <string name="permission_denied">권한이 거부되었습니다</string>
+    
+    <!-- Content Descriptions -->
+    <string name="pdf_icon_desc">PDF 파일 아이콘</string>
+    <string name="previous_page">이전 페이지</string>
+    <string name="next_page">다음 페이지</string>
+    
+    <!-- Web Server -->
+    <string name="server_start_failed">서버 시작 실패</string>
+    <string name="server_started">웹 서버가 시작되었습니다</string>
+    <string name="server_stopped_message">웹 서버가 중지되었습니다</string>
+    
+    <!-- File Operations -->
+    <string name="file_uploaded">파일이 업로드되었습니다</string>
+    <string name="upload_failed">업로드 실패</string>
+</resources>
