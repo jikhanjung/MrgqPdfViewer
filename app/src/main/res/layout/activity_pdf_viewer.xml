@@ -13,6 +13,7 @@
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:scaleType="fitCenter"
+        android:background="@color/white"
         android:contentDescription="@string/app_name"
         android:focusable="true"
         android:focusableInTouchMode="true" />
@@ -39,5 +40,51 @@
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent" />
+
+    <LinearLayout
+        android:id="@+id/navigationGuide"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:background="@color/pdf_page_info_bg"
+        android:padding="@dimen/page_info_padding"
+        android:layout_margin="@dimen/page_info_margin"
+        android:visibility="gone"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintBottom_toBottomOf="parent">
+
+        <TextView
+            android:id="@+id/navigationTitle"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="파일 끝"
+            android:textColor="@color/white"
+            android:textSize="@dimen/page_info_text_size"
+            android:textStyle="bold"
+            android:gravity="center"
+            android:layout_marginBottom="8dp" />
+
+        <TextView
+            android:id="@+id/navigationMessage"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="마지막 페이지입니다."
+            android:textColor="@color/white"
+            android:textSize="14sp"
+            android:gravity="center"
+            android:layout_marginBottom="12dp" />
+
+        <TextView
+            android:id="@+id/navigationInstructions"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="→ 다음 파일로 이동\n← 파일 목록으로 돌아가기"
+            android:textColor="@color/white"
+            android:textSize="14sp"
+            android:gravity="center"
+            android:lineSpacingExtra="4dp" />
+
+    </LinearLayout>
 
 </androidx.constraintlayout.widget.ConstraintLayout>

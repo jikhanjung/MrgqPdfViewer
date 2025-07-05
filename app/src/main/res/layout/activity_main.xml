@@ -36,10 +36,11 @@
             android:textSize="@dimen/body_text_size"
             android:layout_marginEnd="16dp" />
 
-        <com.google.android.material.materialswitch.MaterialSwitch
+        <androidx.appcompat.widget.SwitchCompat
             android:id="@+id/serverToggle"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
+            android:text=""
             android:focusable="true" />
 
     </LinearLayout>

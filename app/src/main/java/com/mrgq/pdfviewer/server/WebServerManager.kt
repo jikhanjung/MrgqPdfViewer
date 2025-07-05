@@ -9,6 +9,9 @@ import java.io.FileOutputStream
 import java.net.InetAddress
 import java.net.NetworkInterface
 import java.util.*
+import kotlin.math.floor
+import kotlin.math.ln
+import kotlin.math.pow
 
 class WebServerManager {
     
@@ -16,20 +19,33 @@ class WebServerManager {
     
     fun startServer(context: Context, callback: (Boolean) -> Unit) {
         try {
-            if (server == null) {
-                server = PdfUploadServer(context, 8080)
-            }
+            // Stop any existing server first
+            stopServer()
+            
+            // Create and start new server
+            server = PdfUploadServer(context, 8080)
             server?.start()
             callback(true)
         } catch (e: Exception) {
             Log.e("WebServerManager", "Failed to start server", e)
+            // Clean up on failure
+            server = null
             callback(false)
         }
     }
     
     fun stopServer() {
-        server?.stop()
-        server = null
+        try {
+            server?.stop()
+        } catch (e: Exception) {
+            Log.e("WebServerManager", "Error stopping server", e)
+        } finally {
+            server = null
+        }
+    }
+    
+    fun isServerRunning(): Boolean {
+        return server?.isAlive == true
     }
     
     fun getServerAddress(): String {
@@ -67,10 +83,12 @@ class WebServerManager {
         }
         
         override fun serve(session: IHTTPSession): Response {
-            return when (session.method) {
-                Method.GET -> handleGetRequest()
-                Method.POST -> handlePostRequest(session)
-                else -> newFixedLengthResponse(Response.Status.METHOD_NOT_ALLOWED, MIME_PLAINTEXT, "Method not allowed")
+            return when {
+                session.method == Method.GET && session.uri == "/" -> handleGetRequest()
+                session.method == Method.GET && session.uri == "/list" -> handleListRequest()
+                session.method == Method.DELETE && session.uri.startsWith("/delete/") -> handleDeleteRequest(session)
+                session.method == Method.POST && session.uri == "/upload" -> handlePostRequest(session)
+                else -> newFixedLengthResponse(Response.Status.NOT_FOUND, MIME_PLAINTEXT, "Not found")
             }
         }
         
@@ -99,8 +117,21 @@ class WebServerManager {
                             border-radius: 12px;
                             padding: 40px;
                             box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
-                            max-width: 500px;
+                            max-width: 1200px;
                             width: 100%;
+                        }
+                        .main-content {
+                            display: flex;
+                            gap: 40px;
+                            align-items: flex-start;
+                        }
+                        .upload-section {
+                            flex: 1;
+                            min-width: 450px;
+                        }
+                        .file-list-section {
+                            flex: 1;
+                            min-width: 450px;
                         }
                         h1 {
                             color: #007aff;
@@ -168,35 +199,177 @@ class WebServerManager {
                         }
                         .message {
                             margin-top: 20px;
-                            padding: 12px;
-                            border-radius: 6px;
+                            padding: 16px 20px;
+                            border-radius: 8px;
                             text-align: center;
+                            font-weight: 500;
+                            font-size: 16px;
+                            border: 2px solid;
+                            animation: slideDown 0.3s ease;
                         }
                         .success {
-                            background-color: #30d158;
-                            color: white;
+                            background-color: rgba(48, 209, 88, 0.1);
+                            color: #30d158;
+                            border-color: #30d158;
                         }
                         .error {
+                            background-color: rgba(255, 59, 48, 0.1);
+                            color: #ff3b30;
+                            border-color: #ff3b30;
+                        }
+                        @keyframes slideDown {
+                            from {
+                                opacity: 0;
+                                transform: translateY(-10px);
+                            }
+                            to {
+                                opacity: 1;
+                                transform: translateY(0);
+                            }
+                        }
+                        .file-list-container {
+                            margin-top: 0;
+                            padding: 0;
+                            border-top: none;
+                            height: 100%;
+                        }
+                        .file-list-section h2 {
+                            color: #007aff;
+                            margin-top: 0;
+                            margin-bottom: 20px;
+                        }
+                        .file-list-header {
+                            display: flex;
+                            justify-content: space-between;
+                            align-items: center;
+                            margin-bottom: 20px;
+                        }
+                        .file-list-container h2 {
+                            color: #007aff;
+                            margin: 0;
+                        }
+                        .sort-controls {
+                            display: flex;
+                            gap: 10px;
+                        }
+                        .sort-btn {
+                            padding: 8px 16px;
+                            background-color: #48484a;
+                            color: #ffffff;
+                            border: none;
+                            border-radius: 4px;
+                            cursor: pointer;
+                            font-size: 14px;
+                            transition: background-color 0.3s ease;
+                        }
+                        .sort-btn:hover {
+                            background-color: #5a5a5c;
+                        }
+                        .sort-btn.active {
+                            background-color: #007aff;
+                        }
+                        .current-file-item {
+                            display: flex;
+                            justify-content: space-between;
+                            align-items: center;
+                            padding: 12px;
+                            margin: 8px 0;
+                            background-color: #3a3a3c;
+                            border-radius: 6px;
+                            transition: background-color 0.3s ease;
+                        }
+                        .current-file-item:hover {
+                            background-color: #48484a;
+                        }
+                        .file-info {
+                            flex: 1;
+                        }
+                        .file-name {
+                            font-weight: bold;
+                            margin-bottom: 4px;
+                        }
+                        .file-meta {
+                            font-size: 14px;
+                            color: #8e8e93;
+                        }
+                        .delete-btn {
+                            padding: 8px 16px;
                             background-color: #ff3b30;
                             color: white;
+                            border: none;
+                            border-radius: 4px;
+                            cursor: pointer;
+                            transition: background-color 0.3s ease;
+                        }
+                        .delete-btn:hover {
+                            background-color: #ff2d20;
+                        }
+                        .empty-message {
+                            text-align: center;
+                            color: #8e8e93;
+                            padding: 40px;
+                        }
+                        .file-list-content {
+                            max-height: 600px;
+                            overflow-y: auto;
+                            padding-right: 10px;
+                        }
+                        .file-list-content::-webkit-scrollbar {
+                            width: 8px;
+                        }
+                        .file-list-content::-webkit-scrollbar-track {
+                            background: #48484a;
+                            border-radius: 4px;
+                        }
+                        .file-list-content::-webkit-scrollbar-thumb {
+                            background: #007aff;
+                            border-radius: 4px;
+                        }
+                        @media (max-width: 1000px) {
+                            .main-content {
+                                flex-direction: column;
+                            }
+                            .upload-section, .file-list-section {
+                                min-width: auto;
+                            }
                         }
                     </style>
                 </head>
                 <body>
                     <div class="container">
-                        <h1>PDF 파일 업로드</h1>
-                        <form id="uploadForm" enctype="multipart/form-data">
-                            <div class="upload-area">
-                                <label for="fileInput" class="upload-label">
-                                    PDF 파일 선택
-                                </label>
-                                <input type="file" id="fileInput" name="files" accept=".pdf" multiple>
-                                <p>또는 파일을 여기로 드래그하세요</p>
+                        <h1>PDF 파일 관리</h1>
+                        <div class="main-content">
+                            <div class="file-list-section">
+                                <div class="file-list-container">
+                                    <div class="file-list-header">
+                                        <h2>현재 파일 목록</h2>
+                                        <div class="sort-controls">
+                                            <button class="sort-btn active" id="sortByName">이름순</button>
+                                            <button class="sort-btn" id="sortByTime">시간순</button>
+                                        </div>
+                                    </div>
+                                    <div class="file-list-content">
+                                        <div id="currentFiles"></div>
+                                    </div>
+                                </div>
                             </div>
-                            <div id="fileList" class="file-list" style="display: none;"></div>
-                            <button type="submit" class="submit-btn" disabled>업로드</button>
-                        </form>
-                        <div id="message"></div>
+                            
+                            <div class="upload-section">
+                                <h2>파일 업로드</h2>
+                                <form id="uploadForm" enctype="multipart/form-data" accept-charset="UTF-8">
+                                    <div class="upload-area">
+                                        <label for="fileInput" class="upload-label">
+                                            PDF 파일 선택
+                                        </label>
+                                        <input type="file" id="fileInput" name="files" accept=".pdf" multiple>
+                                        <p>또는 파일을 여기로 드래그하세요</p>
+                                    </div>
+                                    <div id="fileList" class="file-list" style="display: none;"></div>
+                                    <button type="submit" class="submit-btn" disabled>업로드</button>
+                                </form>
+                                <div id="message"></div>
+                            </div>
+                        </div>
                     </div>
                     
                     <script>
@@ -206,10 +379,31 @@ class WebServerManager {
                         const uploadArea = document.querySelector('.upload-area');
                         const message = document.getElementById('message');
                         const form = document.getElementById('uploadForm');
+                        const sortByNameBtn = document.getElementById('sortByName');
+                        const sortByTimeBtn = document.getElementById('sortByTime');
                         
                         let selectedFiles = [];
+                        let currentFiles = [];
+                        let currentSortBy = 'name';
                         
                         fileInput.addEventListener('change', handleFileSelect);
+                        
+                        sortByNameBtn.addEventListener('click', () => {
+                            currentSortBy = 'name';
+                            updateSortButtons();
+                            displayFileList();
+                        });
+                        
+                        sortByTimeBtn.addEventListener('click', () => {
+                            currentSortBy = 'time';
+                            updateSortButtons();
+                            displayFileList();
+                        });
+                        
+                        function updateSortButtons() {
+                            sortByNameBtn.classList.toggle('active', currentSortBy === 'name');
+                            sortByTimeBtn.classList.toggle('active', currentSortBy === 'time');
+                        }
                         
                         uploadArea.addEventListener('dragover', (e) => {
                             e.preventDefault();
@@ -269,8 +463,14 @@ class WebServerManager {
                             if (selectedFiles.length === 0) return;
                             
                             const formData = new FormData();
-                            selectedFiles.forEach(file => {
-                                formData.append('files', file);
+                            selectedFiles.forEach((file, index) => {
+                                // Use simple index-based naming for upload
+                                const uploadName = 'file_' + index + '.pdf';
+                                const newFile = new File([file], uploadName, {type: file.type});
+                                formData.append('files', newFile);
+                                // Send original filename as Base64 encoded
+                                const base64Name = btoa(unescape(encodeURIComponent(file.name)));
+                                formData.append('filename_' + index, base64Name);
                             });
                             
                             submitBtn.disabled = true;
@@ -286,19 +486,80 @@ class WebServerManager {
                                 const result = await response.text();
                                 
                                 if (response.ok) {
-                                    message.innerHTML = '<div class="message success">업로드 성공!</div>';
+                                    message.innerHTML = '<div class="message success">✅ 업로드 성공!</div>';
                                     selectedFiles = [];
                                     fileInput.value = '';
                                     updateFileList();
                                 } else {
-                                    message.innerHTML = '<div class="message error">업로드 실패: ' + result + '</div>';
+                                    message.innerHTML = '<div class="message error">❌ 업로드 실패: ' + result + '</div>';
                                 }
                             } catch (error) {
-                                message.innerHTML = '<div class="message error">업로드 중 오류 발생</div>';
+                                message.innerHTML = '<div class="message error">❌ 업로드 중 오류 발생</div>';
                             } finally {
                                 submitBtn.textContent = '업로드';
+                                loadFileList();
                             }
                         });
+                        
+                        async function loadFileList() {
+                            try {
+                                const response = await fetch('/list');
+                                currentFiles = await response.json();
+                                displayFileList();
+                            } catch (e) {
+                                console.error('Failed to load file list:', e);
+                            }
+                        }
+                        
+                        function displayFileList() {
+                            const currentFilesDiv = document.getElementById('currentFiles');
+                            
+                            if (currentFiles.length === 0) {
+                                currentFilesDiv.innerHTML = '<div class="empty-message">업로드된 PDF 파일이 없습니다</div>';
+                                return;
+                            }
+                            
+                            // 정렬
+                            const sortedFiles = [...currentFiles];
+                            if (currentSortBy === 'name') {
+                                sortedFiles.sort((a, b) => a.name.localeCompare(b.name, 'ko'));
+                            } else {
+                                // 시간순 정렬 (최신순) - timestamp 사용
+                                sortedFiles.sort((a, b) => b.modifiedTimestamp - a.modifiedTimestamp);
+                            }
+                            
+                            currentFilesDiv.innerHTML = sortedFiles.map(file => `
+                                <div class="current-file-item">
+                                    <div class="file-info">
+                                        <div class="file-name">` + file.name + `</div>
+                                        <div class="file-meta">` + file.size + ` • ` + file.modified + `</div>
+                                    </div>
+                                    <button class="delete-btn" onclick="deleteFile('` + encodeURIComponent(file.name) + `')">삭제</button>
+                                </div>
+                            `).join('');
+                        }
+                        
+                        async function deleteFile(encodedFileName) {
+                            if (confirm('이 파일을 삭제하시겠습니까?')) {
+                                try {
+                                    const response = await fetch('/delete/' + encodedFileName, {
+                                        method: 'DELETE'
+                                    });
+                                    
+                                    if (response.ok) {
+                                        message.innerHTML = '<div class="message success">🗑️ 파일이 삭제되었습니다</div>';
+                                        loadFileList();
+                                    } else {
+                                        message.innerHTML = '<div class="message error">❌ 파일 삭제 실패</div>';
+                                    }
+                                } catch (e) {
+                                    message.innerHTML = '<div class="message error">❌ 삭제 중 오류 발생</div>';
+                                }
+                            }
+                        }
+                        
+                        // Load file list on page load
+                        loadFileList();
                     </script>
                 </body>
                 </html>
@@ -315,20 +576,47 @@ class WebServerManager {
                 val uploadedFiles = mutableListOf<String>()
                 
                 // Process uploaded files
+                var fileIndex = 0
                 for ((paramName, tempLocation) in files) {
-                    if (paramName.startsWith("files")) {
-                        val tempFile = File(tempLocation)
-                        val fileName = session.parms[paramName] ?: "uploaded.pdf"
-                        
-                        if (fileName.endsWith(".pdf", ignoreCase = true)) {
-                            val targetFile = saveFile(tempFile, fileName)
-                            if (targetFile != null) {
-                                uploadedFiles.add(fileName)
-                            }
+                    Log.d(TAG, "Processing file: $paramName at $tempLocation")
+                    
+                    val tempFile = File(tempLocation)
+                    
+                    // Look for Base64 encoded filename
+                    val filenameKey = "filename_$fileIndex"
+                    val base64Filename = session.parms[filenameKey]
+                    
+                    var fileName = "uploaded.pdf"
+                    
+                    if (!base64Filename.isNullOrBlank()) {
+                        try {
+                            // Decode Base64 filename
+                            val decodedBytes = android.util.Base64.decode(base64Filename, android.util.Base64.DEFAULT)
+                            fileName = String(decodedBytes, Charsets.UTF_8)
+                            Log.d(TAG, "Decoded Base64 filename: $fileName")
+                        } catch (e: Exception) {
+                            Log.e(TAG, "Failed to decode Base64 filename: $base64Filename", e)
+                            fileName = "uploaded_$fileIndex.pdf"
                         }
-                        
-                        tempFile.delete()
+                    } else {
+                        fileName = "uploaded_$fileIndex.pdf"
                     }
+                    
+                    // Ensure it's a PDF file
+                    if (!fileName.endsWith(".pdf", ignoreCase = true)) {
+                        fileName = "$fileName.pdf"
+                    }
+                    
+                    Log.d(TAG, "Saving file as: $fileName")
+                    
+                    fileIndex++
+                    
+                    val targetFile = saveFile(tempFile, fileName)
+                    if (targetFile != null) {
+                        uploadedFiles.add(fileName)
+                    }
+                    
+                    tempFile.delete()
                 }
                 
                 return if (uploadedFiles.isNotEmpty()) {
@@ -359,14 +647,85 @@ class WebServerManager {
             }
         }
         
+        private fun handleListRequest(): Response {
+            val pdfFiles = mutableListOf<Map<String, Any>>()
+            
+            // Get files from app directory
+            val pdfDir = File(context.getExternalFilesDir(null), "PDFs")
+            if (pdfDir.exists() && pdfDir.isDirectory) {
+                pdfDir.listFiles { file ->
+                    file.isFile && file.name.endsWith(".pdf", ignoreCase = true)
+                }?.forEach { file ->
+                    pdfFiles.add(mapOf(
+                        "name" to file.name,
+                        "size" to formatFileSize(file.length()),
+                        "modified" to java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.getDefault()).format(file.lastModified()),
+                        "modifiedTimestamp" to file.lastModified()
+                    ))
+                }
+            }
+            
+            // 기본적으로 이름순 정렬
+            pdfFiles.sortBy { it["name"] as String }
+            
+            val json = pdfFiles.map { file ->
+                """{"name":"${file["name"]}","size":"${file["size"]}","modified":"${file["modified"]}","modifiedTimestamp":${file["modifiedTimestamp"]}}"""
+            }.joinToString(",", "[", "]")
+            
+            return newFixedLengthResponse(Response.Status.OK, "application/json; charset=utf-8", json)
+        }
+        
+        private fun handleDeleteRequest(session: IHTTPSession): Response {
+            try {
+                val fileName = session.uri.substring("/delete/".length)
+                val decodedFileName = java.net.URLDecoder.decode(fileName, "UTF-8")
+                
+                val pdfDir = File(context.getExternalFilesDir(null), "PDFs")
+                val fileToDelete = File(pdfDir, decodedFileName)
+                
+                return if (fileToDelete.exists() && fileToDelete.isFile && fileToDelete.name.endsWith(".pdf", ignoreCase = true)) {
+                    if (fileToDelete.delete()) {
+                        // Refresh file list in MainActivity
+                        (context as? com.mrgq.pdfviewer.MainActivity)?.runOnUiThread {
+                            context.refreshFileList()
+                        }
+                        newFixedLengthResponse(Response.Status.OK, MIME_PLAINTEXT, "File deleted successfully")
+                    } else {
+                        newFixedLengthResponse(Response.Status.INTERNAL_ERROR, MIME_PLAINTEXT, "Failed to delete file")
+                    }
+                } else {
+                    newFixedLengthResponse(Response.Status.NOT_FOUND, MIME_PLAINTEXT, "File not found")
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error deleting file", e)
+                return newFixedLengthResponse(Response.Status.INTERNAL_ERROR, MIME_PLAINTEXT, "Error: ${e.message}")
+            }
+        }
+        
+        private fun formatFileSize(bytes: Long): String {
+            if (bytes == 0L) return "0 B"
+            val k = 1024
+            val sizes = arrayOf("B", "KB", "MB", "GB")
+            val i = floor(ln(bytes.toDouble()) / ln(k.toDouble())).toInt()
+            return String.format("%.2f %s", bytes / k.toDouble().pow(i.toDouble()), sizes[i])
+        }
+        
         private fun saveFile(tempFile: File, fileName: String): File? {
             return try {
-                val downloadDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
-                if (!downloadDir.exists()) {
-                    downloadDir.mkdirs()
+                // Use app's external files directory for Android 10+
+                val pdfDir = File(context.getExternalFilesDir(null), "PDFs")
+                if (!pdfDir.exists()) {
+                    pdfDir.mkdirs()
                 }
                 
-                val targetFile = File(downloadDir, fileName)
+                // Keep original filename including Korean characters
+                // Only remove dangerous characters like directory separators
+                val safeFileName = fileName
+                    .replace("/", "_")
+                    .replace("\\", "_")
+                    .replace("..", "_")
+                
+                val targetFile = File(pdfDir, safeFileName)
                 tempFile.inputStream().use { input ->
                     FileOutputStream(targetFile).use { output ->
                         input.copyTo(output)
