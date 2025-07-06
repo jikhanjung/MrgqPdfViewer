@@ -13,8 +13,8 @@ android {
         applicationId = "com.mrgq.pdfviewer"
         minSdk = 21
         targetSdk = 30  // Android TV OS 11
-        versionCode = 4
-        versionName = "0.1.4"
+        versionCode = 5
+        versionName = "0.1.5"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -98,6 +98,15 @@ dependencies {
     
     // HTTP Server for file upload
     implementation("org.nanohttpd:nanohttpd:2.3.1")
+    
+    // WebSocket for collaboration
+    implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    
+    // JSON processing for collaboration messages
+    implementation("com.google.code.gson:gson:2.10.1")
+    
+    // Network state handling
+    implementation("androidx.work:work-runtime-ktx:2.9.0")
     
     testImplementation("junit:junit:4.13.2")
     androidTestImplementation("androidx.test.ext:junit:1.1.5")

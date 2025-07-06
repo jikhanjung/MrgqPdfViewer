@@ -18,6 +18,7 @@ import kotlinx.coroutines.withContext
 import android.util.Log
 import android.content.SharedPreferences
 import android.util.DisplayMetrics
+import android.os.Environment
 import java.io.File
 
 class PdfViewerActivity : AppCompatActivity() {
@@ -42,6 +43,13 @@ class PdfViewerActivity : AppCompatActivity() {
     private var screenWidth = 0
     private var screenHeight = 0
     private lateinit var preferences: SharedPreferences
+    
+    // Collaboration
+    private var collaborationMode = CollaborationMode.NONE
+    private val globalCollaborationManager = GlobalCollaborationManager.getInstance()
+    
+    // Page caching for instant page switching
+    private var pageCache: PageCache? = null
     
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -87,6 +95,7 @@ class PdfViewerActivity : AppCompatActivity() {
         }
         
         setupUI()
+        initializeCollaboration()
         loadPdf()
     }
     
@@ -132,8 +141,27 @@ class PdfViewerActivity : AppCompatActivity() {
                 
                 withContext(Dispatchers.Main) {
                     if (pageCount > 0) {
+                        // Add file to server if in conductor mode
+                        if (collaborationMode == CollaborationMode.CONDUCTOR) {
+                            Log.d("PdfViewerActivity", "🎵 지휘자 모드: 파일을 서버에 추가 중...")
+                            globalCollaborationManager.addFileToServer(pdfFileName, pdfFilePath)
+                        }
+                        
+                        // Initialize page cache with proper scale calculation
+                        pageCache?.destroy() // Clean up previous cache
+                        
+                        // Calculate proper scale based on first page
+                        val firstPage = pdfRenderer!!.openPage(0)
+                        val calculatedScale = calculateOptimalScale(firstPage.width, firstPage.height)
+                        firstPage.close()
+                        
+                        pageCache = PageCache(pdfRenderer!!, screenWidth, screenHeight)
+                        Log.d("PdfViewerActivity", "PageCache 초기화 완료 (calculated scale: $calculatedScale)")
+                        
                         // Check if we should use two-page mode, then show first page
                         checkAndSetTwoPageMode {
+                            // Update cache settings based on mode and calculated scale
+                            pageCache?.updateSettings(isTwoPageMode, calculatedScale)
                             showPage(0)
                         }
                     } else {
@@ -287,6 +315,38 @@ class PdfViewerActivity : AppCompatActivity() {
         
         Log.d("PdfViewerActivity", "showPage called: index=$index, isTwoPageMode=$isTwoPageMode, pageCount=$pageCount")
         
+        // Check cache first for instant display
+        val cachedBitmap = pageCache?.getPageImmediate(index)
+        
+        if (cachedBitmap != null) {
+            // Cache hit - instant display!
+            Log.d("PdfViewerActivity", "⚡ 페이지 $index 캐시에서 즉시 표시")
+            binding.pdfView.setImageBitmap(cachedBitmap)
+            pageIndex = index
+            updatePageInfo()
+            binding.loadingProgress.visibility = View.GONE
+            
+            // Show page info briefly
+            binding.pageInfo.animate().alpha(1f).duration = 200
+            binding.pageInfo.postDelayed({
+                binding.pageInfo.animate().alpha(0.3f).duration = 500
+            }, 2000)
+            
+            // Start prerendering around this page
+            pageCache?.prerenderAround(index)
+            
+            // Broadcast page change if in conductor mode
+            if (collaborationMode == CollaborationMode.CONDUCTOR) {
+                val actualPageNumber = if (isTwoPageMode) index + 1 else index + 1
+                Log.d("PdfViewerActivity", "🎵 지휘자 모드: 페이지 $actualPageNumber 브로드캐스트 중...")
+                globalCollaborationManager.broadcastPageChange(actualPageNumber, pdfFileName)
+            }
+            
+            return
+        }
+        
+        // Cache miss - fallback to traditional rendering with loading indicator
+        Log.d("PdfViewerActivity", "⏳ 페이지 $index 캐시 미스 - 기존 방식으로 렌더링")
         binding.loadingProgress.visibility = View.VISIBLE
         
         CoroutineScope(Dispatchers.IO).launch {
@@ -299,12 +359,12 @@ class PdfViewerActivity : AppCompatActivity() {
                 
                 val bitmap = if (isTwoPageMode && index + 1 < pageCount) {
                     Log.d("PdfViewerActivity", "Rendering two pages: $index and ${index + 1}")
-                    // Render two pages side by side
+                    // For two-page mode, use traditional rendering for now
                     renderTwoPages(index)
                 } else {
                     Log.d("PdfViewerActivity", "Rendering single page: $index")
-                    // Render single page
-                    renderSinglePage(index)
+                    // Try cache again, will render sync if not found
+                    pageCache?.getPageImmediate(index) ?: renderSinglePage(index)
                 }
                 
                 withContext(Dispatchers.Main) {
@@ -318,6 +378,16 @@ class PdfViewerActivity : AppCompatActivity() {
                     binding.pageInfo.postDelayed({
                         binding.pageInfo.animate().alpha(0.3f).duration = 500
                     }, 2000)
+                    
+                    // Start prerendering around this page
+                    pageCache?.prerenderAround(index)
+                    
+                    // Broadcast page change if in conductor mode
+                    if (collaborationMode == CollaborationMode.CONDUCTOR) {
+                        val actualPageNumber = if (isTwoPageMode) index + 1 else index + 1
+                        Log.d("PdfViewerActivity", "🎵 지휘자 모드: 페이지 $actualPageNumber 브로드캐스트 중...")
+                        globalCollaborationManager.broadcastPageChange(actualPageNumber, pdfFileName)
+                    }
                 }
             } catch (e: Exception) {
                 withContext(Dispatchers.Main) {
@@ -511,7 +581,12 @@ class PdfViewerActivity : AppCompatActivity() {
             "${pageIndex + 1} / $pageCount"
         }
         
-        binding.pageInfo.text = "$fileInfo$pageInfo"
+        // Add cache info for debugging (only show if cache exists)
+        val cacheInfo = pageCache?.let { cache ->
+            " [${cache.getCacheInfo()}]"
+        } ?: ""
+        
+        binding.pageInfo.text = "$fileInfo$pageInfo$cacheInfo"
     }
     
     private fun loadNextFile() {
@@ -589,10 +664,33 @@ class PdfViewerActivity : AppCompatActivity() {
                 
                 withContext(Dispatchers.Main) {
                     if (pageCount > 0) {
+                        // Initialize page cache for new file with proper scale calculation
+                        pageCache?.destroy() // Clean up previous cache
+                        
+                        // Calculate proper scale based on first page
+                        val firstPage = pdfRenderer!!.openPage(0)
+                        val calculatedScale = calculateOptimalScale(firstPage.width, firstPage.height)
+                        firstPage.close()
+                        
+                        pageCache = PageCache(pdfRenderer!!, screenWidth, screenHeight)
+                        Log.d("PdfViewerActivity", "PageCache 재초기화 완료 for $fileName (scale: $calculatedScale)")
+                        
                         // Check two-page mode for this new file, then show the page
                         checkAndSetTwoPageMode {
+                            // Update cache settings based on mode and calculated scale
+                            pageCache?.updateSettings(isTwoPageMode, calculatedScale)
+                            
                             val targetPage = if (goToLastPage) pageCount - 1 else 0
                             showPage(targetPage)
+                            
+                            // Broadcast file change if in conductor mode
+                            if (collaborationMode == CollaborationMode.CONDUCTOR) {
+                                // Add file to server first
+                                globalCollaborationManager.addFileToServer(pdfFileName, pdfFilePath)
+                                // Then broadcast the change with the target page number
+                                val actualPageNumber = targetPage + 1 // Convert to 1-based index
+                                globalCollaborationManager.broadcastFileChange(pdfFileName, actualPageNumber)
+                            }
                         }
                     } else {
                         Toast.makeText(this@PdfViewerActivity, "빈 PDF 파일입니다: $fileName", Toast.LENGTH_SHORT).show()
@@ -767,8 +865,282 @@ class PdfViewerActivity : AppCompatActivity() {
         }
     }
     
+    private fun initializeCollaboration() {
+        // Get current collaboration mode from global manager
+        collaborationMode = globalCollaborationManager.getCurrentMode()
+        
+        Log.d("PdfViewerActivity", "Collaboration mode: $collaborationMode")
+        
+        when (collaborationMode) {
+            CollaborationMode.CONDUCTOR -> {
+                setupConductorCallbacks()
+                updateCollaborationStatus()
+            }
+            CollaborationMode.PERFORMER -> {
+                setupPerformerCallbacks()
+                updateCollaborationStatus()
+            }
+            CollaborationMode.NONE -> {
+                binding.collaborationStatus.visibility = View.GONE
+            }
+        }
+    }
+    
+    private fun setupConductorCallbacks() {
+        globalCollaborationManager.setOnServerClientConnected { clientId, deviceName ->
+            runOnUiThread {
+                Log.d("PdfViewerActivity", "🎵 지휘자 모드: 새 연주자 연결됨 - $deviceName")
+                Toast.makeText(this@PdfViewerActivity, "$deviceName 연결됨", Toast.LENGTH_SHORT).show()
+                updateCollaborationStatus()
+                
+                // Send current file and page to newly connected client
+                Log.d("PdfViewerActivity", "🎵 지휘자 모드: 현재 상태를 새 연주자에게 전송 중...")
+                // Add file to server so performers can download if needed
+                globalCollaborationManager.addFileToServer(pdfFileName, pdfFilePath)
+                
+                val actualPageNumber = if (isTwoPageMode) pageIndex + 1 else pageIndex + 1
+                globalCollaborationManager.broadcastFileChange(pdfFileName, actualPageNumber)
+            }
+        }
+        
+        globalCollaborationManager.setOnServerClientDisconnected { clientId ->
+            runOnUiThread {
+                Toast.makeText(this@PdfViewerActivity, "기기 연결 해제됨", Toast.LENGTH_SHORT).show()
+                updateCollaborationStatus()
+            }
+        }
+    }
+    
+    private fun setupPerformerCallbacks() {
+        globalCollaborationManager.setOnPageChangeReceived { page, file ->
+            runOnUiThread {
+                if (file == pdfFileName) {
+                    handleRemotePageChange(page)
+                }
+            }
+        }
+        
+        globalCollaborationManager.setOnFileChangeReceived { file ->
+            runOnUiThread {
+                handleRemoteFileChange(file)
+            }
+        }
+        
+        globalCollaborationManager.setOnClientConnectionStatusChanged { isConnected ->
+            runOnUiThread {
+                val status = if (isConnected) "연결됨" else "연결 끊김"
+                Toast.makeText(this@PdfViewerActivity, "지휘자: $status", Toast.LENGTH_SHORT).show()
+                updateCollaborationStatus()
+            }
+        }
+    }
+    
+    private fun handleRemotePageChange(page: Int) {
+        // Convert to 0-based index
+        val targetIndex = page - 1
+        
+        Log.d("PdfViewerActivity", "🎼 연주자 모드: 페이지 $page 변경 신호 수신됨 (current file: $pdfFileName, pageCount: $pageCount)")
+        
+        if (targetIndex >= 0 && targetIndex < pageCount) {
+            // Temporarily disable conductor mode to prevent infinite loop
+            val originalMode = collaborationMode
+            collaborationMode = CollaborationMode.NONE
+            
+            Log.d("PdfViewerActivity", "🎼 연주자 모드: 페이지 $page 로 이동 중...")
+            showPage(targetIndex)
+            
+            // Restore original mode
+            collaborationMode = originalMode
+            
+            Log.d("PdfViewerActivity", "🎼 연주자 모드: 페이지 $page 로 이동 완료")
+        } else {
+            Log.w("PdfViewerActivity", "🎼 연주자 모드: 잘못된 페이지 번호 $page (총 $pageCount 페이지)")
+        }
+    }
+    
+    private fun handleRemoteFileChange(file: String) {
+        // Check if the requested file exists in our file list
+        val fileIndex = fileNameList.indexOf(file)
+        
+        if (fileIndex >= 0 && fileIndex < filePathList.size) {
+            // Load the requested file
+            currentFileIndex = fileIndex
+            pdfFilePath = filePathList[fileIndex]
+            pdfFileName = fileNameList[fileIndex]
+            
+            // Temporarily disable collaboration to prevent loops
+            val originalMode = collaborationMode
+            collaborationMode = CollaborationMode.NONE
+            
+            Log.d("PdfViewerActivity", "🎼 연주자 모드: 파일 '$file' 로 변경 중...")
+            loadFile(pdfFilePath, pdfFileName)
+            
+            // Restore collaboration mode
+            collaborationMode = originalMode
+            
+            Log.d("PdfViewerActivity", "🎼 연주자 모드: 파일 '$file' 로드 완료, 페이지 변경 대기 중...")
+        } else {
+            Log.w("PdfViewerActivity", "🎼 연주자 모드: 요청된 파일을 찾을 수 없습니다: $file")
+            
+            // Try to download from conductor
+            val conductorAddress = globalCollaborationManager.getConductorAddress()
+            if (conductorAddress.isNotEmpty()) {
+                showDownloadDialog(file, conductorAddress)
+            } else {
+                Toast.makeText(this, "요청된 파일을 찾을 수 없습니다: $file", Toast.LENGTH_LONG).show()
+            }
+        }
+    }
+    
+    private fun updateCollaborationStatus() {
+        when (collaborationMode) {
+            CollaborationMode.CONDUCTOR -> {
+                val clientCount = globalCollaborationManager.getConnectedClientCount()
+                binding.collaborationStatus.text = "지휘자: ${clientCount}명 연결"
+                binding.collaborationStatus.visibility = View.VISIBLE
+            }
+            CollaborationMode.PERFORMER -> {
+                val isConnected = globalCollaborationManager.isClientConnected()
+                val status = if (isConnected) "연결됨" else "연결 끊김"
+                binding.collaborationStatus.text = "연주자: $status"
+                binding.collaborationStatus.visibility = View.VISIBLE
+            }
+            CollaborationMode.NONE -> {
+                binding.collaborationStatus.visibility = View.GONE
+            }
+        }
+    }
+    
+    private fun showDownloadDialog(fileName: String, conductorAddress: String) {
+        val ipOnly = conductorAddress.split(":").firstOrNull() ?: conductorAddress
+        val fileServerUrl = "http://$ipOnly:8090"
+        
+        AlertDialog.Builder(this)
+            .setTitle("파일 다운로드")
+            .setMessage("'$fileName' 파일이 없습니다.\n지휘자로부터 다운로드하시겠습니까?")
+            .setPositiveButton("다운로드") { _, _ ->
+                downloadFileFromConductor(fileName, fileServerUrl)
+            }
+            .setNegativeButton("취소", null)
+            .show()
+    }
+    
+    private fun downloadFileFromConductor(fileName: String, serverUrl: String) {
+        val progressDialog = AlertDialog.Builder(this)
+            .setTitle("다운로드 중...")
+            .setMessage("$fileName\n0%")
+            .setCancelable(false)
+            .create()
+        progressDialog.show()
+        
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                val encodedFileName = java.net.URLEncoder.encode(fileName, "UTF-8")
+                val downloadUrl = "$serverUrl/download/$encodedFileName"
+                Log.d("PdfViewerActivity", "Downloading from: $downloadUrl")
+                
+                val url = java.net.URL(downloadUrl)
+                val connection = url.openConnection()
+                connection.connect()
+                
+                val fileLength = connection.contentLength
+                val input = connection.getInputStream()
+                val downloadPath = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), fileName)
+                val output = java.io.FileOutputStream(downloadPath)
+                
+                val buffer = ByteArray(4096)
+                var total: Long = 0
+                var count: Int
+                
+                while (input.read(buffer).also { count = it } != -1) {
+                    total += count
+                    if (fileLength > 0) {
+                        val progress = (total * 100 / fileLength).toInt()
+                        withContext(Dispatchers.Main) {
+                            progressDialog.setMessage("$fileName\n$progress%")
+                        }
+                    }
+                    output.write(buffer, 0, count)
+                }
+                
+                output.flush()
+                output.close()
+                input.close()
+                
+                withContext(Dispatchers.Main) {
+                    progressDialog.dismiss()
+                    Toast.makeText(this@PdfViewerActivity, "다운로드 완료: $fileName", Toast.LENGTH_SHORT).show()
+                    
+                    // Refresh file list and load the downloaded file
+                    refreshFileListAndLoad(fileName, downloadPath.absolutePath)
+                }
+                
+            } catch (e: Exception) {
+                Log.e("PdfViewerActivity", "Download failed", e)
+                withContext(Dispatchers.Main) {
+                    progressDialog.dismiss()
+                    Toast.makeText(this@PdfViewerActivity, "다운로드 실패: ${e.message}", Toast.LENGTH_LONG).show()
+                }
+            }
+        }
+    }
+    
+    private fun refreshFileListAndLoad(fileName: String, filePath: String) {
+        // Trigger media scanner to make file visible
+        android.media.MediaScannerConnection.scanFile(
+            this,
+            arrayOf(filePath),
+            arrayOf("application/pdf"),
+            null
+        )
+        
+        // Add to current file lists
+        fileNameList = fileNameList.toMutableList().apply { add(fileName) }
+        filePathList = filePathList.toMutableList().apply { add(filePath) }
+        currentFileIndex = fileNameList.size - 1
+        
+        // Update current file info
+        pdfFileName = fileName
+        pdfFilePath = filePath
+        
+        // Notify that file list should be refreshed when returning to MainActivity
+        val sharedPrefs = getSharedPreferences("pdf_viewer_prefs", MODE_PRIVATE)
+        sharedPrefs.edit().putBoolean("refresh_file_list", true).apply()
+        
+        // Close current PDF if open
+        try {
+            currentPage?.close()
+            currentPage = null
+        } catch (e: Exception) {
+            Log.w("PdfViewerActivity", "Error closing current page: ${e.message}")
+        }
+        
+        try {
+            pdfRenderer?.close()
+            pdfRenderer = null
+        } catch (e: Exception) {
+            Log.w("PdfViewerActivity", "Error closing PDF renderer: ${e.message}")
+        }
+        
+        // Load the new file
+        loadPdf()
+    }
+    
     override fun onDestroy() {
         super.onDestroy()
+        
+        // Clean up collaboration resources
+        // Note: 전역 매니저가 관리하므로 여기서 서버를 중지하지 않음
+        // Note: 전역 매니저가 관리하므로 여기서 클라이언트를 끊지 않음
+        
+        // Clean up page cache
+        try {
+            pageCache?.destroy()
+            Log.d("PdfViewerActivity", "PageCache 정리 완료")
+        } catch (e: Exception) {
+            Log.w("PdfViewerActivity", "Error destroying pageCache in onDestroy: ${e.message}")
+        }
+        
         try {
             currentPage?.close()
         } catch (e: Exception) {

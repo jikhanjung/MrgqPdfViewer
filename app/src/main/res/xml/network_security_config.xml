@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<network-security-config>
+    <!-- Allow cleartext traffic for local network communication -->
+    <domain-config cleartextTrafficPermitted="true">
+        <!-- Local network ranges -->
+        <domain includeSubdomains="true">192.168.0.0/16</domain>
+        <domain includeSubdomains="true">10.0.0.0/8</domain>
+        <domain includeSubdomains="true">172.16.0.0/12</domain>
+        <domain includeSubdomains="true">localhost</domain>
+        <domain includeSubdomains="true">127.0.0.1</domain>
+    </domain-config>
+    
+    <!-- For debugging purposes, you can also allow all cleartext traffic -->
+    <!-- WARNING: Only use in development, never in production -->
+    <base-config cleartextTrafficPermitted="true" />
+</network-security-config>

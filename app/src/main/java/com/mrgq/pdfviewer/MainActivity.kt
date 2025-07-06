@@ -40,11 +40,17 @@ class MainActivity : AppCompatActivity() {
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
         
+        // Note: Global collaboration manager는 Application에서 이미 초기화됨
+        
         setupRecyclerView()
         checkPermissions()
         setupWebServer()
         setupSortButtons()
         setupSettingsButton()
+        setupCollaborationCallbacks()
+        
+        // Handle file request from SettingsActivity
+        handleFileRequest()
     }
     
     private fun setupRecyclerView() {
@@ -110,6 +116,19 @@ class MainActivity : AppCompatActivity() {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && Environment.isExternalStorageManager()) {
                 loadPdfFiles()
             }
+        }
+    }
+    
+    override fun onResume() {
+        super.onResume()
+        
+        // Check if file list needs refresh (e.g., after downloading file in PdfViewerActivity)
+        val preferences = getSharedPreferences("pdf_viewer_prefs", MODE_PRIVATE)
+        val needsRefresh = preferences.getBoolean("refresh_file_list", false)
+        
+        if (needsRefresh) {
+            preferences.edit().putBoolean("refresh_file_list", false).apply()
+            loadPdfFiles()
         }
     }
     
@@ -262,13 +281,189 @@ class MainActivity : AppCompatActivity() {
         }
     }
     
+    override fun onNewIntent(intent: Intent?) {
+        super.onNewIntent(intent)
+        this.intent = intent
+        handleFileRequest()
+    }
+    
     override fun onDestroy() {
         super.onDestroy()
+        
+        // Stop web server
         webServerManager.stopServer()
+        
+        // Force stop all collaboration modes to prevent port conflicts
+        Log.d("MainActivity", "Forcing collaboration mode cleanup on app destruction")
+        GlobalCollaborationManager.getInstance().deactivateCollaborationMode()
     }
     
     fun refreshFileList() {
         loadPdfFiles()
+    }
+    
+    private fun setupCollaborationCallbacks() {
+        val globalCollaborationManager = GlobalCollaborationManager.getInstance()
+        
+        // Set up file change callback for performer mode
+        globalCollaborationManager.setOnFileChangeReceived { fileName ->
+            runOnUiThread {
+                handleRemoteFileChange(fileName)
+            }
+        }
+    }
+    
+    private fun handleFileRequest() {
+        // Check if we were called with a specific file request
+        val requestedFile = intent.getStringExtra("requested_file")
+        if (requestedFile != null) {
+            Log.d("MainActivity", "🎼 연주자 모드: SettingsActivity로부터 파일 요청 받음 - $requestedFile")
+            
+            // Wait for file list to load, then try to open the requested file
+            binding.recyclerView.post {
+                val currentFiles = pdfAdapter.currentList
+                if (currentFiles.isNotEmpty()) {
+                    val fileIndex = currentFiles.indexOfFirst { it.name == requestedFile }
+                    if (fileIndex >= 0) {
+                        val pdfFile = currentFiles[fileIndex]
+                        openPdfFile(pdfFile, fileIndex)
+                    } else {
+                        // File not found, try to download
+                        handleRemoteFileChange(requestedFile)
+                    }
+                } else {
+                    // File list not loaded yet, try again after a delay
+                    binding.recyclerView.postDelayed({
+                        handleRemoteFileChange(requestedFile)
+                    }, 1000)
+                }
+            }
+            
+            // Clear the intent extra to prevent re-processing
+            intent.removeExtra("requested_file")
+        }
+    }
+    
+    private fun handleRemoteFileChange(fileName: String) {
+        Log.d("MainActivity", "🎼 연주자 모드: 파일 '$fileName' 변경 요청 받음 (MainActivity)")
+        
+        // Find the file in current list
+        val currentFiles = pdfAdapter.currentList
+        val fileIndex = currentFiles.indexOfFirst { it.name == fileName }
+        
+        if (fileIndex >= 0) {
+            // File found - open it directly
+            val pdfFile = currentFiles[fileIndex]
+            Log.d("MainActivity", "🎼 연주자 모드: 파일 '$fileName' 발견, PDF 뷰어로 이동 중...")
+            openPdfFile(pdfFile, fileIndex)
+        } else {
+            // File not found - try downloading from conductor
+            Log.w("MainActivity", "🎼 연주자 모드: 파일 '$fileName' 을 찾을 수 없음, 다운로드 시도...")
+            val conductorAddress = GlobalCollaborationManager.getInstance().getConductorAddress()
+            
+            if (conductorAddress.isNotEmpty()) {
+                // Show download dialog and refresh file list after download
+                showDownloadDialog(fileName, conductorAddress)
+            } else {
+                Toast.makeText(this, "요청된 파일을 찾을 수 없습니다: $fileName", Toast.LENGTH_LONG).show()
+            }
+        }
+    }
+    
+    private fun showDownloadDialog(fileName: String, conductorAddress: String) {
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle("파일 다운로드")
+            .setMessage("'$fileName' 파일이 없습니다.\n지휘자로부터 다운로드하시겠습니까?")
+            .setPositiveButton("다운로드") { _, _ ->
+                downloadFileFromConductor(fileName, conductorAddress)
+            }
+            .setNegativeButton("취소", null)
+            .show()
+    }
+    
+    private fun downloadFileFromConductor(fileName: String, conductorAddress: String) {
+        // Extract IP from address (format: "192.168.1.100:9090")
+        val ipAddress = conductorAddress.split(":")[0]
+        val fileServerUrl = "http://$ipAddress:8090"
+        
+        Log.d("MainActivity", "🎼 연주자 모드: 파일 다운로드 시작 - $fileServerUrl")
+        
+        val progressDialog = androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle("다운로드 중...")
+            .setMessage("$fileName\n0%")
+            .setCancelable(false)
+            .create()
+        progressDialog.show()
+        
+        lifecycleScope.launch(Dispatchers.IO) {
+            try {
+                val encodedFileName = java.net.URLEncoder.encode(fileName, "UTF-8")
+                val downloadUrl = "$fileServerUrl/download/$encodedFileName"
+                Log.d("MainActivity", "Downloading from: $downloadUrl")
+                
+                val url = java.net.URL(downloadUrl)
+                val connection = url.openConnection()
+                connection.connect()
+                
+                val fileLength = connection.contentLength
+                val input = connection.getInputStream()
+                val downloadPath = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), fileName)
+                val output = java.io.FileOutputStream(downloadPath)
+                
+                val buffer = ByteArray(4096)
+                var total: Long = 0
+                var count: Int
+                
+                while (input.read(buffer).also { count = it } != -1) {
+                    total += count
+                    if (fileLength > 0) {
+                        val progress = (total * 100 / fileLength).toInt()
+                        withContext(Dispatchers.Main) {
+                            progressDialog.setMessage("$fileName\n$progress%")
+                        }
+                    }
+                    output.write(buffer, 0, count)
+                }
+                
+                output.flush()
+                output.close()
+                input.close()
+                
+                withContext(Dispatchers.Main) {
+                    progressDialog.dismiss()
+                    Log.d("MainActivity", "🎼 연주자 모드: 파일 다운로드 완료 - $fileName")
+                    Toast.makeText(this@MainActivity, "파일 다운로드 완료: $fileName", Toast.LENGTH_SHORT).show()
+                    
+                    // Trigger media scanner to make file visible
+                    android.media.MediaScannerConnection.scanFile(
+                        this@MainActivity,
+                        arrayOf(downloadPath.absolutePath),
+                        arrayOf("application/pdf"),
+                        null
+                    )
+                    
+                    // Refresh file list and try to open the downloaded file
+                    loadPdfFiles()
+                    
+                    // Wait a bit for the file list to refresh, then try to open the file
+                    binding.recyclerView.postDelayed({
+                        val currentFiles = pdfAdapter.currentList
+                        val fileIndex = currentFiles.indexOfFirst { it.name == fileName }
+                        if (fileIndex >= 0) {
+                            val pdfFile = currentFiles[fileIndex]
+                            openPdfFile(pdfFile, fileIndex)
+                        }
+                    }, 500)
+                }
+                
+            } catch (e: Exception) {
+                Log.e("MainActivity", "🎼 연주자 모드: 파일 다운로드 오류", e)
+                withContext(Dispatchers.Main) {
+                    progressDialog.dismiss()
+                    Toast.makeText(this@MainActivity, "다운로드 오류: ${e.message}", Toast.LENGTH_LONG).show()
+                }
+            }
+        }
     }
     
     private fun setupSortButtons() {

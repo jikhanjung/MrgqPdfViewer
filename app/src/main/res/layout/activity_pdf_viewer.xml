@@ -32,6 +32,21 @@
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintBottom_toBottomOf="parent" />
 
+    <!-- Collaboration Status -->
+    <TextView
+        android:id="@+id/collaborationStatus"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:background="@color/pdf_page_info_bg"
+        android:padding="8dp"
+        android:text="지휘자: 3명 연결"
+        android:textColor="@color/white"
+        android:textSize="10sp"
+        android:layout_margin="16dp"
+        android:visibility="gone"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintEnd_toEndOf="parent" />
+
     <ProgressBar
         android:id="@+id/loadingProgress"
         android:layout_width="wrap_content"

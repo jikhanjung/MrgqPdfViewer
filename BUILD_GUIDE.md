@@ -132,7 +132,7 @@ adb logcat -s "WebServerManager" "PdfViewer"
 ### 2. 서명된 APK 생성 (배포용)
 **v0.1.4부터 자동 서명 설정**
 - `keystore.properties` 파일 설정 후 `./gradlew assembleRelease` 실행하면 자동으로 서명됨
-- 생성된 APK: `app/build/outputs/apk/release/MrgqPdfViewer-v0.1.4-release.apk`
+- 생성된 APK: `app/build/outputs/apk/release/MrgqPdfViewer-v0.1.5-release.apk`
 
 **수동 서명 (필요시)**
 1. Android Studio: `Build` → `Generate Signed Bundle / APK`

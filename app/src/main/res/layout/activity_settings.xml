@@ -206,11 +206,278 @@
 
             </LinearLayout>
 
+            <!-- 협업 모드 섹션 -->
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="협업 모드"
+                android:textColor="@color/tv_text_primary"
+                android:textSize="@dimen/subtitle_text_size"
+                android:textStyle="bold"
+                android:layout_marginTop="32dp"
+                android:layout_marginBottom="16dp" />
+
+            <TextView
+                android:id="@+id/collaborationModeInfo"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="앙상블/합주용 실시간 페이지 동기화 기능"
+                android:textColor="@color/tv_text_secondary"
+                android:textSize="@dimen/body_text_size"
+                android:layout_marginBottom="16dp" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:layout_marginBottom="16dp">
+
+                <Button
+                    android:id="@+id/masterModeBtn"
+                    android:layout_width="0dp"
+                    android:layout_weight="1"
+                    android:layout_height="wrap_content"
+                    android:text="지휘자 모드\n(Conductor)"
+                    android:textSize="@dimen/body_text_size"
+                    android:backgroundTint="@color/tv_primary"
+                    android:textColor="@color/tv_text_primary"
+                    android:minHeight="64dp"
+                    android:layout_marginEnd="8dp"
+                    android:focusable="true" />
+
+                <Button
+                    android:id="@+id/slaveModeBtn"
+                    android:layout_width="0dp"
+                    android:layout_weight="1"
+                    android:layout_height="wrap_content"
+                    android:text="연주자 모드\n(Performer)"
+                    android:textSize="@dimen/body_text_size"
+                    android:backgroundTint="@color/tv_surface"
+                    android:textColor="@color/tv_text_primary"
+                    android:minHeight="64dp"
+                    android:layout_marginStart="8dp"
+                    android:focusable="true" />
+
+            </LinearLayout>
+
+            <Button
+                android:id="@+id/collaborationOffBtn"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="협업 모드 끄기"
+                android:textSize="@dimen/body_text_size"
+                android:backgroundTint="@color/tv_surface"
+                android:textColor="@color/tv_text_secondary"
+                android:minHeight="56dp"
+                android:paddingHorizontal="24dp"
+                android:layout_marginBottom="16dp"
+                android:focusable="true" />
+
+            <TextView
+                android:id="@+id/collaborationStatus"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="협업 모드: 비활성"
+                android:textColor="@color/tv_text_secondary"
+                android:textSize="@dimen/body_text_size"
+                android:layout_marginBottom="16dp" />
+
+            <!-- 연결 설정 (슬레이브 모드에서만 표시) -->
+            <LinearLayout
+                android:id="@+id/connectionSettingsLayout"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:visibility="gone"
+                android:layout_marginBottom="32dp">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="지휘자 기기 연결"
+                    android:textColor="@color/tv_text_primary"
+                    android:textSize="@dimen/subtitle_text_size"
+                    android:textStyle="bold"
+                    android:layout_marginBottom="12dp" />
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:layout_marginBottom="12dp">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="지휘자 IP:"
+                        android:textColor="@color/tv_text_secondary"
+                        android:textSize="@dimen/body_text_size"
+                        android:layout_marginEnd="16dp" />
+
+                    <EditText
+                        android:id="@+id/masterIpEditText"
+                        android:layout_width="0dp"
+                        android:layout_weight="1"
+                        android:layout_height="wrap_content"
+                        android:inputType="text"
+                        android:hint="192.168.1.100"
+                        android:textColor="@color/tv_text_primary"
+                        android:textColorHint="@color/tv_text_secondary"
+                        android:textSize="@dimen/body_text_size"
+                        android:background="@color/tv_surface"
+                        android:padding="12dp"
+                        android:focusable="true"
+                        android:focusableInTouchMode="true"
+                        android:layout_marginEnd="16dp" />
+
+                    <Button
+                        android:id="@+id/connectBtn"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="연결"
+                        android:textSize="@dimen/small_text_size"
+                        android:backgroundTint="@color/tv_primary"
+                        android:textColor="@color/tv_text_primary"
+                        android:minHeight="48dp"
+                        android:paddingHorizontal="16dp"
+                        android:focusable="true" />
+
+                </LinearLayout>
+
+                <!-- 지휘자 자동 발견 -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:layout_marginBottom="12dp">
+
+                    <Button
+                        android:id="@+id/discoverConductorBtn"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="지휘자 자동 찾기"
+                        android:textSize="@dimen/small_text_size"
+                        android:backgroundTint="@color/tv_secondary"
+                        android:textColor="@color/tv_text_primary"
+                        android:minHeight="48dp"
+                        android:paddingHorizontal="16dp"
+                        android:focusable="true"
+                        android:layout_marginEnd="16dp" />
+
+                    <TextView
+                        android:id="@+id/discoveryStatus"
+                        android:layout_width="0dp"
+                        android:layout_weight="1"
+                        android:layout_height="wrap_content"
+                        android:text="네트워크에서 지휘자를 찾는 중..."
+                        android:textColor="@color/tv_text_secondary"
+                        android:textSize="@dimen/small_text_size"
+                        android:visibility="gone" />
+
+                </LinearLayout>
+
+                <!-- 발견된 지휘자 목록 -->
+                <androidx.recyclerview.widget.RecyclerView
+                    android:id="@+id/discoveredConductorsRecyclerView"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:visibility="gone"
+                    android:layout_marginBottom="16dp" />
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:layout_marginBottom="16dp">
+
+                    <Button
+                        android:id="@+id/scanMastersBtn"
+                        android:layout_width="0dp"
+                        android:layout_weight="1"
+                        android:layout_height="wrap_content"
+                        android:text="지휘자 기기 검색"
+                        android:textSize="@dimen/body_text_size"
+                        android:backgroundTint="@color/tv_surface"
+                        android:textColor="@color/tv_text_primary"
+                        android:minHeight="56dp"
+                        android:layout_marginEnd="8dp"
+                        android:focusable="true" />
+
+                    <Button
+                        android:id="@+id/webConnectBtn"
+                        android:layout_width="0dp"
+                        android:layout_weight="1"
+                        android:layout_height="wrap_content"
+                        android:text="웹 연결 코드"
+                        android:textSize="@dimen/body_text_size"
+                        android:backgroundTint="@color/tv_surface"
+                        android:textColor="@color/tv_text_primary"
+                        android:minHeight="56dp"
+                        android:layout_marginStart="8dp"
+                        android:focusable="true" />
+
+                </LinearLayout>
+
+            </LinearLayout>
+
+            <!-- 지휘자 모드 정보 (지휘자 모드에서만 표시) -->
+            <LinearLayout
+                android:id="@+id/masterInfoLayout"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:visibility="gone"
+                android:layout_marginBottom="32dp">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="연결 정보"
+                    android:textColor="@color/tv_text_primary"
+                    android:textSize="@dimen/subtitle_text_size"
+                    android:textStyle="bold"
+                    android:layout_marginBottom="12dp" />
+
+                <TextView
+                    android:id="@+id/masterConnectionInfo"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="연결 주소: 192.168.1.100:9090"
+                    android:textColor="@color/tv_text_secondary"
+                    android:textSize="@dimen/body_text_size"
+                    android:fontFamily="monospace"
+                    android:layout_marginBottom="8dp" />
+
+                <TextView
+                    android:id="@+id/connectedClientsInfo"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="연결된 기기: 0대"
+                    android:textColor="@color/tv_text_secondary"
+                    android:textSize="@dimen/body_text_size"
+                    android:layout_marginBottom="12dp" />
+
+                <Button
+                    android:id="@+id/showClientsBtn"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="연결된 기기 목록"
+                    android:textSize="@dimen/body_text_size"
+                    android:backgroundTint="@color/tv_surface"
+                    android:textColor="@color/tv_text_primary"
+                    android:minHeight="56dp"
+                    android:paddingHorizontal="24dp"
+                    android:focusable="true" />
+
+            </LinearLayout>
+
             <!-- 설명 텍스트 -->
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="• 파일별 설정: 각 PDF 파일의 페이지 모드 설정을 저장합니다\n• 화면 비율과 PDF 비율이 다를 때 두 페이지/한 페이지 모드를 선택할 수 있습니다\n• 설정을 초기화하면 다음에 파일을 열 때 다시 선택할 수 있습니다"
+                android:text="• 파일별 설정: 각 PDF 파일의 페이지 모드 설정을 저장합니다\n• 화면 비율과 PDF 비율이 다를 때 두 페이지/한 페이지 모드를 선택할 수 있습니다\n• 설정을 초기화하면 다음에 파일을 열 때 다시 선택할 수 있습니다\n\n• 협업 모드: 여러 기기 간 실시간 페이지 동기화\n• 지휘자 모드: 모든 기기의 페이지를 제어\n• 연주자 모드: 지휘자의 페이지 변경에 따라 자동 동기화"
                 android:textColor="@color/tv_text_secondary"
                 android:textSize="@dimen/small_text_size"
                 android:lineSpacingMultiplier="1.2"
