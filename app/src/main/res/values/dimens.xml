@@ -9,7 +9,7 @@
     <dimen name="body_text_size">18sp</dimen>
     <dimen name="item_text_size">20sp</dimen>
     <dimen name="small_text_size">14sp</dimen>
-    <dimen name="page_info_text_size">24sp</dimen>
+    <dimen name="page_info_text_size">11sp</dimen>
     
     <!-- List Item Dimensions -->
     <dimen name="item_margin_horizontal">8dp</dimen>
@@ -24,6 +24,6 @@
     <dimen name="card_elevation_focused">8dp</dimen>
     
     <!-- PDF Viewer Dimensions -->
-    <dimen name="page_info_padding">16dp</dimen>
-    <dimen name="page_info_margin">24dp</dimen>
+    <dimen name="page_info_padding">8dp</dimen>
+    <dimen name="page_info_margin">16dp</dimen>
 </resources>

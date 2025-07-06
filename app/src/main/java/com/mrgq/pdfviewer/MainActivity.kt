@@ -29,6 +29,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var binding: ActivityMainBinding
     private lateinit var pdfAdapter: PdfFileAdapter
     private val webServerManager = WebServerManager()
+    private var currentSortBy = "name" // "name" or "time"
     
     companion object {
         private const val PERMISSION_REQUEST_CODE = 100
@@ -42,12 +43,18 @@ class MainActivity : AppCompatActivity() {
         setupRecyclerView()
         checkPermissions()
         setupWebServer()
+        setupSortButtons()
     }
     
     private fun setupRecyclerView() {
-        pdfAdapter = PdfFileAdapter { pdfFile ->
-            openPdfFile(pdfFile)
-        }
+        pdfAdapter = PdfFileAdapter(
+            onItemClick = { pdfFile ->
+                openPdfFile(pdfFile)
+            },
+            onDeleteClick = { pdfFile ->
+                showDeleteConfirmationDialog(pdfFile)
+            }
+        )
         
         binding.recyclerView.apply {
             layoutManager = LinearLayoutManager(this@MainActivity)
@@ -59,8 +66,19 @@ class MainActivity : AppCompatActivity() {
     private fun checkPermissions() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             if (!Environment.isExternalStorageManager()) {
-                val intent = Intent(android.provider.Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION)
-                startActivityForResult(intent, PERMISSION_REQUEST_CODE)
+                try {
+                    val intent = Intent(android.provider.Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION)
+                    startActivityForResult(intent, PERMISSION_REQUEST_CODE)
+                } catch (e: Exception) {
+                    // Android TV에서는 해당 설정 화면이 없을 수 있음
+                    Toast.makeText(
+                        this,
+                        "저장소 권한이 필요합니다. 설정 > 앱 > MrgqPdfViewer에서 권한을 허용해주세요.",
+                        Toast.LENGTH_LONG
+                    ).show()
+                    // 권한이 없어도 일단 파일 목록을 로드 시도
+                    loadPdfFiles()
+                }
             } else {
                 loadPdfFiles()
             }
@@ -108,7 +126,12 @@ class MainActivity : AppCompatActivity() {
                 appPdfDir.listFiles { file ->
                     file.isFile && file.extension.equals("pdf", ignoreCase = true)
                 }?.forEach { file ->
-                    pdfFiles.add(PdfFile(file.name, file.absolutePath))
+                    pdfFiles.add(PdfFile(
+                        name = file.name,
+                        path = file.absolutePath,
+                        lastModified = file.lastModified(),
+                        size = file.length()
+                    ))
                 }
             }
             
@@ -126,7 +149,11 @@ class MainActivity : AppCompatActivity() {
                 Log.e("MainActivity", "Cannot access Downloads folder", e)
             }
             
-            pdfFiles.sortBy { it.name }
+            // Sort based on current selection
+            when (currentSortBy) {
+                "name" -> pdfFiles.sortBy { it.name }
+                "time" -> pdfFiles.sortByDescending { it.lastModified }
+            }
             
             withContext(Dispatchers.Main) {
                 pdfAdapter.submitList(pdfFiles)
@@ -199,7 +226,12 @@ class MainActivity : AppCompatActivity() {
             appPdfDir.listFiles { file ->
                 file.isFile && file.extension.equals("pdf", ignoreCase = true)
             }?.forEach { file ->
-                pdfFiles.add(PdfFile(file.name, file.absolutePath))
+                pdfFiles.add(PdfFile(
+                    name = file.name,
+                    path = file.absolutePath,
+                    lastModified = file.lastModified(),
+                    size = file.length()
+                ))
             }
         }
         
@@ -210,14 +242,23 @@ class MainActivity : AppCompatActivity() {
                 downloadDir.listFiles { file ->
                     file.isFile && file.extension.equals("pdf", ignoreCase = true)
                 }?.forEach { file ->
-                    pdfFiles.add(PdfFile(file.name, file.absolutePath))
+                    pdfFiles.add(PdfFile(
+                        name = file.name,
+                        path = file.absolutePath,
+                        lastModified = file.lastModified(),
+                        size = file.length()
+                    ))
                 }
             }
         } catch (e: Exception) {
             Log.e("MainActivity", "Cannot access Downloads folder", e)
         }
         
-        pdfFiles.sortBy { it.name }
+        // Sort based on current selection
+        when (currentSortBy) {
+            "name" -> pdfFiles.sortBy { it.name }
+            "time" -> pdfFiles.sortByDescending { it.lastModified }
+        }
         return pdfFiles
     }
     
@@ -252,5 +293,73 @@ class MainActivity : AppCompatActivity() {
     
     fun refreshFileList() {
         loadPdfFiles()
+    }
+    
+    private fun setupSortButtons() {
+        binding.sortByNameBtn.setOnClickListener {
+            currentSortBy = "name"
+            updateSortButtonStates()
+            loadPdfFiles()
+        }
+        
+        binding.sortByTimeBtn.setOnClickListener {
+            currentSortBy = "time"
+            updateSortButtonStates()
+            loadPdfFiles()
+        }
+        
+        // Set initial button states
+        updateSortButtonStates()
+    }
+    
+    private fun updateSortButtonStates() {
+        binding.sortByNameBtn.backgroundTintList = 
+            android.content.res.ColorStateList.valueOf(
+                if (currentSortBy == "name") 
+                    ContextCompat.getColor(this, R.color.tv_primary)
+                else 
+                    ContextCompat.getColor(this, R.color.tv_surface)
+            )
+        
+        binding.sortByTimeBtn.backgroundTintList = 
+            android.content.res.ColorStateList.valueOf(
+                if (currentSortBy == "time") 
+                    ContextCompat.getColor(this, R.color.tv_primary)
+                else 
+                    ContextCompat.getColor(this, R.color.tv_surface)
+            )
+    }
+    
+    private fun showDeleteConfirmationDialog(pdfFile: PdfFile) {
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle("파일 삭제")
+            .setMessage("${pdfFile.name} 파일을 삭제하시겠습니까?")
+            .setPositiveButton("삭제") { _, _ ->
+                deletePdfFile(pdfFile)
+            }
+            .setNegativeButton("취소", null)
+            .show()
+    }
+    
+    private fun deletePdfFile(pdfFile: PdfFile) {
+        lifecycleScope.launch(Dispatchers.IO) {
+            try {
+                val file = File(pdfFile.path)
+                val deleted = file.delete()
+                
+                withContext(Dispatchers.Main) {
+                    if (deleted) {
+                        Toast.makeText(this@MainActivity, "파일이 삭제되었습니다", Toast.LENGTH_SHORT).show()
+                        loadPdfFiles()
+                    } else {
+                        Toast.makeText(this@MainActivity, "파일 삭제 실패", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(this@MainActivity, "삭제 중 오류 발생: ${e.message}", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
     }
 }

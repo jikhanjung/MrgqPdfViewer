@@ -30,5 +30,8 @@
     
     <!-- PDF Viewer Colors -->
     <color name="pdf_background">#FF000000</color>
-    <color name="pdf_page_info_bg">#CC000000</color>
+    <color name="pdf_page_info_bg">#80000000</color>
+    
+    <!-- Button Colors -->
+    <color name="delete_button_color">#FFFF3B30</color>
 </resources>

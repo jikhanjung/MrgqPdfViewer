@@ -28,8 +28,9 @@
         android:textColor="@color/white"
         android:textSize="@dimen/page_info_text_size"
         android:layout_margin="@dimen/page_info_margin"
-        app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintEnd_toEndOf="parent" />
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintBottom_toBottomOf="parent" />
 
     <ProgressBar
         android:id="@+id/loadingProgress"
@@ -41,49 +42,100 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent" />
 
+    <!-- Navigation Guide - Split Left/Right Design -->
     <LinearLayout
         android:id="@+id/navigationGuide"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
-        android:orientation="vertical"
-        android:background="@color/pdf_page_info_bg"
-        android:padding="@dimen/page_info_padding"
-        android:layout_margin="@dimen/page_info_margin"
+        android:orientation="horizontal"
+        android:layout_margin="32dp"
         android:visibility="gone"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintBottom_toBottomOf="parent">
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintTop_toTopOf="parent">
 
-        <TextView
-            android:id="@+id/navigationTitle"
-            android:layout_width="match_parent"
+        <!-- Left Navigation -->
+        <LinearLayout
+            android:id="@+id/leftNavigation"
+            android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:text="파일 끝"
-            android:textColor="@color/white"
-            android:textSize="@dimen/page_info_text_size"
-            android:textStyle="bold"
+            android:layout_weight="1"
+            android:orientation="vertical"
+            android:background="@color/pdf_page_info_bg"
+            android:padding="24dp"
+            android:layout_marginEnd="16dp"
             android:gravity="center"
-            android:layout_marginBottom="8dp" />
+            android:visibility="gone">
 
-        <TextView
-            android:id="@+id/navigationMessage"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="마지막 페이지입니다."
-            android:textColor="@color/white"
-            android:textSize="14sp"
-            android:gravity="center"
-            android:layout_marginBottom="12dp" />
+            <ImageView
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:src="@drawable/ic_arrow_left_large"
+                android:layout_marginBottom="16dp" />
 
-        <TextView
-            android:id="@+id/navigationInstructions"
-            android:layout_width="match_parent"
+            <TextView
+                android:id="@+id/leftNavText"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="이전 파일"
+                android:textColor="@color/white"
+                android:textSize="20sp"
+                android:textStyle="bold"
+                android:gravity="center" />
+
+            <TextView
+                android:id="@+id/leftNavSubText"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="파일명.pdf"
+                android:textColor="@color/white"
+                android:textSize="14sp"
+                android:gravity="center"
+                android:layout_marginTop="4dp" />
+
+        </LinearLayout>
+
+        <!-- Right Navigation -->
+        <LinearLayout
+            android:id="@+id/rightNavigation"
+            android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:text="→ 다음 파일로 이동\n← 파일 목록으로 돌아가기"
-            android:textColor="@color/white"
-            android:textSize="14sp"
+            android:layout_weight="1"
+            android:orientation="vertical"
+            android:background="@color/pdf_page_info_bg"
+            android:padding="24dp"
+            android:layout_marginStart="16dp"
             android:gravity="center"
-            android:lineSpacingExtra="4dp" />
+            android:visibility="gone">
+
+            <ImageView
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:src="@drawable/ic_arrow_right_large"
+                android:layout_marginBottom="16dp" />
+
+            <TextView
+                android:id="@+id/rightNavText"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="다음 파일"
+                android:textColor="@color/white"
+                android:textSize="20sp"
+                android:textStyle="bold"
+                android:gravity="center" />
+
+            <TextView
+                android:id="@+id/rightNavSubText"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="파일명.pdf"
+                android:textColor="@color/white"
+                android:textSize="14sp"
+                android:gravity="center"
+                android:layout_marginTop="4dp" />
+
+        </LinearLayout>
 
     </LinearLayout>
 

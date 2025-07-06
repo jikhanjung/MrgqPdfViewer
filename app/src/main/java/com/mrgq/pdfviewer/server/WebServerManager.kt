@@ -197,34 +197,57 @@ class WebServerManager {
                             background-color: #48484a;
                             cursor: not-allowed;
                         }
+                        .message-container {
+                            position: fixed;
+                            bottom: 0;
+                            left: 0;
+                            right: 0;
+                            z-index: 1000;
+                            display: flex;
+                            justify-content: center;
+                            padding: 20px;
+                            pointer-events: none;
+                        }
                         .message {
-                            margin-top: 20px;
-                            padding: 16px 20px;
+                            padding: 20px 40px;
                             border-radius: 8px;
                             text-align: center;
                             font-weight: 500;
-                            font-size: 16px;
-                            border: 2px solid;
-                            animation: slideDown 0.3s ease;
+                            font-size: 18px;
+                            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+                            animation: slideUp 0.3s ease;
+                            pointer-events: auto;
+                            max-width: 80%;
+                        }
+                        .message.fade-out {
+                            animation: fadeOut 0.3s ease forwards;
                         }
                         .success {
-                            background-color: rgba(48, 209, 88, 0.1);
-                            color: #30d158;
-                            border-color: #30d158;
+                            background-color: #30d158;
+                            color: #ffffff;
                         }
                         .error {
-                            background-color: rgba(255, 59, 48, 0.1);
-                            color: #ff3b30;
-                            border-color: #ff3b30;
+                            background-color: #ff3b30;
+                            color: #ffffff;
                         }
-                        @keyframes slideDown {
+                        @keyframes slideUp {
                             from {
                                 opacity: 0;
-                                transform: translateY(-10px);
+                                transform: translateY(20px);
                             }
                             to {
                                 opacity: 1;
                                 transform: translateY(0);
+                            }
+                        }
+                        @keyframes fadeOut {
+                            from {
+                                opacity: 1;
+                                transform: translateY(0);
+                            }
+                            to {
+                                opacity: 0;
+                                transform: translateY(20px);
                             }
                         }
                         .file-list-container {
@@ -367,17 +390,18 @@ class WebServerManager {
                                     <div id="fileList" class="file-list" style="display: none;"></div>
                                     <button type="submit" class="submit-btn" disabled>업로드</button>
                                 </form>
-                                <div id="message"></div>
                             </div>
                         </div>
                     </div>
+                    
+                    <div id="messageContainer" class="message-container"></div>
                     
                     <script>
                         const fileInput = document.getElementById('fileInput');
                         const fileList = document.getElementById('fileList');
                         const submitBtn = document.querySelector('.submit-btn');
                         const uploadArea = document.querySelector('.upload-area');
-                        const message = document.getElementById('message');
+                        const messageContainer = document.getElementById('messageContainer');
                         const form = document.getElementById('uploadForm');
                         const sortByNameBtn = document.getElementById('sortByName');
                         const sortByTimeBtn = document.getElementById('sortByTime');
@@ -385,6 +409,31 @@ class WebServerManager {
                         let selectedFiles = [];
                         let currentFiles = [];
                         let currentSortBy = 'name';
+                        let messageTimeout = null;
+                        
+                        function showMessage(text, isSuccess = true) {
+                            // Clear any existing timeout
+                            if (messageTimeout) {
+                                clearTimeout(messageTimeout);
+                            }
+                            
+                            // Create message element
+                            const messageEl = document.createElement('div');
+                            messageEl.className = 'message ' + (isSuccess ? 'success' : 'error');
+                            messageEl.textContent = text;
+                            
+                            // Clear container and add new message
+                            messageContainer.innerHTML = '';
+                            messageContainer.appendChild(messageEl);
+                            
+                            // Auto-hide after 5 seconds
+                            messageTimeout = setTimeout(() => {
+                                messageEl.classList.add('fade-out');
+                                setTimeout(() => {
+                                    messageContainer.innerHTML = '';
+                                }, 300);
+                            }, 5000);
+                        }
                         
                         fileInput.addEventListener('change', handleFileSelect);
                         
@@ -475,7 +524,6 @@ class WebServerManager {
                             
                             submitBtn.disabled = true;
                             submitBtn.textContent = '업로드 중...';
-                            message.innerHTML = '';
                             
                             try {
                                 const response = await fetch('/upload', {
@@ -486,15 +534,15 @@ class WebServerManager {
                                 const result = await response.text();
                                 
                                 if (response.ok) {
-                                    message.innerHTML = '<div class="message success">✅ 업로드 성공!</div>';
+                                    showMessage('✅ 업로드 성공!', true);
                                     selectedFiles = [];
                                     fileInput.value = '';
                                     updateFileList();
                                 } else {
-                                    message.innerHTML = '<div class="message error">❌ 업로드 실패: ' + result + '</div>';
+                                    showMessage('❌ 업로드 실패: ' + result, false);
                                 }
                             } catch (error) {
-                                message.innerHTML = '<div class="message error">❌ 업로드 중 오류 발생</div>';
+                                showMessage('❌ 업로드 중 오류 발생', false);
                             } finally {
                                 submitBtn.textContent = '업로드';
                                 loadFileList();
@@ -547,13 +595,13 @@ class WebServerManager {
                                     });
                                     
                                     if (response.ok) {
-                                        message.innerHTML = '<div class="message success">🗑️ 파일이 삭제되었습니다</div>';
+                                        showMessage('🗑️ 파일이 삭제되었습니다', true);
                                         loadFileList();
                                     } else {
-                                        message.innerHTML = '<div class="message error">❌ 파일 삭제 실패</div>';
+                                        showMessage('❌ 파일 삭제 실패', false);
                                     }
                                 } catch (e) {
-                                    message.innerHTML = '<div class="message error">❌ 삭제 중 오류 발생</div>';
+                                    showMessage('❌ 삭제 중 오류 발생', false);
                                 }
                             }
                         }

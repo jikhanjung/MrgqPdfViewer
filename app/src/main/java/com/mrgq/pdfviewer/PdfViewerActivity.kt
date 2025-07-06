@@ -235,7 +235,6 @@ class PdfViewerActivity : AppCompatActivity() {
                     if (pageCount > 0) {
                         val targetPage = if (goToLastPage) pageCount - 1 else 0
                         showPage(targetPage)
-                        Toast.makeText(this@PdfViewerActivity, "파일 열림: $fileName", Toast.LENGTH_SHORT).show()
                     } else {
                         Toast.makeText(this@PdfViewerActivity, "빈 PDF 파일입니다: $fileName", Toast.LENGTH_SHORT).show()
                         finish()
@@ -259,32 +258,40 @@ class PdfViewerActivity : AppCompatActivity() {
             KeyEvent.KEYCODE_DPAD_LEFT -> {
                 if (isNavigationGuideVisible) {
                     if (navigationGuideType == "end") {
-                        // 파일 끝 안내에서 왼쪽 키 -> 파일 목록으로
+                        // 마지막 페이지 안내에서 왼쪽 키 -> 파일 목록으로
                         hideNavigationGuide()
                         finish()
                         return true
                     } else if (navigationGuideType == "start") {
-                        // 파일 시작 안내에서 왼쪽 키 -> 이전 파일로 이동
-                        handleStartOfFile()
+                        // 첫 페이지 안내에서 왼쪽 키
+                        if (currentFileIndex > 0) {
+                            // 이전 파일로 이동
+                            hideNavigationGuide()
+                            loadPreviousFile()
+                        }
                         return true
                     }
                 } else if (pageIndex > 0) {
                     showPage(pageIndex - 1)
                     return true
                 } else {
-                    // 첫 페이지에서 안내 표시 또는 이전 파일로 이동
-                    handleStartOfFile()
+                    // 첫 페이지에서 안내 표시
+                    showStartOfFileGuide()
                     return true
                 }
             }
             KeyEvent.KEYCODE_DPAD_RIGHT -> {
                 if (isNavigationGuideVisible) {
                     if (navigationGuideType == "end") {
-                        // 파일 끝 안내에서 오른쪽 키 -> 다음 파일로 이동
-                        handleEndOfFile()
+                        // 마지막 페이지 안내에서 오른쪽 키
+                        if (currentFileIndex < filePathList.size - 1) {
+                            // 다음 파일로 이동
+                            hideNavigationGuide()
+                            loadNextFile()
+                        }
                         return true
                     } else if (navigationGuideType == "start") {
-                        // 파일 시작 안내에서 오른쪽 키 -> 파일 목록으로
+                        // 첫 페이지 안내에서 오른쪽 키 -> 파일 목록으로
                         hideNavigationGuide()
                         finish()
                         return true
@@ -293,8 +300,8 @@ class PdfViewerActivity : AppCompatActivity() {
                     showPage(pageIndex + 1)
                     return true
                 } else {
-                    // 마지막 페이지에서 안내 표시 또는 다음 파일로 이동
-                    handleEndOfFile()
+                    // 마지막 페이지에서 안내 표시
+                    showEndOfFileGuide()
                     return true
                 }
             }
@@ -320,44 +327,24 @@ class PdfViewerActivity : AppCompatActivity() {
         return super.onKeyDown(keyCode, event)
     }
     
-    private fun handleEndOfFile() {
-        if (isNavigationGuideVisible && navigationGuideType == "end") {
-            // 안내가 이미 표시된 상태에서 다시 오른쪽 키 -> 다음 파일로 이동
-            hideNavigationGuide()
-            if (currentFileIndex < filePathList.size - 1) {
-                loadNextFile()
-            }
-        } else {
-            // 첫 번째 오른쪽 키 -> 안내 표시
-            showEndOfFileGuide()
-        }
-    }
-    
-    private fun handleStartOfFile() {
-        if (isNavigationGuideVisible && navigationGuideType == "start") {
-            // 안내가 이미 표시된 상태에서 다시 왼쪽 키 -> 이전 파일로 이동
-            hideNavigationGuide()
-            if (currentFileIndex > 0) {
-                loadPreviousFile()
-            }
-        } else {
-            // 첫 번째 왼쪽 키 -> 안내 표시
-            showStartOfFileGuide()
-        }
-    }
+    // handleEndOfFile()과 handleStartOfFile() 메서드 삭제 - 더 이상 필요하지 않음
     
     private fun showEndOfFileGuide() {
         val hasNextFile = currentFileIndex < filePathList.size - 1
+        val hasPreviousFile = currentFileIndex > 0
         
+        // 왼쪽 네비게이션 설정 (목록으로 돌아가기)
+        binding.leftNavigation.visibility = View.VISIBLE
+        binding.leftNavText.text = "파일 목록"
+        binding.leftNavSubText.text = "목록으로 돌아가기"
+        
+        // 오른쪽 네비게이션 설정 (다음 파일 또는 없음)
         if (hasNextFile) {
-            val nextFileName = fileNameList[currentFileIndex + 1]
-            binding.navigationTitle.text = "파일 끝"
-            binding.navigationMessage.text = "마지막 페이지입니다.\n다음 파일: $nextFileName"
-            binding.navigationInstructions.text = "→ 다음 파일로 이동\n← 파일 목록으로 돌아가기"
+            binding.rightNavigation.visibility = View.VISIBLE
+            binding.rightNavText.text = "다음 파일"
+            binding.rightNavSubText.text = fileNameList[currentFileIndex + 1]
         } else {
-            binding.navigationTitle.text = "마지막 파일"
-            binding.navigationMessage.text = "모든 파일의 마지막 페이지입니다."
-            binding.navigationInstructions.text = "← 파일 목록으로 돌아가기"
+            binding.rightNavigation.visibility = View.GONE
         }
         
         showNavigationGuide("end")
@@ -365,17 +352,21 @@ class PdfViewerActivity : AppCompatActivity() {
     
     private fun showStartOfFileGuide() {
         val hasPreviousFile = currentFileIndex > 0
+        val hasNextFile = currentFileIndex < filePathList.size - 1
         
+        // 왼쪽 네비게이션 설정 (이전 파일 또는 없음)
         if (hasPreviousFile) {
-            val previousFileName = fileNameList[currentFileIndex - 1]
-            binding.navigationTitle.text = "파일 처음"
-            binding.navigationMessage.text = "첫 페이지입니다.\n이전 파일: $previousFileName"
-            binding.navigationInstructions.text = "← 이전 파일로 이동\n→ 파일 목록으로 돌아가기"
+            binding.leftNavigation.visibility = View.VISIBLE
+            binding.leftNavText.text = "이전 파일"
+            binding.leftNavSubText.text = fileNameList[currentFileIndex - 1]
         } else {
-            binding.navigationTitle.text = "첫 번째 파일"
-            binding.navigationMessage.text = "첫 번째 파일의 첫 페이지입니다."
-            binding.navigationInstructions.text = "→ 파일 목록으로 돌아가기"
+            binding.leftNavigation.visibility = View.GONE
         }
+        
+        // 오른쪽 네비게이션 설정 (목록으로 돌아가기)
+        binding.rightNavigation.visibility = View.VISIBLE
+        binding.rightNavText.text = "파일 목록"
+        binding.rightNavSubText.text = "목록으로 돌아가기"
         
         showNavigationGuide("start")
     }
@@ -398,6 +389,8 @@ class PdfViewerActivity : AppCompatActivity() {
             navigationGuideType = ""
             binding.navigationGuide.animate().alpha(0f).withEndAction {
                 binding.navigationGuide.visibility = View.GONE
+                binding.leftNavigation.visibility = View.GONE
+                binding.rightNavigation.visibility = View.GONE
             }.duration = 300
         }
     }
