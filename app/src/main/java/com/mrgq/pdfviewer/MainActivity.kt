@@ -44,12 +44,13 @@ class MainActivity : AppCompatActivity() {
         checkPermissions()
         setupWebServer()
         setupSortButtons()
+        setupSettingsButton()
     }
     
     private fun setupRecyclerView() {
         pdfAdapter = PdfFileAdapter(
-            onItemClick = { pdfFile ->
-                openPdfFile(pdfFile)
+            onItemClick = { pdfFile, position ->
+                openPdfFile(pdfFile, position)
             },
             onDeleteClick = { pdfFile ->
                 showDeleteConfirmationDialog(pdfFile)
@@ -66,19 +67,15 @@ class MainActivity : AppCompatActivity() {
     private fun checkPermissions() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             if (!Environment.isExternalStorageManager()) {
-                try {
-                    val intent = Intent(android.provider.Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION)
-                    startActivityForResult(intent, PERMISSION_REQUEST_CODE)
-                } catch (e: Exception) {
-                    // Android TV에서는 해당 설정 화면이 없을 수 있음
-                    Toast.makeText(
-                        this,
-                        "저장소 권한이 필요합니다. 설정 > 앱 > MrgqPdfViewer에서 권한을 허용해주세요.",
-                        Toast.LENGTH_LONG
-                    ).show()
-                    // 권한이 없어도 일단 파일 목록을 로드 시도
-                    loadPdfFiles()
-                }
+                // Android TV에서는 MANAGE_ALL_FILES_ACCESS_PERMISSION 설정 화면이 없음
+                // 권한 요청 대신 사용자에게 수동 설정 안내
+                Toast.makeText(
+                    this,
+                    "저장소 권한이 필요합니다. 설정 > 앱 > MrgqPdfViewer > 권한에서 '파일 및 미디어'를 허용해주세요.",
+                    Toast.LENGTH_LONG
+                ).show()
+                // 권한이 없어도 일단 파일 목록을 로드 시도
+                loadPdfFiles()
             } else {
                 loadPdfFiles()
             }
@@ -118,42 +115,7 @@ class MainActivity : AppCompatActivity() {
     
     private fun loadPdfFiles() {
         CoroutineScope(Dispatchers.IO).launch {
-            val pdfFiles = mutableListOf<PdfFile>()
-            
-            // Load from app's external files directory
-            val appPdfDir = File(getExternalFilesDir(null), "PDFs")
-            if (appPdfDir.exists() && appPdfDir.isDirectory) {
-                appPdfDir.listFiles { file ->
-                    file.isFile && file.extension.equals("pdf", ignoreCase = true)
-                }?.forEach { file ->
-                    pdfFiles.add(PdfFile(
-                        name = file.name,
-                        path = file.absolutePath,
-                        lastModified = file.lastModified(),
-                        size = file.length()
-                    ))
-                }
-            }
-            
-            // Also check Downloads directory if accessible
-            try {
-                val downloadDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
-                if (downloadDir.exists() && downloadDir.canRead()) {
-                    downloadDir.listFiles { file ->
-                        file.isFile && file.extension.equals("pdf", ignoreCase = true)
-                    }?.forEach { file ->
-                        pdfFiles.add(PdfFile(file.name, file.absolutePath))
-                    }
-                }
-            } catch (e: Exception) {
-                Log.e("MainActivity", "Cannot access Downloads folder", e)
-            }
-            
-            // Sort based on current selection
-            when (currentSortBy) {
-                "name" -> pdfFiles.sortBy { it.name }
-                "time" -> pdfFiles.sortByDescending { it.lastModified }
-            }
+            val pdfFiles = getCurrentPdfFiles()
             
             withContext(Dispatchers.Main) {
                 pdfAdapter.submitList(pdfFiles)
@@ -173,7 +135,9 @@ class MainActivity : AppCompatActivity() {
                     runOnUiThread {
                         if (success) {
                             val ip = webServerManager.getServerAddress()
-                            binding.serverStatus.text = "서버 실행 중: http://$ip:8080"
+                            val preferences = getSharedPreferences("pdf_viewer_prefs", MODE_PRIVATE)
+                            val port = preferences.getInt("web_server_port", 8080)
+                            binding.serverStatus.text = "서버 실행 중: http://$ip:$port"
                             Toast.makeText(this, "웹 서버가 시작되었습니다", Toast.LENGTH_SHORT).show()
                         } else {
                             binding.serverToggle.isChecked = false
@@ -189,36 +153,33 @@ class MainActivity : AppCompatActivity() {
         }
     }
     
-    private fun openPdfFile(pdfFile: PdfFile) {
-        // 최신 파일 목록을 다시 로드해서 동기화
-        lifecycleScope.launch(Dispatchers.IO) {
-            val currentPdfFiles = getCurrentPdfFiles()
-            
-            withContext(Dispatchers.Main) {
-                val currentIndex = currentPdfFiles.indexOfFirst { it.path == pdfFile.path }
-                
-                if (currentIndex == -1) {
-                    Toast.makeText(this@MainActivity, "파일을 찾을 수 없습니다: ${pdfFile.name}", Toast.LENGTH_SHORT).show()
-                    return@withContext
-                }
-                
-                val filePathList = currentPdfFiles.map { it.path }
-                val fileNameList = currentPdfFiles.map { it.name }
-                
-                val intent = Intent(this@MainActivity, PdfViewerActivity::class.java).apply {
-                    putExtra("pdf_path", pdfFile.path)
-                    putExtra("pdf_name", pdfFile.name)
-                    putExtra("current_index", currentIndex)
-                    putStringArrayListExtra("file_path_list", ArrayList(filePathList))
-                    putStringArrayListExtra("file_name_list", ArrayList(fileNameList))
-                }
-                startActivity(intent)
-            }
+    private fun openPdfFile(pdfFile: PdfFile, position: Int) {
+        // 어댑터에서 전달받은 position을 직접 사용
+        val currentPdfFiles = pdfAdapter.currentList
+        
+        if (position < 0 || position >= currentPdfFiles.size) {
+            Toast.makeText(this, "잘못된 파일 위치입니다", Toast.LENGTH_SHORT).show()
+            return
         }
+        
+        val filePathList = currentPdfFiles.map { it.path }
+        val fileNameList = currentPdfFiles.map { it.name }
+        
+        Log.d("MainActivity", "Opening file: ${pdfFile.name} at position $position")
+        Log.d("MainActivity", "File list size: ${currentPdfFiles.size}")
+        Log.d("MainActivity", "Actual file at position $position: ${currentPdfFiles[position].name}")
+        
+        val intent = Intent(this, PdfViewerActivity::class.java).apply {
+            putExtra("current_index", position)  // position을 직접 사용
+            putStringArrayListExtra("file_path_list", ArrayList(filePathList))
+            putStringArrayListExtra("file_name_list", ArrayList(fileNameList))
+        }
+        startActivity(intent)
     }
     
     private fun getCurrentPdfFiles(): List<PdfFile> {
         val pdfFiles = mutableListOf<PdfFile>()
+        val addedPaths = mutableSetOf<String>() // 중복 방지용
         
         // Load from app's external files directory
         val appPdfDir = File(getExternalFilesDir(null), "PDFs")
@@ -226,12 +187,16 @@ class MainActivity : AppCompatActivity() {
             appPdfDir.listFiles { file ->
                 file.isFile && file.extension.equals("pdf", ignoreCase = true)
             }?.forEach { file ->
-                pdfFiles.add(PdfFile(
-                    name = file.name,
-                    path = file.absolutePath,
-                    lastModified = file.lastModified(),
-                    size = file.length()
-                ))
+                val canonicalPath = file.canonicalPath
+                if (!addedPaths.contains(canonicalPath)) {
+                    pdfFiles.add(PdfFile(
+                        name = file.name,
+                        path = file.absolutePath,
+                        lastModified = file.lastModified(),
+                        size = file.length()
+                    ))
+                    addedPaths.add(canonicalPath)
+                }
             }
         }
         
@@ -242,12 +207,16 @@ class MainActivity : AppCompatActivity() {
                 downloadDir.listFiles { file ->
                     file.isFile && file.extension.equals("pdf", ignoreCase = true)
                 }?.forEach { file ->
-                    pdfFiles.add(PdfFile(
-                        name = file.name,
-                        path = file.absolutePath,
-                        lastModified = file.lastModified(),
-                        size = file.length()
-                    ))
+                    val canonicalPath = file.canonicalPath
+                    if (!addedPaths.contains(canonicalPath)) {
+                        pdfFiles.add(PdfFile(
+                            name = file.name,
+                            path = file.absolutePath,
+                            lastModified = file.lastModified(),
+                            size = file.length()
+                        ))
+                        addedPaths.add(canonicalPath)
+                    }
                 }
             }
         } catch (e: Exception) {
@@ -259,6 +228,13 @@ class MainActivity : AppCompatActivity() {
             "name" -> pdfFiles.sortBy { it.name }
             "time" -> pdfFiles.sortByDescending { it.lastModified }
         }
+        
+        Log.d("MainActivity", "=== LOADED ${pdfFiles.size} UNIQUE PDF FILES ===")
+        pdfFiles.forEachIndexed { index, file ->
+            Log.d("MainActivity", "[$index] NAME: '${file.name}' PATH: '${file.path}'")
+        }
+        Log.d("MainActivity", "=== END FILE LIST ===")
+        
         return pdfFiles
     }
     
@@ -360,6 +336,13 @@ class MainActivity : AppCompatActivity() {
                     Toast.makeText(this@MainActivity, "삭제 중 오류 발생: ${e.message}", Toast.LENGTH_SHORT).show()
                 }
             }
+        }
+    }
+    
+    private fun setupSettingsButton() {
+        binding.settingsButton.setOnClickListener {
+            val intent = Intent(this, SettingsActivity::class.java)
+            startActivity(intent)
         }
     }
 }

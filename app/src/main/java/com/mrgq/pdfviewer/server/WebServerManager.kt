@@ -22,8 +22,12 @@ class WebServerManager {
             // Stop any existing server first
             stopServer()
             
+            // Get port from settings
+            val preferences = context.getSharedPreferences("pdf_viewer_prefs", Context.MODE_PRIVATE)
+            val port = preferences.getInt("web_server_port", 8080)
+            
             // Create and start new server
-            server = PdfUploadServer(context, 8080)
+            server = PdfUploadServer(context, port)
             server?.start()
             callback(true)
         } catch (e: Exception) {
@@ -87,6 +91,7 @@ class WebServerManager {
                 session.method == Method.GET && session.uri == "/" -> handleGetRequest()
                 session.method == Method.GET && session.uri == "/list" -> handleListRequest()
                 session.method == Method.DELETE && session.uri.startsWith("/delete/") -> handleDeleteRequest(session)
+                session.method == Method.DELETE && session.uri == "/deleteAll" -> handleDeleteAllRequest()
                 session.method == Method.POST && session.uri == "/upload" -> handlePostRequest(session)
                 else -> newFixedLengthResponse(Response.Status.NOT_FOUND, MIME_PLAINTEXT, "Not found")
             }
@@ -196,6 +201,43 @@ class WebServerManager {
                         .submit-btn:disabled {
                             background-color: #48484a;
                             cursor: not-allowed;
+                        }
+                        .progress-container {
+                            margin-top: 20px;
+                            display: none;
+                        }
+                        .progress-bar-bg {
+                            width: 100%;
+                            height: 20px;
+                            background-color: #48484a;
+                            border-radius: 10px;
+                            overflow: hidden;
+                            position: relative;
+                        }
+                        .progress-bar {
+                            height: 100%;
+                            background-color: #007aff;
+                            width: 0%;
+                            transition: width 0.3s ease;
+                            position: relative;
+                        }
+                        .progress-text {
+                            position: absolute;
+                            top: 50%;
+                            left: 50%;
+                            transform: translate(-50%, -50%);
+                            color: white;
+                            font-size: 12px;
+                            font-weight: bold;
+                            z-index: 1;
+                            width: 100%;
+                            text-align: center;
+                        }
+                        .upload-status {
+                            margin-top: 10px;
+                            font-size: 14px;
+                            color: #8e8e93;
+                            text-align: center;
                         }
                         .message-container {
                             position: fixed;
@@ -369,6 +411,7 @@ class WebServerManager {
                                         <div class="sort-controls">
                                             <button class="sort-btn active" id="sortByName">이름순</button>
                                             <button class="sort-btn" id="sortByTime">시간순</button>
+                                            <button class="delete-btn" id="deleteAllBtn" style="margin-left: 20px;">전체 삭제</button>
                                         </div>
                                     </div>
                                     <div class="file-list-content">
@@ -389,6 +432,13 @@ class WebServerManager {
                                     </div>
                                     <div id="fileList" class="file-list" style="display: none;"></div>
                                     <button type="submit" class="submit-btn" disabled>업로드</button>
+                                    <div id="progressContainer" class="progress-container">
+                                        <div class="progress-bar-bg">
+                                            <div class="progress-text">0%</div>
+                                            <div id="progressBar" class="progress-bar"></div>
+                                        </div>
+                                        <div id="uploadStatus" class="upload-status">업로드 준비 중...</div>
+                                    </div>
                                 </form>
                             </div>
                         </div>
@@ -447,6 +497,37 @@ class WebServerManager {
                             currentSortBy = 'time';
                             updateSortButtons();
                             displayFileList();
+                        });
+                        
+                        document.getElementById('deleteAllBtn').addEventListener('click', async () => {
+                            if (currentFiles.length === 0) {
+                                showMessage('❕ 삭제할 파일이 없습니다', false);
+                                return;
+                            }
+                            
+                            if (confirm('모든 PDF 파일을 삭제하시겠습니까?\\n이 작업은 되돌릴 수 없습니다.')) {
+                                const deleteAllBtn = document.getElementById('deleteAllBtn');
+                                deleteAllBtn.disabled = true;
+                                deleteAllBtn.textContent = '삭제 중...';
+                                
+                                try {
+                                    const response = await fetch('/deleteAll', {
+                                        method: 'DELETE'
+                                    });
+                                    
+                                    if (response.ok) {
+                                        showMessage('🗑️ 모든 파일이 삭제되었습니다', true);
+                                        loadFileList();
+                                    } else {
+                                        showMessage('❌ 전체 삭제 실패', false);
+                                    }
+                                } catch (e) {
+                                    showMessage('❌ 삭제 중 오류 발생', false);
+                                } finally {
+                                    deleteAllBtn.disabled = false;
+                                    deleteAllBtn.textContent = '전체 삭제';
+                                }
+                            }
                         });
                         
                         function updateSortButtons() {
@@ -511,6 +592,17 @@ class WebServerManager {
                             
                             if (selectedFiles.length === 0) return;
                             
+                            const progressContainer = document.getElementById('progressContainer');
+                            const progressBar = document.getElementById('progressBar');
+                            const progressText = document.querySelector('.progress-text');
+                            const uploadStatus = document.getElementById('uploadStatus');
+                            
+                            // Show progress container
+                            progressContainer.style.display = 'block';
+                            progressBar.style.width = '0%';
+                            progressText.textContent = '0%';
+                            uploadStatus.textContent = '업로드 준비 중...';
+                            
                             const formData = new FormData();
                             selectedFiles.forEach((file, index) => {
                                 // Use simple index-based naming for upload
@@ -526,25 +618,57 @@ class WebServerManager {
                             submitBtn.textContent = '업로드 중...';
                             
                             try {
-                                const response = await fetch('/upload', {
-                                    method: 'POST',
-                                    body: formData
+                                // Create XMLHttpRequest for progress tracking
+                                const xhr = new XMLHttpRequest();
+                                
+                                // Track upload progress
+                                xhr.upload.addEventListener('progress', (e) => {
+                                    if (e.lengthComputable) {
+                                        const percentComplete = Math.round((e.loaded / e.total) * 100);
+                                        progressBar.style.width = percentComplete + '%';
+                                        progressText.textContent = percentComplete + '%';
+                                        
+                                        if (percentComplete === 100) {
+                                            uploadStatus.textContent = '서버에서 처리 중...';
+                                        } else {
+                                            const loaded = formatFileSize(e.loaded);
+                                            const total = formatFileSize(e.total);
+                                            uploadStatus.textContent = '업로드 중: ' + loaded + ' / ' + total;
+                                        }
+                                    }
                                 });
                                 
-                                const result = await response.text();
+                                // Handle completion
+                                await new Promise((resolve, reject) => {
+                                    xhr.onload = () => {
+                                        if (xhr.status === 200) {
+                                            resolve(xhr.responseText);
+                                        } else {
+                                            reject(new Error(xhr.responseText));
+                                        }
+                                    };
+                                    xhr.onerror = () => reject(new Error('네트워크 오류'));
+                                    
+                                    xhr.open('POST', '/upload');
+                                    xhr.send(formData);
+                                });
                                 
-                                if (response.ok) {
-                                    showMessage('✅ 업로드 성공!', true);
-                                    selectedFiles = [];
-                                    fileInput.value = '';
-                                    updateFileList();
-                                } else {
-                                    showMessage('❌ 업로드 실패: ' + result, false);
-                                }
+                                showMessage('✅ 업로드 성공!', true);
+                                selectedFiles = [];
+                                fileInput.value = '';
+                                updateFileList();
+                                
+                                // Hide progress after success
+                                setTimeout(() => {
+                                    progressContainer.style.display = 'none';
+                                }, 2000);
+                                
                             } catch (error) {
-                                showMessage('❌ 업로드 중 오류 발생', false);
+                                showMessage('❌ 업로드 실패: ' + error.message, false);
+                                progressContainer.style.display = 'none';
                             } finally {
                                 submitBtn.textContent = '업로드';
+                                submitBtn.disabled = false;
                                 loadFileList();
                             }
                         });
@@ -623,31 +747,40 @@ class WebServerManager {
                 
                 val uploadedFiles = mutableListOf<String>()
                 
-                // Process uploaded files
-                var fileIndex = 0
-                for ((paramName, tempLocation) in files) {
-                    Log.d(TAG, "Processing file: $paramName at $tempLocation")
+                // Process uploaded files with proper mapping
+                val fileParams = files.keys.filter { it.startsWith("files") }.sortedBy { key ->
+                    // Extract numeric part for proper sorting
+                    if (key == "files") {
+                        0 // "files" without number is first
+                    } else {
+                        key.removePrefix("files").toIntOrNull() ?: Int.MAX_VALUE
+                    }
+                }
+                
+                Log.d(TAG, "Sorted file params: $fileParams")
+                
+                for ((index, paramName) in fileParams.withIndex()) {
+                    val tempLocation = files[paramName] ?: continue
+                    Log.d(TAG, "Processing [$index] $paramName at $tempLocation")
                     
                     val tempFile = File(tempLocation)
                     
-                    // Look for Base64 encoded filename
-                    val filenameKey = "filename_$fileIndex"
+                    // Look for Base64 encoded filename with correct index
+                    val filenameKey = "filename_$index"
                     val base64Filename = session.parms[filenameKey]
                     
-                    var fileName = "uploaded.pdf"
+                    var fileName = "uploaded_$index.pdf"
                     
                     if (!base64Filename.isNullOrBlank()) {
                         try {
                             // Decode Base64 filename
                             val decodedBytes = android.util.Base64.decode(base64Filename, android.util.Base64.DEFAULT)
                             fileName = String(decodedBytes, Charsets.UTF_8)
-                            Log.d(TAG, "Decoded Base64 filename: $fileName")
+                            Log.d(TAG, "Decoded Base64 filename for $paramName: $fileName")
                         } catch (e: Exception) {
                             Log.e(TAG, "Failed to decode Base64 filename: $base64Filename", e)
-                            fileName = "uploaded_$fileIndex.pdf"
+                            fileName = "uploaded_$index.pdf"
                         }
-                    } else {
-                        fileName = "uploaded_$fileIndex.pdf"
                     }
                     
                     // Ensure it's a PDF file
@@ -655,9 +788,7 @@ class WebServerManager {
                         fileName = "$fileName.pdf"
                     }
                     
-                    Log.d(TAG, "Saving file as: $fileName")
-                    
-                    fileIndex++
+                    Log.d(TAG, "Saving $paramName as: $fileName")
                     
                     val targetFile = saveFile(tempFile, fileName)
                     if (targetFile != null) {
@@ -756,6 +887,52 @@ class WebServerManager {
             val sizes = arrayOf("B", "KB", "MB", "GB")
             val i = floor(ln(bytes.toDouble()) / ln(k.toDouble())).toInt()
             return String.format("%.2f %s", bytes / k.toDouble().pow(i.toDouble()), sizes[i])
+        }
+        
+        private fun handleDeleteAllRequest(): Response {
+            try {
+                val pdfDir = File(context.getExternalFilesDir(null), "PDFs")
+                var deletedCount = 0
+                var failedCount = 0
+                
+                if (pdfDir.exists() && pdfDir.isDirectory) {
+                    pdfDir.listFiles { file ->
+                        file.isFile && file.name.endsWith(".pdf", ignoreCase = true)
+                    }?.forEach { file ->
+                        if (file.delete()) {
+                            deletedCount++
+                        } else {
+                            failedCount++
+                        }
+                    }
+                }
+                
+                // Refresh file list in MainActivity
+                (context as? com.mrgq.pdfviewer.MainActivity)?.runOnUiThread {
+                    context.refreshFileList()
+                }
+                
+                return if (failedCount == 0) {
+                    newFixedLengthResponse(
+                        Response.Status.OK,
+                        MIME_PLAINTEXT,
+                        "Deleted $deletedCount files successfully"
+                    )
+                } else {
+                    newFixedLengthResponse(
+                        Response.Status.INTERNAL_ERROR,
+                        MIME_PLAINTEXT,
+                        "Deleted $deletedCount files, failed to delete $failedCount files"
+                    )
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error deleting all files", e)
+                return newFixedLengthResponse(
+                    Response.Status.INTERNAL_ERROR,
+                    MIME_PLAINTEXT,
+                    "Error: ${e.message}"
+                )
+            }
         }
         
         private fun saveFile(tempFile: File, fileName: String): File? {

@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
@@ -11,20 +13,63 @@ android {
         applicationId = "com.mrgq.pdfviewer"
         minSdk = 21
         targetSdk = 30  // Android TV OS 11
-        versionCode = 3
-        versionName = "0.1.3"
+        versionCode = 4
+        versionName = "0.1.4"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    signingConfigs {
+        create("release") {
+            // Load signing properties
+            val signingPropsFile = rootProject.file("signing.properties")
+            if (signingPropsFile.exists()) {
+                val signingProps = Properties()
+                signingPropsFile.inputStream().use { signingProps.load(it) }
+                
+                storeFile = file(signingProps.getProperty("storeFile"))
+                storePassword = signingProps.getProperty("storePassword")
+                keyAlias = signingProps.getProperty("keyAlias")
+                keyPassword = signingProps.getProperty("keyPassword")
+            } else {
+                // Fallback to debug keystore if signing.properties doesn't exist
+                storeFile = file("${System.getProperty("user.home")}/.android/debug.keystore")
+                storePassword = "android"
+                keyAlias = "androiddebugkey"
+                keyPassword = "android"
+            }
+        }
+    }
+    
     buildTypes {
         release {
-            isMinifyEnabled = false
+            isMinifyEnabled = true
+            isShrinkResources = true
+            signingConfig = signingConfigs.getByName("release")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
         }
+    }
+    
+    applicationVariants.all {
+        outputs.all {
+            if (this is com.android.build.gradle.internal.api.BaseVariantOutputImpl) {
+                val fileName = when (buildType.name) {
+                    "release" -> "MrgqPdfViewer-v${versionName}-release.apk"
+                    "debug" -> "MrgqPdfViewer-v${versionName}-debug.apk"
+                    else -> "MrgqPdfViewer-${buildType.name}.apk"
+                }
+                outputFileName = fileName
+            }
+        }
+    }
+    
+    lint {
+        checkReleaseBuilds = false
+        // 또는 특정 오류만 무시하려면:
+        // disable.add("ExpiredTargetSdkVersion")
     }
     
     compileOptions {

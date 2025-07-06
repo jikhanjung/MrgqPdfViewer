@@ -1,0 +1,223 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/tv_background"
+    android:padding="@dimen/tv_padding"
+    tools:context=".SettingsActivity">
+
+    <TextView
+        android:id="@+id/titleText"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="설정"
+        android:textColor="@color/tv_text_primary"
+        android:textSize="@dimen/title_text_size"
+        android:textStyle="bold"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent" />
+
+    <Button
+        android:id="@+id/backButton"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="돌아가기"
+        android:textSize="@dimen/body_text_size"
+        android:backgroundTint="@color/tv_surface"
+        android:textColor="@color/tv_text_primary"
+        android:focusable="true"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintTop_toTopOf="parent" />
+
+    <ScrollView
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:layout_marginTop="32dp"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/titleText">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:padding="16dp">
+
+            <!-- 웹서버 설정 섹션 -->
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="웹서버 설정"
+                android:textColor="@color/tv_text_primary"
+                android:textSize="@dimen/subtitle_text_size"
+                android:textStyle="bold"
+                android:layout_marginBottom="16dp" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:layout_marginBottom="12dp">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="포트 번호:"
+                    android:textColor="@color/tv_text_secondary"
+                    android:textSize="@dimen/body_text_size"
+                    android:layout_marginEnd="16dp" />
+
+                <EditText
+                    android:id="@+id/portEditText"
+                    android:layout_width="120dp"
+                    android:layout_height="wrap_content"
+                    android:inputType="number"
+                    android:hint="8080"
+                    android:text="8080"
+                    android:textColor="@color/tv_text_primary"
+                    android:textColorHint="@color/tv_text_secondary"
+                    android:textSize="@dimen/body_text_size"
+                    android:background="@color/tv_surface"
+                    android:padding="12dp"
+                    android:focusable="true"
+                    android:focusableInTouchMode="true"
+                    android:layout_marginEnd="16dp" />
+
+                <Button
+                    android:id="@+id/savePortBtn"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="저장"
+                    android:textSize="@dimen/small_text_size"
+                    android:backgroundTint="@color/tv_primary"
+                    android:textColor="@color/tv_text_primary"
+                    android:minHeight="48dp"
+                    android:paddingHorizontal="16dp"
+                    android:focusable="true" />
+
+            </LinearLayout>
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="• 권장 포트: 8080-8090\n• 변경 후 웹서버를 재시작해야 적용됩니다"
+                android:textColor="@color/tv_text_secondary"
+                android:textSize="@dimen/small_text_size"
+                android:layout_marginBottom="32dp" />
+
+            <!-- PDF 파일 관리 섹션 -->
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="PDF 파일 관리"
+                android:textColor="@color/tv_text_primary"
+                android:textSize="@dimen/subtitle_text_size"
+                android:textStyle="bold"
+                android:layout_marginBottom="16dp" />
+
+            <TextView
+                android:id="@+id/pdfFilesInfo"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="저장된 PDF 파일: 0개"
+                android:textColor="@color/tv_text_secondary"
+                android:textSize="@dimen/body_text_size"
+                android:layout_marginBottom="16dp" />
+
+            <Button
+                android:id="@+id/deleteAllPdfBtn"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="모든 PDF 파일 삭제"
+                android:textSize="@dimen/body_text_size"
+                android:backgroundTint="@color/tv_error"
+                android:textColor="@color/tv_text_primary"
+                android:layout_marginBottom="40dp"
+                android:minHeight="56dp"
+                android:paddingHorizontal="24dp"
+                android:focusable="true"
+                android:clickable="true" />
+
+            <!-- 파일별 설정 섹션 -->
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="파일별 페이지 모드 설정"
+                android:textColor="@color/tv_text_primary"
+                android:textSize="@dimen/subtitle_text_size"
+                android:textStyle="bold"
+                android:layout_marginBottom="16dp" />
+
+            <TextView
+                android:id="@+id/fileSettingsInfo"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="저장된 파일별 설정: 0개"
+                android:textColor="@color/tv_text_secondary"
+                android:textSize="@dimen/body_text_size"
+                android:layout_marginBottom="12dp" />
+
+            <TextView
+                android:id="@+id/settingsDetails"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="저장된 파일별 설정이 없습니다"
+                android:textColor="@color/tv_text_secondary"
+                android:textSize="@dimen/small_text_size"
+                android:layout_marginBottom="24dp"
+                android:fontFamily="monospace" />
+
+            <!-- 설정 관리 버튼들 -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:gravity="start">
+
+                <Button
+                    android:id="@+id/resetFileSettingsBtn"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="파일별 설정 선택 삭제"
+                    android:textSize="@dimen/body_text_size"
+                    android:backgroundTint="@color/tv_primary"
+                    android:textColor="@color/tv_text_primary"
+                    android:layout_marginBottom="16dp"
+                    android:minHeight="56dp"
+                    android:paddingHorizontal="24dp"
+                    android:focusable="true" />
+
+                <Button
+                    android:id="@+id/resetAllSettingsBtn"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="모든 설정 초기화"
+                    android:textSize="@dimen/body_text_size"
+                    android:backgroundTint="@color/tv_error"
+                    android:textColor="@color/tv_text_primary"
+                    android:layout_marginBottom="24dp"
+                    android:minHeight="56dp"
+                    android:paddingHorizontal="24dp"
+                    android:focusable="true" />
+
+            </LinearLayout>
+
+            <!-- 설명 텍스트 -->
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="• 파일별 설정: 각 PDF 파일의 페이지 모드 설정을 저장합니다\n• 화면 비율과 PDF 비율이 다를 때 두 페이지/한 페이지 모드를 선택할 수 있습니다\n• 설정을 초기화하면 다음에 파일을 열 때 다시 선택할 수 있습니다"
+                android:textColor="@color/tv_text_secondary"
+                android:textSize="@dimen/small_text_size"
+                android:lineSpacingMultiplier="1.2"
+                android:layout_marginTop="32dp" />
+
+        </LinearLayout>
+
+    </ScrollView>
+
+</androidx.constraintlayout.widget.ConstraintLayout>

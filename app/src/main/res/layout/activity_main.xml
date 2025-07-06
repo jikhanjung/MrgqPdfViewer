@@ -20,13 +20,24 @@
         app:layout_constraintTop_toTopOf="parent" />
 
     <LinearLayout
-        android:id="@+id/serverPanel"
+        android:id="@+id/topControlPanel"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:orientation="horizontal"
         android:gravity="center_vertical"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintTop_toTopOf="parent">
+
+        <Button
+            android:id="@+id/settingsButton"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="설정"
+            android:textSize="@dimen/body_text_size"
+            android:backgroundTint="@color/tv_surface"
+            android:textColor="@color/tv_text_primary"
+            android:layout_marginEnd="24dp"
+            android:focusable="true" />
 
         <TextView
             android:layout_width="wrap_content"
@@ -53,8 +64,8 @@
         android:textColor="@color/tv_text_secondary"
         android:textSize="@dimen/small_text_size"
         android:layout_marginTop="8dp"
-        app:layout_constraintEnd_toEndOf="@id/serverPanel"
-        app:layout_constraintTop_toBottomOf="@id/serverPanel" />
+        app:layout_constraintEnd_toEndOf="@id/topControlPanel"
+        app:layout_constraintTop_toBottomOf="@id/topControlPanel" />
 
     <LinearLayout
         android:id="@+id/sortPanel"

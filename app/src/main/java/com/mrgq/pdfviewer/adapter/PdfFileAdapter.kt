@@ -16,7 +16,7 @@ import kotlin.math.ln
 import kotlin.math.pow
 
 class PdfFileAdapter(
-    private val onItemClick: (PdfFile) -> Unit,
+    private val onItemClick: (PdfFile, Int) -> Unit,
     private val onDeleteClick: (PdfFile) -> Unit
 ) : ListAdapter<PdfFile, PdfFileAdapter.PdfViewHolder>(PdfDiffCallback()) {
     
@@ -27,12 +27,12 @@ class PdfFileAdapter(
     }
     
     override fun onBindViewHolder(holder: PdfViewHolder, position: Int) {
-        holder.bind(getItem(position))
+        holder.bind(getItem(position), position)
     }
     
     class PdfViewHolder(
         itemView: View,
-        private val onItemClick: (PdfFile) -> Unit,
+        private val onItemClick: (PdfFile, Int) -> Unit,
         private val onDeleteClick: (PdfFile) -> Unit
     ) : RecyclerView.ViewHolder(itemView) {
         
@@ -40,13 +40,14 @@ class PdfFileAdapter(
         private val fileInfoText: TextView = itemView.findViewById(R.id.fileInfoText)
         private val deleteButton: Button = itemView.findViewById(R.id.deleteButton)
         private var currentItem: PdfFile? = null
+        private var currentPosition: Int = -1
         
         init {
             itemView.isFocusable = true
             itemView.isFocusableInTouchMode = true
             
             itemView.setOnClickListener {
-                currentItem?.let { onItemClick(it) }
+                currentItem?.let { onItemClick(it, currentPosition) }
             }
             
             deleteButton.setOnClickListener {
@@ -64,8 +65,9 @@ class PdfFileAdapter(
             }
         }
         
-        fun bind(pdfFile: PdfFile) {
+        fun bind(pdfFile: PdfFile, position: Int) {
             currentItem = pdfFile
+            currentPosition = position
             fileNameText.text = pdfFile.name
             
             // Format file info

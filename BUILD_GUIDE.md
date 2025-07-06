@@ -47,6 +47,17 @@ Android Studio에서 자동으로 필요한 SDK를 다운로드합니다:
 ```
 
 #### Release 빌드
+**v0.1.4부터 keystore.properties 파일이 필요합니다:**
+
+1. 프로젝트 루트에 `keystore.properties` 파일 생성:
+```properties
+storeFile=path/to/your/keystore.jks
+storePassword=your_store_password
+keyAlias=your_key_alias
+keyPassword=your_key_password
+```
+
+2. Release APK 빌드:
 ```bash
 ./gradlew assembleRelease
 ```
@@ -119,6 +130,11 @@ adb logcat -s "WebServerManager" "PdfViewer"
 ```
 
 ### 2. 서명된 APK 생성 (배포용)
+**v0.1.4부터 자동 서명 설정**
+- `keystore.properties` 파일 설정 후 `./gradlew assembleRelease` 실행하면 자동으로 서명됨
+- 생성된 APK: `app/build/outputs/apk/release/MrgqPdfViewer-v0.1.4-release.apk`
+
+**수동 서명 (필요시)**
 1. Android Studio: `Build` → `Generate Signed Bundle / APK`
 2. 키스토어 생성 또는 기존 키스토어 선택
 3. Release 버전 선택 후 APK 생성
@@ -136,14 +152,24 @@ adb logcat -s "WebServerManager" "PdfViewer"
 1. **앱 실행**: TV에서 앱이 정상 실행되는지 확인
 2. **파일 목록**: PDF 파일들이 목록에 표시되는지 확인
 3. **리모컨 탐색**: DPAD UP/DOWN으로 목록 탐색 가능한지 확인
-4. **PDF 열기**: 파일 선택 시 PDF 뷰어가 열리는지 확인
-5. **페이지 이동**: 리모컨 LEFT/RIGHT로 페이지 이동 가능한지 확인
+4. **설정 버튼**: 우상단 설정 버튼으로 설정 화면 접근 확인
+5. **PDF 열기**: 파일 선택 시 PDF 뷰어가 열리는지 확인
+6. **페이지 이동**: 리모컨 LEFT/RIGHT로 페이지 이동 가능한지 확인
+7. **두 페이지 모드**: 세로 PDF에서 두 페이지 모드 대화상자 확인
 
 ### 웹 서버 테스트
 1. **서버 시작**: 토글 버튼으로 웹 서버 시작
 2. **IP 주소 확인**: TV 화면에 IP 주소 표시 확인
-3. **브라우저 접속**: PC에서 `http://<TV_IP>:8080` 접속
+3. **브라우저 접속**: PC에서 `http://<TV_IP>:포트번호` 접속
 4. **파일 업로드**: PDF 파일 업로드 후 목록 갱신 확인
+5. **진행률 표시**: 업로드 중 진행률 바 및 백분율 확인
+6. **파일 관리**: 웹에서 파일 목록 조회 및 삭제 기능 확인
+
+### 설정 화면 테스트
+1. **포트 설정**: 웹서버 포트 변경 (1024-65535)
+2. **파일별 설정**: 페이지 모드 설정 목록 확인
+3. **설정 초기화**: 전체/선택적 설정 초기화 확인
+4. **파일 삭제**: PDF 파일 전체 삭제 기능 확인
 
 ### 성능 테스트
 - **대용량 PDF**: 10MB+ PDF 파일 렌더링 테스트
