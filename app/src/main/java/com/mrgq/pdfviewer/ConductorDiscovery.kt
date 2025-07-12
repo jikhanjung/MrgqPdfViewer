@@ -16,9 +16,9 @@ class ConductorDiscovery {
     companion object {
         private const val TAG = "ConductorDiscovery"
         private const val DISCOVERY_PORT = 9091
-        private const val BROADCAST_INTERVAL = 3000L // 3초마다 브로드캐스트
-        private const val LISTEN_TIMEOUT = 2000 // 2초 타임아웃
-        private const val MAX_DISCOVERY_TIME = 15000L // 최대 15초 발견 시도
+        private const val BROADCAST_INTERVAL = 2000L // 2초마다 브로드캐스트
+        private const val LISTEN_TIMEOUT = 1000 // 1초 타임아웃
+        private const val MAX_DISCOVERY_TIME = 12000L // 최대 12초 발견 시도
     }
     
     private val gson = Gson()
@@ -43,16 +43,23 @@ class ConductorDiscovery {
             stopConductorBroadcast() // 기존 브로드캐스트 중지
             
             broadcastJob = CoroutineScope(Dispatchers.IO).launch {
-                val socket = DatagramSocket()
-                socket.broadcast = true
+                val socket = DatagramSocket().apply {
+                    broadcast = true
+                }
                 
                 val message = createConductorMessage(conductorName, webSocketPort)
                 val data = message.toByteArray(StandardCharsets.UTF_8)
                 
+                Log.d(TAG, "Conductor broadcast message: $message")
+                Log.d(TAG, "Conductor broadcast message size: ${data.size} bytes")
+                
                 try {
+                    var broadcastCount = 0
                     while (isActive) {
                         // 브로드캐스트 주소로 전송
                         val broadcastAddresses = getBroadcastAddresses()
+                        
+                        Log.d(TAG, "Broadcasting to ${broadcastAddresses.size} addresses (broadcast #${++broadcastCount})")
                         
                         broadcastAddresses.forEach { address ->
                             try {
@@ -61,10 +68,37 @@ class ConductorDiscovery {
                                     InetAddress.getByName(address), DISCOVERY_PORT
                                 )
                                 socket.send(packet)
-                                Log.d(TAG, "Sent conductor broadcast to $address:$DISCOVERY_PORT")
+                                Log.d(TAG, "✓ Sent conductor broadcast to $address:$DISCOVERY_PORT")
                             } catch (e: Exception) {
-                                Log.w(TAG, "Failed to send broadcast to $address", e)
+                                Log.w(TAG, "✗ Failed to send broadcast to $address", e)
                             }
+                        }
+                        
+                        // Also try unicast to local network range as fallback
+                        try {
+                            val localIP = NetworkUtils.getLocalIpAddress()
+                            if (localIP != "Unknown" && localIP.contains(".")) {
+                                val parts = localIP.split(".")
+                                if (parts.size == 4) {
+                                    val networkBase = "${parts[0]}.${parts[1]}.${parts[2]}"
+                                    // Send to a few common addresses in the network
+                                    val commonAddresses = listOf("$networkBase.1", "$networkBase.255")
+                                    commonAddresses.forEach { unicastAddress ->
+                                        try {
+                                            val packet = DatagramPacket(
+                                                data, data.size,
+                                                InetAddress.getByName(unicastAddress), DISCOVERY_PORT
+                                            )
+                                            socket.send(packet)
+                                            Log.v(TAG, "✓ Sent conductor unicast to $unicastAddress:$DISCOVERY_PORT")
+                                        } catch (e: Exception) {
+                                            Log.v(TAG, "✗ Failed to send unicast to $unicastAddress", e)
+                                        }
+                                    }
+                                }
+                            }
+                        } catch (e: Exception) {
+                            Log.v(TAG, "Failed unicast fallback", e)
                         }
                         
                         delay(BROADCAST_INTERVAL)
@@ -75,6 +109,7 @@ class ConductorDiscovery {
                     }
                 } finally {
                     socket.close()
+                    Log.d(TAG, "Conductor broadcast socket closed")
                 }
             }
             
@@ -108,8 +143,10 @@ class ConductorDiscovery {
             
             discoveryJob = CoroutineScope(Dispatchers.IO).launch {
                 try {
-                    listenSocket = DatagramSocket(DISCOVERY_PORT)
-                    listenSocket?.soTimeout = LISTEN_TIMEOUT
+                    listenSocket = DatagramSocket(DISCOVERY_PORT).apply {
+                        soTimeout = LISTEN_TIMEOUT
+                    }
+                    Log.d(TAG, "Successfully bound to port $DISCOVERY_PORT for discovery")
                     
                     val buffer = ByteArray(1024)
                     val startTime = System.currentTimeMillis()
@@ -120,6 +157,8 @@ class ConductorDiscovery {
                     while (isActive && (System.currentTimeMillis() - startTime) < MAX_DISCOVERY_TIME) {
                         try {
                             val packet = DatagramPacket(buffer, buffer.size)
+                            Log.v(TAG, "Waiting for discovery packet on port $DISCOVERY_PORT...")
+                            
                             listenSocket?.receive(packet)
                             
                             val message = String(packet.data, 0, packet.length, StandardCharsets.UTF_8)
@@ -138,10 +177,15 @@ class ConductorDiscovery {
                                     withContext(Dispatchers.Main) {
                                         onConductorFound(conductorInfo)
                                     }
+                                } else {
+                                    Log.v(TAG, "Duplicate conductor ignored: $conductorKey")
                                 }
+                            } else {
+                                Log.w(TAG, "Failed to parse conductor message: $message")
                             }
                         } catch (e: SocketTimeoutException) {
                             // 타임아웃은 정상 - 계속 대기
+                            Log.v(TAG, "Discovery timeout - continue listening...")
                         } catch (e: Exception) {
                             if (isActive) {
                                 Log.w(TAG, "Error receiving discovery packet", e)
@@ -192,6 +236,51 @@ class ConductorDiscovery {
         stopConductorDiscovery()
     }
     
+    /**
+     * 네트워크 연결 테스트 (디버깅용)
+     */
+    fun testNetworkConnectivity(): String {
+        val results = StringBuilder()
+        
+        try {
+            // 1. 로컬 IP 주소 확인
+            val localIP = NetworkUtils.getLocalIpAddress()
+            results.append("Local IP: $localIP\n")
+            
+            // 2. 브로드캐스트 주소 확인
+            val broadcastAddresses = getBroadcastAddresses()
+            results.append("Broadcast addresses: $broadcastAddresses\n")
+            
+            // 3. 소켓 바인딩 테스트
+            try {
+                val testSocket = DatagramSocket(DISCOVERY_PORT + 100).apply {
+                    reuseAddress = true
+                }
+                results.append("Socket binding: SUCCESS\n")
+                testSocket.close()
+            } catch (e: Exception) {
+                results.append("Socket binding: FAILED - ${e.message}\n")
+            }
+            
+            // 4. 네트워크 인터페이스 확인
+            val interfaces = NetworkInterface.getNetworkInterfaces()
+            var interfaceCount = 0
+            while (interfaces.hasMoreElements()) {
+                val networkInterface = interfaces.nextElement()
+                if (!networkInterface.isLoopback && networkInterface.isUp) {
+                    interfaceCount++
+                    results.append("Network interface: ${networkInterface.name} (${networkInterface.displayName})\n")
+                }
+            }
+            results.append("Active network interfaces: $interfaceCount\n")
+            
+        } catch (e: Exception) {
+            results.append("Network test error: ${e.message}\n")
+        }
+        
+        return results.toString()
+    }
+    
     private fun createConductorMessage(conductorName: String, webSocketPort: Int): String {
         val message = JsonObject().apply {
             addProperty("type", "conductor_announcement")
@@ -239,20 +328,44 @@ class ConductorDiscovery {
                 networkInterface.interfaceAddresses.forEach { interfaceAddress ->
                     val broadcastAddress = interfaceAddress.broadcast
                     if (broadcastAddress != null) {
-                        addresses.add(broadcastAddress.hostAddress)
-                        Log.d(TAG, "Found broadcast address: ${broadcastAddress.hostAddress}")
+                        val broadcastIP = broadcastAddress.hostAddress
+                        if (broadcastIP != null && !addresses.contains(broadcastIP)) {
+                            addresses.add(broadcastIP)
+                            Log.d(TAG, "Found broadcast address: $broadcastIP")
+                        }
                     }
                 }
             }
             
-            // 기본 브로드캐스트 주소 추가
-            if (addresses.isEmpty()) {
-                addresses.add("255.255.255.255")
-                Log.d(TAG, "Using default broadcast address: 255.255.255.255")
+            // 현재 IP 주소를 기반으로 계산된 브로드캐스트 주소 추가
+            val localIP = NetworkUtils.getLocalIpAddress()
+            if (localIP != "Unknown" && localIP.contains(".")) {
+                try {
+                    val parts = localIP.split(".")
+                    if (parts.size == 4) {
+                        // 일반적인 /24 네트워크 가정
+                        val calculatedBroadcast = "${parts[0]}.${parts[1]}.${parts[2]}.255"
+                        if (!addresses.contains(calculatedBroadcast)) {
+                            addresses.add(calculatedBroadcast)
+                            Log.d(TAG, "Added calculated broadcast address: $calculatedBroadcast")
+                        }
+                    }
+                } catch (e: Exception) {
+                    Log.w(TAG, "Failed to calculate broadcast address from $localIP", e)
+                }
             }
+            
+            // 기본 브로드캐스트 주소 추가
+            if (!addresses.contains("255.255.255.255")) {
+                addresses.add("255.255.255.255")
+                Log.d(TAG, "Added default broadcast address: 255.255.255.255")
+            }
+            
+            Log.d(TAG, "Final broadcast addresses: $addresses")
             
         } catch (e: Exception) {
             Log.e(TAG, "Error getting broadcast addresses", e)
+            addresses.clear()
             addresses.add("255.255.255.255") // 폴백
         }
         

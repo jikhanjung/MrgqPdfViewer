@@ -19,6 +19,17 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent" />
 
+    <TextView
+        android:id="@+id/collaborationStatus"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="협업 모드: 비활성"
+        android:textColor="@color/tv_secondary"
+        android:textSize="@dimen/body_text_size"
+        android:visibility="gone"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/titleText" />
+
     <LinearLayout
         android:id="@+id/topControlPanel"
         android:layout_width="wrap_content"

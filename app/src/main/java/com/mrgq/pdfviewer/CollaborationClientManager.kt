@@ -16,8 +16,9 @@ import java.util.concurrent.atomic.AtomicInteger
 
 class CollaborationClientManager(
     private val onPageChangeReceived: (Int, String) -> Unit,
-    private val onFileChangeReceived: (String) -> Unit,
-    private val onConnectionStatusChanged: (Boolean) -> Unit
+    private val onFileChangeReceived: (String, Int) -> Unit,
+    private val onConnectionStatusChanged: (Boolean) -> Unit,
+    private val onBackToListReceived: (() -> Unit)? = null
 ) {
     
     private var webSocket: WebSocket? = null
@@ -163,13 +164,10 @@ class CollaborationClientManager(
                     val page = json.get("page")?.asInt ?: 1
                     Log.d(TAG, "Received file change: file=$file, page=$page")
                     
-                    // First call the file change callback, then page change
-                    onFileChangeReceived(file)
+                    // Call file change callback with page information
+                    onFileChangeReceived(file, page)
                     
-                    // After file change, set the specific page
-                    if (page > 1) {
-                        onPageChangeReceived(page, file)
-                    }
+                    Log.d(TAG, "File change callback triggered with page $page")
                 }
                 "connect_response" -> {
                     val status = json.get("status")?.asString
@@ -180,6 +178,10 @@ class CollaborationClientManager(
                         startHeartbeat()
                         Log.d(TAG, "Successfully connected to conductor")
                     }
+                }
+                "back_to_list" -> {
+                    Log.d(TAG, "Received back to list command")
+                    onBackToListReceived?.invoke()
                 }
                 "heartbeat_response" -> {
                     Log.d(TAG, "Heartbeat acknowledged by conductor")

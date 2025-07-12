@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.SharedPreferences
 import android.os.Bundle
 import android.os.Environment
+import android.util.Log
 import android.view.KeyEvent
 import android.view.View
 import android.view.inputmethod.InputMethodManager
@@ -40,8 +41,7 @@ class SettingsActivity : AppCompatActivity() {
         
         preferences = getSharedPreferences("pdf_viewer_prefs", MODE_PRIVATE)
         
-        // Initialize global collaboration manager
-        globalCollaborationManager.initialize(this)
+        // Get current collaboration mode (no need to reinitialize)
         currentCollaborationMode = globalCollaborationManager.getCurrentMode()
         
         setupUI()
@@ -414,25 +414,56 @@ class SettingsActivity : AppCompatActivity() {
     }
     
     private fun activateConductorMode() {
-        if (globalCollaborationManager.activateConductorMode()) {
-            currentCollaborationMode = CollaborationMode.CONDUCTOR
-            setupCollaborationCallbacks()
-            updateCollaborationUI()
-            Toast.makeText(this, "지휘자 모드가 활성화되었습니다", Toast.LENGTH_SHORT).show()
-        } else {
-            Toast.makeText(this, "지휘자 모드 활성화 실패", Toast.LENGTH_SHORT).show()
-        }
+        // Show loading state
+        binding.masterModeBtn.isEnabled = false
+        binding.collaborationStatus.text = "지휘자 모드 활성화 중..."
+        
+        // Run in background thread to prevent ANR
+        Thread {
+            val success = globalCollaborationManager.activateConductorMode()
+            
+            // Update UI on main thread
+            runOnUiThread {
+                binding.masterModeBtn.isEnabled = true
+                
+                if (success) {
+                    currentCollaborationMode = CollaborationMode.CONDUCTOR
+                    setupCollaborationCallbacks()
+                    updateCollaborationUI()
+                    Toast.makeText(this, "지휘자 모드가 활성화되었습니다", Toast.LENGTH_SHORT).show()
+                } else {
+                    binding.collaborationStatus.text = "협업 모드: 비활성화"
+                    Toast.makeText(this, "지휘자 모드 활성화 실패", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }.start()
     }
     
     private fun activatePerformerMode() {
-        if (globalCollaborationManager.activatePerformerMode()) {
-            currentCollaborationMode = CollaborationMode.PERFORMER
-            setupCollaborationCallbacks()
-            updateCollaborationUI()
-            Toast.makeText(this, "연주자 모드가 활성화되었습니다", Toast.LENGTH_SHORT).show()
-        } else {
-            Toast.makeText(this, "연주자 모드 활성화 실패", Toast.LENGTH_SHORT).show()
-        }
+        // Show loading state
+        binding.slaveModeBtn.isEnabled = false
+        binding.collaborationStatus.text = "연주자 모드 활성화 중..."
+        
+        // Run in background thread to prevent ANR
+        Thread {
+            val success = globalCollaborationManager.activatePerformerMode()
+            
+            // Update UI on main thread
+            runOnUiThread {
+                binding.slaveModeBtn.isEnabled = true
+                
+                if (success) {
+                    currentCollaborationMode = CollaborationMode.PERFORMER
+                    setupCollaborationCallbacks()
+                    setupAutoConnectionCallback()
+                    updateCollaborationUI()
+                    Toast.makeText(this, "연주자 모드 활성화됨 - 지휘자 자동 검색 중...", Toast.LENGTH_SHORT).show()
+                } else {
+                    binding.collaborationStatus.text = "협업 모드: 비활성화"
+                    Toast.makeText(this, "연주자 모드 활성화 실패", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }.start()
     }
     
     private fun deactivateCollaborationMode() {
@@ -443,6 +474,13 @@ class SettingsActivity : AppCompatActivity() {
     }
     
     private fun setupCollaborationCallbacks() {
+        // Set up file change callback for performer mode (applies to all modes)
+        globalCollaborationManager.setOnFileChangeReceived { fileName, page ->
+            runOnUiThread {
+                handleRemoteFileChange(fileName, page)
+            }
+        }
+        
         when (currentCollaborationMode) {
             CollaborationMode.CONDUCTOR -> {
                 globalCollaborationManager.setOnServerClientConnected { clientId, deviceName ->
@@ -480,13 +518,34 @@ class SettingsActivity : AppCompatActivity() {
         }
     }
     
+    private fun setupAutoConnectionCallback() {
+        globalCollaborationManager.setOnAutoConnectionResult { success, conductorName ->
+            runOnUiThread {
+                if (success) {
+                    Toast.makeText(this@SettingsActivity, "지휘자 '$conductorName'에 자동 연결됨", Toast.LENGTH_LONG).show()
+                    updatePerformerInfo()
+                } else {
+                    Toast.makeText(this@SettingsActivity, "자동 연결 실패: $conductorName", Toast.LENGTH_LONG).show()
+                }
+            }
+        }
+    }
     
     private fun updateConductorInfo() {
-        val connectionInfo = globalCollaborationManager.getServerConnectionInfo()
+        // Force check current state from the actual running server
+        val isRunning = globalCollaborationManager.isServerRunning()
+        val connectionInfo = if (isRunning) {
+            "${NetworkUtils.getLocalIpAddress()}:9090"
+        } else {
+            "서버 중지됨"
+        }
         binding.masterConnectionInfo.text = "연결 주소: $connectionInfo"
         
         val clientCount = globalCollaborationManager.getConnectedClientCount()
         binding.connectedClientsInfo.text = "연결된 기기: ${clientCount}대"
+        
+        // Debug logging
+        Log.d("SettingsActivity", "지휘자 정보 업데이트 - 서버 상태: $isRunning, 연결된 클라이언트: $clientCount")
     }
     
     private fun updatePerformerInfo() {
@@ -643,6 +702,27 @@ class SettingsActivity : AppCompatActivity() {
         }
     }
     
+    override fun onResume() {
+        super.onResume()
+        
+        // Update collaboration UI state when returning to settings
+        Log.d("SettingsActivity", "onResume - 협업 상태 업데이트")
+        updateCollaborationUI()
+        
+        // Refresh server/client info based on current mode
+        when (currentCollaborationMode) {
+            CollaborationMode.CONDUCTOR -> {
+                updateConductorInfo()
+            }
+            CollaborationMode.PERFORMER -> {
+                updatePerformerInfo()
+            }
+            else -> {
+                // No update needed for NONE mode
+            }
+        }
+    }
+    
     override fun onDestroy() {
         super.onDestroy()
         
@@ -655,27 +735,20 @@ class SettingsActivity : AppCompatActivity() {
         // 앱이 완전히 종료될 때만 정리됨
     }
     
-    private fun setupCollaborationCallbacks() {
-        // Set up file change callback for performer mode
-        globalCollaborationManager.setOnFileChangeReceived { fileName ->
-            runOnUiThread {
-                handleRemoteFileChange(fileName)
-            }
-        }
-    }
     
-    private fun handleRemoteFileChange(fileName: String) {
-        android.util.Log.d("SettingsActivity", "🎼 연주자 모드: 파일 '$fileName' 변경 요청 받음 (SettingsActivity)")
+    private fun handleRemoteFileChange(fileName: String, page: Int) {
+        android.util.Log.d("SettingsActivity", "🎼 연주자 모드: 파일 '$fileName' 변경 요청 받음 (페이지: $page) (SettingsActivity)")
         
         // Switch to MainActivity and open the file
         val intent = android.content.Intent(this, MainActivity::class.java).apply {
             // Add flag to indicate this is from file change request
             putExtra("requested_file", fileName)
+            putExtra("requested_page", page)
             flags = android.content.Intent.FLAG_ACTIVITY_CLEAR_TOP or android.content.Intent.FLAG_ACTIVITY_SINGLE_TOP
         }
         startActivity(intent)
         
         // Show a toast to indicate what's happening
-        Toast.makeText(this, "지휘자가 '$fileName' 파일을 열었습니다", Toast.LENGTH_SHORT).show()
+        Toast.makeText(this, "지휘자가 '$fileName' 파일 (페이지 $page)을 열었습니다", Toast.LENGTH_SHORT).show()
     }
 }

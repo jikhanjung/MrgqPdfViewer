@@ -21,6 +21,9 @@ class CollaborationServerManager {
     private val gson = Gson()
     private val clientCounter = AtomicInteger(0)
     
+    // Add explicit server state tracking
+    private var serverStarted = false
+    
     private var onClientConnected: ((String, String) -> Unit)? = null
     private var onClientDisconnected: ((String) -> Unit)? = null
     
@@ -72,14 +75,17 @@ class CollaborationServerManager {
             val started = webSocketServer?.start() ?: false
             
             if (started) {
-                Log.d(TAG, "WebSocket server started on port $port")
+                serverStarted = true
+                Log.d(TAG, "WebSocket server started on port $port - serverStarted flag set to true")
             } else {
-                Log.e(TAG, "Failed to start WebSocket server")
+                serverStarted = false
+                Log.e(TAG, "Failed to start WebSocket server - serverStarted flag set to false")
             }
             
             started
         } catch (e: Exception) {
             Log.e(TAG, "Failed to start server", e)
+            serverStarted = false
             false
         }
     }
@@ -116,20 +122,29 @@ class CollaborationServerManager {
             }
             
             webSocketServer = null
+            serverStarted = false
             
-            Log.d(TAG, "WebSocket server stopped successfully")
+            Log.d(TAG, "WebSocket server stopped successfully - serverStarted flag set to false")
         } catch (e: Exception) {
             Log.e(TAG, "Error stopping server", e)
             
             // Force cleanup even if there were errors
             webSocketServer = null
+            serverStarted = false
             connectedClients.clear()
             clientDeviceNames.clear()
         }
     }
     
     fun isServerRunning(): Boolean {
-        return webSocketServer != null && webSocketServer?.isAlive == true
+        val hasServer = webSocketServer != null
+        val isAlive = webSocketServer?.isAlive == true
+        val result = serverStarted && hasServer && isAlive
+        
+        // Debug logging to understand why server status is incorrect
+        Log.d(TAG, "서버 상태 확인 - serverStarted: $serverStarted, hasServer: $hasServer, isAlive: $isAlive, result: $result")
+        
+        return result
     }
     
     fun getConnectedClientCount(): Int {
@@ -166,6 +181,16 @@ class CollaborationServerManager {
         
         broadcastToClients(message.toString())
         Log.d(TAG, "Broadcasted file change: $fileName, page: $pageNumber" + if (fileServerUrl != null) " (with file server: $fileServerUrl)" else "")
+    }
+    
+    fun broadcastBackToList() {
+        val message = JsonObject().apply {
+            addProperty("action", "back_to_list")
+            addProperty("timestamp", System.currentTimeMillis())
+        }
+        
+        broadcastToClients(message.toString())
+        Log.d(TAG, "Broadcasted back to list")
     }
     
     private fun broadcastToClients(message: String) {

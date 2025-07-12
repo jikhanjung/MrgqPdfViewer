@@ -395,24 +395,25 @@ class SettingsActivityNew : AppCompatActivity() {
     
     // 협업 콜백 설정
     private fun setupCollaborationCallbacks() {
-        globalCollaborationManager.setOnFileChangeReceived { fileName ->
+        globalCollaborationManager.setOnFileChangeReceived { fileName, page ->
             runOnUiThread {
-                handleRemoteFileChange(fileName)
+                handleRemoteFileChange(fileName, page)
             }
         }
     }
     
-    private fun handleRemoteFileChange(fileName: String) {
-        Log.d("SettingsActivityNew", "🎼 연주자 모드: 파일 '$fileName' 변경 요청 받음 (SettingsActivityNew)")
+    private fun handleRemoteFileChange(fileName: String, page: Int) {
+        Log.d("SettingsActivityNew", "🎼 연주자 모드: 파일 '$fileName' 변경 요청 받음 (페이지: $page) (SettingsActivityNew)")
         
         // Switch to MainActivity and open the file
         val intent = android.content.Intent(this, MainActivity::class.java).apply {
             putExtra("requested_file", fileName)
+            putExtra("requested_page", page)
             flags = android.content.Intent.FLAG_ACTIVITY_CLEAR_TOP or android.content.Intent.FLAG_ACTIVITY_SINGLE_TOP
         }
         startActivity(intent)
         
-        Toast.makeText(this, "지휘자가 '$fileName' 파일을 열었습니다", Toast.LENGTH_SHORT).show()
+        Toast.makeText(this, "지휘자가 '$fileName' 파일 (페이지 $page)을 열었습니다", Toast.LENGTH_SHORT).show()
     }
     
     // 유틸리티 메서드들

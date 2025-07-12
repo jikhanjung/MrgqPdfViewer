@@ -122,6 +122,13 @@ class MainActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         
+        // Re-register collaboration callbacks when MainActivity resumes
+        Log.d("MainActivity", "onResume - 협업 콜백 재등록")
+        setupCollaborationCallbacks()
+        
+        // Update collaboration status display
+        updateCollaborationStatus()
+        
         // Check if file list needs refresh (e.g., after downloading file in PdfViewerActivity)
         val preferences = getSharedPreferences("pdf_viewer_prefs", MODE_PRIVATE)
         val needsRefresh = preferences.getBoolean("refresh_file_list", false)
@@ -187,6 +194,14 @@ class MainActivity : AppCompatActivity() {
         Log.d("MainActivity", "Opening file: ${pdfFile.name} at position $position")
         Log.d("MainActivity", "File list size: ${currentPdfFiles.size}")
         Log.d("MainActivity", "Actual file at position $position: ${currentPdfFiles[position].name}")
+        
+        // 지휘자 모드에서 파일 변경 브로드캐스트
+        val globalCollaborationManager = GlobalCollaborationManager.getInstance()
+        if (globalCollaborationManager.getCurrentMode() == CollaborationMode.CONDUCTOR) {
+            Log.d("MainActivity", "🎵 지휘자 모드: 파일 선택 브로드캐스트 - ${pdfFile.name}")
+            globalCollaborationManager.addFileToServer(pdfFile.name, pdfFile.path)
+            globalCollaborationManager.broadcastFileChange(pdfFile.name, 1) // 첫 페이지로
+        }
         
         val intent = Intent(this, PdfViewerActivity::class.java).apply {
             putExtra("current_index", position)  // position을 직접 사용
@@ -306,9 +321,9 @@ class MainActivity : AppCompatActivity() {
         val globalCollaborationManager = GlobalCollaborationManager.getInstance()
         
         // Set up file change callback for performer mode
-        globalCollaborationManager.setOnFileChangeReceived { fileName ->
+        globalCollaborationManager.setOnFileChangeReceived { fileName, page ->
             runOnUiThread {
-                handleRemoteFileChange(fileName)
+                handleRemoteFileChange(fileName, page)
             }
         }
     }
@@ -329,33 +344,61 @@ class MainActivity : AppCompatActivity() {
                         openPdfFile(pdfFile, fileIndex)
                     } else {
                         // File not found, try to download
-                        handleRemoteFileChange(requestedFile)
+                        val requestedPage = intent.getIntExtra("requested_page", 1)
+                        handleRemoteFileChange(requestedFile, requestedPage)
                     }
                 } else {
                     // File list not loaded yet, try again after a delay
                     binding.recyclerView.postDelayed({
-                        handleRemoteFileChange(requestedFile)
+                        val requestedPage = intent.getIntExtra("requested_page", 1)
+                        handleRemoteFileChange(requestedFile, requestedPage)
                     }, 1000)
                 }
             }
             
-            // Clear the intent extra to prevent re-processing
+            // Clear the intent extras to prevent re-processing
             intent.removeExtra("requested_file")
+            intent.removeExtra("requested_page")
         }
     }
     
-    private fun handleRemoteFileChange(fileName: String) {
-        Log.d("MainActivity", "🎼 연주자 모드: 파일 '$fileName' 변경 요청 받음 (MainActivity)")
+    private fun handleRemoteFileChange(fileName: String, page: Int = 1) {
+        Log.d("MainActivity", "🎼 연주자 모드: 파일 '$fileName' 변경 요청 받음 (페이지: $page) (MainActivity)")
         
         // Find the file in current list
         val currentFiles = pdfAdapter.currentList
+        Log.d("MainActivity", "🎼 현재 파일 목록 크기: ${currentFiles.size}")
+        
+        // 파일 목록이 비어있으면 잠시 기다린 후 재시도
+        if (currentFiles.isEmpty()) {
+            Log.d("MainActivity", "🎼 파일 목록이 비어있음, 1초 후 재시도...")
+            binding.recyclerView.postDelayed({
+                handleRemoteFileChange(fileName, page)
+            }, 1000)
+            return
+        }
+        
+        currentFiles.forEachIndexed { index, file ->
+            Log.d("MainActivity", "🎼 [$index] ${file.name}")
+        }
+        
         val fileIndex = currentFiles.indexOfFirst { it.name == fileName }
+        Log.d("MainActivity", "🎼 요청된 파일 '$fileName'의 인덱스: $fileIndex")
         
         if (fileIndex >= 0) {
-            // File found - open it directly
+            // File found - open it directly with target page
             val pdfFile = currentFiles[fileIndex]
             Log.d("MainActivity", "🎼 연주자 모드: 파일 '$fileName' 발견, PDF 뷰어로 이동 중...")
-            openPdfFile(pdfFile, fileIndex)
+            
+            // Pass the target page to PdfViewerActivity
+            val intent = Intent(this, PdfViewerActivity::class.java).apply {
+                putExtra("current_index", fileIndex)
+                putExtra("target_page", page) // Pass target page
+                putStringArrayListExtra("file_path_list", ArrayList(currentFiles.map { it.path }))
+                putStringArrayListExtra("file_name_list", ArrayList(currentFiles.map { it.name }))
+            }
+            startActivity(intent)
+            Log.d("MainActivity", "🎼 PdfViewerActivity 시작됨")
         } else {
             // File not found - try downloading from conductor
             Log.w("MainActivity", "🎼 연주자 모드: 파일 '$fileName' 을 찾을 수 없음, 다운로드 시도...")
@@ -539,5 +582,29 @@ class MainActivity : AppCompatActivity() {
             val intent = Intent(this, SettingsActivity::class.java)
             startActivity(intent)
         }
+    }
+    
+    private fun updateCollaborationStatus() {
+        val globalCollaborationManager = GlobalCollaborationManager.getInstance()
+        val currentMode = globalCollaborationManager.getCurrentMode()
+        
+        when (currentMode) {
+            CollaborationMode.CONDUCTOR -> {
+                val clientCount = globalCollaborationManager.getConnectedClientCount()
+                binding.collaborationStatus.text = "협업 모드: 지휘자 (연결된 기기: ${clientCount}대)"
+                binding.collaborationStatus.visibility = android.view.View.VISIBLE
+            }
+            CollaborationMode.PERFORMER -> {
+                val isConnected = globalCollaborationManager.isClientConnected()
+                val status = if (isConnected) "연결됨" else "연결 끊김"
+                binding.collaborationStatus.text = "협업 모드: 연주자 ($status)"
+                binding.collaborationStatus.visibility = android.view.View.VISIBLE
+            }
+            CollaborationMode.NONE -> {
+                binding.collaborationStatus.visibility = android.view.View.GONE
+            }
+        }
+        
+        Log.d("MainActivity", "협업 상태 업데이트: $currentMode")
     }
 }

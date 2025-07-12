@@ -61,7 +61,16 @@ class PageCache(
      * 현재 페이지를 기준으로 주변 페이지들을 프리렌더링
      */
     fun prerenderAround(currentPageIndex: Int) {
-        val pageCount = pdfRenderer.pageCount
+        // Safety check: ensure PDF renderer is still valid
+        val pageCount = try {
+            pdfRenderer.pageCount
+        } catch (e: IllegalStateException) {
+            Log.w(TAG, "PdfRenderer is closed, skipping prerender", e)
+            return
+        } catch (e: Exception) {
+            Log.w(TAG, "Error accessing page count, skipping prerender", e)
+            return
+        }
         
         // 두 페이지 모드인 경우 홀수 페이지 인덱스 조정
         val adjustedIndex = if (isTwoPageMode && currentPageIndex % 2 == 1) {
@@ -107,12 +116,30 @@ class PageCache(
      * 동기 페이지 렌더링 (즉시 필요한 경우)
      */
     private fun renderPageSync(pageIndex: Int): Bitmap? {
-        if (pageIndex < 0 || pageIndex >= pdfRenderer.pageCount) {
+        // Safety check: ensure PDF renderer is still valid
+        val pageCount = try {
+            pdfRenderer.pageCount
+        } catch (e: IllegalStateException) {
+            Log.w(TAG, "PdfRenderer is closed, cannot sync render page $pageIndex", e)
+            return null
+        } catch (e: Exception) {
+            Log.w(TAG, "Error accessing page count for sync render page $pageIndex", e)
+            return null
+        }
+        
+        if (pageIndex < 0 || pageIndex >= pageCount) {
             return null
         }
         
         return try {
-            val page = pdfRenderer.openPage(pageIndex)
+            // Safety check: ensure PDF renderer is still valid before opening page
+            val page = try {
+                pdfRenderer.openPage(pageIndex)
+            } catch (e: IllegalStateException) {
+                Log.w(TAG, "PdfRenderer is closed, cannot render page $pageIndex", e)
+                return null
+            }
+            
             val bitmap = createBitmapForPage(page)
             
             // 렌더링
@@ -134,7 +161,18 @@ class PageCache(
      * 비동기 페이지 렌더링 (프리렌더링용)
      */
     private suspend fun renderPageAsync(pageIndex: Int) = withContext(Dispatchers.IO) {
-        if (pageIndex < 0 || pageIndex >= pdfRenderer.pageCount) {
+        // Safety check: ensure PDF renderer is still valid
+        val pageCount = try {
+            pdfRenderer.pageCount
+        } catch (e: IllegalStateException) {
+            Log.w(TAG, "PdfRenderer is closed, skipping async render for page $pageIndex", e)
+            return@withContext
+        } catch (e: Exception) {
+            Log.w(TAG, "Error accessing page count for page $pageIndex", e)
+            return@withContext
+        }
+        
+        if (pageIndex < 0 || pageIndex >= pageCount) {
             return@withContext
         }
         
@@ -144,7 +182,14 @@ class PageCache(
         }
         
         try {
-            val page = pdfRenderer.openPage(pageIndex)
+            // Safety check: ensure PDF renderer is still valid before opening page
+            val page = try {
+                pdfRenderer.openPage(pageIndex)
+            } catch (e: IllegalStateException) {
+                Log.w(TAG, "PdfRenderer is closed, cannot async render page $pageIndex", e)
+                return@withContext
+            }
+            
             val bitmap = createBitmapForPage(page)
             
             // 렌더링

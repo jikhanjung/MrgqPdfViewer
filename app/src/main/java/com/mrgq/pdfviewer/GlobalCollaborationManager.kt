@@ -36,12 +36,22 @@ class GlobalCollaborationManager private constructor() {
     private var onServerClientDisconnected: ((String) -> Unit)? = null
     private var onClientConnectionStatusChanged: ((Boolean) -> Unit)? = null
     private var onPageChangeReceived: ((Int, String) -> Unit)? = null
-    private var onFileChangeReceived: ((String) -> Unit)? = null
+    private var onFileChangeReceived: ((String, Int) -> Unit)? = null // Updated to include page
+    private var onBackToListReceived: (() -> Unit)? = null
     private var onConductorDiscovered: ((ConductorDiscovery.ConductorInfo) -> Unit)? = null
     private var onDiscoveryTimeout: (() -> Unit)? = null
+    private var onAutoConnectionResult: ((Boolean, String) -> Unit)? = null
+    
+    private var isInitialized = false
     
     fun initialize(context: Context) {
+        if (isInitialized) {
+            Log.d(TAG, "GlobalCollaborationManager already initialized - skipping")
+            return
+        }
+        
         preferences = context.getSharedPreferences("pdf_viewer_prefs", Context.MODE_PRIVATE)
+        isInitialized = true
         
         // Restore collaboration mode from preferences
         val savedMode = preferences?.getString("collaboration_mode", "none") ?: "none"
@@ -54,8 +64,13 @@ class GlobalCollaborationManager private constructor() {
         // Re-initialize collaboration if it was active
         when (currentMode) {
             CollaborationMode.CONDUCTOR -> {
-                Log.d(TAG, "Restoring conductor mode")
-                initializeConductorMode()
+                // Check if server is already running before trying to start a new one
+                if (collaborationServerManager?.isServerRunning() == true) {
+                    Log.d(TAG, "Conductor mode server is already running - no need to restore")
+                } else {
+                    Log.d(TAG, "Restoring conductor mode")
+                    initializeConductorMode()
+                }
             }
             CollaborationMode.PERFORMER -> {
                 Log.d(TAG, "Restoring performer mode")
@@ -93,7 +108,15 @@ class GlobalCollaborationManager private constructor() {
         currentMode = CollaborationMode.PERFORMER
         preferences?.edit()?.putString("collaboration_mode", "performer")?.apply()
         
-        return initializePerformerMode()
+        val success = initializePerformerMode()
+        
+        // Auto-start conductor discovery when performer mode is activated
+        if (success) {
+            Log.d(TAG, "Auto-starting conductor discovery...")
+            startAutoConductorDiscovery()
+        }
+        
+        return success
     }
     
     fun deactivateCollaborationMode() {
@@ -225,13 +248,17 @@ class GlobalCollaborationManager private constructor() {
                     Log.d(TAG, "Page change received: $page, $file")
                     onPageChangeReceived?.invoke(page, file)
                 },
-                onFileChangeReceived = { file ->
-                    Log.d(TAG, "File change received: $file")
-                    onFileChangeReceived?.invoke(file)
+                onFileChangeReceived = { file, page ->
+                    Log.d(TAG, "File change received: $file, page: $page")
+                    onFileChangeReceived?.invoke(file, page)
                 },
                 onConnectionStatusChanged = { isConnected ->
                     Log.d(TAG, "Connection status changed: $isConnected")
                     onClientConnectionStatusChanged?.invoke(isConnected)
+                },
+                onBackToListReceived = {
+                    Log.d(TAG, "Back to list received")
+                    onBackToListReceived?.invoke()
                 }
             )
             
@@ -267,6 +294,10 @@ class GlobalCollaborationManager private constructor() {
     fun broadcastFileChange(fileName: String, pageNumber: Int = 1) {
         val fileServerUrl = getFileServerUrl()
         collaborationServerManager?.broadcastFileChange(fileName, pageNumber, fileServerUrl)
+    }
+    
+    fun broadcastBackToList() {
+        collaborationServerManager?.broadcastBackToList()
     }
     
     // File server operations
@@ -331,8 +362,12 @@ class GlobalCollaborationManager private constructor() {
         onPageChangeReceived = callback
     }
     
-    fun setOnFileChangeReceived(callback: (String) -> Unit) {
+    fun setOnFileChangeReceived(callback: (String, Int) -> Unit) {
         onFileChangeReceived = callback
+    }
+    
+    fun setOnBackToListReceived(callback: () -> Unit) {
+        onBackToListReceived = callback
     }
     
     fun setOnConductorDiscovered(callback: (ConductorDiscovery.ConductorInfo) -> Unit) {
@@ -341,6 +376,10 @@ class GlobalCollaborationManager private constructor() {
     
     fun setOnDiscoveryTimeout(callback: () -> Unit) {
         onDiscoveryTimeout = callback
+    }
+    
+    fun setOnAutoConnectionResult(callback: (Boolean, String) -> Unit) {
+        onAutoConnectionResult = callback
     }
     
     // Conductor Discovery operations
@@ -371,14 +410,52 @@ class GlobalCollaborationManager private constructor() {
         return connectToConductor(conductorInfo.ipAddress, conductorInfo.port, "$deviceName (연주자)")
     }
     
+    private fun startAutoConductorDiscovery() {
+        if (currentMode != CollaborationMode.PERFORMER) {
+            Log.w(TAG, "Auto conductor discovery is only available in performer mode")
+            return
+        }
+        
+        Log.d(TAG, "Starting auto conductor discovery...")
+        
+        // Set up auto-connection callback
+        val success = conductorDiscovery?.startConductorDiscovery(
+            onConductorFound = { conductorInfo ->
+                Log.d(TAG, "Auto-discovery found conductor: ${conductorInfo.name} at ${conductorInfo.ipAddress}:${conductorInfo.port}")
+                
+                // Automatically connect to the first discovered conductor
+                val connected = connectToDiscoveredConductor(conductorInfo)
+                if (connected) {
+                    Log.d(TAG, "Auto-connected to conductor: ${conductorInfo.name}")
+                    onAutoConnectionResult?.invoke(true, conductorInfo.name)
+                    // Stop discovery after successful connection
+                    stopConductorDiscovery()
+                } else {
+                    Log.w(TAG, "Failed to auto-connect to conductor: ${conductorInfo.name}")
+                    onAutoConnectionResult?.invoke(false, conductorInfo.name)
+                }
+            },
+            onDiscoveryTimeout = {
+                Log.d(TAG, "Auto conductor discovery timeout - no conductors found")
+                onAutoConnectionResult?.invoke(false, "지휘자를 찾을 수 없음")
+            }
+        ) ?: false
+        
+        if (!success) {
+            Log.w(TAG, "Failed to start auto conductor discovery")
+        }
+    }
+    
     private fun clearCallbacks() {
         onServerClientConnected = null
         onServerClientDisconnected = null
         onClientConnectionStatusChanged = null
         onPageChangeReceived = null
         onFileChangeReceived = null
+        onBackToListReceived = null
         onConductorDiscovered = null
         onDiscoveryTimeout = null
+        onAutoConnectionResult = null
     }
     
     // Utility methods

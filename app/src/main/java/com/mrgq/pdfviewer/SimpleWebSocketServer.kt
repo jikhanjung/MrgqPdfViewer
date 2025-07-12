@@ -186,5 +186,11 @@ class SimpleWebSocketServer(
     }
     
     val isAlive: Boolean
-        get() = isRunning && serverSocket?.isClosed == false
+        get() {
+            val running = isRunning
+            val socketNotClosed = serverSocket?.isClosed == false
+            val result = running && socketNotClosed
+            Log.d(TAG, "isAlive 체크 - isRunning: $running, socketNotClosed: $socketNotClosed, result: $result")
+            return result
+        }
 }
