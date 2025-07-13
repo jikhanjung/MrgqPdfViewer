@@ -20,6 +20,8 @@ class PdfFileAdapter(
     private val onDeleteClick: (PdfFile) -> Unit
 ) : ListAdapter<PdfFile, PdfFileAdapter.PdfViewHolder>(PdfDiffCallback()) {
     
+    private var isFileManagementMode = false
+    
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): PdfViewHolder {
         val view = LayoutInflater.from(parent.context)
             .inflate(R.layout.item_pdf_file, parent, false)
@@ -27,7 +29,12 @@ class PdfFileAdapter(
     }
     
     override fun onBindViewHolder(holder: PdfViewHolder, position: Int) {
-        holder.bind(getItem(position), position)
+        holder.bind(getItem(position), position, isFileManagementMode)
+    }
+    
+    fun setFileManagementMode(enabled: Boolean) {
+        isFileManagementMode = enabled
+        notifyDataSetChanged()
     }
     
     class PdfViewHolder(
@@ -65,7 +72,7 @@ class PdfFileAdapter(
             }
         }
         
-        fun bind(pdfFile: PdfFile, position: Int) {
+        fun bind(pdfFile: PdfFile, position: Int, isFileManagementMode: Boolean) {
             currentItem = pdfFile
             currentPosition = position
             fileNameText.text = pdfFile.name
@@ -75,6 +82,9 @@ class PdfFileAdapter(
             val modifiedDate = dateFormat.format(Date(pdfFile.lastModified))
             val fileSize = formatFileSize(pdfFile.size)
             fileInfoText.text = "$fileSize • $modifiedDate"
+            
+            // 파일 관리 모드에 따라 삭제 버튼 표시/숨김
+            deleteButton.visibility = if (isFileManagementMode) View.VISIBLE else View.GONE
         }
         
         private fun formatFileSize(bytes: Long): String {

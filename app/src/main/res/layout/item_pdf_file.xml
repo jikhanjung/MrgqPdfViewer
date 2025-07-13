@@ -46,7 +46,7 @@
                 android:id="@+id/fileInfoText"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="4dp"
+                android:layout_marginTop="2dp"
                 android:textColor="@color/tv_text_secondary"
                 android:textSize="@dimen/small_text_size"
                 android:maxLines="1"
@@ -58,10 +58,10 @@
             android:id="@+id/deleteButton"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginStart="8dp"
+            android:layout_marginStart="6dp"
             android:text="삭제"
             android:textSize="@dimen/small_text_size"
-            android:minWidth="80dp"
+            android:minWidth="70dp"
             android:backgroundTint="@color/delete_button_color"
             android:focusable="true" />
 

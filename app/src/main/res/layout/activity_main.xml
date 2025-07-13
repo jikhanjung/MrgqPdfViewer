@@ -19,25 +19,39 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent" />
 
-    <TextView
-        android:id="@+id/collaborationStatus"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="협업 모드: 비활성"
-        android:textColor="@color/tv_secondary"
-        android:textSize="@dimen/body_text_size"
-        android:visibility="gone"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/titleText" />
-
     <LinearLayout
         android:id="@+id/topControlPanel"
-        android:layout_width="wrap_content"
+        android:layout_width="0dp"
         android:layout_height="wrap_content"
         android:orientation="horizontal"
         android:gravity="center_vertical"
         app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent">
+
+        <TextView
+            android:id="@+id/collaborationStatus"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="합주 모드: 비활성"
+            android:textColor="@color/tv_text_secondary"
+            android:textSize="@dimen/small_text_size"
+            android:gravity="end|center_vertical"
+            android:layout_marginEnd="12dp"
+            android:maxLines="1"
+            android:ellipsize="end" />
+
+        <Button
+            android:id="@+id/collaborationButton"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="합주 모드"
+            android:textSize="@dimen/body_text_size"
+            android:backgroundTint="@color/tv_surface"
+            android:textColor="@color/tv_text_primary"
+            android:layout_marginEnd="12dp"
+            android:focusable="true" />
 
         <Button
             android:id="@+id/settingsButton"
@@ -47,44 +61,19 @@
             android:textSize="@dimen/body_text_size"
             android:backgroundTint="@color/tv_surface"
             android:textColor="@color/tv_text_primary"
-            android:layout_marginEnd="24dp"
-            android:focusable="true" />
-
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="웹 서버"
-            android:textColor="@color/tv_text_secondary"
-            android:textSize="@dimen/body_text_size"
-            android:layout_marginEnd="16dp" />
-
-        <androidx.appcompat.widget.SwitchCompat
-            android:id="@+id/serverToggle"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text=""
             android:focusable="true" />
 
     </LinearLayout>
 
-    <TextView
-        android:id="@+id/serverStatus"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="서버 중지됨"
-        android:textColor="@color/tv_text_secondary"
-        android:textSize="@dimen/small_text_size"
-        android:layout_marginTop="8dp"
-        app:layout_constraintEnd_toEndOf="@id/topControlPanel"
-        app:layout_constraintTop_toBottomOf="@id/topControlPanel" />
-
     <LinearLayout
         android:id="@+id/sortPanel"
-        android:layout_width="wrap_content"
+        android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="horizontal"
-        android:layout_marginTop="16dp"
+        android:layout_marginTop="12dp"
+        android:gravity="center_vertical"
         app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintTop_toBottomOf="@id/titleText">
 
         <TextView
@@ -93,7 +82,7 @@
             android:text="정렬:"
             android:textColor="@color/tv_text_secondary"
             android:textSize="@dimen/body_text_size"
-            android:layout_marginEnd="16dp"
+            android:layout_marginEnd="12dp"
             android:layout_gravity="center_vertical" />
 
         <Button
@@ -102,10 +91,12 @@
             android:layout_height="wrap_content"
             android:text="이름순"
             android:textSize="@dimen/small_text_size"
-            android:minHeight="48dp"
+            android:textColor="@color/tv_text_primary"
+            android:minHeight="42dp"
+            android:paddingHorizontal="16dp"
             android:focusable="true"
             android:backgroundTint="@color/tv_primary"
-            android:layout_marginEnd="8dp" />
+            android:layout_marginEnd="6dp" />
 
         <Button
             android:id="@+id/sortByTimeBtn"
@@ -113,7 +104,26 @@
             android:layout_height="wrap_content"
             android:text="시간순"
             android:textSize="@dimen/small_text_size"
-            android:minHeight="48dp"
+            android:textColor="@color/tv_text_primary"
+            android:minHeight="42dp"
+            android:paddingHorizontal="16dp"
+            android:focusable="true"
+            android:backgroundTint="@color/tv_surface" />
+
+        <View
+            android:layout_width="0dp"
+            android:layout_height="1dp"
+            android:layout_weight="1" />
+
+        <Button
+            android:id="@+id/fileManageBtn"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="파일관리"
+            android:textSize="@dimen/small_text_size"
+            android:textColor="@color/tv_text_primary"
+            android:minHeight="42dp"
+            android:paddingHorizontal="16dp"
             android:focusable="true"
             android:backgroundTint="@color/tv_surface" />
 
@@ -123,7 +133,7 @@
         android:id="@+id/recyclerView"
         android:layout_width="0dp"
         android:layout_height="0dp"
-        android:layout_marginTop="16dp"
+        android:layout_marginTop="12dp"
         android:clipToPadding="false"
         android:focusable="true"
         android:descendantFocusability="afterDescendants"
