@@ -20,6 +20,10 @@ import android.content.SharedPreferences
 import android.util.DisplayMetrics
 import android.os.Environment
 import java.io.File
+import com.mrgq.pdfviewer.database.entity.DisplayMode
+import com.mrgq.pdfviewer.database.entity.PageOrientation
+import com.mrgq.pdfviewer.repository.MusicRepository
+import com.mrgq.pdfviewer.utils.PdfAnalyzer
 
 class PdfViewerActivity : AppCompatActivity() {
     
@@ -51,6 +55,10 @@ class PdfViewerActivity : AppCompatActivity() {
     // Page caching for instant page switching
     private var pageCache: PageCache? = null
     
+    // Database repository
+    private lateinit var musicRepository: MusicRepository
+    private var currentPdfFileId: String? = null
+    
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityPdfViewerBinding.inflate(layoutInflater)
@@ -58,6 +66,9 @@ class PdfViewerActivity : AppCompatActivity() {
         
         // Initialize preferences
         preferences = getSharedPreferences("pdf_viewer_prefs", MODE_PRIVATE)
+        
+        // Initialize database repository
+        musicRepository = MusicRepository(this)
         
         // Get screen dimensions
         val displayMetrics = DisplayMetrics()
@@ -164,8 +175,16 @@ class PdfViewerActivity : AppCompatActivity() {
                         
                         // Check if we should use two-page mode, then show target page or first page
                         checkAndSetTwoPageMode {
-                            // Update cache settings based on mode and calculated scale
-                            pageCache?.updateSettings(isTwoPageMode, calculatedScale)
+                            // Recalculate scale based on the determined mode
+                            val firstPage = pdfRenderer!!.openPage(0)
+                            val finalScale = calculateOptimalScale(firstPage.width, firstPage.height, isTwoPageMode)
+                            firstPage.close()
+                            
+                            Log.d("PdfViewerActivity", "Final scale for two-page mode $isTwoPageMode: $finalScale")
+                            
+                            // Clear cache and update settings to ensure clean state
+                            pageCache?.clear()
+                            pageCache?.updateSettings(isTwoPageMode, finalScale)
                             
                             // Navigate to target page if specified, otherwise first page
                             val targetPage = intent.getIntExtra("target_page", -1)
@@ -196,18 +215,32 @@ class PdfViewerActivity : AppCompatActivity() {
     private fun checkAndSetTwoPageMode(onComplete: () -> Unit) {
         CoroutineScope(Dispatchers.IO).launch {
             try {
-                // Check if this file already has a saved setting
-                val fileKey = getFileKey(pdfFilePath)
-                val savedFilePreference = preferences.getString("file_mode_$fileKey", null)
+                // First, ensure PDF file is in database
+                ensurePdfFileInDatabase()
                 
-                if (savedFilePreference != null) {
-                    // File-specific setting exists
-                    withContext(Dispatchers.Main) {
-                        isTwoPageMode = savedFilePreference == "two"
-                        Log.d("PdfViewerActivity", "Using saved file preference: $savedFilePreference for $pdfFileName")
-                        onComplete()
+                // Check if this file already has a saved setting
+                currentPdfFileId?.let { fileId ->
+                    val userPreference = musicRepository.getUserPreference(fileId)
+                    
+                    if (userPreference != null) {
+                        // File-specific setting exists
+                        withContext(Dispatchers.Main) {
+                            isTwoPageMode = when (userPreference.displayMode) {
+                                DisplayMode.DOUBLE -> true
+                                DisplayMode.SINGLE -> false
+                                DisplayMode.AUTO -> {
+                                    // AUTO mode: determine based on orientation
+                                    val pdfFile = musicRepository.getPdfFileById(fileId)
+                                    pdfFile?.let { file ->
+                                        screenWidth > screenHeight && file.orientation == PageOrientation.PORTRAIT
+                                    } ?: false
+                                }
+                            }
+                            Log.d("PdfViewerActivity", "Using saved display mode: ${userPreference.displayMode} for $pdfFileName")
+                            onComplete()
+                        }
+                        return@launch
                     }
-                    return@launch
                 }
                 
                 // Get first page to check aspect ratio
@@ -235,7 +268,7 @@ class PdfViewerActivity : AppCompatActivity() {
                         } else if (screenAspectRatio > 1.0f && pdfAspectRatio < 1.0f) {
                             // Screen is landscape and PDF is portrait - ask user
                             Log.d("PdfViewerActivity", "Landscape screen + Portrait PDF, asking user")
-                            showTwoPageModeDialog(fileKey, onComplete)
+                            showTwoPageModeDialog(onComplete)
                         } else {
                             // Other cases (portrait screen, landscape PDF, etc.) - use single page - NO SAVING
                             isTwoPageMode = false
@@ -254,6 +287,34 @@ class PdfViewerActivity : AppCompatActivity() {
         }
     }
     
+    private suspend fun ensurePdfFileInDatabase() {
+        try {
+            val file = File(pdfFilePath)
+            if (!file.exists()) return
+            
+            // Check if file already exists in database
+            val existingPdfFile = musicRepository.getPdfFileByPath(pdfFilePath)
+            
+            if (existingPdfFile != null) {
+                currentPdfFileId = existingPdfFile.id
+                Log.d("PdfViewerActivity", "Found existing PDF file in database: ${existingPdfFile.id}")
+                return
+            }
+            
+            // Analyze and insert new PDF file
+            val pdfFile = PdfAnalyzer.analyzePdfFile(file)
+            if (pdfFile != null) {
+                musicRepository.insertPdfFile(pdfFile)
+                currentPdfFileId = pdfFile.id
+                Log.d("PdfViewerActivity", "Inserted new PDF file into database: ${pdfFile.id}")
+            } else {
+                Log.e("PdfViewerActivity", "Failed to analyze PDF file: $pdfFilePath")
+            }
+        } catch (e: Exception) {
+            Log.e("PdfViewerActivity", "Error ensuring PDF file in database", e)
+        }
+    }
+    
     private fun getFileKey(filePath: String): String {
         // Create a unique key for the file based on path and size
         return try {
@@ -264,12 +325,33 @@ class PdfViewerActivity : AppCompatActivity() {
         }
     }
     
-    private fun saveFilePreference(fileKey: String, mode: String) {
-        preferences.edit().putString("file_mode_$fileKey", mode).apply()
-        Log.d("PdfViewerActivity", "Saved file preference: $mode for key: $fileKey")
+    private fun saveDisplayModePreference(displayMode: DisplayMode) {
+        currentPdfFileId?.let { fileId ->
+            CoroutineScope(Dispatchers.IO).launch {
+                try {
+                    musicRepository.setDisplayModeForFile(fileId, displayMode)
+                    Log.d("PdfViewerActivity", "Saved display mode preference: $displayMode for file: $fileId")
+                } catch (e: Exception) {
+                    Log.e("PdfViewerActivity", "Error saving display mode preference", e)
+                }
+            }
+        }
     }
     
-    private fun showTwoPageModeDialog(fileKey: String, onComplete: () -> Unit) {
+    private fun saveLastPageNumber(pageNumber: Int) {
+        currentPdfFileId?.let { fileId ->
+            CoroutineScope(Dispatchers.IO).launch {
+                try {
+                    musicRepository.setLastPageForFile(fileId, pageNumber)
+                    // Don't log every page change to avoid spam
+                } catch (e: Exception) {
+                    Log.e("PdfViewerActivity", "Error saving last page number", e)
+                }
+            }
+        }
+    }
+    
+    private fun showTwoPageModeDialog(onComplete: () -> Unit) {
         // Create custom dialog with checkbox
         val dialogView = layoutInflater.inflate(android.R.layout.select_dialog_multichoice, null)
         
@@ -303,7 +385,7 @@ class PdfViewerActivity : AppCompatActivity() {
             .setPositiveButton("두 페이지로 보기") { _, _ ->
                 isTwoPageMode = true
                 if (rememberCheckbox.isChecked) {
-                    saveFilePreference(fileKey, "two")
+                    saveDisplayModePreference(DisplayMode.DOUBLE)
                     Log.d("PdfViewerActivity", "User selected two page mode (saved) for $pdfFileName")
                 } else {
                     Log.d("PdfViewerActivity", "User selected two page mode (temp) for $pdfFileName")
@@ -313,7 +395,7 @@ class PdfViewerActivity : AppCompatActivity() {
             .setNegativeButton("한 페이지씩 보기") { _, _ ->
                 isTwoPageMode = false
                 if (rememberCheckbox.isChecked) {
-                    saveFilePreference(fileKey, "single")
+                    saveDisplayModePreference(DisplayMode.SINGLE)
                     Log.d("PdfViewerActivity", "User selected single page mode (saved) for $pdfFileName")
                 } else {
                     Log.d("PdfViewerActivity", "User selected single page mode (temp) for $pdfFileName")
@@ -330,15 +412,33 @@ class PdfViewerActivity : AppCompatActivity() {
         Log.d("PdfViewerActivity", "showPage called: index=$index, isTwoPageMode=$isTwoPageMode, pageCount=$pageCount")
         
         // Check cache first for instant display
-        val cachedBitmap = pageCache?.getPageImmediate(index)
+        val cachedBitmap = if (isTwoPageMode && index + 1 < pageCount) {
+            // Two page mode - check if both pages are cached with correct scale
+            val page1 = pageCache?.getPageImmediate(index)
+            val page2 = pageCache?.getPageImmediate(index + 1)
+            if (page1 != null && page2 != null) {
+                Log.d("PdfViewerActivity", "⚡ 페이지 $index, ${index + 1} 캐시에서 즉시 표시 (두 페이지 모드)")
+                combineTwoPages(page1, page2)
+            } else {
+                null
+            }
+        } else {
+            pageCache?.getPageImmediate(index)
+        }
         
         if (cachedBitmap != null) {
             // Cache hit - instant display!
-            Log.d("PdfViewerActivity", "⚡ 페이지 $index 캐시에서 즉시 표시")
+            if (!isTwoPageMode) {
+                Log.d("PdfViewerActivity", "⚡ 페이지 $index 캐시에서 즉시 표시")
+            }
             binding.pdfView.setImageBitmap(cachedBitmap)
+            setImageViewMatrix(cachedBitmap)
             pageIndex = index
             updatePageInfo()
             binding.loadingProgress.visibility = View.GONE
+            
+            // Save last page number to database
+            saveLastPageNumber(index + 1)
             
             // Show page info briefly
             binding.pageInfo.animate().alpha(1f).duration = 200
@@ -373,7 +473,7 @@ class PdfViewerActivity : AppCompatActivity() {
                 
                 val bitmap = if (isTwoPageMode && index + 1 < pageCount) {
                     Log.d("PdfViewerActivity", "Rendering two pages: $index and ${index + 1}")
-                    // For two-page mode, use traditional rendering for now
+                    // For two-page mode, always use direct rendering to preserve aspect ratio
                     renderTwoPages(index)
                 } else {
                     Log.d("PdfViewerActivity", "Rendering single page: $index")
@@ -383,9 +483,13 @@ class PdfViewerActivity : AppCompatActivity() {
                 
                 withContext(Dispatchers.Main) {
                     binding.pdfView.setImageBitmap(bitmap)
+                    setImageViewMatrix(bitmap)
                     pageIndex = index
                     updatePageInfo()
                     binding.loadingProgress.visibility = View.GONE
+                    
+                    // Save last page number to database
+                    saveLastPageNumber(index + 1)
                     
                     // Show page info briefly
                     binding.pageInfo.animate().alpha(1f).duration = 200
@@ -412,6 +516,38 @@ class PdfViewerActivity : AppCompatActivity() {
         }
     }
     
+    private fun combineTwoPages(leftBitmap: Bitmap, rightBitmap: Bitmap): Bitmap {
+        Log.d("PdfViewerActivity", "=== COMBINE TWO PAGES DEBUG ===")
+        Log.d("PdfViewerActivity", "Left bitmap: ${leftBitmap.width}x${leftBitmap.height}, aspect ratio: ${leftBitmap.width.toFloat() / leftBitmap.height.toFloat()}")
+        Log.d("PdfViewerActivity", "Right bitmap: ${rightBitmap.width}x${rightBitmap.height}, aspect ratio: ${rightBitmap.width.toFloat() / rightBitmap.height.toFloat()}")
+        
+        // Create combined bitmap
+        val combinedWidth = leftBitmap.width + rightBitmap.width
+        val combinedHeight = maxOf(leftBitmap.height, rightBitmap.height)
+        
+        Log.d("PdfViewerActivity", "Combined will be: ${combinedWidth}x${combinedHeight}, aspect ratio: ${combinedWidth.toFloat() / combinedHeight.toFloat()}")
+        Log.d("PdfViewerActivity", "===============================")
+        
+        val combinedBitmap = Bitmap.createBitmap(
+            combinedWidth,
+            combinedHeight,
+            Bitmap.Config.ARGB_8888
+        )
+        
+        val combinedCanvas = Canvas(combinedBitmap)
+        combinedCanvas.drawColor(android.graphics.Color.WHITE)
+        
+        // Draw left page
+        combinedCanvas.drawBitmap(leftBitmap, 0f, 0f, null)
+        
+        // Draw right page
+        combinedCanvas.drawBitmap(rightBitmap, leftBitmap.width.toFloat(), 0f, null)
+        
+        Log.d("PdfViewerActivity", "Combined two cached pages successfully")
+        
+        return combinedBitmap
+    }
+    
     private suspend fun renderSinglePage(index: Int): Bitmap {
         currentPage = pdfRenderer?.openPage(index)
         val page = currentPage ?: throw Exception("Failed to open page $index")
@@ -421,7 +557,14 @@ class PdfViewerActivity : AppCompatActivity() {
         val renderWidth = (page.width * scale).toInt()
         val renderHeight = (page.height * scale).toInt()
         
-        Log.d("PdfViewerActivity", "Original: ${page.width}x${page.height}, Render: ${renderWidth}x${renderHeight}, Scale: $scale")
+        val originalPageRatio = page.width.toFloat() / page.height.toFloat()
+        val renderedPageRatio = renderWidth.toFloat() / renderHeight.toFloat()
+        
+        Log.d("PdfViewerActivity", "=== SINGLE PAGE RENDER ===")
+        Log.d("PdfViewerActivity", "Original PDF page: ${page.width}x${page.height}, aspect ratio: $originalPageRatio")
+        Log.d("PdfViewerActivity", "Rendered bitmap: ${renderWidth}x${renderHeight}, aspect ratio: $renderedPageRatio")
+        Log.d("PdfViewerActivity", "Scale: $scale, aspect ratio preserved: ${kotlin.math.abs(originalPageRatio - renderedPageRatio) < 0.001f}")
+        Log.d("PdfViewerActivity", "==========================")
         
         val bitmap = Bitmap.createBitmap(
             renderWidth,
@@ -437,9 +580,8 @@ class PdfViewerActivity : AppCompatActivity() {
         val matrix = android.graphics.Matrix()
         matrix.setScale(scale, scale)
         
-        // Render with scaling
-        val rect = android.graphics.Rect(0, 0, renderWidth, renderHeight)
-        page.render(bitmap, rect, matrix, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
+        // Render with scaling (Matrix only to preserve aspect ratio)
+        page.render(bitmap, null, matrix, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
         
         return bitmap
     }
@@ -447,7 +589,7 @@ class PdfViewerActivity : AppCompatActivity() {
     private suspend fun renderTwoPages(leftPageIndex: Int): Bitmap {
         Log.d("PdfViewerActivity", "Starting renderTwoPages for pages $leftPageIndex and ${leftPageIndex + 1}")
         
-        // Open pages sequentially to avoid conflicts
+        // Open left page
         val leftPage = try {
             pdfRenderer?.openPage(leftPageIndex)
         } catch (e: Exception) {
@@ -461,31 +603,18 @@ class PdfViewerActivity : AppCompatActivity() {
         }
         
         try {
-            // Calculate high-resolution dimensions for left page
-            val leftScale = calculateOptimalScale(leftPage.width, leftPage.height)
-            val leftRenderWidth = (leftPage.width * leftScale).toInt()
-            val leftRenderHeight = (leftPage.height * leftScale).toInt()
+            // Log individual page dimensions
+            Log.d("PdfViewerActivity", "=== INDIVIDUAL PAGE ASPECT RATIOS ===")
+            Log.d("PdfViewerActivity", "Left page (${leftPageIndex}): ${leftPage.width}x${leftPage.height}, aspect ratio: ${leftPage.width.toFloat() / leftPage.height.toFloat()}")
             
-            // Create bitmap for left page
-            val leftBitmap = Bitmap.createBitmap(
-                leftRenderWidth,
-                leftRenderHeight,
-                Bitmap.Config.ARGB_8888
-            )
+            // Create original-size bitmap for left page (no scaling yet)
+            val leftBitmap = Bitmap.createBitmap(leftPage.width, leftPage.height, Bitmap.Config.ARGB_8888)
+            leftBitmap.eraseColor(android.graphics.Color.WHITE)
+            leftPage.render(leftBitmap, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
             
-            // Render left page
-            val leftCanvas = Canvas(leftBitmap)
-            leftCanvas.drawColor(android.graphics.Color.WHITE)
-            val leftMatrix = android.graphics.Matrix()
-            leftMatrix.setScale(leftScale, leftScale)
-            val leftRect = android.graphics.Rect(0, 0, leftRenderWidth, leftRenderHeight)
-            leftPage.render(leftBitmap, leftRect, leftMatrix, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
-            Log.d("PdfViewerActivity", "Left page rendered successfully at ${leftRenderWidth}x${leftRenderHeight}")
-            
-            // Close left page before opening right page
             leftPage.close()
             
-            // Now open right page
+            // Open right page
             val rightPage = try {
                 pdfRenderer?.openPage(leftPageIndex + 1)
             } catch (e: Exception) {
@@ -499,85 +628,165 @@ class PdfViewerActivity : AppCompatActivity() {
             }
             
             try {
-                // Calculate high-resolution dimensions for right page
-                val rightScale = calculateOptimalScale(rightPage.width, rightPage.height)
-                val rightRenderWidth = (rightPage.width * rightScale).toInt()
-                val rightRenderHeight = (rightPage.height * rightScale).toInt()
+                Log.d("PdfViewerActivity", "Right page (${leftPageIndex + 1}): ${rightPage.width}x${rightPage.height}, aspect ratio: ${rightPage.width.toFloat() / rightPage.height.toFloat()}")
+                Log.d("PdfViewerActivity", "=====================================")
                 
-                // Create bitmap for right page
-                val rightBitmap = Bitmap.createBitmap(
-                    rightRenderWidth,
-                    rightRenderHeight,
-                    Bitmap.Config.ARGB_8888
-                )
+                // Create original-size bitmap for right page (no scaling yet)
+                val rightBitmap = Bitmap.createBitmap(rightPage.width, rightPage.height, Bitmap.Config.ARGB_8888)
+                rightBitmap.eraseColor(android.graphics.Color.WHITE)
+                rightPage.render(rightBitmap, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
                 
-                // Render right page
-                val rightCanvas = Canvas(rightBitmap)
-                rightCanvas.drawColor(android.graphics.Color.WHITE)
-                val rightMatrix = android.graphics.Matrix()
-                rightMatrix.setScale(rightScale, rightScale)
-                val rightRect = android.graphics.Rect(0, 0, rightRenderWidth, rightRenderHeight)
-                rightPage.render(rightBitmap, rightRect, rightMatrix, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
-                Log.d("PdfViewerActivity", "Right page rendered successfully at ${rightRenderWidth}x${rightRenderHeight}")
+                rightPage.close()
                 
-                // Create combined bitmap
+                // Combine two pages side by side (original resolution)
                 val combinedWidth = leftBitmap.width + rightBitmap.width
                 val combinedHeight = maxOf(leftBitmap.height, rightBitmap.height)
-                
-                val combinedBitmap = Bitmap.createBitmap(
-                    combinedWidth,
-                    combinedHeight,
-                    Bitmap.Config.ARGB_8888
-                )
+                val combinedBitmap = Bitmap.createBitmap(combinedWidth, combinedHeight, Bitmap.Config.ARGB_8888)
                 
                 val combinedCanvas = Canvas(combinedBitmap)
                 combinedCanvas.drawColor(android.graphics.Color.WHITE)
-                
-                // Draw left page
                 combinedCanvas.drawBitmap(leftBitmap, 0f, 0f, null)
-                
-                // Draw right page
                 combinedCanvas.drawBitmap(rightBitmap, leftBitmap.width.toFloat(), 0f, null)
                 
-                Log.d("PdfViewerActivity", "Combined bitmap created successfully")
+                // Calculate scale based on combined bitmap aspect ratio vs screen
+                val combinedAspectRatio = combinedWidth.toFloat() / combinedHeight.toFloat()
+                val screenAspectRatio = screenWidth.toFloat() / screenHeight.toFloat()
                 
-                // Clean up individual bitmaps
+                val scale = if (combinedAspectRatio > screenAspectRatio) {
+                    // Combined bitmap is wider than screen -> scale by width
+                    screenWidth.toFloat() / combinedWidth.toFloat()
+                } else {
+                    // Combined bitmap is taller than screen -> scale by height
+                    screenHeight.toFloat() / combinedHeight.toFloat()
+                }
+                
+                // Apply high-resolution multiplier (2-4x for crisp rendering)
+                val finalScale = (scale * 2.5f).coerceIn(1.0f, 4.0f)
+                
+                Log.d("PdfViewerActivity", "=== TWO PAGE SCALING ===")
+                Log.d("PdfViewerActivity", "Combined: ${combinedWidth}x${combinedHeight}, aspect ratio: $combinedAspectRatio")
+                Log.d("PdfViewerActivity", "Screen: ${screenWidth}x${screenHeight}, aspect ratio: $screenAspectRatio")
+                Log.d("PdfViewerActivity", "Base scale: $scale, Final scale: $finalScale")
+                Log.d("PdfViewerActivity", "========================")
+                
+                // Create final high-resolution bitmap
+                val finalWidth = (combinedWidth * finalScale).toInt()
+                val finalHeight = (combinedHeight * finalScale).toInt()
+                val finalBitmap = Bitmap.createBitmap(finalWidth, finalHeight, Bitmap.Config.ARGB_8888)
+                
+                val finalCanvas = Canvas(finalBitmap)
+                finalCanvas.drawColor(android.graphics.Color.WHITE)
+                
+                // Scale and draw the combined bitmap
+                val scaleMatrix = android.graphics.Matrix()
+                scaleMatrix.setScale(finalScale, finalScale)
+                finalCanvas.drawBitmap(combinedBitmap, scaleMatrix, null)
+                
+                // Clean up intermediate bitmaps
                 leftBitmap.recycle()
                 rightBitmap.recycle()
+                combinedBitmap.recycle()
                 
-                return combinedBitmap
+                return finalBitmap
                 
             } finally {
-                rightPage.close()
+                try {
+                    rightPage.close()
+                } catch (e: Exception) {
+                    Log.w("PdfViewerActivity", "Right page already closed or error closing: ${e.message}")
+                }
             }
             
         } catch (e: Exception) {
             Log.e("PdfViewerActivity", "Error in renderTwoPages", e)
-            leftPage.close()
+            try {
+                leftPage.close()
+            } catch (closeError: Exception) {
+                Log.w("PdfViewerActivity", "Left page already closed or error closing: ${closeError.message}")
+            }
             return renderSinglePage(leftPageIndex)
         }
     }
     
-    private fun calculateOptimalScale(pageWidth: Int, pageHeight: Int): Float {
+    private fun calculateOptimalScale(pageWidth: Int, pageHeight: Int, forTwoPageMode: Boolean = false): Float {
+        // 두 페이지 모드에서는 합쳐진 크기 기준으로 계산
+        val effectiveWidth = if (forTwoPageMode) pageWidth * 2 else pageWidth
+        val effectiveHeight = pageHeight
+        
         // 화면 크기에 맞는 최적 스케일 계산
         val screenRatio = screenWidth.toFloat() / screenHeight.toFloat()
-        val pageRatio = pageWidth.toFloat() / pageHeight.toFloat()
+        val pageRatio = effectiveWidth.toFloat() / effectiveHeight.toFloat()
         
         val scale = if (pageRatio > screenRatio) {
             // 페이지가 화면보다 가로가 긴 경우 - 가로 기준으로 맞춤
-            screenWidth.toFloat() / pageWidth.toFloat()
+            screenWidth.toFloat() / effectiveWidth.toFloat()
         } else {
             // 페이지가 화면보다 세로가 긴 경우 - 세로 기준으로 맞춤  
-            screenHeight.toFloat() / pageHeight.toFloat()
+            screenHeight.toFloat() / effectiveHeight.toFloat()
         }
         
         // 최소 2배, 최대 4배 스케일링 (고해상도 보장)
         val finalScale = (scale * 2.0f).coerceIn(2.0f, 4.0f)
         
-        Log.d("PdfViewerActivity", "Screen: ${screenWidth}x${screenHeight}, Page: ${pageWidth}x${pageHeight}")
-        Log.d("PdfViewerActivity", "Calculated scale: $scale, Final scale: $finalScale")
+        Log.d("PdfViewerActivity", "=== SCALE CALCULATION ===")
+        Log.d("PdfViewerActivity", "Input: Page ${pageWidth}x${pageHeight}, forTwoPageMode=$forTwoPageMode")
+        Log.d("PdfViewerActivity", "Effective: ${effectiveWidth}x${effectiveHeight}")
+        Log.d("PdfViewerActivity", "Screen: ${screenWidth}x${screenHeight}")
+        Log.d("PdfViewerActivity", "Screen ratio: $screenRatio, Page ratio: $pageRatio")
+        Log.d("PdfViewerActivity", "Scale by ${if (pageRatio > screenRatio) "WIDTH" else "HEIGHT"}: $scale")
+        Log.d("PdfViewerActivity", "Final scale: $finalScale")
+        Log.d("PdfViewerActivity", "==========================")
         
         return finalScale
+    }
+    
+    private fun setImageViewMatrix(bitmap: Bitmap) {
+        val imageMatrix = android.graphics.Matrix()
+        
+        // Calculate scale to fit the image in the view while preserving aspect ratio
+        val viewWidth = binding.pdfView.width
+        val viewHeight = binding.pdfView.height
+        
+        if (viewWidth == 0 || viewHeight == 0) {
+            // View not yet measured, set later
+            binding.pdfView.post {
+                setImageViewMatrix(bitmap)
+            }
+            return
+        }
+        
+        val bitmapWidth = bitmap.width
+        val bitmapHeight = bitmap.height
+        
+        // Calculate original aspect ratio
+        val originalAspectRatio = bitmapWidth.toFloat() / bitmapHeight.toFloat()
+        
+        val scaleX = viewWidth.toFloat() / bitmapWidth.toFloat()
+        val scaleY = viewHeight.toFloat() / bitmapHeight.toFloat()
+        
+        // Use the smaller scale to ensure the whole image fits
+        val scale = minOf(scaleX, scaleY)
+        
+        // Calculate translation to center the image
+        val scaledWidth = bitmapWidth * scale
+        val scaledHeight = bitmapHeight * scale
+        val dx = (viewWidth - scaledWidth) / 2f
+        val dy = (viewHeight - scaledHeight) / 2f
+        
+        // Calculate final displayed aspect ratio
+        val finalAspectRatio = scaledWidth / scaledHeight
+        
+        imageMatrix.setScale(scale, scale)
+        imageMatrix.postTranslate(dx, dy)
+        
+        binding.pdfView.imageMatrix = imageMatrix
+        
+        Log.d("PdfViewerActivity", "=== ASPECT RATIO CHECK ===")
+        Log.d("PdfViewerActivity", "Original bitmap: ${bitmapWidth}x${bitmapHeight}, aspect ratio: $originalAspectRatio")
+        Log.d("PdfViewerActivity", "Final displayed: ${scaledWidth}x${scaledHeight}, aspect ratio: $finalAspectRatio")
+        Log.d("PdfViewerActivity", "Aspect ratio preserved: ${kotlin.math.abs(originalAspectRatio - finalAspectRatio) < 0.001f}")
+        Log.d("PdfViewerActivity", "ImageView matrix: scale=$scale, translate=($dx, $dy)")
+        Log.d("PdfViewerActivity", "========================")
     }
     
     private fun updatePageInfo() {
@@ -668,7 +877,16 @@ class PdfViewerActivity : AppCompatActivity() {
                         Log.d("PdfViewerActivity", "PageCache 재초기화 완료 for collaboration file change")
                         
                         checkAndSetTwoPageMode {
-                            pageCache?.updateSettings(isTwoPageMode, calculatedScale)
+                            // Recalculate scale based on the determined mode
+                            val firstPage = pdfRenderer!!.openPage(0)
+                            val finalScale = calculateOptimalScale(firstPage.width, firstPage.height, isTwoPageMode)
+                            firstPage.close()
+                            
+                            Log.d("PdfViewerActivity", "Final scale for collaboration file change, two-page mode $isTwoPageMode: $finalScale")
+                            
+                            // Clear cache and update settings to ensure clean state
+                            pageCache?.clear()
+                            pageCache?.updateSettings(isTwoPageMode, finalScale)
                             
                             // Navigate to target page (convert from 1-based to 0-based)
                             val targetIndex = (targetPage - 1).coerceIn(0, pageCount - 1)
@@ -770,8 +988,16 @@ class PdfViewerActivity : AppCompatActivity() {
                         
                         // Check two-page mode for this new file, then show the page
                         checkAndSetTwoPageMode {
-                            // Update cache settings based on mode and calculated scale
-                            pageCache?.updateSettings(isTwoPageMode, calculatedScale)
+                            // Recalculate scale based on the determined mode
+                            val firstPage = pdfRenderer!!.openPage(0)
+                            val finalScale = calculateOptimalScale(firstPage.width, firstPage.height, isTwoPageMode)
+                            firstPage.close()
+                            
+                            Log.d("PdfViewerActivity", "Final scale for loadFile, two-page mode $isTwoPageMode: $finalScale")
+                            
+                            // Clear cache and update settings to ensure clean state
+                            pageCache?.clear()
+                            pageCache?.updateSettings(isTwoPageMode, finalScale)
                             
                             val targetPage = if (goToLastPage) pageCount - 1 else 0
                             showPage(targetPage)
@@ -1246,7 +1472,16 @@ class PdfViewerActivity : AppCompatActivity() {
                         Log.d("PdfViewerActivity", "PageCache 초기화 완료 for downloaded file")
                         
                         checkAndSetTwoPageMode {
-                            pageCache?.updateSettings(isTwoPageMode, calculatedScale)
+                            // Recalculate scale based on the determined mode
+                            val firstPage = pdfRenderer!!.openPage(0)
+                            val finalScale = calculateOptimalScale(firstPage.width, firstPage.height, isTwoPageMode)
+                            firstPage.close()
+                            
+                            Log.d("PdfViewerActivity", "Final scale for downloaded file, two-page mode $isTwoPageMode: $finalScale")
+                            
+                            // Clear cache and update settings to ensure clean state
+                            pageCache?.clear()
+                            pageCache?.updateSettings(isTwoPageMode, finalScale)
                             
                             // Navigate to target page
                             val targetIndex = (targetPage - 1).coerceIn(0, pageCount - 1)

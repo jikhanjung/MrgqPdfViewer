@@ -220,9 +220,9 @@ class PageCache(
         val targetHeight: Int
         
         if (isTwoPageMode) {
-            // 두 페이지 모드: 폭을 절반으로
-            targetWidth = (screenWidth / 2 * renderScale).toInt()
-            targetHeight = (screenHeight * renderScale).toInt()
+            // 두 페이지 모드: 원본 PDF 비율 유지하면서 스케일 적용
+            targetWidth = (pdfWidth * renderScale).toInt()
+            targetHeight = (pdfHeight * renderScale).toInt()
         } else {
             // 단일 페이지 모드: 화면에 맞춤
             if (pdfAspectRatio > screenAspectRatio) {

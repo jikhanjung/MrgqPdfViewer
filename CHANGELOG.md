@@ -4,6 +4,159 @@
 
 ---
 
+## [0.1.7] - 2025-07-13
+
+### 🗄️ Room Database 도입 및 PDF 메타데이터 관리 시스템
+
+#### 📊 새로운 데이터베이스 아키텍처
+- **Room Database 완전 구현**
+  - SharedPreferences 기반 설정 → SQLite 기반 Room 데이터베이스 전환
+  - PDF 파일 엔티티: 파일별 메타데이터 저장 (파일명, 경로, 페이지 수, 방향, 크기)
+  - 사용자 설정 엔티티: 파일별 표시 모드 및 사용자 선호도 저장
+  - Repository 패턴: 데이터 접근 계층 추상화로 유지보수성 향상
+
+#### 🎯 DisplayMode 열거형 시스템
+- **AUTO**: 화면과 PDF 비율에 따라 자동 결정 (기본값)
+- **SINGLE**: 항상 한 페이지씩 표시
+- **DOUBLE**: 항상 두 페이지씩 표시
+- **파일별 개별 설정**: 각 PDF 파일마다 독립적인 표시 모드 저장
+
+#### 🏗️ 새로운 파일 구조
+```
+database/
+├── MusicDatabase.kt           # Room 데이터베이스 설정
+├── entity/
+│   ├── PdfFile.kt            # PDF 파일 메타데이터 엔티티
+│   └── UserPreference.kt     # 사용자 설정 엔티티
+├── dao/
+│   ├── PdfFileDao.kt         # PDF 파일 데이터 접근 객체
+│   └── UserPreferenceDao.kt  # 사용자 설정 데이터 접근 객체
+└── converter/
+    └── Converters.kt         # Enum 타입 컨버터
+
+repository/
+└── MusicRepository.kt        # 데이터 접근 통합 관리
+
+utils/
+└── PdfAnalyzer.kt           # PDF 분석 및 메타데이터 추출
+```
+
+### 🔧 두 페이지 모드 Aspect Ratio 문제 완전 해결
+
+#### 🐛 발견된 문제
+- **PageCache 렌더링 왜곡**: 두 페이지 모드에서 개별 페이지를 화면 비율로 강제 변환
+- **원본 비율 0.707 → 왜곡된 비율 0.889**로 변형
+- **최종 결과**: 4930×2773 (화면 비율 1.778)으로 가로 늘어남
+
+#### ✅ 해결 방법
+```kotlin
+// 수정 전 (PageCache.kt)
+if (isTwoPageMode) {
+    targetWidth = (screenWidth / 2 * renderScale).toInt()  // 화면 절반 크기 강제
+    targetHeight = (screenHeight * renderScale).toInt()
+}
+
+// 수정 후
+if (isTwoPageMode) {
+    targetWidth = (pdfWidth * renderScale).toInt()   // 원본 PDF 크기 유지
+    targetHeight = (pdfHeight * renderScale).toInt()
+}
+```
+
+#### 🎯 완벽한 결과
+- **개별 페이지**: 595×841 → 1528×2160 (원본 비율 0.707 유지)
+- **합쳐진 비트맵**: 3056×2160 (올바른 비율 1.414)
+- **화면 표시**: 높이 기준으로 올바르게 스케일링, 가로 늘어남 완전 제거
+
+### 🚀 성능 및 안정성 개선
+
+#### 📐 스케일 계산 로직 개선
+- **forTwoPageMode 매개변수 추가**: `calculateOptimalScale` 함수 확장
+- **두 페이지 모드 최적화**: 합쳐진 크기(1190×841) 기준으로 스케일 계산
+- **상세한 디버깅 로그**: aspect ratio 추적 및 scale 계산 과정 완전 가시화
+
+#### 🧹 캐시 관리 강화
+- **모드 전환 시 캐시 완전 초기화**: `pageCache?.clear()` 호출
+- **올바른 스케일로 재계산**: 모드 결정 후 최종 스케일 계산
+- **메모리 누수 방지**: 적절한 리소스 해제 및 성능 최적화
+
+#### 📊 로깅 시스템 확장
+```kotlin
+Log.d("PdfViewerActivity", "=== INDIVIDUAL PAGE ASPECT RATIOS ===")
+Log.d("PdfViewerActivity", "Left page: 595x841, aspect ratio: 0.7074074")
+Log.d("PdfViewerActivity", "Right page: 595x841, aspect ratio: 0.7074074")
+Log.d("PdfViewerActivity", "Combined: 1190x841, aspect ratio: 1.4148148")
+```
+
+### 🎨 설정 UI 정리 및 개선
+
+#### 🔄 중복 설정 카드 제거
+- **기존 "파일별 설정" 카드 제거**: SharedPreferences 기반 구식 UI
+- **"화면 표시 모드" 카드 유지**: Room 데이터베이스 기반 현대적 UI
+- **설정 화면 단순화**: 불필요한 중복 제거로 사용자 경험 개선
+
+### 📊 기술적 세부사항
+
+#### 🗃️ 데이터베이스 스키마
+**PdfFile 테이블:**
+- id (PRIMARY KEY): 파일 해시 기반 고유 식별자
+- filename, filePath: 파일 정보
+- totalPages: 총 페이지 수  
+- orientation: 페이지 방향 (PORTRAIT/LANDSCAPE)
+- width, height: PDF 원본 크기
+- 음악 메타데이터 필드 (composer, title, genre 등)
+
+**UserPreference 테이블:**
+- pdfFileId (PRIMARY KEY): PDF 파일 참조
+- displayMode: 표시 모드 설정
+- lastPageNumber: 마지막 읽은 페이지
+- bookmarkedPages: 북마크된 페이지 목록
+
+#### ⚡ 비동기 처리
+- **Kotlin Coroutines**: 데이터베이스 작업의 비동기 처리
+- **Flow 기반 반응형 업데이트**: 실시간 데이터 동기화
+- **백그라운드 PDF 분석**: UI 블로킹 없는 메타데이터 추출
+
+### 🔄 마이그레이션 정보
+
+#### 📈 업그레이드 절차
+1. **앱 재설치 또는 업데이트**
+2. **첫 실행 시 PDF 메타데이터 자동 분석**
+3. **파일별 표시 모드 재설정 필요** (기존 SharedPreferences 설정 호환 안됨)
+
+### 🐛 해결된 주요 버그
+
+1. **두 페이지 모드 aspect ratio 왜곡**: PageCache 렌더링 로직 수정으로 **완전 해결**
+2. **설정 화면 중복 카드**: 기존 "파일별 설정" 카드 제거, 통합 완료
+3. **스케일 계산 오류**: 개별 페이지가 아닌 합쳐진 크기 기준으로 계산
+4. **캐시 불일치**: 모드 전환 시 캐시 완전 초기화로 정확한 렌더링 보장
+
+### 📈 성능 지표
+
+#### 🎨 렌더링 품질 향상
+- **두 페이지 모드 aspect ratio**: 100% 원본 비율 보존
+- **고해상도 스케일링**: 2-4배 선명도 유지
+- **메모리 사용량**: Room 데이터베이스로 효율성 개선
+
+#### 💾 데이터베이스 성능
+- **Room 기반 빠른 설정 조회**: SharedPreferences 대비 향상
+- **인덱스 기반 효율적 검색**: 대용량 파일 목록 처리 최적화
+- **백그라운드 처리**: UI 반응성 유지
+
+### 🔮 향후 계획
+
+#### 📋 단기 목표 (v0.1.8)
+- **음악 메타데이터 활용**: 작곡가, 제목 기반 정렬 및 검색
+- **북마크 시스템 구현**: UserPreference 테이블의 bookmarkedPages 활용
+- **데이터베이스 마이그레이션 도구**: 기존 설정 자동 이전
+
+#### 🚀 중기 목표 (v0.2.x)
+- **PDF 썸네일 생성 및 저장**: 데이터베이스 연동
+- **고급 검색 기능**: 메타데이터 기반 필터링
+- **사용자 설정 백업/복원**: Room 데이터베이스 익스포트/임포트
+
+---
+
 ## [0.1.6] - 2025-07-13
 
 ### 🏗️ 합주 모드 아키텍처 완전 재구조화

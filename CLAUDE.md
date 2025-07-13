@@ -3,10 +3,10 @@
 ## 프로젝트 개요
 Android TV OS (Z18TV Pro)용 PDF 악보 리더 앱으로, 무선 파일 업로드와 리모컨을 이용한 탐색 기능을 제공합니다.
 
-**현재 버전**: v0.1.6 (2025-07-13)  
+**현재 버전**: v0.1.7 (2025-07-13)  
 **빌드 상태**: 🟢 빌드 가능  
 **테스트 상태**: 🟢 기본 기능 테스트 완료
-**최근 업데이트**: 합주 모드 아키텍처 완전 재구조화, 연결 안정성 100% 달성
+**최근 업데이트**: Room 데이터베이스 도입, 두 페이지 모드 aspect ratio 문제 완전 해결
 
 ## 주요 기능
 - **파일 목록 뷰어**: `/sdcard/Download/` 디렉토리의 PDF 파일 목록 표시
@@ -19,7 +19,8 @@ Android TV OS (Z18TV Pro)용 PDF 악보 리더 앱으로, 무선 파일 업로�
 - **웹 파일 관리**: 브라우저에서 파일 목록 조회, 개별/전체 삭제 기능
 - **PDF 뷰어**: Android PdfRenderer를 이용한 고해상도 PDF 렌더링
 - **두 페이지 모드**: 가로 화면에서 세로 PDF를 두 페이지로 표시하는 스마트 모드
-- **파일별 설정 기억**: 각 PDF 파일의 페이지 모드 설정을 개별 저장
+- **Room 데이터베이스**: PDF 메타데이터 및 사용자 설정을 SQLite로 관리
+- **DisplayMode 시스템**: AUTO/SINGLE/DOUBLE 표시 모드를 파일별로 개별 저장
 - **혁신적인 파일 탐색**: 좌우 분할 카드 UI로 직관적인 파일 간 이동
 - **리모컨 탐색**: DPAD 및 ENTER 키 완벽 지원
 - **TV 최적화**: Android TV UI 가이드라인 준수
@@ -28,6 +29,7 @@ Android TV OS (Z18TV Pro)용 PDF 악보 리더 앱으로, 무선 파일 업로�
 - **플랫폼**: Android TV OS (minSdk 21, targetSdk 30)
 - **언어**: Kotlin
 - **PDF 렌더링**: PdfRenderer (Android 5.0+ 내장)
+- **데이터베이스**: Room 2.6.1 (SQLite 기반)
 - **웹 서버**: NanoHTTPD 2.3.1
 - **입력 처리**: 리모컨용 KeyEvent 처리
 - **비동기**: Kotlin Coroutines
@@ -134,6 +136,19 @@ adb install app/build/outputs/apk/debug/app-debug.apk
 ## 현재 구현 상태
 
 ### ✅ 완료된 기능
+
+#### 🗄️ v0.1.7 주요 업데이트
+- [x] **Room 데이터베이스 완전 구현** (SQLite 기반)
+- [x] **PDF 메타데이터 관리**: PdfFile 엔티티로 파일 정보 저장
+- [x] **사용자 설정 관리**: UserPreference 엔티티로 표시 모드 저장
+- [x] **DisplayMode 열거형**: AUTO/SINGLE/DOUBLE 파일별 설정
+- [x] **Repository 패턴**: 데이터 접근 계층 추상화
+- [x] **두 페이지 모드 aspect ratio 문제 완전 해결** (PageCache 수정)
+- [x] **캐시 관리 강화**: 모드 전환 시 완전 초기화
+- [x] **스케일 계산 로직 개선**: forTwoPageMode 매개변수 추가
+- [x] **설정 UI 정리**: 중복 카드 제거, 데이터베이스 기반 통합
+
+#### 🏗️ 핵심 기능 (v0.1.6 이전)
 - [x] 프로젝트 초기 설정 및 구조
 - [x] MainActivity 파일 목록 표시
 - [x] 파일 정렬 기능 (이름순/시간순)

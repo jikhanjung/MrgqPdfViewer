@@ -20,6 +20,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 import com.mrgq.pdfviewer.server.WebServerManager
+import com.mrgq.pdfviewer.repository.MusicRepository
+import com.mrgq.pdfviewer.database.entity.DisplayMode
 
 class SettingsActivity : AppCompatActivity() {
     
@@ -30,6 +32,9 @@ class SettingsActivity : AppCompatActivity() {
     private val webServerManager = WebServerManager()
     private var isWebServerRunning = false
     
+    // Database repository
+    private lateinit var musicRepository: MusicRepository
+    
     
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -38,9 +43,12 @@ class SettingsActivity : AppCompatActivity() {
         
         preferences = getSharedPreferences("pdf_viewer_prefs", MODE_PRIVATE)
         
+        // Initialize database repository
+        musicRepository = MusicRepository(this)
+        
         setupUI()
-        updateSettingsInfo()
         setupPdfFileInfo()
+        setupDisplayModeInfo()
         checkWebServerStatus()
         updateWebServerUI()
     }
@@ -54,14 +62,6 @@ class SettingsActivity : AppCompatActivity() {
             savePortSetting()
         }
         
-        binding.resetAllSettingsBtn.setOnClickListener {
-            showResetAllSettingsDialog()
-        }
-        
-        binding.resetFileSettingsBtn.setOnClickListener {
-            showResetFileSettingsDialog()
-        }
-        
         binding.backButton.setOnClickListener {
             finish()
         }
@@ -72,6 +72,14 @@ class SettingsActivity : AppCompatActivity() {
         
         binding.webServerToggleBtn.setOnClickListener {
             toggleWebServer()
+        }
+        
+        binding.resetDisplayModeBtn.setOnClickListener {
+            showResetDisplayModeDialog()
+        }
+        
+        binding.viewDisplayModeBtn.setOnClickListener {
+            showDisplayModeListDialog()
         }
         
         // Focus management - 키보드 숨기기
@@ -98,91 +106,6 @@ class SettingsActivity : AppCompatActivity() {
                 false
             }
         }
-    }
-    
-    private fun updateSettingsInfo() {
-        val allPrefs = preferences.all
-        val fileSettingsCount = allPrefs.keys.count { it.startsWith("file_mode_") }
-        
-        binding.fileSettingsInfo.text = "저장된 파일별 설정: ${fileSettingsCount}개"
-        
-        if (fileSettingsCount > 0) {
-            val settingsList = StringBuilder()
-            allPrefs.entries.filter { it.key.startsWith("file_mode_") }.forEach { entry ->
-                val fileKey = entry.key.removePrefix("file_mode_")
-                val mode = when (entry.value as String) {
-                    "two" -> "두 페이지"
-                    "single" -> "한 페이지"
-                    else -> "알 수 없음"
-                }
-                settingsList.append("• $fileKey: $mode\n")
-            }
-            binding.settingsDetails.text = settingsList.toString().trimEnd()
-        } else {
-            binding.settingsDetails.text = "저장된 파일별 설정이 없습니다"
-        }
-    }
-    
-    private fun showResetAllSettingsDialog() {
-        AlertDialog.Builder(this)
-            .setTitle("전체 설정 초기화")
-            .setMessage("모든 파일의 페이지 모드 설정을 초기화하시겠습니까?\n이 작업은 되돌릴 수 없습니다.")
-            .setPositiveButton("초기화") { _, _ ->
-                clearAllFileSettings()
-                Toast.makeText(this, "모든 설정이 초기화되었습니다", Toast.LENGTH_SHORT).show()
-                updateSettingsInfo()
-            }
-            .setNegativeButton("취소", null)
-            .show()
-    }
-    
-    private fun showResetFileSettingsDialog() {
-        val allPrefs = preferences.all
-        val fileSettings = allPrefs.entries.filter { it.key.startsWith("file_mode_") }
-        
-        if (fileSettings.isEmpty()) {
-            Toast.makeText(this, "삭제할 파일 설정이 없습니다", Toast.LENGTH_SHORT).show()
-            return
-        }
-        
-        val fileKeys = fileSettings.map { it.key.removePrefix("file_mode_") }.toTypedArray()
-        val checkedItems = BooleanArray(fileKeys.size) { false }
-        
-        AlertDialog.Builder(this)
-            .setTitle("파일별 설정 선택 삭제")
-            .setMultiChoiceItems(fileKeys, checkedItems) { _, which, isChecked ->
-                checkedItems[which] = isChecked
-            }
-            .setPositiveButton("선택 삭제") { _, _ ->
-                var deletedCount = 0
-                val editor = preferences.edit()
-                
-                fileKeys.forEachIndexed { index, fileKey ->
-                    if (checkedItems[index]) {
-                        editor.remove("file_mode_$fileKey")
-                        deletedCount++
-                    }
-                }
-                
-                editor.apply()
-                Toast.makeText(this, "${deletedCount}개 파일 설정이 삭제되었습니다", Toast.LENGTH_SHORT).show()
-                updateSettingsInfo()
-            }
-            .setNegativeButton("취소", null)
-            .show()
-    }
-    
-    private fun clearAllFileSettings() {
-        val editor = preferences.edit()
-        val allPrefs = preferences.all
-        
-        for ((key, _) in allPrefs) {
-            if (key.startsWith("file_mode_")) {
-                editor.remove(key)
-            }
-        }
-        
-        editor.apply()
     }
     
     private fun savePortSetting() {
@@ -320,8 +243,8 @@ class SettingsActivity : AppCompatActivity() {
         
         // Update settings info when returning
         Log.d("SettingsActivity", "onResume - 설정 정보 업데이트")
-        updateSettingsInfo()
         setupPdfFileInfo()
+        setupDisplayModeInfo()
         checkWebServerStatus()
         updateWebServerUI()
     }
@@ -408,5 +331,103 @@ class SettingsActivity : AppCompatActivity() {
         Toast.makeText(this, "웹서버가 중지되었습니다", Toast.LENGTH_SHORT).show()
     }
     
+    // Display mode management functions
+    private fun setupDisplayModeInfo() {
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                val preferenceCount = musicRepository.getUserPreferenceCount()
+                
+                withContext(Dispatchers.Main) {
+                    binding.displayModeInfo.text = "저장된 표시 모드 설정: ${preferenceCount}개"
+                }
+            } catch (e: Exception) {
+                Log.e("SettingsActivity", "Error loading display mode info", e)
+            }
+        }
+    }
+    
+    private fun showResetDisplayModeDialog() {
+        AlertDialog.Builder(this)
+            .setTitle("표시 모드 초기화")
+            .setMessage("모든 파일의 표시 모드 설정을 초기화하시겠습니까?\n이 작업은 되돌릴 수 없습니다.")
+            .setPositiveButton("초기화") { _, _ ->
+                resetAllDisplayModes()
+            }
+            .setNegativeButton("취소", null)
+            .show()
+    }
+    
+    private fun resetAllDisplayModes() {
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                musicRepository.deleteAllUserPreferences()
+                
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(this@SettingsActivity, "모든 표시 모드 설정이 초기화되었습니다", Toast.LENGTH_SHORT).show()
+                    setupDisplayModeInfo()
+                }
+            } catch (e: Exception) {
+                Log.e("SettingsActivity", "Error resetting display modes", e)
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(this@SettingsActivity, "설정 초기화 중 오류가 발생했습니다", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+    }
+    
+    private fun showDisplayModeListDialog() {
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                val preferences = musicRepository.getAllUserPreferences()
+                val pdfFiles = musicRepository.getAllPdfFiles()
+                
+                // Collect preferences in a coroutine context
+                val preferenceList = mutableListOf<Pair<String, DisplayMode>>()
+                preferences.collect { prefs ->
+                    preferenceList.clear()
+                    pdfFiles.collect { files ->
+                        val fileMap = files.associateBy { it.id }
+                        prefs.forEach { pref ->
+                            val fileName = fileMap[pref.pdfFileId]?.filename ?: "Unknown"
+                            preferenceList.add(fileName to pref.displayMode)
+                        }
+                        
+                        withContext(Dispatchers.Main) {
+                            if (preferenceList.isEmpty()) {
+                                Toast.makeText(this@SettingsActivity, "저장된 표시 모드 설정이 없습니다", Toast.LENGTH_SHORT).show()
+                            } else {
+                                showDisplayModeList(preferenceList)
+                            }
+                        }
+                        return@collect
+                    }
+                    return@collect
+                }
+            } catch (e: Exception) {
+                Log.e("SettingsActivity", "Error loading display mode list", e)
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(this@SettingsActivity, "설정 목록을 불러오는 중 오류가 발생했습니다", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+    }
+    
+    private fun showDisplayModeList(preferences: List<Pair<String, DisplayMode>>) {
+        val displayText = StringBuilder()
+        preferences.forEach { (fileName, mode) ->
+            val modeText = when (mode) {
+                DisplayMode.AUTO -> "자동"
+                DisplayMode.SINGLE -> "한 페이지"
+                DisplayMode.DOUBLE -> "두 페이지"
+            }
+            displayText.append("• $fileName: $modeText\n")
+        }
+        
+        AlertDialog.Builder(this)
+            .setTitle("저장된 표시 모드 설정")
+            .setMessage(displayText.toString().trimEnd())
+            .setPositiveButton("확인", null)
+            .show()
+    }
     
 }
