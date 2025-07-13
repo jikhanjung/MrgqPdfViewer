@@ -13,8 +13,8 @@ android {
         applicationId = "com.mrgq.pdfviewer"
         minSdk = 21
         targetSdk = 30  // Android TV OS 11
-        versionCode = 5
-        versionName = "0.1.5"
+        versionCode = 6
+        versionName = "0.1.6"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

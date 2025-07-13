@@ -16,7 +16,6 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import com.mrgq.pdfviewer.adapter.PdfFileAdapter
 import com.mrgq.pdfviewer.databinding.ActivityMainBinding
 import com.mrgq.pdfviewer.model.PdfFile
-import com.mrgq.pdfviewer.server.WebServerManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -28,8 +27,8 @@ class MainActivity : AppCompatActivity() {
     
     private lateinit var binding: ActivityMainBinding
     private lateinit var pdfAdapter: PdfFileAdapter
-    private val webServerManager = WebServerManager()
     private var currentSortBy = "name" // "name" or "time"
+    private var isFileManagementMode = false // 파일 관리 모드 상태
     
     companion object {
         private const val PERMISSION_REQUEST_CODE = 100
@@ -44,9 +43,10 @@ class MainActivity : AppCompatActivity() {
         
         setupRecyclerView()
         checkPermissions()
-        setupWebServer()
+        setupCollaborationButton()
         setupSortButtons()
         setupSettingsButton()
+        setupFileManagementButton()
         setupCollaborationCallbacks()
         
         // Handle file request from SettingsActivity
@@ -122,21 +122,19 @@ class MainActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         
-        // Re-register collaboration callbacks when MainActivity resumes
-        Log.d("MainActivity", "onResume - 협업 콜백 재등록")
-        setupCollaborationCallbacks()
-        
-        // Update collaboration status display
+        // Setup collaboration callbacks only once during onCreate
+        // Re-registering on every onResume can cause multiple callback instances
+        Log.d("MainActivity", "onResume - 협업 상태 업데이트")
         updateCollaborationStatus()
         
-        // Check if file list needs refresh (e.g., after downloading file in PdfViewerActivity)
-        val preferences = getSharedPreferences("pdf_viewer_prefs", MODE_PRIVATE)
-        val needsRefresh = preferences.getBoolean("refresh_file_list", false)
+        // Always refresh file list when returning to MainActivity
+        // This ensures files deleted/added in Settings are reflected
+        Log.d("MainActivity", "onResume - 파일 목록 새로고침")
+        loadPdfFiles()
         
-        if (needsRefresh) {
-            preferences.edit().putBoolean("refresh_file_list", false).apply()
-            loadPdfFiles()
-        }
+        // Clear any refresh flag
+        val preferences = getSharedPreferences("pdf_viewer_prefs", MODE_PRIVATE)
+        preferences.edit().putBoolean("refresh_file_list", false).apply()
     }
     
     private fun loadPdfFiles() {
@@ -154,29 +152,236 @@ class MainActivity : AppCompatActivity() {
         }
     }
     
-    private fun setupWebServer() {
-        binding.serverToggle.setOnCheckedChangeListener { _, isChecked ->
-            if (isChecked) {
-                webServerManager.startServer(this) { success ->
-                    runOnUiThread {
-                        if (success) {
-                            val ip = webServerManager.getServerAddress()
-                            val preferences = getSharedPreferences("pdf_viewer_prefs", MODE_PRIVATE)
-                            val port = preferences.getInt("web_server_port", 8080)
-                            binding.serverStatus.text = "서버 실행 중: http://$ip:$port"
-                            Toast.makeText(this, "웹 서버가 시작되었습니다", Toast.LENGTH_SHORT).show()
-                        } else {
-                            binding.serverToggle.isChecked = false
-                            Toast.makeText(this, "서버 시작 실패", Toast.LENGTH_SHORT).show()
+    private fun setupCollaborationButton() {
+        binding.collaborationButton.setOnClickListener {
+            // Show collaboration options dialog
+            showCollaborationDialog()
+        }
+        
+        // Update collaboration status on startup
+        updateCollaborationStatus()
+    }
+    
+    private fun showCollaborationDialog() {
+        val globalManager = GlobalCollaborationManager.getInstance()
+        val currentMode = globalManager.getCurrentMode()
+        
+        val options = when (currentMode) {
+            CollaborationMode.NONE -> arrayOf("지휘자 모드 시작", "연주자 모드 시작", "취소")
+            CollaborationMode.CONDUCTOR -> arrayOf("지휘자 모드 종료", "취소")
+            CollaborationMode.PERFORMER -> arrayOf("연주자 모드 종료", "취소")
+        }
+        
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle("합주 모드")
+            .setItems(options) { _, which ->
+                when (currentMode) {
+                    CollaborationMode.NONE -> {
+                        when (which) {
+                            0 -> startConductorMode()
+                            1 -> showPerformerDialog()
                         }
                     }
+                    CollaborationMode.CONDUCTOR -> {
+                        if (which == 0) stopCollaborationMode()
+                    }
+                    CollaborationMode.PERFORMER -> {
+                        if (which == 0) stopCollaborationMode()
+                    }
                 }
-            } else {
-                webServerManager.stopServer()
-                binding.serverStatus.text = "서버 중지됨"
-                Toast.makeText(this, "웹 서버가 중지되었습니다", Toast.LENGTH_SHORT).show()
             }
+            .show()
+    }
+    
+    /**
+     * Clean, consistent flow for conductor mode:
+     * 1. Activate conductor mode (this clears callbacks)
+     * 2. Setup callbacks after activation 
+     * 3. Update status
+     */
+    private fun startConductorMode() {
+        val globalManager = GlobalCollaborationManager.getInstance()
+        
+        Log.d("MainActivity", "🎯 Starting conductor mode")
+        
+        // STEP 1: Activate conductor mode FIRST (this clears callbacks)
+        val success = globalManager.activateConductorMode()
+        
+        if (success) {
+            Toast.makeText(this, "지휘자 모드가 시작되었습니다", Toast.LENGTH_SHORT).show()
+            
+            // STEP 2: Setup ALL callbacks AFTER mode activation (so they don't get cleared)
+            Log.d("MainActivity", "🎯 Setting up conductor callbacks")
+            setupCollaborationCallbacks()
+            
+            // STEP 3: Update collaboration status
+            updateCollaborationStatus()
+            
+            Log.d("MainActivity", "🎯 Conductor mode ready - waiting for performers")
+        } else {
+            Toast.makeText(this, "지휘자 모드 시작 실패", Toast.LENGTH_SHORT).show()
         }
+    }
+    
+    private fun showPerformerDialog() {
+        // 기본값으로 자동 발견 모드로 바로 시작
+        startPerformerModeWithAutoDiscovery()
+        
+        // 자동 발견 실패 시 수동 연결 옵션 제공을 위한 타임아웃 설정
+        binding.collaborationStatus.postDelayed({
+            // 만약 아직 연결되지 않았다면 수동 연결 옵션 제공
+            val globalManager = GlobalCollaborationManager.getInstance()
+            if (globalManager.getCurrentMode() == CollaborationMode.PERFORMER && !globalManager.isClientConnected()) {
+                showManualConnectionOption()
+            }
+        }, 15000) // 15초 후 수동 연결 옵션 제공
+    }
+    
+    private fun showManualConnectionOption() {
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle("지휘자 연결")
+            .setMessage("자동 발견에 실패했습니다.\n수동으로 지휘자 IP를 입력하시겠습니까?")
+            .setPositiveButton("수동 입력") { _, _ ->
+                showManualConnectionDialog()
+            }
+            .setNegativeButton("계속 자동 발견", null)
+            .setNeutralButton("연주자 모드 종료") { _, _ ->
+                stopCollaborationMode()
+            }
+            .show()
+    }
+    
+    /**
+     * Clean, linear flow for performer mode with discovery:
+     * 1. Setup all callbacks first
+     * 2. Activate performer mode
+     * 3. Start discovery
+     */
+    private fun startPerformerModeWithAutoDiscovery() {
+        val globalManager = GlobalCollaborationManager.getInstance()
+        
+        Log.d("MainActivity", "🎯 Starting performer mode with auto-discovery")
+        
+        // STEP 1: Activate performer mode FIRST (this clears callbacks)
+        val success = globalManager.activatePerformerMode()
+        
+        if (success) {
+            updateCollaborationStatus()
+            Toast.makeText(this, "연주자 모드 시작 - 지휘자 자동 검색 중...", Toast.LENGTH_SHORT).show()
+            
+            // STEP 2: Setup ALL callbacks AFTER mode activation (so they don't get cleared)
+            Log.d("MainActivity", "🎯 Setting up collaboration callbacks")
+            setupCollaborationCallbacks()
+            
+            // STEP 3: Setup discovery-specific callbacks
+            Log.d("MainActivity", "🎯 Setting up discovery callbacks")
+            
+            globalManager.setOnConductorDiscovered { conductorInfo ->
+                runOnUiThread {
+                    Log.d("MainActivity", "🎯 Conductor discovered in UI: ${conductorInfo.name} at ${conductorInfo.ipAddress}")
+                    
+                    // Auto-connect to discovered conductor
+                    val connected = globalManager.connectToDiscoveredConductor(conductorInfo)
+                    if (connected) {
+                        Toast.makeText(this, "지휘자 발견 - 연결 중...", Toast.LENGTH_SHORT).show()
+                        // Stop discovery after successful connection attempt
+                        globalManager.stopConductorDiscovery()
+                    } else {
+                        Toast.makeText(this, "지휘자 연결 실패", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            }
+            
+            globalManager.setOnDiscoveryTimeout {
+                runOnUiThread {
+                    Log.d("MainActivity", "🎯 Discovery timeout in UI")
+                    Toast.makeText(this, "지휘자를 찾을 수 없습니다. 수동 연결을 시도해보세요.", Toast.LENGTH_LONG).show()
+                }
+            }
+            
+            // STEP 4: Start discovery manually with proper callback setup
+            Log.d("MainActivity", "🎯 Starting conductor discovery")
+            val discoveryStarted = globalManager.startConductorDiscovery()
+            
+            if (!discoveryStarted) {
+                Toast.makeText(this, "자동 검색 시작 실패", Toast.LENGTH_SHORT).show()
+            }
+        } else {
+            Toast.makeText(this, "연주자 모드 시작 실패", Toast.LENGTH_SHORT).show()
+        }
+    }
+    
+    private fun showConductorFoundDialog(conductorInfo: com.mrgq.pdfviewer.ConductorDiscovery.ConductorInfo) {
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle("지휘자 발견")
+            .setMessage("${conductorInfo.name}\nIP: ${conductorInfo.ipAddress}\n\n연결하시겠습니까?")
+            .setPositiveButton("연결") { _, _ ->
+                val globalManager = GlobalCollaborationManager.getInstance()
+                val connected = globalManager.connectToDiscoveredConductor(conductorInfo)
+                if (connected) {
+                    Toast.makeText(this, "지휘자에 연결 중...", Toast.LENGTH_SHORT).show()
+                    // 상태 업데이트는 콜백에서 처리되도록 함
+                } else {
+                    Toast.makeText(this, "연결 실패", Toast.LENGTH_SHORT).show()
+                }
+            }
+            .setNegativeButton("취소", null)
+            .show()
+    }
+    
+    private fun showManualConnectionDialog() {
+        val globalManager = GlobalCollaborationManager.getInstance()
+        
+        // 연주자 모드가 아니면 먼저 시작
+        if (globalManager.getCurrentMode() != CollaborationMode.PERFORMER) {
+            val success = globalManager.activatePerformerMode()
+            if (!success) {
+                Toast.makeText(this, "연주자 모드 시작 실패", Toast.LENGTH_SHORT).show()
+                return
+            }
+            updateCollaborationStatus()
+        }
+        
+        val input = android.widget.EditText(this)
+        input.hint = "192.168.1.100"
+        input.inputType = android.text.InputType.TYPE_CLASS_TEXT
+        
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle("수동 연결")
+            .setMessage("지휘자의 IP 주소를 입력하세요:")
+            .setView(input)
+            .setPositiveButton("연결") { _, _ ->
+                val ip = input.text.toString().trim()
+                if (ip.isNotEmpty()) {
+                    connectToManualConductor(ip)
+                } else {
+                    Toast.makeText(this, "IP 주소를 입력해주세요", Toast.LENGTH_SHORT).show()
+                }
+            }
+            .setNegativeButton("취소", null)
+            .show()
+    }
+    
+    private fun connectToManualConductor(ip: String) {
+        val globalManager = GlobalCollaborationManager.getInstance()
+        
+        // Connect to conductor (performer mode should already be active)
+        val deviceName = android.os.Build.MODEL ?: "Android TV"
+        val connected = globalManager.connectToConductor(ip, 9090, "$deviceName (연주자)")
+        
+        if (connected) {
+            Toast.makeText(this, "지휘자에 연결 중... ($ip)", Toast.LENGTH_SHORT).show()
+            // 상태 업데이트는 콜백에서 처리되도록 함
+        } else {
+            Toast.makeText(this, "연결 실패. IP 주소와 지휘자 상태를 확인해주세요.", Toast.LENGTH_LONG).show()
+        }
+    }
+    
+    private fun stopCollaborationMode() {
+        val globalManager = GlobalCollaborationManager.getInstance()
+        globalManager.deactivateCollaborationMode()
+        Toast.makeText(this, "합주 모드가 종료되었습니다", Toast.LENGTH_SHORT).show()
+        updateCollaborationStatus()
     }
     
     private fun openPdfFile(pdfFile: PdfFile, position: Int) {
@@ -279,7 +484,7 @@ class MainActivity : AppCompatActivity() {
                 return super.onKeyDown(keyCode, event)
             }
             KeyEvent.KEYCODE_MENU -> {
-                binding.serverToggle.isChecked = !binding.serverToggle.isChecked
+                // Menu key reserved for future use
                 return true
             }
         }
@@ -288,12 +493,7 @@ class MainActivity : AppCompatActivity() {
     
     override fun onPause() {
         super.onPause()
-        // Stop server when app goes to background
-        if (binding.serverToggle.isChecked) {
-            webServerManager.stopServer()
-            binding.serverToggle.isChecked = false
-            binding.serverStatus.text = "서버 중지됨"
-        }
+        // Note: 웹서버 관리는 이제 설정 화면에서 담당
     }
     
     override fun onNewIntent(intent: Intent?) {
@@ -305,12 +505,16 @@ class MainActivity : AppCompatActivity() {
     override fun onDestroy() {
         super.onDestroy()
         
-        // Stop web server
-        webServerManager.stopServer()
+        // Clear collaboration callbacks to prevent memory leaks
+        val globalCollaborationManager = GlobalCollaborationManager.getInstance()
+        globalCollaborationManager.setOnServerClientConnected { _, _ -> }
+        globalCollaborationManager.setOnServerClientDisconnected { _ -> }
+        globalCollaborationManager.setOnClientConnectionStatusChanged { _ -> }
+        globalCollaborationManager.setOnFileChangeReceived { _, _ -> }
         
         // Force stop all collaboration modes to prevent port conflicts
         Log.d("MainActivity", "Forcing collaboration mode cleanup on app destruction")
-        GlobalCollaborationManager.getInstance().deactivateCollaborationMode()
+        globalCollaborationManager.deactivateCollaborationMode()
     }
     
     fun refreshFileList() {
@@ -324,6 +528,50 @@ class MainActivity : AppCompatActivity() {
         globalCollaborationManager.setOnFileChangeReceived { fileName, page ->
             runOnUiThread {
                 handleRemoteFileChange(fileName, page)
+            }
+        }
+        
+        // Set up connection status callbacks
+        globalCollaborationManager.setOnServerClientConnected { clientId, deviceName ->
+            runOnUiThread {
+                Log.d("MainActivity", "🎼 지휘자 모드: 연주자 연결됨 - $deviceName")
+                updateCollaborationStatus()
+                Toast.makeText(this, "연주자 '$deviceName'이 연결되었습니다", Toast.LENGTH_SHORT).show()
+            }
+        }
+        
+        globalCollaborationManager.setOnServerClientDisconnected { clientId ->
+            runOnUiThread {
+                Log.d("MainActivity", "🎼 지휘자 모드: 연주자 연결 해제됨")
+                updateCollaborationStatus()
+                Toast.makeText(this, "연주자 연결이 해제되었습니다", Toast.LENGTH_SHORT).show()
+            }
+        }
+        
+        globalCollaborationManager.setOnClientConnectionStatusChanged { isConnected ->
+            runOnUiThread {
+                Log.d("MainActivity", "🎼 연주자 모드: 연결 상태 콜백 - $isConnected")
+                
+                // 콜백 직후 실제 상태도 확인
+                val actualConnected = globalCollaborationManager.isClientConnected()
+                val conductorAddress = globalCollaborationManager.getConductorAddress()
+                Log.d("MainActivity", "🎼 실제 연결 상태: $actualConnected, 지휘자 주소: $conductorAddress")
+                
+                // 즉시 상태 업데이트
+                updateCollaborationStatus()
+                
+                // 추가로 약간 지연 후에도 상태 업데이트 (안전장치)
+                binding.collaborationStatus.postDelayed({
+                    Log.d("MainActivity", "🎼 200ms 후 추가 상태 업데이트 실행")
+                    updateCollaborationStatus()
+                }, 200)
+                
+                // 연결 성공 시에만 토스트 메시지 표시
+                if (isConnected) {
+                    Toast.makeText(this, "지휘자에 연결되었습니다", Toast.LENGTH_SHORT).show()
+                } else {
+                    Toast.makeText(this, "지휘자와의 연결이 끊어졌습니다", Toast.LENGTH_SHORT).show()
+                }
             }
         }
     }
@@ -584,6 +832,27 @@ class MainActivity : AppCompatActivity() {
         }
     }
     
+    private fun setupFileManagementButton() {
+        binding.fileManageBtn.setOnClickListener {
+            isFileManagementMode = !isFileManagementMode
+            updateFileManagementUI()
+            pdfAdapter.setFileManagementMode(isFileManagementMode)
+        }
+        
+        // 초기 상태 설정
+        updateFileManagementUI()
+    }
+    
+    private fun updateFileManagementUI() {
+        if (isFileManagementMode) {
+            binding.fileManageBtn.text = "완료"
+            binding.fileManageBtn.backgroundTintList = getColorStateList(R.color.tv_primary)
+        } else {
+            binding.fileManageBtn.text = "파일관리"
+            binding.fileManageBtn.backgroundTintList = getColorStateList(R.color.tv_surface)
+        }
+    }
+    
     private fun updateCollaborationStatus() {
         val globalCollaborationManager = GlobalCollaborationManager.getInstance()
         val currentMode = globalCollaborationManager.getCurrentMode()
@@ -591,17 +860,42 @@ class MainActivity : AppCompatActivity() {
         when (currentMode) {
             CollaborationMode.CONDUCTOR -> {
                 val clientCount = globalCollaborationManager.getConnectedClientCount()
-                binding.collaborationStatus.text = "협업 모드: 지휘자 (연결된 기기: ${clientCount}대)"
+                binding.collaborationStatus.text = "🎼 지휘자 모드 활성 (연결된 연주자: ${clientCount}명)"
                 binding.collaborationStatus.visibility = android.view.View.VISIBLE
+                binding.collaborationStatus.setTextColor(getColor(R.color.tv_secondary)) // 녹색으로 변경
+                binding.collaborationButton.backgroundTintList = getColorStateList(R.color.tv_secondary)
             }
             CollaborationMode.PERFORMER -> {
                 val isConnected = globalCollaborationManager.isClientConnected()
-                val status = if (isConnected) "연결됨" else "연결 끊김"
-                binding.collaborationStatus.text = "협업 모드: 연주자 ($status)"
+                val conductorAddress = globalCollaborationManager.getConductorAddress()
+                val conductorIp = if (conductorAddress.contains(":")) {
+                    conductorAddress.split(":")[0]
+                } else conductorAddress
+                
+                Log.d("MainActivity", "🎼 updateCollaborationStatus - 연주자 모드")
+                Log.d("MainActivity", "🎼   isConnected: $isConnected")
+                Log.d("MainActivity", "🎼   conductorAddress: '$conductorAddress'")
+                Log.d("MainActivity", "🎼   conductorIp: '$conductorIp'")
+                
+                // 더 관대한 연결 상태 판단: isConnected가 true이면 연결된 것으로 간주
+                if (isConnected) {
+                    val displayIp = if (conductorIp.isNotEmpty()) conductorIp else "지휘자"
+                    binding.collaborationStatus.text = "🎵 연주자 모드 (지휘자: $displayIp)"
+                    binding.collaborationStatus.setTextColor(getColor(R.color.tv_secondary)) // 녹색으로 변경
+                    Log.d("MainActivity", "🎼 UI 업데이트: 연결됨 상태로 표시 - '$displayIp'")
+                } else {
+                    binding.collaborationStatus.text = "🎵 연주자 모드 (연결 끊김)"
+                    binding.collaborationStatus.setTextColor(getColor(R.color.tv_error))
+                    Log.d("MainActivity", "🎼 UI 업데이트: 연결 끊김 상태로 표시")
+                }
                 binding.collaborationStatus.visibility = android.view.View.VISIBLE
+                binding.collaborationButton.backgroundTintList = getColorStateList(R.color.tv_secondary)
             }
             CollaborationMode.NONE -> {
-                binding.collaborationStatus.visibility = android.view.View.GONE
+                binding.collaborationStatus.text = "합주 모드: 비활성"
+                binding.collaborationStatus.visibility = android.view.View.VISIBLE
+                binding.collaborationStatus.setTextColor(getColor(R.color.tv_text_secondary))
+                binding.collaborationButton.backgroundTintList = getColorStateList(R.color.tv_surface)
             }
         }
         

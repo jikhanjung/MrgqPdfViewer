@@ -807,20 +807,14 @@ class PdfViewerActivity : AppCompatActivity() {
         when (keyCode) {
             KeyEvent.KEYCODE_DPAD_LEFT -> {
                 if (isNavigationGuideVisible) {
-                    if (navigationGuideType == "end") {
-                        // 마지막 페이지 안내에서 왼쪽 키 -> 파일 목록으로
+                    if (navigationGuideType == "start" && currentFileIndex > 0) {
+                        // 첫 페이지 안내에서 왼쪽 키 -> 이전 파일로 이동
                         hideNavigationGuide()
-                        finish()
-                        return true
-                    } else if (navigationGuideType == "start") {
-                        // 첫 페이지 안내에서 왼쪽 키
-                        if (currentFileIndex > 0) {
-                            // 이전 파일로 이동
-                            hideNavigationGuide()
-                            loadPreviousFile()
-                        }
+                        loadPreviousFile()
                         return true
                     }
+                    // 안내가 표시된 상태에서는 일반 페이지 이동 차단
+                    return true
                 } else if (pageIndex > 0) {
                     val nextPageIndex = if (isTwoPageMode) pageIndex - 2 else pageIndex - 1
                     showPage(maxOf(0, nextPageIndex))
@@ -833,20 +827,14 @@ class PdfViewerActivity : AppCompatActivity() {
             }
             KeyEvent.KEYCODE_DPAD_RIGHT -> {
                 if (isNavigationGuideVisible) {
-                    if (navigationGuideType == "end") {
-                        // 마지막 페이지 안내에서 오른쪽 키
-                        if (currentFileIndex < filePathList.size - 1) {
-                            // 다음 파일로 이동
-                            hideNavigationGuide()
-                            loadNextFile()
-                        }
-                        return true
-                    } else if (navigationGuideType == "start") {
-                        // 첫 페이지 안내에서 오른쪽 키 -> 파일 목록으로
+                    if (navigationGuideType == "end" && currentFileIndex < filePathList.size - 1) {
+                        // 마지막 페이지 안내에서 오른쪽 키 -> 다음 파일로 이동
                         hideNavigationGuide()
-                        finish()
+                        loadNextFile()
                         return true
                     }
+                    // 안내가 표시된 상태에서는 일반 페이지 이동 차단
+                    return true
                 } else {
                     val nextPageIndex = if (isTwoPageMode) pageIndex + 2 else pageIndex + 1
                     if (nextPageIndex < pageCount) {
@@ -899,12 +887,9 @@ class PdfViewerActivity : AppCompatActivity() {
     
     private fun showEndOfFileGuide() {
         val hasNextFile = currentFileIndex < filePathList.size - 1
-        val hasPreviousFile = currentFileIndex > 0
         
-        // 왼쪽 네비게이션 설정 (목록으로 돌아가기)
-        binding.leftNavigation.visibility = View.VISIBLE
-        binding.leftNavText.text = "파일 목록"
-        binding.leftNavSubText.text = "목록으로 돌아가기"
+        // 왼쪽 네비게이션은 숨김 (더 이상 목록으로 돌아가기 없음)
+        binding.leftNavigation.visibility = View.GONE
         
         // 오른쪽 네비게이션 설정 (다음 파일 또는 없음)
         if (hasNextFile) {
@@ -920,7 +905,6 @@ class PdfViewerActivity : AppCompatActivity() {
     
     private fun showStartOfFileGuide() {
         val hasPreviousFile = currentFileIndex > 0
-        val hasNextFile = currentFileIndex < filePathList.size - 1
         
         // 왼쪽 네비게이션 설정 (이전 파일 또는 없음)
         if (hasPreviousFile) {
@@ -931,10 +915,8 @@ class PdfViewerActivity : AppCompatActivity() {
             binding.leftNavigation.visibility = View.GONE
         }
         
-        // 오른쪽 네비게이션 설정 (목록으로 돌아가기)
-        binding.rightNavigation.visibility = View.VISIBLE
-        binding.rightNavText.text = "파일 목록"
-        binding.rightNavSubText.text = "목록으로 돌아가기"
+        // 오른쪽 네비게이션은 숨김 (더 이상 목록으로 돌아가기 없음)
+        binding.rightNavigation.visibility = View.GONE
         
         showNavigationGuide("start")
     }
@@ -945,10 +927,10 @@ class PdfViewerActivity : AppCompatActivity() {
         binding.navigationGuide.visibility = View.VISIBLE
         binding.navigationGuide.animate().alpha(1f).duration = 300
         
-        // 5초 후 자동으로 숨기기
+        // 3초 후 자동으로 숨기기
         binding.navigationGuide.postDelayed({
             hideNavigationGuide()
-        }, 5000)
+        }, 3000)
     }
     
     private fun hideNavigationGuide() {

@@ -202,6 +202,22 @@ class CollaborationServerManager {
     }
     
     internal fun addClient(clientId: String, webSocket: WebSocket, deviceName: String) {
+        // Check for duplicate device names and remove old connections
+        val duplicateClientIds = clientDeviceNames.filterValues { it == deviceName }.keys
+        if (duplicateClientIds.isNotEmpty()) {
+            Log.d(TAG, "Found duplicate device '$deviceName', removing ${duplicateClientIds.size} old connections")
+            duplicateClientIds.forEach { oldClientId ->
+                try {
+                    connectedClients[oldClientId]?.close(1000, "Duplicate connection")
+                    connectedClients.remove(oldClientId)
+                    clientDeviceNames.remove(oldClientId)
+                    Log.d(TAG, "Removed old connection: $oldClientId")
+                } catch (e: Exception) {
+                    Log.w(TAG, "Error removing old connection $oldClientId", e)
+                }
+            }
+        }
+        
         connectedClients[clientId] = webSocket
         clientDeviceNames[clientId] = deviceName
         

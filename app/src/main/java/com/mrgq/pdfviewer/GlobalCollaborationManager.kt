@@ -108,15 +108,7 @@ class GlobalCollaborationManager private constructor() {
         currentMode = CollaborationMode.PERFORMER
         preferences?.edit()?.putString("collaboration_mode", "performer")?.apply()
         
-        val success = initializePerformerMode()
-        
-        // Auto-start conductor discovery when performer mode is activated
-        if (success) {
-            Log.d(TAG, "Auto-starting conductor discovery...")
-            startAutoConductorDiscovery()
-        }
-        
-        return success
+        return initializePerformerMode()
     }
     
     fun deactivateCollaborationMode() {
@@ -199,13 +191,19 @@ class GlobalCollaborationManager private constructor() {
         return try {
             collaborationServerManager = CollaborationServerManager().apply {
                 setOnClientConnected { clientId, deviceName ->
-                    Log.d(TAG, "Client connected: $clientId ($deviceName)")
-                    onServerClientConnected?.invoke(clientId, deviceName)
+                    Log.d(TAG, "🎯 Server: Client connected: $clientId ($deviceName)")
+                    onServerClientConnected?.let { callback ->
+                        Log.d(TAG, "🎯 Invoking server client connected callback")
+                        callback(clientId, deviceName)
+                    } ?: Log.w(TAG, "🎯 No server client connected callback set!")
                 }
                 
                 setOnClientDisconnected { clientId ->
-                    Log.d(TAG, "Client disconnected: $clientId")
-                    onServerClientDisconnected?.invoke(clientId)
+                    Log.d(TAG, "🎯 Server: Client disconnected: $clientId")
+                    onServerClientDisconnected?.let { callback ->
+                        Log.d(TAG, "🎯 Invoking server client disconnected callback")
+                        callback(clientId)
+                    } ?: Log.w(TAG, "🎯 No server client disconnected callback set!")
                 }
             }
             
@@ -345,12 +343,14 @@ class GlobalCollaborationManager private constructor() {
         return collaborationClientManager?.getConductorAddress() ?: ""
     }
     
-    // Callback setters
+    // Callback setters with logging for server callbacks
     fun setOnServerClientConnected(callback: (String, String) -> Unit) {
+        Log.d(TAG, "🎯 Setting server client connected callback")
         onServerClientConnected = callback
     }
     
     fun setOnServerClientDisconnected(callback: (String) -> Unit) {
+        Log.d(TAG, "🎯 Setting server client disconnected callback")
         onServerClientDisconnected = callback
     }
     
@@ -370,11 +370,19 @@ class GlobalCollaborationManager private constructor() {
         onBackToListReceived = callback
     }
     
+    /**
+     * Set conductor discovery callback - this is critical for MainActivity integration
+     */
     fun setOnConductorDiscovered(callback: (ConductorDiscovery.ConductorInfo) -> Unit) {
+        Log.d(TAG, "🎯 Setting conductor discovered callback")
         onConductorDiscovered = callback
     }
     
+    /**
+     * Set discovery timeout callback
+     */
     fun setOnDiscoveryTimeout(callback: () -> Unit) {
+        Log.d(TAG, "🎯 Setting discovery timeout callback")
         onDiscoveryTimeout = callback
     }
     
@@ -383,22 +391,43 @@ class GlobalCollaborationManager private constructor() {
     }
     
     // Conductor Discovery operations
+    /**
+     * Start conductor discovery with proper callback management
+     * This method ensures callbacks are properly connected and managed
+     */
     fun startConductorDiscovery(): Boolean {
         if (currentMode != CollaborationMode.PERFORMER) {
             Log.w(TAG, "Conductor discovery is only available in performer mode")
             return false
         }
         
-        return conductorDiscovery?.startConductorDiscovery(
+        if (conductorDiscovery == null) {
+            Log.e(TAG, "ConductorDiscovery is not initialized")
+            return false
+        }
+        
+        Log.d(TAG, "Starting conductor discovery with callbacks: " +
+                "onConductorDiscovered=${if (onConductorDiscovered != null) "SET" else "NULL"}, " +
+                "onDiscoveryTimeout=${if (onDiscoveryTimeout != null) "SET" else "NULL"}")
+        
+        return conductorDiscovery!!.startConductorDiscovery(
             onConductorFound = { conductorInfo ->
-                Log.d(TAG, "Conductor discovered: ${conductorInfo.name} at ${conductorInfo.ipAddress}:${conductorInfo.port}")
-                onConductorDiscovered?.invoke(conductorInfo)
+                Log.d(TAG, "🎯 Conductor discovered: ${conductorInfo.name} at ${conductorInfo.ipAddress}:${conductorInfo.port}")
+                
+                // Ensure callback is called on main thread
+                onConductorDiscovered?.let { callback ->
+                    Log.d(TAG, "🎯 Invoking discovery callback")
+                    callback(conductorInfo)
+                } ?: Log.w(TAG, "🎯 No discovery callback set!")
             },
             onDiscoveryTimeout = {
-                Log.d(TAG, "Conductor discovery timeout")
-                onDiscoveryTimeout?.invoke()
+                Log.d(TAG, "🎯 Conductor discovery timeout")
+                onDiscoveryTimeout?.let { callback ->
+                    Log.d(TAG, "🎯 Invoking timeout callback")
+                    callback()
+                } ?: Log.w(TAG, "🎯 No timeout callback set!")
             }
-        ) ?: false
+        )
     }
     
     fun stopConductorDiscovery() {
@@ -410,41 +439,8 @@ class GlobalCollaborationManager private constructor() {
         return connectToConductor(conductorInfo.ipAddress, conductorInfo.port, "$deviceName (연주자)")
     }
     
-    private fun startAutoConductorDiscovery() {
-        if (currentMode != CollaborationMode.PERFORMER) {
-            Log.w(TAG, "Auto conductor discovery is only available in performer mode")
-            return
-        }
-        
-        Log.d(TAG, "Starting auto conductor discovery...")
-        
-        // Set up auto-connection callback
-        val success = conductorDiscovery?.startConductorDiscovery(
-            onConductorFound = { conductorInfo ->
-                Log.d(TAG, "Auto-discovery found conductor: ${conductorInfo.name} at ${conductorInfo.ipAddress}:${conductorInfo.port}")
-                
-                // Automatically connect to the first discovered conductor
-                val connected = connectToDiscoveredConductor(conductorInfo)
-                if (connected) {
-                    Log.d(TAG, "Auto-connected to conductor: ${conductorInfo.name}")
-                    onAutoConnectionResult?.invoke(true, conductorInfo.name)
-                    // Stop discovery after successful connection
-                    stopConductorDiscovery()
-                } else {
-                    Log.w(TAG, "Failed to auto-connect to conductor: ${conductorInfo.name}")
-                    onAutoConnectionResult?.invoke(false, conductorInfo.name)
-                }
-            },
-            onDiscoveryTimeout = {
-                Log.d(TAG, "Auto conductor discovery timeout - no conductors found")
-                onAutoConnectionResult?.invoke(false, "지휘자를 찾을 수 없음")
-            }
-        ) ?: false
-        
-        if (!success) {
-            Log.w(TAG, "Failed to start auto conductor discovery")
-        }
-    }
+    // Note: Auto-discovery method removed in favor of explicit discovery management
+    // Discovery is now handled via startConductorDiscovery() with proper callback setup
     
     private fun clearCallbacks() {
         onServerClientConnected = null
@@ -471,17 +467,17 @@ class GlobalCollaborationManager private constructor() {
         return when (currentMode) {
             CollaborationMode.CONDUCTOR -> {
                 val clientCount = getConnectedClientCount()
-                "협업 모드: 지휘자 (연결된 기기: ${clientCount}대)"
+                "합주 모드: 지휘자 (연결된 기기: ${clientCount}대)"
             }
             CollaborationMode.PERFORMER -> {
                 val conductorAddress = getConductorAddress()
                 if (isClientConnected()) {
-                    "협업 모드: 연주자 (연결됨: $conductorAddress)"
+                    "합주 모드: 연주자 (연결됨: $conductorAddress)"
                 } else {
-                    "협업 모드: 연주자 (연결 끊김)"
+                    "합주 모드: 연주자 (연결 끊김)"
                 }
             }
-            else -> "협업 모드: 비활성화"
+            else -> "합주 모드: 비활성화"
         }
     }
 }

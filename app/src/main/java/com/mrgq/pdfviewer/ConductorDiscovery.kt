@@ -221,11 +221,28 @@ class ConductorDiscovery {
      */
     fun stopConductorDiscovery() {
         Log.d(TAG, "Stopping conductor discovery")
+        
+        // Cancel discovery job first
         discoveryJob?.cancel()
         discoveryJob = null
         
-        listenSocket?.close()
-        listenSocket = null
+        // Force close socket with timeout handling
+        try {
+            listenSocket?.let { socket ->
+                if (!socket.isClosed) {
+                    Log.d(TAG, "Forcefully closing discovery socket on port $DISCOVERY_PORT")
+                    socket.close()
+                }
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Error closing discovery socket", e)
+        } finally {
+            listenSocket = null
+        }
+        
+        // Give time for port to be released
+        Thread.sleep(100)
+        Log.d(TAG, "Discovery socket cleanup complete")
     }
     
     /**

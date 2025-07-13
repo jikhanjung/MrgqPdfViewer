@@ -14,8 +14,20 @@
 bin/
 gen/
 out/
-#  Uncomment the following line in case you need and you don't have the release build type files in your app
-# release/
+
+# Release build files and artifacts
+app/release/
+release/
+app/debug/
+debug/
+
+# Baseline profiles (auto-generated performance optimization files)
+**/baselineProfiles/
+baseline-prof.txt
+
+# Build outputs and metadata
+output-metadata.json
+mapping.txt
 
 # Gradle files
 .gradle/
@@ -78,6 +90,12 @@ lint/tmp/
 
 # Android Profiling
 *.hprof
+
+# Development and analysis documents (keep these tracked)
+# COLLABORATION_SETTINGS_DESIGN.md
+# ENSEMBLE_MODE_RESTRUCTURING.md
+# PORT_BINDING_ANALYSIS.md
+# UDP_BROADCAST_DISCOVERY.md
 
 # MacOS
 .DS_Store
