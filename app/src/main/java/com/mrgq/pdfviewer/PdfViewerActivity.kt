@@ -22,8 +22,11 @@ import android.os.Environment
 import java.io.File
 import com.mrgq.pdfviewer.database.entity.DisplayMode
 import com.mrgq.pdfviewer.database.entity.PageOrientation
+import com.mrgq.pdfviewer.database.entity.UserPreference
 import com.mrgq.pdfviewer.repository.MusicRepository
 import com.mrgq.pdfviewer.utils.PdfAnalyzer
+import android.os.Handler
+import android.os.Looper
 
 class PdfViewerActivity : AppCompatActivity() {
     
@@ -58,6 +61,24 @@ class PdfViewerActivity : AppCompatActivity() {
     // Database repository
     private lateinit var musicRepository: MusicRepository
     private var currentPdfFileId: String? = null
+    
+    // Current display settings
+    private var currentTopClipping: Float = 0f
+    private var currentBottomClipping: Float = 0f
+    private var currentCenterPadding: Float = 0f  // Changed to Float for percentage (0.0 - 0.15)
+    
+    // Flag to force direct rendering (bypass cache) after settings change
+    private var forceDirectRendering: Boolean = false
+    
+    // Long press handling for OK button
+    private var isLongPressing = false
+    private val longPressHandler = Handler(Looper.getMainLooper())
+    private val longPressRunnable = Runnable {
+        if (isLongPressing) {
+            showPdfDisplayOptions()
+        }
+    }
+    private val longPressDelay = 800L // 800ms for long press
     
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -171,6 +192,10 @@ class PdfViewerActivity : AppCompatActivity() {
                         firstPage.close()
                         
                         pageCache = PageCache(pdfRenderer!!, screenWidth, screenHeight)
+                        
+                        // PageCache에 설정 콜백 등록
+                        registerSettingsCallback()
+                        
                         Log.d("PdfViewerActivity", "PageCache 초기화 완료 (calculated scale: $calculatedScale)")
                         
                         // Check if we should use two-page mode, then show target page or first page
@@ -185,6 +210,12 @@ class PdfViewerActivity : AppCompatActivity() {
                             // Clear cache and update settings to ensure clean state
                             pageCache?.clear()
                             pageCache?.updateSettings(isTwoPageMode, finalScale)
+                            
+                            // Re-register settings provider after cache operations and settings load
+                            registerSettingsCallback()
+                            
+                            Log.d("PdfViewerActivity", "=== 최종 콜백 등록 완료 ===")
+                            Log.d("PdfViewerActivity", "최종 설정 상태: 위 ${currentTopClipping * 100}%, 아래 ${currentBottomClipping * 100}%, 여백 ${currentCenterPadding}px")
                             
                             // Navigate to target page if specified, otherwise first page
                             val targetPage = intent.getIntExtra("target_page", -1)
@@ -217,6 +248,21 @@ class PdfViewerActivity : AppCompatActivity() {
             try {
                 // First, ensure PDF file is in database
                 ensurePdfFileInDatabase()
+                
+                Log.d("PdfViewerActivity", "=== checkAndSetTwoPageMode: PDF 파일 DB 등록 완료 ===")
+                Log.d("PdfViewerActivity", "currentPdfFileId: $currentPdfFileId")
+                
+                // Load display settings after ensuring file is in database
+                loadDisplaySettingsSync()
+                
+                Log.d("PdfViewerActivity", "=== checkAndSetTwoPageMode: 설정 로드 완료 ===")
+                Log.d("PdfViewerActivity", "로드된 설정: 위 ${currentTopClipping * 100}%, 아래 ${currentBottomClipping * 100}%, 여백 ${currentCenterPadding}px")
+                
+                // Force cache invalidation to apply loaded settings
+                withContext(Dispatchers.Main) {
+                    pageCache?.clear()
+                    Log.d("PdfViewerActivity", "=== 설정 로드 후 캐시 클리어 완료 ===")
+                }
                 
                 // Check if this file already has a saved setting
                 currentPdfFileId?.let { fileId ->
@@ -412,15 +458,26 @@ class PdfViewerActivity : AppCompatActivity() {
         Log.d("PdfViewerActivity", "showPage called: index=$index, isTwoPageMode=$isTwoPageMode, pageCount=$pageCount")
         
         // Check cache first for instant display
-        val cachedBitmap = if (isTwoPageMode && index + 1 < pageCount) {
-            // Two page mode - check if both pages are cached with correct scale
-            val page1 = pageCache?.getPageImmediate(index)
-            val page2 = pageCache?.getPageImmediate(index + 1)
-            if (page1 != null && page2 != null) {
-                Log.d("PdfViewerActivity", "⚡ 페이지 $index, ${index + 1} 캐시에서 즉시 표시 (두 페이지 모드)")
-                combineTwoPages(page1, page2)
+        val cachedBitmap = if (isTwoPageMode) {
+            if (index + 1 < pageCount) {
+                // Two page mode - check if both pages are cached with correct scale
+                val page1 = pageCache?.getPageImmediate(index)
+                val page2 = pageCache?.getPageImmediate(index + 1)
+                if (page1 != null && page2 != null) {
+                    Log.d("PdfViewerActivity", "⚡ 페이지 $index, ${index + 1} 캐시에서 즉시 표시 (두 페이지 모드)")
+                    combineTwoPages(page1, page2)
+                } else {
+                    null
+                }
             } else {
-                null
+                // Last page is odd - show on left side with empty right
+                val page1 = pageCache?.getPageImmediate(index)
+                if (page1 != null) {
+                    Log.d("PdfViewerActivity", "⚡ 마지막 페이지 $index 캐시에서 왼쪽에 표시 (두 페이지 모드)")
+                    combinePageWithEmpty(page1)
+                } else {
+                    null
+                }
             }
         } else {
             pageCache?.getPageImmediate(index)
@@ -471,14 +528,36 @@ class PdfViewerActivity : AppCompatActivity() {
                     Log.w("PdfViewerActivity", "Current page already closed or error closing in showPage: ${e.message}")
                 }
                 
-                val bitmap = if (isTwoPageMode && index + 1 < pageCount) {
-                    Log.d("PdfViewerActivity", "Rendering two pages: $index and ${index + 1}")
-                    // For two-page mode, always use direct rendering to preserve aspect ratio
-                    renderTwoPages(index)
+                val bitmap = if (isTwoPageMode) {
+                    if (index + 1 < pageCount) {
+                        Log.d("PdfViewerActivity", "=== 두 페이지 모드 렌더링: $index and ${index + 1} ===")
+                        Log.d("PdfViewerActivity", "forceDirectRendering: $forceDirectRendering")
+                        // For two-page mode, always use direct rendering to preserve aspect ratio
+                        if (forceDirectRendering) {
+                            forceDirectRendering = false // 플래그 리셋
+                        }
+                        renderTwoPages(index)
+                    } else {
+                        Log.d("PdfViewerActivity", "=== 마지막 페이지 왼쪽 표시 렌더링: $index ===")
+                        Log.d("PdfViewerActivity", "forceDirectRendering: $forceDirectRendering")
+                        if (forceDirectRendering) {
+                            forceDirectRendering = false // 플래그 리셋
+                        }
+                        renderSinglePageOnLeft(index)
+                    }
                 } else {
-                    Log.d("PdfViewerActivity", "Rendering single page: $index")
-                    // Try cache again, will render sync if not found
-                    pageCache?.getPageImmediate(index) ?: renderSinglePage(index)
+                    Log.d("PdfViewerActivity", "=== 단일 페이지 모드 렌더링: $index ===")
+                    Log.d("PdfViewerActivity", "forceDirectRendering: $forceDirectRendering")
+                    
+                    if (forceDirectRendering) {
+                        Log.d("PdfViewerActivity", "설정 변경으로 인한 강제 직접 렌더링 - 캐시 완전 우회")
+                        forceDirectRendering = false // 플래그 리셋
+                        renderSinglePage(index)
+                    } else {
+                        Log.d("PdfViewerActivity", "일반 렌더링 - PageCache 자동 설정 관리 사용")
+                        // PageCache will automatically handle settings changes and cache invalidation
+                        pageCache?.getPageImmediate(index) ?: renderSinglePage(index)
+                    }
                 }
                 
                 withContext(Dispatchers.Main) {
@@ -520,9 +599,12 @@ class PdfViewerActivity : AppCompatActivity() {
         Log.d("PdfViewerActivity", "=== COMBINE TWO PAGES DEBUG ===")
         Log.d("PdfViewerActivity", "Left bitmap: ${leftBitmap.width}x${leftBitmap.height}, aspect ratio: ${leftBitmap.width.toFloat() / leftBitmap.height.toFloat()}")
         Log.d("PdfViewerActivity", "Right bitmap: ${rightBitmap.width}x${rightBitmap.height}, aspect ratio: ${rightBitmap.width.toFloat() / rightBitmap.height.toFloat()}")
+        // Calculate center padding in pixels (percentage of one page width)
+        val paddingPixels = (leftBitmap.width * currentCenterPadding).toInt()
+        Log.d("PdfViewerActivity", "Center padding: ${(currentCenterPadding * 100).toInt()}% (${paddingPixels}px)")
         
-        // Create combined bitmap
-        val combinedWidth = leftBitmap.width + rightBitmap.width
+        // Create combined bitmap with center padding
+        val combinedWidth = leftBitmap.width + rightBitmap.width + paddingPixels
         val combinedHeight = maxOf(leftBitmap.height, rightBitmap.height)
         
         Log.d("PdfViewerActivity", "Combined will be: ${combinedWidth}x${combinedHeight}, aspect ratio: ${combinedWidth.toFloat() / combinedHeight.toFloat()}")
@@ -540,12 +622,134 @@ class PdfViewerActivity : AppCompatActivity() {
         // Draw left page
         combinedCanvas.drawBitmap(leftBitmap, 0f, 0f, null)
         
-        // Draw right page
-        combinedCanvas.drawBitmap(rightBitmap, leftBitmap.width.toFloat(), 0f, null)
+        // Draw right page with center padding offset
+        val rightPageX = leftBitmap.width.toFloat() + paddingPixels
+        combinedCanvas.drawBitmap(rightBitmap, rightPageX, 0f, null)
         
-        Log.d("PdfViewerActivity", "Combined two cached pages successfully")
+        Log.d("PdfViewerActivity", "Combined two cached pages successfully with ${(currentCenterPadding * 100).toInt()}% center padding")
         
         return combinedBitmap
+    }
+    
+    private fun combinePageWithEmpty(leftBitmap: Bitmap): Bitmap {
+        Log.d("PdfViewerActivity", "=== COMBINE PAGE WITH EMPTY DEBUG ===")
+        Log.d("PdfViewerActivity", "Left bitmap: ${leftBitmap.width}x${leftBitmap.height}")
+        // Calculate center padding in pixels (percentage of one page width)
+        val paddingPixels = (leftBitmap.width * currentCenterPadding).toInt()
+        Log.d("PdfViewerActivity", "Center padding: ${(currentCenterPadding * 100).toInt()}% (${paddingPixels}px)")
+        
+        // Create combined bitmap with empty right page
+        val rightPageWidth = leftBitmap.width  // Same size as left page
+        val combinedWidth = leftBitmap.width + rightPageWidth + paddingPixels
+        val combinedHeight = leftBitmap.height
+        
+        Log.d("PdfViewerActivity", "Combined will be: ${combinedWidth}x${combinedHeight}")
+        Log.d("PdfViewerActivity", "=====================================")
+        
+        val combinedBitmap = Bitmap.createBitmap(
+            combinedWidth,
+            combinedHeight,
+            Bitmap.Config.ARGB_8888
+        )
+        
+        val combinedCanvas = Canvas(combinedBitmap)
+        combinedCanvas.drawColor(android.graphics.Color.WHITE)
+        
+        // Draw left page
+        combinedCanvas.drawBitmap(leftBitmap, 0f, 0f, null)
+        
+        // Right side remains empty (white background already drawn)
+        
+        Log.d("PdfViewerActivity", "Combined page with empty right side successfully")
+        
+        return combinedBitmap
+    }
+    
+    private suspend fun renderSinglePageOnLeft(pageIndex: Int): Bitmap {
+        Log.d("PdfViewerActivity", "Starting renderSinglePageOnLeft for page $pageIndex")
+        
+        // Open the page
+        val page = try {
+            pdfRenderer?.openPage(pageIndex)
+        } catch (e: Exception) {
+            Log.e("PdfViewerActivity", "Failed to open page $pageIndex", e)
+            return renderSinglePage(pageIndex)
+        }
+        
+        if (page == null) {
+            Log.e("PdfViewerActivity", "Page is null")
+            return renderSinglePage(pageIndex)
+        }
+        
+        try {
+            Log.d("PdfViewerActivity", "Page (${pageIndex}): ${page.width}x${page.height}, aspect ratio: ${page.width.toFloat() / page.height.toFloat()}")
+            
+            // Create original-size bitmap for the page
+            val pageBitmap = Bitmap.createBitmap(page.width, page.height, Bitmap.Config.ARGB_8888)
+            pageBitmap.eraseColor(android.graphics.Color.WHITE)
+            page.render(pageBitmap, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
+            
+            page.close()
+            
+            // Create combined bitmap with empty right side (same size as two-page layout)
+            val paddingPixels = (pageBitmap.width * currentCenterPadding).toInt()
+            val combinedWidth = pageBitmap.width * 2 + paddingPixels
+            val combinedHeight = pageBitmap.height
+            val combinedBitmap = Bitmap.createBitmap(combinedWidth, combinedHeight, Bitmap.Config.ARGB_8888)
+            
+            val combinedCanvas = Canvas(combinedBitmap)
+            combinedCanvas.drawColor(android.graphics.Color.WHITE)
+            combinedCanvas.drawBitmap(pageBitmap, 0f, 0f, null)
+            // Right side remains empty
+            
+            // Calculate scale for the combined layout
+            val combinedAspectRatio = combinedWidth.toFloat() / combinedHeight.toFloat()
+            val screenAspectRatio = screenWidth.toFloat() / screenHeight.toFloat()
+            
+            val scale = if (combinedAspectRatio > screenAspectRatio) {
+                screenWidth.toFloat() / combinedWidth.toFloat()
+            } else {
+                screenHeight.toFloat() / combinedHeight.toFloat()
+            }
+            
+            // Apply high-resolution multiplier
+            val finalScale = (scale * 2.5f).coerceIn(1.0f, 4.0f)
+            
+            Log.d("PdfViewerActivity", "=== SINGLE PAGE ON LEFT SCALING ===")
+            Log.d("PdfViewerActivity", "Combined: ${combinedWidth}x${combinedHeight}, aspect ratio: $combinedAspectRatio")
+            Log.d("PdfViewerActivity", "Screen: ${screenWidth}x${screenHeight}, aspect ratio: $screenAspectRatio")
+            Log.d("PdfViewerActivity", "Base scale: $scale, Final scale: $finalScale")
+            Log.d("PdfViewerActivity", "===================================")
+            
+            // Create final high-resolution bitmap
+            val finalWidth = (combinedWidth * finalScale).toInt()
+            val finalHeight = (combinedHeight * finalScale).toInt()
+            val finalBitmap = Bitmap.createBitmap(finalWidth, finalHeight, Bitmap.Config.ARGB_8888)
+            
+            val finalCanvas = Canvas(finalBitmap)
+            finalCanvas.drawColor(android.graphics.Color.WHITE)
+            
+            // Scale and draw the combined bitmap
+            val scaleMatrix = android.graphics.Matrix()
+            scaleMatrix.setScale(finalScale, finalScale)
+            finalCanvas.drawBitmap(combinedBitmap, scaleMatrix, null)
+            
+            // Clean up intermediate bitmaps
+            pageBitmap.recycle()
+            combinedBitmap.recycle()
+            
+            // Apply clipping if needed
+            return applyDisplaySettings(finalBitmap, true)
+            
+        } catch (e: Exception) {
+            Log.e("PdfViewerActivity", "Error in renderSinglePageOnLeft", e)
+            try {
+                page.close()
+            } catch (closeError: Exception) {
+                Log.w("PdfViewerActivity", "Page already closed or error closing: ${closeError.message}")
+            }
+            throw e
+        }
     }
     
     private suspend fun renderSinglePage(index: Int): Bitmap {
@@ -583,7 +787,8 @@ class PdfViewerActivity : AppCompatActivity() {
         // Render with scaling (Matrix only to preserve aspect ratio)
         page.render(bitmap, null, matrix, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
         
-        return bitmap
+        // Apply clipping and padding if needed
+        return applyDisplaySettings(bitmap, false)
     }
     
     private suspend fun renderTwoPages(leftPageIndex: Int): Bitmap {
@@ -638,15 +843,21 @@ class PdfViewerActivity : AppCompatActivity() {
                 
                 rightPage.close()
                 
-                // Combine two pages side by side (original resolution)
-                val combinedWidth = leftBitmap.width + rightBitmap.width
+                // Combine two pages side by side with center padding (original resolution)
+                val paddingPixels = (leftBitmap.width * currentCenterPadding).toInt()
+                val combinedWidth = leftBitmap.width + rightBitmap.width + paddingPixels
                 val combinedHeight = maxOf(leftBitmap.height, rightBitmap.height)
                 val combinedBitmap = Bitmap.createBitmap(combinedWidth, combinedHeight, Bitmap.Config.ARGB_8888)
                 
                 val combinedCanvas = Canvas(combinedBitmap)
                 combinedCanvas.drawColor(android.graphics.Color.WHITE)
                 combinedCanvas.drawBitmap(leftBitmap, 0f, 0f, null)
-                combinedCanvas.drawBitmap(rightBitmap, leftBitmap.width.toFloat(), 0f, null)
+                
+                // Draw right page with center padding offset
+                val rightPageX = leftBitmap.width.toFloat() + paddingPixels
+                combinedCanvas.drawBitmap(rightBitmap, rightPageX, 0f, null)
+                
+                Log.d("PdfViewerActivity", "Combined pages with ${(currentCenterPadding * 100).toInt()}% center padding")
                 
                 // Calculate scale based on combined bitmap aspect ratio vs screen
                 val combinedAspectRatio = combinedWidth.toFloat() / combinedHeight.toFloat()
@@ -687,7 +898,8 @@ class PdfViewerActivity : AppCompatActivity() {
                 rightBitmap.recycle()
                 combinedBitmap.recycle()
                 
-                return finalBitmap
+                // Apply clipping and padding if needed
+                return applyDisplaySettings(finalBitmap, true)
                 
             } finally {
                 try {
@@ -874,6 +1086,10 @@ class PdfViewerActivity : AppCompatActivity() {
                         firstPage.close()
                         
                         pageCache = PageCache(pdfRenderer!!, screenWidth, screenHeight)
+                        
+                        // Register settings callback immediately after PageCache creation
+                        registerSettingsCallback()
+                        
                         Log.d("PdfViewerActivity", "PageCache 재초기화 완료 for collaboration file change")
                         
                         checkAndSetTwoPageMode {
@@ -984,6 +1200,10 @@ class PdfViewerActivity : AppCompatActivity() {
                         firstPage.close()
                         
                         pageCache = PageCache(pdfRenderer!!, screenWidth, screenHeight)
+                        
+                        // Register settings callback immediately after PageCache creation
+                        registerSettingsCallback()
+                        
                         Log.d("PdfViewerActivity", "PageCache 재초기화 완료 for $fileName (scale: $calculatedScale)")
                         
                         // Check two-page mode for this new file, then show the page
@@ -1083,16 +1303,10 @@ class PdfViewerActivity : AppCompatActivity() {
                 return true
             }
             KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER -> {
-                if (isNavigationGuideVisible) {
-                    // 안내가 표시되어 있으면 숨기기
-                    hideNavigationGuide()
-                } else {
-                    // Toggle page info visibility
-                    if (binding.pageInfo.alpha > 0.5f) {
-                        binding.pageInfo.animate().alpha(0.3f).duration = 200
-                    } else {
-                        binding.pageInfo.animate().alpha(1f).duration = 200
-                    }
+                if (event?.action == KeyEvent.ACTION_DOWN && event.repeatCount == 0) {
+                    // Start long press detection
+                    isLongPressing = true
+                    longPressHandler.postDelayed(longPressRunnable, longPressDelay)
                 }
                 return true
             }
@@ -1107,6 +1321,34 @@ class PdfViewerActivity : AppCompatActivity() {
             }
         }
         return super.onKeyDown(keyCode, event)
+    }
+    
+    override fun onKeyUp(keyCode: Int, event: KeyEvent?): Boolean {
+        when (keyCode) {
+            KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER -> {
+                // Cancel long press and handle short press
+                longPressHandler.removeCallbacks(longPressRunnable)
+                
+                if (isLongPressing && event?.isCanceled != true) {
+                    // This was a short press, not a long press
+                    if (isNavigationGuideVisible) {
+                        // 안내가 표시되어 있으면 숨기기
+                        hideNavigationGuide()
+                    } else {
+                        // Toggle page info visibility
+                        if (binding.pageInfo.alpha > 0.5f) {
+                            binding.pageInfo.animate().alpha(0.3f).duration = 200
+                        } else {
+                            binding.pageInfo.animate().alpha(1f).duration = 200
+                        }
+                    }
+                }
+                
+                isLongPressing = false
+                return true
+            }
+        }
+        return super.onKeyUp(keyCode, event)
     }
     
     // handleEndOfFile()과 handleStartOfFile() 메서드 삭제 - 더 이상 필요하지 않음
@@ -1504,6 +1746,763 @@ class PdfViewerActivity : AppCompatActivity() {
         }
     }
     
+    /**
+     * PDF 표시 옵션 다이얼로그 표시 (OK 버튼 길게 누르기)
+     */
+    private fun showPdfDisplayOptions() {
+        Log.d("PdfViewerActivity", "PDF 표시 옵션 다이얼로그 표시")
+        
+        val options = arrayOf(
+            "두 페이지 모드 전환",
+            "위/아래 클리핑 설정",
+            "가운데 여백 설정",
+            "취소"
+        )
+        
+        AlertDialog.Builder(this)
+            .setTitle("PDF 표시 옵션")
+            .setItems(options) { dialog, which ->
+                when (which) {
+                    0 -> showTwoPageModeDialog { 
+                        // 두 페이지 모드 변경 완료 후 현재 페이지 다시 렌더링
+                        showPage(pageIndex)
+                    }
+                    1 -> showClippingDialog()
+                    2 -> showPaddingDialog()
+                    3 -> dialog.dismiss()
+                }
+            }
+            .setNegativeButton("취소") { dialog, _ -> dialog.dismiss() }
+            .show()
+    }
+    
+    /**
+     * PageCache에 설정 콜백을 등록하는 헬퍼 함수
+     */
+    private fun registerSettingsCallback() {
+        pageCache?.setDisplaySettingsProvider { 
+            Log.d("PdfViewerActivity", "설정 콜백 호출: 위 ${(currentTopClipping * 100).toInt()}%, 아래 ${(currentBottomClipping * 100).toInt()}%, 여백 ${(currentCenterPadding * 100).toInt()}%")
+            Triple(currentTopClipping, currentBottomClipping, currentCenterPadding) 
+        }
+    }
+    
+    /**
+     * 현재 클리핑 설정에 해당하는 선택 항목 찾기 (deprecated - 슬라이더 UI로 대체됨)
+     */
+    @Deprecated("No longer needed with slider UI")
+    private fun getCurrentClippingSelection(): Int {
+        return when {
+            currentTopClipping == 0f && currentBottomClipping == 0f -> 0 // 클리핑 없음
+            currentTopClipping == 0.05f && currentBottomClipping == 0f -> 1 // 위 5%
+            currentTopClipping == 0.10f && currentBottomClipping == 0f -> 2 // 위 10%
+            currentTopClipping == 0.15f && currentBottomClipping == 0f -> 3 // 위 15%
+            currentTopClipping == 0f && currentBottomClipping == 0.05f -> 4 // 아래 5%
+            currentTopClipping == 0f && currentBottomClipping == 0.10f -> 5 // 아래 10%
+            currentTopClipping == 0f && currentBottomClipping == 0.15f -> 6 // 아래 15%
+            currentTopClipping == 0.05f && currentBottomClipping == 0.05f -> 7 // 위/아래 각 5%
+            currentTopClipping == 0.10f && currentBottomClipping == 0.10f -> 8 // 위/아래 각 10%
+            else -> -1 // 사용자 정의
+        }
+    }
+    
+    /**
+     * 위/아래 클리핑 설정 다이얼로그
+     */
+    private fun showClippingDialog() {
+        // 커스텀 레이아웃 생성
+        val dialogView = android.widget.LinearLayout(this).apply {
+            orientation = android.widget.LinearLayout.VERTICAL
+            setPadding(50, 30, 50, 30)
+        }
+        
+        // 위쪽 클리핑 레이블
+        val topLabel = android.widget.TextView(this).apply {
+            text = "위쪽 클리핑: ${(currentTopClipping * 100).toInt()}%"
+            textSize = 16f
+            setPadding(0, 0, 0, 10)
+        }
+        dialogView.addView(topLabel)
+        
+        // 위쪽 클리핑 슬라이더 (0-30%)
+        val topSeekBar = android.widget.SeekBar(this).apply {
+            max = 15  // 0-15%
+            progress = (currentTopClipping * 100).toInt()
+            setPadding(0, 0, 0, 30)
+        }
+        dialogView.addView(topSeekBar)
+        
+        // 아래쪽 클리핑 레이블
+        val bottomLabel = android.widget.TextView(this).apply {
+            text = "아래쪽 클리핑: ${(currentBottomClipping * 100).toInt()}%"
+            textSize = 16f
+            setPadding(0, 0, 0, 10)
+        }
+        dialogView.addView(bottomLabel)
+        
+        // 아래쪽 클리핑 슬라이더 (0-30%)
+        val bottomSeekBar = android.widget.SeekBar(this).apply {
+            max = 15  // 0-15%
+            progress = (currentBottomClipping * 100).toInt()
+            setPadding(0, 0, 0, 20)
+        }
+        dialogView.addView(bottomSeekBar)
+        
+        // 빠른 설정 버튼들
+        val quickButtonsLayout = android.widget.LinearLayout(this).apply {
+            orientation = android.widget.LinearLayout.HORIZONTAL
+            gravity = android.view.Gravity.CENTER
+            setPadding(0, 20, 0, 10)
+        }
+        
+        val resetButton = android.widget.Button(this).apply {
+            text = "초기화"
+            setOnClickListener {
+                topSeekBar.progress = 0
+                bottomSeekBar.progress = 0
+            }
+        }
+        quickButtonsLayout.addView(resetButton)
+        
+        val bothButton = android.widget.Button(this).apply {
+            text = "위/아래 5%"
+            setOnClickListener {
+                topSeekBar.progress = 5
+                bottomSeekBar.progress = 5
+            }
+        }
+        quickButtonsLayout.addView(bothButton)
+        
+        dialogView.addView(quickButtonsLayout)
+        
+        // 미리보기 텍스트
+        val previewLabel = android.widget.TextView(this).apply {
+            text = "실시간 미리보기가 적용됩니다"
+            textSize = 12f
+            setTextColor(android.graphics.Color.GRAY)
+            gravity = android.view.Gravity.CENTER
+            setPadding(0, 10, 0, 0)
+        }
+        dialogView.addView(previewLabel)
+        
+        // 실시간 미리보기를 위한 변수
+        var previewHandler: android.os.Handler? = null
+        var previewRunnable: Runnable? = null
+        
+        // 원래 설정 저장
+        val originalTop = currentTopClipping
+        val originalBottom = currentBottomClipping
+        
+        val applyPreview = {
+            val topPercent = topSeekBar.progress / 100f
+            val bottomPercent = bottomSeekBar.progress / 100f
+            
+            // 임시로 설정 적용 (저장하지 않음)
+            currentTopClipping = topPercent
+            currentBottomClipping = bottomPercent
+            
+            // 페이지 다시 렌더링
+            forceDirectRendering = true
+            showPage(pageIndex)
+            
+            Log.d("PdfViewerActivity", "미리보기 적용: 위 ${(topPercent * 100).toInt()}%, 아래 ${(bottomPercent * 100).toInt()}%")
+        }
+        
+        val setupPreview = { _: android.widget.SeekBar ->
+            previewRunnable?.let { previewHandler?.removeCallbacks(it) }
+            previewRunnable = Runnable { applyPreview() }
+            previewHandler = android.os.Handler(android.os.Looper.getMainLooper())
+            previewHandler?.postDelayed(previewRunnable!!, 200) // 200ms 딜레이
+        }
+        
+        // 슬라이더에 실시간 미리보기 연결
+        topSeekBar.setOnSeekBarChangeListener(object : android.widget.SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(seekBar: android.widget.SeekBar?, progress: Int, fromUser: Boolean) {
+                topLabel.text = "위쪽 클리핑: ${progress}%"
+                if (fromUser) setupPreview(seekBar!!)
+            }
+            override fun onStartTrackingTouch(seekBar: android.widget.SeekBar?) {}
+            override fun onStopTrackingTouch(seekBar: android.widget.SeekBar?) {}
+        })
+        
+        bottomSeekBar.setOnSeekBarChangeListener(object : android.widget.SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(seekBar: android.widget.SeekBar?, progress: Int, fromUser: Boolean) {
+                bottomLabel.text = "아래쪽 클리핑: ${progress}%"
+                if (fromUser) setupPreview(seekBar!!)
+            }
+            override fun onStartTrackingTouch(seekBar: android.widget.SeekBar?) {}
+            override fun onStopTrackingTouch(seekBar: android.widget.SeekBar?) {}
+        })
+        
+        AlertDialog.Builder(this)
+            .setTitle("클리핑 설정")
+            .setView(dialogView)
+            .setPositiveButton("적용") { _, _ ->
+                val topPercent = topSeekBar.progress / 100f
+                val bottomPercent = bottomSeekBar.progress / 100f
+                
+                saveClippingSettings(topPercent, bottomPercent)
+                Toast.makeText(this, "위 ${(topPercent * 100).toInt()}%, 아래 ${(bottomPercent * 100).toInt()}% 클리핑을 적용했습니다", Toast.LENGTH_SHORT).show()
+                
+                Log.d("PdfViewerActivity", "=== 클리핑 설정 적용 ===")
+                Log.d("PdfViewerActivity", "위: ${(topPercent * 100).toInt()}%, 아래: ${(bottomPercent * 100).toInt()}%")
+                
+                registerSettingsCallback()
+                forceDirectRendering = true
+                showPage(pageIndex)
+            }
+            .setNegativeButton("취소") { _, _ ->
+                // 원래 설정으로 복원
+                currentTopClipping = originalTop
+                currentBottomClipping = originalBottom
+                forceDirectRendering = true
+                showPage(pageIndex)
+            }
+            .setOnCancelListener {
+                // 취소 시에도 원래 설정으로 복원
+                currentTopClipping = originalTop
+                currentBottomClipping = originalBottom
+                forceDirectRendering = true
+                showPage(pageIndex)
+            }
+            .show()
+    }
+    
+    /**
+     * 사용자 정의 클리핑 설정 다이얼로그 (deprecated - showClippingDialog로 통합됨)
+     */
+    @Deprecated("Use showClippingDialog instead", ReplaceWith("showClippingDialog()"))
+    private fun showCustomClippingDialog() {
+        // 커스텀 레이아웃 생성
+        val dialogView = android.widget.LinearLayout(this).apply {
+            orientation = android.widget.LinearLayout.VERTICAL
+            setPadding(50, 30, 50, 30)
+        }
+        
+        // 위쪽 클리핑 레이블
+        val topLabel = android.widget.TextView(this).apply {
+            text = "위쪽 클리핑: ${(currentTopClipping * 100).toInt()}%"
+            textSize = 16f
+            setPadding(0, 0, 0, 10)
+        }
+        dialogView.addView(topLabel)
+        
+        // 위쪽 클리핑 슬라이더 (0-30%)
+        val topSeekBar = android.widget.SeekBar(this).apply {
+            max = 15  // 0-15%
+            progress = (currentTopClipping * 100).toInt()
+            setPadding(0, 0, 0, 30)
+            setOnSeekBarChangeListener(object : android.widget.SeekBar.OnSeekBarChangeListener {
+                override fun onProgressChanged(seekBar: android.widget.SeekBar?, progress: Int, fromUser: Boolean) {
+                    topLabel.text = "위쪽 클리핑: ${progress}%"
+                }
+                override fun onStartTrackingTouch(seekBar: android.widget.SeekBar?) {}
+                override fun onStopTrackingTouch(seekBar: android.widget.SeekBar?) {}
+            })
+        }
+        dialogView.addView(topSeekBar)
+        
+        // 아래쪽 클리핑 레이블
+        val bottomLabel = android.widget.TextView(this).apply {
+            text = "아래쪽 클리핑: ${(currentBottomClipping * 100).toInt()}%"
+            textSize = 16f
+            setPadding(0, 0, 0, 10)
+        }
+        dialogView.addView(bottomLabel)
+        
+        // 아래쪽 클리핑 슬라이더 (0-30%)
+        val bottomSeekBar = android.widget.SeekBar(this).apply {
+            max = 15  // 0-15%
+            progress = (currentBottomClipping * 100).toInt()
+            setPadding(0, 0, 0, 20)
+            setOnSeekBarChangeListener(object : android.widget.SeekBar.OnSeekBarChangeListener {
+                override fun onProgressChanged(seekBar: android.widget.SeekBar?, progress: Int, fromUser: Boolean) {
+                    bottomLabel.text = "아래쪽 클리핑: ${progress}%"
+                }
+                override fun onStartTrackingTouch(seekBar: android.widget.SeekBar?) {}
+                override fun onStopTrackingTouch(seekBar: android.widget.SeekBar?) {}
+            })
+        }
+        dialogView.addView(bottomSeekBar)
+        
+        // 미리보기 텍스트
+        val previewLabel = android.widget.TextView(this).apply {
+            text = "실시간 미리보기가 적용됩니다"
+            textSize = 12f
+            setTextColor(android.graphics.Color.GRAY)
+            gravity = android.view.Gravity.CENTER
+        }
+        dialogView.addView(previewLabel)
+        
+        // 실시간 미리보기를 위한 변수
+        var previewHandler: android.os.Handler? = null
+        var previewRunnable: Runnable? = null
+        
+        val applyPreview = {
+            val topPercent = topSeekBar.progress / 100f
+            val bottomPercent = bottomSeekBar.progress / 100f
+            
+            // 임시로 설정 적용 (저장하지 않음)
+            val oldTop = currentTopClipping
+            val oldBottom = currentBottomClipping
+            currentTopClipping = topPercent
+            currentBottomClipping = bottomPercent
+            
+            // 페이지 다시 렌더링
+            forceDirectRendering = true
+            showPage(pageIndex)
+            
+            Log.d("PdfViewerActivity", "미리보기 적용: 위 ${(topPercent * 100).toInt()}%, 아래 ${(bottomPercent * 100).toInt()}%")
+        }
+        
+        val setupPreview = { _: android.widget.SeekBar ->
+            previewRunnable?.let { previewHandler?.removeCallbacks(it) }
+            previewRunnable = Runnable { applyPreview() }
+            previewHandler = android.os.Handler(android.os.Looper.getMainLooper())
+            previewHandler?.postDelayed(previewRunnable!!, 200) // 200ms 딜레이
+        }
+        
+        // 슬라이더에 실시간 미리보기 연결
+        topSeekBar.setOnSeekBarChangeListener(object : android.widget.SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(seekBar: android.widget.SeekBar?, progress: Int, fromUser: Boolean) {
+                topLabel.text = "위쪽 클리핑: ${progress}%"
+                if (fromUser) setupPreview(seekBar!!)
+            }
+            override fun onStartTrackingTouch(seekBar: android.widget.SeekBar?) {}
+            override fun onStopTrackingTouch(seekBar: android.widget.SeekBar?) {}
+        })
+        
+        bottomSeekBar.setOnSeekBarChangeListener(object : android.widget.SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(seekBar: android.widget.SeekBar?, progress: Int, fromUser: Boolean) {
+                bottomLabel.text = "아래쪽 클리핑: ${progress}%"
+                if (fromUser) setupPreview(seekBar!!)
+            }
+            override fun onStartTrackingTouch(seekBar: android.widget.SeekBar?) {}
+            override fun onStopTrackingTouch(seekBar: android.widget.SeekBar?) {}
+        })
+        
+        AlertDialog.Builder(this)
+            .setTitle("사용자 정의 클리핑 설정")
+            .setView(dialogView)
+            .setPositiveButton("적용") { _, _ ->
+                val topPercent = topSeekBar.progress / 100f
+                val bottomPercent = bottomSeekBar.progress / 100f
+                
+                saveClippingSettings(topPercent, bottomPercent)
+                Toast.makeText(this, "위 ${(topPercent * 100).toInt()}%, 아래 ${(bottomPercent * 100).toInt()}% 클리핑을 적용했습니다", Toast.LENGTH_SHORT).show()
+                
+                Log.d("PdfViewerActivity", "=== 사용자 정의 클리핑 설정 적용 ===")
+                Log.d("PdfViewerActivity", "위: ${(topPercent * 100).toInt()}%, 아래: ${(bottomPercent * 100).toInt()}%")
+                
+                registerSettingsCallback()
+                forceDirectRendering = true
+                showPage(pageIndex)
+            }
+            .setNegativeButton("취소") { _, _ ->
+                // 원래 설정으로 복원
+                forceDirectRendering = true
+                showPage(pageIndex)
+            }
+            .setOnCancelListener {
+                // 취소 시에도 원래 설정으로 복원
+                forceDirectRendering = true
+                showPage(pageIndex)
+            }
+            .show()
+    }
+    
+    /**
+     * 현재 여백 설정에 해당하는 선택 항목 찾기
+     */
+    @Deprecated("No longer needed with slider UI")
+    private fun getCurrentPaddingSelection(): Int {
+        return when {
+            currentCenterPadding == 0f -> 0    // 여백 없음
+            currentCenterPadding == 0.05f -> 1   // 5%
+            currentCenterPadding == 0.10f -> 2   // 10%
+            else -> -1 // 사용자 정의
+        }
+    }
+    
+    /**
+     * 가운데 여백 설정 다이얼로그
+     */
+    private fun showPaddingDialog() {
+        // 커스텀 레이아웃 생성
+        val dialogView = android.widget.LinearLayout(this).apply {
+            orientation = android.widget.LinearLayout.VERTICAL
+            setPadding(50, 30, 50, 30)
+        }
+        
+        // 가운데 여백 레이블
+        val paddingLabel = android.widget.TextView(this).apply {
+            text = "가운데 여백: ${(currentCenterPadding * 100).toInt()}%"
+            textSize = 16f
+            setPadding(0, 0, 0, 10)
+        }
+        dialogView.addView(paddingLabel)
+        
+        // 가운데 여백 슬라이더 (0-15%)
+        val paddingSeekBar = android.widget.SeekBar(this).apply {
+            max = 15  // 0-15%
+            progress = (currentCenterPadding * 100).toInt()
+            setPadding(0, 0, 0, 20)
+        }
+        dialogView.addView(paddingSeekBar)
+        
+        // 빠른 설정 버튼들
+        val quickButtonsLayout = android.widget.LinearLayout(this).apply {
+            orientation = android.widget.LinearLayout.HORIZONTAL
+            gravity = android.view.Gravity.CENTER
+            setPadding(0, 20, 0, 10)
+        }
+        
+        val resetButton = android.widget.Button(this).apply {
+            text = "여백 없음"
+            setOnClickListener {
+                paddingSeekBar.progress = 0
+            }
+        }
+        quickButtonsLayout.addView(resetButton)
+        
+        val preset5Button = android.widget.Button(this).apply {
+            text = "5%"
+            setOnClickListener {
+                paddingSeekBar.progress = 5
+            }
+        }
+        quickButtonsLayout.addView(preset5Button)
+        
+        val preset10Button = android.widget.Button(this).apply {
+            text = "10%"
+            setOnClickListener {
+                paddingSeekBar.progress = 10
+            }
+        }
+        quickButtonsLayout.addView(preset10Button)
+        
+        dialogView.addView(quickButtonsLayout)
+        
+        // 미리보기 텍스트
+        val previewLabel = android.widget.TextView(this).apply {
+            text = "실시간 미리보기가 적용됩니다"
+            textSize = 12f
+            setTextColor(android.graphics.Color.GRAY)
+            gravity = android.view.Gravity.CENTER
+            setPadding(0, 10, 0, 0)
+        }
+        dialogView.addView(previewLabel)
+        
+        // 실시간 미리보기를 위한 변수
+        var previewHandler: android.os.Handler? = null
+        var previewRunnable: Runnable? = null
+        
+        // 원래 설정 저장
+        val originalPadding = currentCenterPadding
+        
+        val applyPreview = {
+            val paddingPercent = paddingSeekBar.progress / 100f
+            
+            // 임시로 설정 적용 (저장하지 않음)
+            currentCenterPadding = paddingPercent
+            
+            // 페이지 다시 렌더링
+            forceDirectRendering = true
+            showPage(pageIndex)
+            
+            Log.d("PdfViewerActivity", "미리보기 적용: 가운데 여백 ${(paddingPercent * 100).toInt()}%")
+        }
+        
+        val setupPreview = { _: android.widget.SeekBar ->
+            previewRunnable?.let { previewHandler?.removeCallbacks(it) }
+            previewRunnable = Runnable { applyPreview() }
+            previewHandler = android.os.Handler(android.os.Looper.getMainLooper())
+            previewHandler?.postDelayed(previewRunnable!!, 200) // 200ms 딜레이
+        }
+        
+        // 슬라이더에 실시간 미리보기 연결
+        paddingSeekBar.setOnSeekBarChangeListener(object : android.widget.SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(seekBar: android.widget.SeekBar?, progress: Int, fromUser: Boolean) {
+                paddingLabel.text = "가운데 여백: ${progress}%"
+                if (fromUser) setupPreview(seekBar!!)
+            }
+            override fun onStartTrackingTouch(seekBar: android.widget.SeekBar?) {}
+            override fun onStopTrackingTouch(seekBar: android.widget.SeekBar?) {}
+        })
+        
+        AlertDialog.Builder(this)
+            .setTitle("가운데 여백 설정")
+            .setView(dialogView)
+            .setPositiveButton("적용") { _, _ ->
+                val paddingPercent = paddingSeekBar.progress / 100f
+                
+                savePaddingSettings(paddingPercent)
+                Toast.makeText(this, "가운데 여백 ${(paddingPercent * 100).toInt()}%를 적용했습니다", Toast.LENGTH_SHORT).show()
+                
+                Log.d("PdfViewerActivity", "=== 가운데 여백 설정 적용 ===")
+                Log.d("PdfViewerActivity", "여백: ${(paddingPercent * 100).toInt()}%")
+                
+                registerSettingsCallback()
+                forceDirectRendering = true
+                showPage(pageIndex)
+            }
+            .setNegativeButton("취소") { _, _ ->
+                // 원래 설정으로 복원
+                currentCenterPadding = originalPadding
+                forceDirectRendering = true
+                showPage(pageIndex)
+            }
+            .setOnCancelListener {
+                // 취소 시에도 원래 설정으로 복원
+                currentCenterPadding = originalPadding
+                forceDirectRendering = true
+                showPage(pageIndex)
+            }
+            .show()
+    }
+    
+    /**
+     * 클리핑과 여백 설정을 비트맵에 적용
+     */
+    private fun applyDisplaySettings(originalBitmap: Bitmap, isTwoPageMode: Boolean): Bitmap {
+        Log.d("PdfViewerActivity", "=== applyDisplaySettings 호출됨 ===")
+        Log.d("PdfViewerActivity", "현재 설정: 위 클리핑 ${currentTopClipping * 100}%, 아래 클리핑 ${currentBottomClipping * 100}%, 여백 ${currentCenterPadding}px")
+        Log.d("PdfViewerActivity", "isTwoPageMode: $isTwoPageMode, 원본 크기: ${originalBitmap.width}x${originalBitmap.height}")
+        
+        val hasClipping = currentTopClipping > 0f || currentBottomClipping > 0f
+        val hasPadding = currentCenterPadding > 0 && isTwoPageMode
+        
+        Log.d("PdfViewerActivity", "hasClipping: $hasClipping, hasPadding: $hasPadding")
+        
+        if (!hasClipping && !hasPadding) {
+            Log.d("PdfViewerActivity", "설정이 없어서 원본 반환")
+            return originalBitmap
+        }
+        
+        Log.d("PdfViewerActivity", "표시 설정 적용 중: 위 클리핑 ${currentTopClipping * 100}%, 아래 클리핑 ${currentBottomClipping * 100}%, 여백 ${currentCenterPadding}px")
+        
+        val originalWidth = originalBitmap.width
+        val originalHeight = originalBitmap.height
+        
+        // 클리핑 계산
+        val topClipPixels = (originalHeight * currentTopClipping).toInt()
+        val bottomClipPixels = (originalHeight * currentBottomClipping).toInt()
+        val clippedHeight = originalHeight - topClipPixels - bottomClipPixels
+        
+        // 여백 계산 (두 페이지 모드에서만)
+        val paddingWidth = if (isTwoPageMode && currentCenterPadding > 0) {
+            (originalWidth * currentCenterPadding).toInt()
+        } else {
+            0
+        }
+        val finalWidth = originalWidth + paddingWidth
+        val finalHeight = clippedHeight
+        
+        if (finalWidth <= 0 || finalHeight <= 0) {
+            Log.w("PdfViewerActivity", "클리핑 결과가 유효하지 않음: ${finalWidth}x${finalHeight}")
+            return originalBitmap
+        }
+        
+        // 새 비트맵 생성
+        val resultBitmap = Bitmap.createBitmap(finalWidth, finalHeight, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(resultBitmap)
+        canvas.drawColor(android.graphics.Color.WHITE)
+        
+        if (isTwoPageMode) {
+            // 두 페이지 모드에서는 여백이 이미 적용되었으므로 클리핑만 적용
+            // 여백을 고려한 최종 폭 계산 (여백이 이미 적용된 상태)
+            val actualPaddingWidth = if (currentCenterPadding > 0) {
+                (originalWidth * currentCenterPadding).toInt()
+            } else {
+                0
+            }
+            val leftPageWidth = (originalWidth - actualPaddingWidth) / 2
+            val rightPageStartX = leftPageWidth + actualPaddingWidth
+            
+            Log.d("PdfViewerActivity", "두 페이지 클리핑: 원본 폭=${originalWidth}, 여백=${actualPaddingWidth}, 왼쪽 페이지 폭=${leftPageWidth}")
+            
+            // 왼쪽 페이지 (클리핑된 부분)
+            val leftSrcRect = android.graphics.Rect(0, topClipPixels, leftPageWidth, originalHeight - bottomClipPixels)
+            val leftDstRect = android.graphics.Rect(0, 0, leftPageWidth, clippedHeight)
+            canvas.drawBitmap(originalBitmap, leftSrcRect, leftDstRect, null)
+            
+            // 가운데 여백 부분은 흰색으로 유지 (이미 drawColor로 처리됨)
+            
+            // 오른쪽 페이지 (클리핑된 부분)
+            val rightSrcRect = android.graphics.Rect(rightPageStartX, topClipPixels, originalWidth, originalHeight - bottomClipPixels)
+            val rightDstRect = android.graphics.Rect(rightPageStartX, 0, finalWidth, clippedHeight)
+            canvas.drawBitmap(originalBitmap, rightSrcRect, rightDstRect, null)
+            
+        } else {
+            // 단일 페이지 모드에서 클리핑만 적용
+            val srcRect = android.graphics.Rect(0, topClipPixels, originalWidth, originalHeight - bottomClipPixels)
+            val dstRect = android.graphics.Rect(0, 0, originalWidth, clippedHeight)
+            canvas.drawBitmap(originalBitmap, srcRect, dstRect, null)
+        }
+        
+        // 원본 비트맵을 재사용하지 않을 때만 해제
+        if (resultBitmap != originalBitmap) {
+            originalBitmap.recycle()
+        }
+        
+        Log.d("PdfViewerActivity", "표시 설정 적용 완료: ${originalWidth}x${originalHeight} → ${finalWidth}x${finalHeight}")
+        return resultBitmap
+    }
+    
+    /**
+     * 데이터베이스에서 표시 설정 로드 (동기)
+     */
+    private suspend fun loadDisplaySettingsSync() = withContext(Dispatchers.IO) {
+        Log.d("PdfViewerActivity", "=== loadDisplaySettingsSync 시작 ===")
+        Log.d("PdfViewerActivity", "currentPdfFileId: $currentPdfFileId")
+        
+        currentPdfFileId?.let { fileId ->
+            try {
+                val prefs = musicRepository.getUserPreference(fileId)
+                Log.d("PdfViewerActivity", "DB에서 조회된 설정: $prefs")
+                
+                if (prefs != null) {
+                    withContext(Dispatchers.Main) {
+                        currentTopClipping = prefs.topClippingPercent
+                        currentBottomClipping = prefs.bottomClippingPercent
+                        currentCenterPadding = prefs.centerPadding
+                        Log.d("PdfViewerActivity", "=== 데이터베이스에서 설정 로드 완료 ===")
+                        Log.d("PdfViewerActivity", "로드된 설정: 위 클리핑 ${currentTopClipping * 100}%, 아래 클리핑 ${currentBottomClipping * 100}%, 여백 ${currentCenterPadding}px")
+                    }
+                } else {
+                    // 기본값 사용
+                    withContext(Dispatchers.Main) {
+                        currentTopClipping = 0f
+                        currentBottomClipping = 0f
+                        currentCenterPadding = 0f
+                    }
+                    Log.d("PdfViewerActivity", "표시 설정 없음, 기본값 사용")
+                }
+            } catch (e: Exception) {
+                Log.e("PdfViewerActivity", "표시 설정 로드 실패", e)
+                // 기본값으로 폴백
+                withContext(Dispatchers.Main) {
+                    currentTopClipping = 0f
+                    currentBottomClipping = 0f
+                    currentCenterPadding = 0f
+                }
+            }
+        } ?: run {
+            Log.w("PdfViewerActivity", "currentPdfFileId가 null이어서 설정을 로드할 수 없습니다")
+        }
+    }
+    
+    /**
+     * 데이터베이스에서 표시 설정 로드 (비동기)
+     */
+    private fun loadDisplaySettings() {
+        currentPdfFileId?.let { fileId ->
+            CoroutineScope(Dispatchers.IO).launch {
+                try {
+                    val prefs = musicRepository.getUserPreference(fileId)
+                    if (prefs != null) {
+                        currentTopClipping = prefs.topClippingPercent
+                        currentBottomClipping = prefs.bottomClippingPercent
+                        currentCenterPadding = prefs.centerPadding
+                        Log.d("PdfViewerActivity", "표시 설정 로드 완료: 위 클리핑 ${currentTopClipping * 100}%, 아래 클리핑 ${currentBottomClipping * 100}%, 여백 ${currentCenterPadding}px")
+                    } else {
+                        // 기본값 사용
+                        currentTopClipping = 0f
+                        currentBottomClipping = 0f
+                        currentCenterPadding = 0f
+                        Log.d("PdfViewerActivity", "표시 설정 없음, 기본값 사용")
+                    }
+                } catch (e: Exception) {
+                    Log.e("PdfViewerActivity", "표시 설정 로드 실패", e)
+                    // 기본값으로 폴백
+                    currentTopClipping = 0f
+                    currentBottomClipping = 0f
+                    currentCenterPadding = 0f
+                }
+            }
+        }
+    }
+    
+    /**
+     * 클리핑 설정을 데이터베이스에 저장
+     */
+    private fun saveClippingSettings(topPercent: Float, bottomPercent: Float) {
+        currentPdfFileId?.let { fileId ->
+            CoroutineScope(Dispatchers.IO).launch {
+                try {
+                    val currentPrefs = musicRepository.getUserPreference(fileId)
+                    val updatedPrefs = if (currentPrefs != null) {
+                        currentPrefs.copy(
+                            topClippingPercent = topPercent,
+                            bottomClippingPercent = bottomPercent,
+                            updatedAt = System.currentTimeMillis()
+                        )
+                    } else {
+                        // 기본 설정으로 새로 생성
+                        UserPreference(
+                            pdfFileId = fileId,
+                            displayMode = DisplayMode.AUTO,
+                            topClippingPercent = topPercent,
+                            bottomClippingPercent = bottomPercent
+                        )
+                    }
+                    musicRepository.insertUserPreference(updatedPrefs)
+                    
+                    // Update current settings
+                    withContext(Dispatchers.Main) {
+                        Log.d("PdfViewerActivity", "=== 클리핑 설정 업데이트 ===")
+                        Log.d("PdfViewerActivity", "이전: 위 ${currentTopClipping * 100}%, 아래 ${currentBottomClipping * 100}%")
+                        currentTopClipping = topPercent
+                        currentBottomClipping = bottomPercent
+                        Log.d("PdfViewerActivity", "이후: 위 ${currentTopClipping * 100}%, 아래 ${currentBottomClipping * 100}%")
+                    }
+                    
+                    Log.d("PdfViewerActivity", "클리핑 설정 저장 완료: 위 ${topPercent * 100}%, 아래 ${bottomPercent * 100}%")
+                } catch (e: Exception) {
+                    Log.e("PdfViewerActivity", "클리핑 설정 저장 실패", e)
+                }
+            }
+        }
+    }
+    
+    /**
+     * 여백 설정을 데이터베이스에 저장
+     */
+    private fun savePaddingSettings(padding: Float) {
+        currentPdfFileId?.let { fileId ->
+            CoroutineScope(Dispatchers.IO).launch {
+                try {
+                    val currentPrefs = musicRepository.getUserPreference(fileId)
+                    val updatedPrefs = if (currentPrefs != null) {
+                        currentPrefs.copy(
+                            centerPadding = padding,
+                            updatedAt = System.currentTimeMillis()
+                        )
+                    } else {
+                        // 기본 설정으로 새로 생성
+                        UserPreference(
+                            pdfFileId = fileId,
+                            displayMode = DisplayMode.AUTO,
+                            centerPadding = padding
+                        )
+                    }
+                    musicRepository.insertUserPreference(updatedPrefs)
+                    
+                    // Update current settings
+                    withContext(Dispatchers.Main) {
+                        Log.d("PdfViewerActivity", "=== 여백 설정 업데이트 ===")
+                        Log.d("PdfViewerActivity", "이전: ${(currentCenterPadding * 100).toInt()}%")
+                        currentCenterPadding = padding
+                        Log.d("PdfViewerActivity", "이후: ${(currentCenterPadding * 100).toInt()}%")
+                    }
+                    
+                    Log.d("PdfViewerActivity", "여백 설정 저장 완료: ${(padding * 100).toInt()}%")
+                } catch (e: Exception) {
+                    Log.e("PdfViewerActivity", "여백 설정 저장 실패", e)
+                }
+            }
+        }
+    }
+
     override fun onPause() {
         super.onPause()
         
@@ -1514,6 +2513,9 @@ class PdfViewerActivity : AppCompatActivity() {
     
     override fun onDestroy() {
         super.onDestroy()
+        
+        // Clean up long press handler
+        longPressHandler.removeCallbacks(longPressRunnable)
         
         // Clean up collaboration resources
         // Note: 전역 매니저가 관리하므로 여기서 서버를 중지하지 않음

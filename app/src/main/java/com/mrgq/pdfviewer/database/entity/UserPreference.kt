@@ -18,6 +18,9 @@ data class UserPreference(
     val displayMode: DisplayMode,        // SINGLE, DOUBLE, AUTO
     val lastPageNumber: Int = 1,
     val bookmarkedPages: String = "",    // JSON array of page numbers
+    val topClippingPercent: Float = 0f,  // 위쪽 클리핑 비율 (0.0 ~ 1.0)
+    val bottomClippingPercent: Float = 0f, // 아래쪽 클리핑 비율 (0.0 ~ 1.0)
+    val centerPadding: Float = 0f,       // 가운데 여백 비율 (0.0 ~ 0.15)
     val updatedAt: Long = System.currentTimeMillis()
 )
 

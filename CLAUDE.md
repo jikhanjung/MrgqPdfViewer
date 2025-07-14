@@ -19,6 +19,7 @@ Android TV OS (Z18TV Pro)용 PDF 악보 리더 앱으로, 무선 파일 업로�
 - **웹 파일 관리**: 브라우저에서 파일 목록 조회, 개별/전체 삭제 기능
 - **PDF 뷰어**: Android PdfRenderer를 이용한 고해상도 PDF 렌더링
 - **두 페이지 모드**: 가로 화면에서 세로 PDF를 두 페이지로 표시하는 스마트 모드
+- **PDF 표시 옵션**: OK 버튼 길게 누르기로 클리핑/여백 설정 (위/아래 클리핑 0-15%, 중앙 여백 0-15%)
 - **Room 데이터베이스**: PDF 메타데이터 및 사용자 설정을 SQLite로 관리
 - **DisplayMode 시스템**: AUTO/SINGLE/DOUBLE 표시 모드를 파일별로 개별 저장
 - **혁신적인 파일 탐색**: 좌우 분할 카드 UI로 직관적인 파일 간 이동
@@ -29,7 +30,7 @@ Android TV OS (Z18TV Pro)용 PDF 악보 리더 앱으로, 무선 파일 업로�
 - **플랫폼**: Android TV OS (minSdk 21, targetSdk 30)
 - **언어**: Kotlin
 - **PDF 렌더링**: PdfRenderer (Android 5.0+ 내장)
-- **데이터베이스**: Room 2.6.1 (SQLite 기반)
+- **데이터베이스**: Room 2.6.1 (SQLite 기반, 현재 v3 스키마)
 - **웹 서버**: NanoHTTPD 2.3.1
 - **입력 처리**: 리모컨용 KeyEvent 처리
 - **비동기**: Kotlin Coroutines
@@ -71,6 +72,7 @@ Android TV OS (Z18TV Pro)용 PDF 악보 리더 앱으로, 무선 파일 업로�
 - **DPAD_UP/DOWN**: 파일 목록 탐색
 - **DPAD_LEFT/RIGHT**: PDF 뷰어에서 이전/다음 페이지
 - **ENTER**: 파일 선택 또는 동작 확인
+- **ENTER 길게 누르기 (800ms)**: PDF 표시 옵션 메뉴 진입
 
 ## 개발 가이드라인
 - Android SDK 네이티브 컴포넌트 사용
@@ -110,7 +112,7 @@ adb install app/build/outputs/apk/debug/app-debug.apk
 
 ### 핵심 파일
 - `MainActivity.kt`: 메인 화면 및 파일 목록, 합주 파일 변경 처리
-- `PdfViewerActivity.kt`: PDF 뷰어 화면 (고해상도 렌더링, 두 페이지 모드)
+- `PdfViewerActivity.kt`: PDF 뷰어 화면 (고해상도 렌더링, 두 페이지 모드, 클리핑/여백 설정)
 - `SettingsActivity.kt`: 기존 설정 화면 (포트 설정, 파일 관리, 설정 초기화)
 - `SettingsActivityNew.kt`: 새로운 TV 스타일 설정 화면
 - `WebServerManager.kt`: HTTP 서버 관리 (업로드 진행률, 파일 관리 API)
@@ -147,6 +149,12 @@ adb install app/build/outputs/apk/debug/app-debug.apk
 - [x] **캐시 관리 강화**: 모드 전환 시 완전 초기화
 - [x] **스케일 계산 로직 개선**: forTwoPageMode 매개변수 추가
 - [x] **설정 UI 정리**: 중복 카드 제거, 데이터베이스 기반 통합
+- [x] **PDF 표시 옵션 시스템**: OK 버튼 길게 누르기로 클리핑/여백 설정
+- [x] **슬라이더 기반 클리핑 UI**: 처음부터 직관적인 슬라이더로 0-15% 1% 단위 정밀 조정
+- [x] **중앙 여백 설정**: 두 페이지 모드에서 페이지 너비 기준 0-15% 슬라이더 조정 (퍼센티지 기반)
+- [x] **설정 지속성 문제 해결**: 파일 목록 복귀 시 설정 미적용 문제 완전 수정
+- [x] **마지막 페이지 표시 개선**: 두 페이지 모드에서 홀수 마지막 페이지를 왼쪽에 배치
+- [x] **데이터베이스 마이그레이션 v2→v3**: 중앙 여백 픽셀→퍼센티지 변환 자동 처리
 
 #### 🏗️ 핵심 기능 (v0.1.6 이전)
 - [x] 프로젝트 초기 설정 및 구조

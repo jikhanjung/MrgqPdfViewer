@@ -6,6 +6,63 @@
 
 ## [0.1.7] - 2025-07-13
 
+### 🎨 PDF 표시 옵션 및 클리핑/여백 설정 시스템
+
+#### 🔧 새로운 표시 옵션 기능
+- **OK 버튼 길게 누르기**: PDF 뷰어에서 800ms 길게 누르면 표시 옵션 메뉴 진입
+- **슬라이더 기반 클리핑 UI**: 처음부터 직관적인 슬라이더로 위/아래 클리핑 조정
+- **개별 클리핑 설정**: 위쪽과 아래쪽 클리핑을 0-15% 범위에서 1% 단위로 정밀 조정
+- **실시간 미리보기**: 슬라이더 조정 시 200ms 딜레이로 즉시 페이지에 반영
+- **빠른 설정 버튼**: "초기화" (0%로 리셋), "위/아래 5%" (빠른 설정)
+- **중앙 여백 설정**: 두 페이지 모드에서 페이지 너비의 0-15% 범위에서 1% 단위로 정밀 조정
+- **파일별 저장**: 모든 설정이 Room 데이터베이스에 PDF 파일별로 개별 저장
+- **실시간 적용**: 설정 변경 시 PageCache 자동 무효화로 즉시 렌더링 적용
+
+#### 🐛 설정 지속성 문제 해결
+- **파일 목록 복귀 시 설정 미적용 문제 완전 해결**
+  - `loadFile()` 및 `loadFileWithTargetPage()` 메서드에서 PageCache 생성 후 설정 콜백 누락 문제 수정
+  - PageCache 생성 직후 `registerSettingsCallback()` 호출로 설정 연동 보장
+  - 설정 로드 후 강제 캐시 클리어로 기존 캐시 무효화 확보
+
+#### 🔧 가운데 여백 렌더링 아키텍처 수정
+- **두 페이지 모드 여백 처리 방식 개선**
+  - PageCache에서 개별 페이지 여백 처리 제거 (클리핑만 담당)
+  - PdfViewerActivity의 `renderTwoPages()` 및 `combineTwoPages()` 함수에서 여백 적용
+  - 두 페이지 합치기 시점에 가운데 여백을 정확히 반영하여 렌더링 품질 향상
+
+#### 📄 마지막 페이지 표시 개선
+- **홀수 마지막 페이지 왼쪽 배치**
+  - 두 페이지 모드에서 마지막 페이지가 홀수일 때 왼쪽에 표시
+  - `combinePageWithEmpty()` 및 `renderSinglePageOnLeft()` 함수 추가
+  - 일관된 두 페이지 레이아웃 유지로 사용자 경험 향상
+
+#### 📐 중앙 여백 퍼센티지 기반 변환 (v0.1.7+)
+- **퍼센티지 기반 여백 시스템**
+  - 기존 픽셀 기반 여백 → 페이지 너비 기준 퍼센티지 변환
+  - 다양한 PDF 크기에 대해 일관된 여백 효과 제공
+  - Room 데이터베이스 v2 → v3 마이그레이션 자동 처리
+
+#### 📐 클리핑 및 여백 렌더링 로직
+```kotlin
+// PdfViewerActivity에서 두 페이지 합치기 시 여백 적용 (퍼센티지 기반)
+val paddingPixels = (leftBitmap.width * currentCenterPadding).toInt()
+val combinedWidth = leftBitmap.width + rightBitmap.width + paddingPixels
+combinedCanvas.drawBitmap(leftBitmap, 0f, 0f, null)
+
+// 오른쪽 페이지를 여백만큼 오른쪽으로 이동하여 배치
+val rightPageX = leftBitmap.width.toFloat() + paddingPixels
+combinedCanvas.drawBitmap(rightBitmap, rightPageX, 0f, null)
+
+// PageCache에서는 개별 페이지 클리핑만 처리
+val topClipPixels = (originalHeight * topClipping).toInt()
+val bottomClipPixels = (originalHeight * bottomClipping).toInt()
+val srcRect = Rect(0, topClipPixels, originalWidth, originalHeight - bottomClipPixels)
+
+// 데이터베이스 마이그레이션 (v2 → v3)
+// 픽셀 기반 centerPadding → 퍼센티지 기반 변환
+CASE WHEN centerPadding > 0 THEN centerPadding / 600.0 ELSE 0.0 END
+```
+
 ### 🗄️ Room Database 도입 및 PDF 메타데이터 관리 시스템
 
 #### 📊 새로운 데이터베이스 아키텍처
