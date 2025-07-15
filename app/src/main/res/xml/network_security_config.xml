@@ -1,27 +1,21 @@
 <?xml version="1.0" encoding="utf-8"?>
 <network-security-config>
-    <!-- WSS Security Configuration for Ensemble Mode -->
-    <base-config cleartextTrafficPermitted="false">
+    <!-- Allow cleartext traffic for local development -->
+    <base-config cleartextTrafficPermitted="true">
         <trust-anchors>
-            <!-- Trust the self-signed certificate for WSS ensemble mode -->
-            <certificates src="@raw/scoremate_cert" />
-            <!-- Trust default system certificates for other connections -->
+            <!-- Trust default system certificates -->
             <certificates src="system" />
         </trust-anchors>
     </base-config>
     
     <!-- Local network domain configuration for ensemble mode -->
-    <domain-config cleartextTrafficPermitted="false">
-        <!-- Local network ranges - now secured with WSS -->
+    <domain-config cleartextTrafficPermitted="true">
+        <!-- Local network ranges - allow cleartext for WebSocket -->
         <domain includeSubdomains="true">192.168.0.0/16</domain>
         <domain includeSubdomains="true">10.0.0.0/8</domain>
         <domain includeSubdomains="true">172.16.0.0/12</domain>
         <domain includeSubdomains="true">localhost</domain>
         <domain includeSubdomains="true">127.0.0.1</domain>
-        <trust-anchors>
-            <certificates src="@raw/scoremate_cert" />
-            <certificates src="system" />
-        </trust-anchors>
     </domain-config>
     
     <!-- Fallback for non-ensemble features that may need HTTP -->

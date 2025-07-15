@@ -12,6 +12,7 @@ import javax.net.ssl.KeyManagerFactory
 import javax.net.ssl.SSLContext
 import javax.net.ssl.SSLServerSocket
 import javax.net.ssl.SSLServerSocketFactory
+import com.mrgq.pdfviewer.BuildConfig
 
 class SimpleWebSocketServer(
     private val port: Int,
@@ -70,8 +71,8 @@ class SimpleWebSocketServer(
             
             // Load the keystore from raw resources
             val keyStore = KeyStore.getInstance("PKCS12")
-            val keyStoreStream: InputStream = context.resources.openRawResource(R.raw.scoremate_keystore)
-            val keystorePassword = "scorematepass".toCharArray() // This should match your keystore password
+            val keyStoreStream: InputStream = context.resources.openRawResource(R.raw.mrgqpdfviewer_keystore)
+            val keystorePassword = BuildConfig.KEYSTORE_PASSWORD.toCharArray()
             
             keyStore.load(keyStoreStream, keystorePassword)
             keyStoreStream.close()

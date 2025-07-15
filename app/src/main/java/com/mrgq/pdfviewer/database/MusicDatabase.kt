@@ -15,7 +15,7 @@ import com.mrgq.pdfviewer.database.entity.UserPreference
 
 @Database(
     entities = [PdfFile::class, UserPreference::class],
-    version = 3,
+    version = 4,
     exportSchema = false
 )
 @TypeConverters(Converters::class)
@@ -41,7 +41,7 @@ abstract class MusicDatabase : RoomDatabase() {
         // Migration from version 2 to 3 (change centerPadding from INTEGER to REAL for percentage)
         private val MIGRATION_2_3 = object : Migration(2, 3) {
             override fun migrate(database: SupportSQLiteDatabase) {
-                // Create a new table with the new schema
+                // Create a new table with the new schema including foreign key constraint
                 database.execSQL("""
                     CREATE TABLE user_preferences_new (
                         pdfFileId TEXT NOT NULL PRIMARY KEY,
@@ -51,7 +51,8 @@ abstract class MusicDatabase : RoomDatabase() {
                         topClippingPercent REAL NOT NULL DEFAULT 0.0,
                         bottomClippingPercent REAL NOT NULL DEFAULT 0.0,
                         centerPadding REAL NOT NULL DEFAULT 0.0,
-                        updatedAt INTEGER NOT NULL
+                        updatedAt INTEGER NOT NULL,
+                        FOREIGN KEY(pdfFileId) REFERENCES pdf_files(id) ON DELETE CASCADE
                     )
                 """)
                 
@@ -74,6 +75,27 @@ abstract class MusicDatabase : RoomDatabase() {
             }
         }
         
+        // Migration from version 3 to 4 (fix foreign key constraint issue)
+        private val MIGRATION_3_4 = object : Migration(3, 4) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                // Drop and recreate the user_preferences table with proper foreign key
+                database.execSQL("DROP TABLE IF EXISTS user_preferences")
+                database.execSQL("""
+                    CREATE TABLE user_preferences (
+                        pdfFileId TEXT NOT NULL PRIMARY KEY,
+                        displayMode TEXT NOT NULL,
+                        lastPageNumber INTEGER NOT NULL DEFAULT 1,
+                        bookmarkedPages TEXT NOT NULL DEFAULT '',
+                        topClippingPercent REAL NOT NULL DEFAULT 0.0,
+                        bottomClippingPercent REAL NOT NULL DEFAULT 0.0,
+                        centerPadding REAL NOT NULL DEFAULT 0.0,
+                        updatedAt INTEGER NOT NULL,
+                        FOREIGN KEY(pdfFileId) REFERENCES pdf_files(id) ON DELETE CASCADE
+                    )
+                """)
+            }
+        }
+        
         fun getDatabase(context: Context): MusicDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
@@ -81,7 +103,7 @@ abstract class MusicDatabase : RoomDatabase() {
                     MusicDatabase::class.java,
                     "music_database"
                 )
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
                 .build()
                 INSTANCE = instance
                 instance

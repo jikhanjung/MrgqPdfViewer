@@ -81,8 +81,20 @@ class MusicRepository(context: Context) {
     }
     
     suspend fun setDisplayModeForFile(pdfFileId: String, displayMode: DisplayMode) {
-        val preference = getOrCreateUserPreference(pdfFileId)
-        updateUserPreference(preference.copy(displayMode = displayMode, updatedAt = System.currentTimeMillis()))
+        android.util.Log.d("MusicRepository", "=== setDisplayModeForFile 시작 ===")
+        android.util.Log.d("MusicRepository", "pdfFileId: $pdfFileId, displayMode: $displayMode")
+        
+        // 기존 설정을 보장하기 위해 먼저 레코드 생성
+        val existingPref = getOrCreateUserPreference(pdfFileId)
+        android.util.Log.d("MusicRepository", "기존 설정: $existingPref")
+        
+        // 부분 업데이트로 DisplayMode만 변경
+        userPreferenceDao.updateDisplayMode(pdfFileId, displayMode, System.currentTimeMillis())
+        android.util.Log.d("MusicRepository", "DisplayMode 업데이트 완료")
+        
+        // 저장 확인
+        val updatedPref = getUserPreference(pdfFileId)
+        android.util.Log.d("MusicRepository", "저장 후 설정: $updatedPref")
     }
     
     suspend fun setLastPageForFile(pdfFileId: String, pageNumber: Int) {

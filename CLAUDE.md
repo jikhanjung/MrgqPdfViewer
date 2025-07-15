@@ -6,10 +6,10 @@ Android TV OS (Z18TV Pro)용 PDF 악보 리더 앱으로, 무선 파일 업로�
 **현재 버전**: v0.1.8 (2025-07-15)  
 **빌드 상태**: 🟢 빌드 가능  
 **테스트 상태**: 🟢 기본 기능 테스트 완료
-**최근 업데이트**: PdfViewerActivity 아키텍처 리팩토링, WSS 보안 강화, 페이지 설정 버그 수정
+**최근 업데이트**: 스토리지 접근 방식 대폭 개선, 외부 저장소 권한 완전 제거, 웹 업로드 전용 방식으로 전환
 
 ## 주요 기능
-- **파일 목록 뷰어**: `/sdcard/Download/` 디렉토리의 PDF 파일 목록 표시
+- **파일 목록 뷰어**: 앱 전용 디렉토리의 PDF 파일 목록 표시
 - **정렬 및 관리**: 이름순/시간순 정렬, 개별 파일 삭제 기능
 - **상세 파일 정보**: 파일 크기, 수정 시간 표시
 - **설정 화면**: 웹서버 포트 설정, 파일별 페이지 모드 관리, PDF 파일 전체 삭제
@@ -25,13 +25,14 @@ Android TV OS (Z18TV Pro)용 PDF 악보 리더 앱으로, 무선 파일 업로�
 - **혁신적인 파일 탐색**: 좌우 분할 카드 UI로 직관적인 파일 간 이동
 - **리모컨 탐색**: DPAD 및 ENTER 키 완벽 지원
 - **TV 최적화**: Android TV UI 가이드라인 준수
+- **보안 향상**: 앱 전용 디렉토리 사용으로 외부 저장소 권한 불필요
 
 ## 기술 스택
 - **플랫폼**: Android TV OS (minSdk 21, targetSdk 30)
 - **언어**: Kotlin
 - **아키텍처**: Manager 패턴 기반 분산 아키텍처 (v0.1.8+)
 - **PDF 렌더링**: PdfRenderer (Android 5.0+ 내장)
-- **데이터베이스**: Room 2.6.1 (SQLite 기반, 현재 v3 스키마)
+- **데이터베이스**: Room 2.6.1 (SQLite 기반, 현재 v4 스키마)
 - **웹 서버**: NanoHTTPD 2.3.1
 - **보안**: WSS (WebSocket Secure) with TLS 1.2/1.3 (v0.1.8+)
 - **입력 처리**: 리모컨용 KeyEvent 처리
@@ -39,21 +40,20 @@ Android TV OS (Z18TV Pro)용 PDF 악보 리더 앱으로, 무선 파일 업로�
 
 ## 디렉토리 구조
 ```
-/storage/emulated/0/Download/
+/storage/emulated/0/Android/data/com.mrgq.pdfviewer/files/PDFs/
 ├── 악보1.pdf
 ├── 악보2.pdf
 └── 악보3.pdf
 ```
 
 ## 필요한 권한
-- `READ_EXTERNAL_STORAGE`, `WRITE_EXTERNAL_STORAGE` (API 28 이하)
-- `MANAGE_EXTERNAL_STORAGE` 또는 scoped storage (API 29+)
 - `INTERNET`, `ACCESS_NETWORK_STATE` (웹 서버 기능용)
+- `ACCESS_WIFI_STATE`, `CHANGE_NETWORK_STATE` (네트워크 상태 관리용)
 
 ## 핵심 컴포넌트
 
 ### 1. PDF 파일 목록
-- PDF 파일만 필터링하여 표시
+- 앱 전용 디렉토리의 PDF 파일만 필터링하여 표시
 - 파일명 정렬 (A-Z)
 - 썸네일 없는 단순 리스트 뷰
 - 리모컨 탐색 (DPAD_UP/DOWN, ENTER)
@@ -61,7 +61,7 @@ Android TV OS (Z18TV Pro)용 PDF 악보 리더 앱으로, 무선 파일 업로�
 ### 2. 웹 서버
 - 기본 포트: 8080
 - HTML 업로드 폼 (단일/다중 파일 지원)
-- 업로드 후 자동 파일 저장
+- 앱 전용 디렉토리에 자동 파일 저장
 - ON/OFF 토글 기능
 
 ### 3. PDF 뷰어
@@ -82,6 +82,7 @@ Android TV OS (Z18TV Pro)용 PDF 악보 리더 앱으로, 무선 파일 업로�
 - TV 하드웨어에서 원활한 성능 보장
 - Android TV UI 가이드라인 준수
 - 리모컨 입력으로 철저한 테스트
+- 앱 전용 디렉토리 사용으로 보안 및 권한 정책 준수
 
 ## 개발 환경
 
@@ -148,10 +149,17 @@ adb install app/build/outputs/apk/debug/app-debug.apk
   - [x] **ViewerInputHandler** (191라인): 입력 이벤트 처리 전문화
   - [x] **ViewerCollaborationManager** (196라인): 실시간 협업 관리
   - [x] **ViewerFileManager** (89라인): 파일 작업 관리 기본 구조
-- [x] **WSS 보안 강화 완전 구현**: 합주 모드 실시간 통신 TLS 1.2/1.3 암호화
-- [x] **인증서 피닝**: 자체 서명 인증서 기반 중간자 공격 방지
-- [x] **네트워크 보안 정책**: Android 네트워크 보안 구성 업데이트
+- [ ] **WSS 보안 강화 시도 (실패 후 롤백)**: 합주 모드 통신에 WSS 암호화를 시도했으나, 인증서 호환성 문제로 실패하여 현재는 일반 WebSocket(WS)으로 동작합니다.
+- [ ] **인증서 피닝**: WSS 구현이 롤백됨에 따라 현재 비활성화 상태입니다.
+- [ ] **네트워크 보안 정책**: WS 통신을 위해 일반 텍스트(cleartext) 트래픽이 임시로 허용된 상태입니다.
 - [x] **개발 로그 체계 구축**: devlog/ 디렉토리 및 종합 문서화
+- [x] **두 페이지 모드 설정 지속성 문제 해결**: 데이터베이스 마이그레이션 오류 수정으로 DisplayMode 저장/로드 정상화
+- [x] **스토리지 접근 방식 대폭 개선**: Downloads 폴더 의존성 완전 제거, 웹 업로드 전용 방식으로 전환
+- [x] **외부 저장소 권한 완전 제거**: MANAGE_EXTERNAL_STORAGE, READ_EXTERNAL_STORAGE 권한 제거
+- [x] **앱 전용 디렉토리 사용**: `/Android/data/com.mrgq.pdfviewer/files/PDFs/` 디렉토리만 사용
+- [x] **권한 관련 코드 정리**: 권한 체크, 요청 콜백 등 모든 권한 관련 로직 제거
+- [x] **사용자 안내 메시지 개선**: 빈 상태 메시지를 웹 업로드 방식으로 수정
+- [x] **보안 및 안정성 강화**: 앱 샌드박스 내 파일 관리로 시스템 보안 정책 완전 준수
 
 #### 🗄️ v0.1.7 주요 업데이트
 - [x] **Room 데이터베이스 완전 구현** (SQLite 기반)

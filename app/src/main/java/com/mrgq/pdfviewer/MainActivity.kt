@@ -1,16 +1,11 @@
 package com.mrgq.pdfviewer
 
-import android.Manifest
 import android.content.Intent
-import android.content.pm.PackageManager
-import android.os.Build
 import android.os.Bundle
-import android.os.Environment
 import android.util.Log
 import android.view.KeyEvent
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
-import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.mrgq.pdfviewer.adapter.PdfFileAdapter
@@ -30,9 +25,6 @@ class MainActivity : AppCompatActivity() {
     private var currentSortBy = "name" // "name" or "time"
     private var isFileManagementMode = false // 파일 관리 모드 상태
     
-    companion object {
-        private const val PERMISSION_REQUEST_CODE = 100
-    }
     
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -42,7 +34,7 @@ class MainActivity : AppCompatActivity() {
         // Note: Global collaboration manager는 Application에서 이미 초기화됨
         
         setupRecyclerView()
-        checkPermissions()
+        loadPdfFiles()
         setupCollaborationButton()
         setupSortButtons()
         setupSettingsButton()
@@ -70,54 +62,7 @@ class MainActivity : AppCompatActivity() {
         }
     }
     
-    private fun checkPermissions() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            if (!Environment.isExternalStorageManager()) {
-                // Android TV에서는 MANAGE_ALL_FILES_ACCESS_PERMISSION 설정 화면이 없음
-                // 권한 요청 대신 사용자에게 수동 설정 안내
-                Toast.makeText(
-                    this,
-                    "저장소 권한이 필요합니다. 설정 > 앱 > MrgqPdfViewer > 권한에서 '파일 및 미디어'를 허용해주세요.",
-                    Toast.LENGTH_LONG
-                ).show()
-                // 권한이 없어도 일단 파일 목록을 로드 시도
-                loadPdfFiles()
-            } else {
-                loadPdfFiles()
-            }
-        } else {
-            val permission = Manifest.permission.READ_EXTERNAL_STORAGE
-            if (ContextCompat.checkSelfPermission(this, permission) != PackageManager.PERMISSION_GRANTED) {
-                ActivityCompat.requestPermissions(this, arrayOf(permission), PERMISSION_REQUEST_CODE)
-            } else {
-                loadPdfFiles()
-            }
-        }
-    }
     
-    override fun onRequestPermissionsResult(
-        requestCode: Int,
-        permissions: Array<out String>,
-        grantResults: IntArray
-    ) {
-        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-        if (requestCode == PERMISSION_REQUEST_CODE) {
-            if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-                loadPdfFiles()
-            } else {
-                Toast.makeText(this, "파일 접근 권한이 필요합니다", Toast.LENGTH_LONG).show()
-            }
-        }
-    }
-    
-    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
-        super.onActivityResult(requestCode, resultCode, data)
-        if (requestCode == PERMISSION_REQUEST_CODE) {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && Environment.isExternalStorageManager()) {
-                loadPdfFiles()
-            }
-        }
-    }
     
     override fun onResume() {
         super.onResume()
@@ -418,48 +363,20 @@ class MainActivity : AppCompatActivity() {
     
     private fun getCurrentPdfFiles(): List<PdfFile> {
         val pdfFiles = mutableListOf<PdfFile>()
-        val addedPaths = mutableSetOf<String>() // 중복 방지용
         
-        // Load from app's external files directory
+        // Load from app's external files directory (uploaded via web server)
         val appPdfDir = File(getExternalFilesDir(null), "PDFs")
         if (appPdfDir.exists() && appPdfDir.isDirectory) {
             appPdfDir.listFiles { file ->
                 file.isFile && file.extension.equals("pdf", ignoreCase = true)
             }?.forEach { file ->
-                val canonicalPath = file.canonicalPath
-                if (!addedPaths.contains(canonicalPath)) {
-                    pdfFiles.add(PdfFile(
-                        name = file.name,
-                        path = file.absolutePath,
-                        lastModified = file.lastModified(),
-                        size = file.length()
-                    ))
-                    addedPaths.add(canonicalPath)
-                }
+                pdfFiles.add(PdfFile(
+                    name = file.name,
+                    path = file.absolutePath,
+                    lastModified = file.lastModified(),
+                    size = file.length()
+                ))
             }
-        }
-        
-        // Also check Downloads directory if accessible
-        try {
-            val downloadDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
-            if (downloadDir.exists() && downloadDir.canRead()) {
-                downloadDir.listFiles { file ->
-                    file.isFile && file.extension.equals("pdf", ignoreCase = true)
-                }?.forEach { file ->
-                    val canonicalPath = file.canonicalPath
-                    if (!addedPaths.contains(canonicalPath)) {
-                        pdfFiles.add(PdfFile(
-                            name = file.name,
-                            path = file.absolutePath,
-                            lastModified = file.lastModified(),
-                            size = file.length()
-                        ))
-                        addedPaths.add(canonicalPath)
-                    }
-                }
-            }
-        } catch (e: Exception) {
-            Log.e("MainActivity", "Cannot access Downloads folder", e)
         }
         
         // Sort based on current selection
@@ -468,7 +385,7 @@ class MainActivity : AppCompatActivity() {
             "time" -> pdfFiles.sortByDescending { it.lastModified }
         }
         
-        Log.d("MainActivity", "=== LOADED ${pdfFiles.size} UNIQUE PDF FILES ===")
+        Log.d("MainActivity", "=== LOADED ${pdfFiles.size} PDF FILES FROM APP DIRECTORY ===")
         pdfFiles.forEachIndexed { index, file ->
             Log.d("MainActivity", "[$index] NAME: '${file.name}' PATH: '${file.path}'")
         }
@@ -698,7 +615,12 @@ class MainActivity : AppCompatActivity() {
                 
                 val fileLength = connection.contentLength
                 val input = connection.getInputStream()
-                val downloadPath = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), fileName)
+                // Save to app's external files directory instead of public Downloads
+                val appPdfDir = File(getExternalFilesDir(null), "PDFs")
+                if (!appPdfDir.exists()) {
+                    appPdfDir.mkdirs()
+                }
+                val downloadPath = File(appPdfDir, fileName)
                 val output = java.io.FileOutputStream(downloadPath)
                 
                 val buffer = ByteArray(4096)

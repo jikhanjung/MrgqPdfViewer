@@ -35,7 +35,7 @@ class CollaborationServerManager(
         private const val DEFAULT_PORT = 9090
     }
     
-    fun startServer(port: Int = DEFAULT_PORT, useSSL: Boolean = true): Boolean {
+    fun startServer(port: Int = DEFAULT_PORT, useSSL: Boolean = false): Boolean {
         return try {
             if (webSocketServer != null) {
                 Log.d(TAG, "Server already running, stopping first")
