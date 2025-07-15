@@ -1,14 +1,23 @@
 package com.mrgq.pdfviewer
 
+import android.content.Context
 import android.util.Log
+import java.io.InputStream
 import java.net.ServerSocket
 import java.net.Socket
+import java.security.KeyStore
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
+import javax.net.ssl.KeyManagerFactory
+import javax.net.ssl.SSLContext
+import javax.net.ssl.SSLServerSocket
+import javax.net.ssl.SSLServerSocketFactory
 
 class SimpleWebSocketServer(
     private val port: Int,
-    private val serverManager: CollaborationServerManager
+    private val serverManager: CollaborationServerManager,
+    private val context: Context? = null,
+    private val useSSL: Boolean = false
 ) {
     private var serverSocket: ServerSocket? = null
     private var isRunning = false
@@ -22,14 +31,19 @@ class SimpleWebSocketServer(
     
     fun start(): Boolean {
         return try {
-            serverSocket = ServerSocket(port).apply {
+            serverSocket = if (useSSL && context != null) {
+                createSSLServerSocket()
+            } else {
+                ServerSocket(port)
+            }.apply {
                 // Set socket timeout to 1 second for better shutdown responsiveness
                 soTimeout = 1000
                 Log.d(TAG, "Server socket timeout set to 1000ms for better shutdown")
             }
             isRunning = true
             
-            Log.d(TAG, "Starting WebSocket server on port $port")
+            val protocol = if (useSSL) "WSS" else "WS"
+            Log.d(TAG, "Starting $protocol WebSocket server on port $port")
             
             // Start accepting connections in a separate thread
             acceptThread = Thread {
@@ -43,6 +57,48 @@ class SimpleWebSocketServer(
         } catch (e: Exception) {
             Log.e(TAG, "Failed to start server", e)
             false
+        }
+    }
+    
+    private fun createSSLServerSocket(): ServerSocket {
+        if (context == null) {
+            throw IllegalStateException("Context is required for SSL")
+        }
+        
+        try {
+            Log.d(TAG, "Creating SSL ServerSocket...")
+            
+            // Load the keystore from raw resources
+            val keyStore = KeyStore.getInstance("PKCS12")
+            val keyStoreStream: InputStream = context.resources.openRawResource(R.raw.scoremate_keystore)
+            val keystorePassword = "scorematepass".toCharArray() // This should match your keystore password
+            
+            keyStore.load(keyStoreStream, keystorePassword)
+            keyStoreStream.close()
+            
+            // Create KeyManagerFactory
+            val keyManagerFactory = KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm())
+            keyManagerFactory.init(keyStore, keystorePassword)
+            
+            // Create SSLContext
+            val sslContext = SSLContext.getInstance("TLS")
+            sslContext.init(keyManagerFactory.keyManagers, null, null)
+            
+            // Create SSL ServerSocket
+            val sslServerSocketFactory: SSLServerSocketFactory = sslContext.serverSocketFactory
+            val sslServerSocket = sslServerSocketFactory.createServerSocket(port) as SSLServerSocket
+            
+            // Configure SSL protocols and cipher suites
+            sslServerSocket.enabledProtocols = arrayOf("TLSv1.2", "TLSv1.3")
+            
+            Log.d(TAG, "SSL ServerSocket created successfully")
+            Log.d(TAG, "Enabled protocols: ${sslServerSocket.enabledProtocols.joinToString()}")
+            Log.d(TAG, "Enabled cipher suites: ${sslServerSocket.enabledCipherSuites.size} suites")
+            
+            return sslServerSocket
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to create SSL ServerSocket", e)
+            throw e
         }
     }
     

@@ -30,6 +30,7 @@ class GlobalCollaborationManager private constructor() {
     private var conductorDiscovery: ConductorDiscovery? = null
     private var currentMode = CollaborationMode.NONE
     private var preferences: SharedPreferences? = null
+    private var applicationContext: Context? = null
     
     // Callback functions for UI updates
     private var onServerClientConnected: ((String, String) -> Unit)? = null
@@ -50,6 +51,7 @@ class GlobalCollaborationManager private constructor() {
             return
         }
         
+        applicationContext = context.applicationContext
         preferences = context.getSharedPreferences("pdf_viewer_prefs", Context.MODE_PRIVATE)
         isInitialized = true
         
@@ -189,7 +191,7 @@ class GlobalCollaborationManager private constructor() {
     
     private fun initializeConductorMode(): Boolean {
         return try {
-            collaborationServerManager = CollaborationServerManager().apply {
+            collaborationServerManager = CollaborationServerManager(applicationContext).apply {
                 setOnClientConnected { clientId, deviceName ->
                     Log.d(TAG, "🎯 Server: Client connected: $clientId ($deviceName)")
                     onServerClientConnected?.let { callback ->

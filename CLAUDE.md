@@ -3,10 +3,10 @@
 ## 프로젝트 개요
 Android TV OS (Z18TV Pro)용 PDF 악보 리더 앱으로, 무선 파일 업로드와 리모컨을 이용한 탐색 기능을 제공합니다.
 
-**현재 버전**: v0.1.7 (2025-07-13)  
+**현재 버전**: v0.1.8 (2025-07-15)  
 **빌드 상태**: 🟢 빌드 가능  
 **테스트 상태**: 🟢 기본 기능 테스트 완료
-**최근 업데이트**: Room 데이터베이스 도입, 두 페이지 모드 aspect ratio 문제 완전 해결
+**최근 업데이트**: PdfViewerActivity 아키텍처 리팩토링, WSS 보안 강화, 페이지 설정 버그 수정
 
 ## 주요 기능
 - **파일 목록 뷰어**: `/sdcard/Download/` 디렉토리의 PDF 파일 목록 표시
@@ -29,9 +29,11 @@ Android TV OS (Z18TV Pro)용 PDF 악보 리더 앱으로, 무선 파일 업로�
 ## 기술 스택
 - **플랫폼**: Android TV OS (minSdk 21, targetSdk 30)
 - **언어**: Kotlin
+- **아키텍처**: Manager 패턴 기반 분산 아키텍처 (v0.1.8+)
 - **PDF 렌더링**: PdfRenderer (Android 5.0+ 내장)
 - **데이터베이스**: Room 2.6.1 (SQLite 기반, 현재 v3 스키마)
 - **웹 서버**: NanoHTTPD 2.3.1
+- **보안**: WSS (WebSocket Secure) with TLS 1.2/1.3 (v0.1.8+)
 - **입력 처리**: 리모컨용 KeyEvent 처리
 - **비동기**: Kotlin Coroutines
 
@@ -138,6 +140,18 @@ adb install app/build/outputs/apk/debug/app-debug.apk
 ## 현재 구현 상태
 
 ### ✅ 완료된 기능
+
+#### 🚀 v0.1.8 주요 업데이트 (2025-07-15)
+- [x] **페이지 설정 프리셋 버그 수정**: "초기화", "위/아래 5%" 버튼 즉시 적용 보장
+- [x] **PdfViewerActivity 아키텍처 대규모 리팩토링**: 600+ 라인을 4개 매니저 클래스로 분해
+  - [x] **PdfPageManager** (430라인): PDF 렌더링 및 캐싱 전문 관리
+  - [x] **ViewerInputHandler** (191라인): 입력 이벤트 처리 전문화
+  - [x] **ViewerCollaborationManager** (196라인): 실시간 협업 관리
+  - [x] **ViewerFileManager** (89라인): 파일 작업 관리 기본 구조
+- [x] **WSS 보안 강화 완전 구현**: 합주 모드 실시간 통신 TLS 1.2/1.3 암호화
+- [x] **인증서 피닝**: 자체 서명 인증서 기반 중간자 공격 방지
+- [x] **네트워크 보안 정책**: Android 네트워크 보안 구성 업데이트
+- [x] **개발 로그 체계 구축**: devlog/ 디렉토리 및 종합 문서화
 
 #### 🗄️ v0.1.7 주요 업데이트
 - [x] **Room 데이터베이스 완전 구현** (SQLite 기반)

@@ -64,13 +64,14 @@ class CollaborationClientManager(
                 .writeTimeout(CONNECTION_TIMEOUT, TimeUnit.MILLISECONDS)
                 .build()
             
+            // Use WSS (secure WebSocket) protocol for enhanced security
             val request = Request.Builder()
-                .url("ws://$ipAddress:$port")
+                .url("wss://$ipAddress:$port")
                 .build()
             
             webSocket = okHttpClient!!.newWebSocket(request, CollaborationWebSocketListener())
             
-            Log.d(TAG, "Attempting to connect to conductor at $ipAddress:$port")
+            Log.d(TAG, "Attempting secure WSS connection to conductor at $ipAddress:$port")
             true
         } catch (e: Exception) {
             Log.e(TAG, "Failed to connect to conductor", e)

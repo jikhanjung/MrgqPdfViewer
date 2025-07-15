@@ -1859,6 +1859,7 @@ class PdfViewerActivity : AppCompatActivity() {
             setOnClickListener {
                 topSeekBar.progress = 0
                 bottomSeekBar.progress = 0
+                setupPreview(topSeekBar)
             }
         }
         quickButtonsLayout.addView(resetButton)
@@ -1868,6 +1869,7 @@ class PdfViewerActivity : AppCompatActivity() {
             setOnClickListener {
                 topSeekBar.progress = 5
                 bottomSeekBar.progress = 5
+                setupPreview(topSeekBar)
             }
         }
         quickButtonsLayout.addView(bothButton)
@@ -2160,6 +2162,7 @@ class PdfViewerActivity : AppCompatActivity() {
             text = "여백 없음"
             setOnClickListener {
                 paddingSeekBar.progress = 0
+                setupPreview(paddingSeekBar)
             }
         }
         quickButtonsLayout.addView(resetButton)
@@ -2168,6 +2171,7 @@ class PdfViewerActivity : AppCompatActivity() {
             text = "5%"
             setOnClickListener {
                 paddingSeekBar.progress = 5
+                setupPreview(paddingSeekBar)
             }
         }
         quickButtonsLayout.addView(preset5Button)
@@ -2176,6 +2180,7 @@ class PdfViewerActivity : AppCompatActivity() {
             text = "10%"
             setOnClickListener {
                 paddingSeekBar.progress = 10
+                setupPreview(paddingSeekBar)
             }
         }
         quickButtonsLayout.addView(preset10Button)

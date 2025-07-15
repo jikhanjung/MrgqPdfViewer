@@ -1,5 +1,6 @@
 package com.mrgq.pdfviewer
 
+import android.content.Context
 import android.util.Log
 import com.google.gson.Gson
 import com.google.gson.JsonObject
@@ -13,7 +14,9 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.atomic.AtomicInteger
 
-class CollaborationServerManager {
+class CollaborationServerManager(
+    private val context: Context? = null
+) {
     
     private var webSocketServer: SimpleWebSocketServer? = null
     private val connectedClients = ConcurrentHashMap<String, WebSocket>()
@@ -32,7 +35,7 @@ class CollaborationServerManager {
         private const val DEFAULT_PORT = 9090
     }
     
-    fun startServer(port: Int = DEFAULT_PORT): Boolean {
+    fun startServer(port: Int = DEFAULT_PORT, useSSL: Boolean = true): Boolean {
         return try {
             if (webSocketServer != null) {
                 Log.d(TAG, "Server already running, stopping first")
@@ -71,12 +74,21 @@ class CollaborationServerManager {
                 return false
             }
             
-            webSocketServer = SimpleWebSocketServer(port, this)
+            // Create WebSocket server with SSL support if enabled
+            webSocketServer = if (useSSL && context != null) {
+                Log.d(TAG, "Creating WSS (secure) WebSocket server")
+                SimpleWebSocketServer(port, this, context, true)
+            } else {
+                Log.d(TAG, "Creating WS (regular) WebSocket server")
+                SimpleWebSocketServer(port, this, null, false)
+            }
+            
             val started = webSocketServer?.start() ?: false
             
             if (started) {
                 serverStarted = true
-                Log.d(TAG, "WebSocket server started on port $port - serverStarted flag set to true")
+                val protocol = if (useSSL) "WSS" else "WS"
+                Log.d(TAG, "$protocol WebSocket server started on port $port - serverStarted flag set to true")
             } else {
                 serverStarted = false
                 Log.e(TAG, "Failed to start WebSocket server - serverStarted flag set to false")
