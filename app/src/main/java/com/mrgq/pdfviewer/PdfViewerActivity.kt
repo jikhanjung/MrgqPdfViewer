@@ -66,6 +66,7 @@ class PdfViewerActivity : AppCompatActivity() {
     private var currentTopClipping: Float = 0f
     private var currentBottomClipping: Float = 0f
     private var currentCenterPadding: Float = 0f  // Changed to Float for percentage (0.0 - 0.15)
+    private var currentDisplayMode: DisplayMode = DisplayMode.AUTO
     
     // Flag to force direct rendering (bypass cache) after settings change
     private var forceDirectRendering: Boolean = false
@@ -264,29 +265,34 @@ class PdfViewerActivity : AppCompatActivity() {
                     Log.d("PdfViewerActivity", "=== 설정 로드 후 캐시 클리어 완료 ===")
                 }
                 
-                // Check if this file already has a saved setting
-                currentPdfFileId?.let { fileId ->
-                    val userPreference = musicRepository.getUserPreference(fileId)
+                // Use already loaded currentDisplayMode instead of querying database again
+                Log.d("PdfViewerActivity", "=== checkAndSetTwoPageMode: currentDisplayMode 사용 ===")
+                Log.d("PdfViewerActivity", "currentDisplayMode: $currentDisplayMode")
+                Log.d("PdfViewerActivity", "파일: $pdfFileName")
+                Log.d("PdfViewerActivity", "파일 ID: $currentPdfFileId")
+                
+                if (currentDisplayMode != DisplayMode.AUTO) {
+                    // File-specific setting exists (SINGLE or DOUBLE)
+                    Log.d("PdfViewerActivity", "=== 저장된 설정 발견됨 ===")
+                    Log.d("PdfViewerActivity", "저장된 DisplayMode: $currentDisplayMode")
                     
-                    if (userPreference != null) {
-                        // File-specific setting exists
-                        withContext(Dispatchers.Main) {
-                            isTwoPageMode = when (userPreference.displayMode) {
-                                DisplayMode.DOUBLE -> true
-                                DisplayMode.SINGLE -> false
-                                DisplayMode.AUTO -> {
-                                    // AUTO mode: determine based on orientation
-                                    val pdfFile = musicRepository.getPdfFileById(fileId)
-                                    pdfFile?.let { file ->
-                                        screenWidth > screenHeight && file.orientation == PageOrientation.PORTRAIT
-                                    } ?: false
-                                }
+                    withContext(Dispatchers.Main) {
+                        isTwoPageMode = when (currentDisplayMode) {
+                            DisplayMode.DOUBLE -> {
+                                Log.d("PdfViewerActivity", "✅ 저장된 설정으로 두 페이지 모드 적용")
+                                true
                             }
-                            Log.d("PdfViewerActivity", "Using saved display mode: ${userPreference.displayMode} for $pdfFileName")
-                            onComplete()
+                            DisplayMode.SINGLE -> {
+                                Log.d("PdfViewerActivity", "✅ 저장된 설정으로 단일 페이지 모드 적용")
+                                false
+                            }
+                            DisplayMode.AUTO -> false // Won't reach here due to if condition
                         }
-                        return@launch
+                        Log.d("PdfViewerActivity", "=== 저장된 설정 적용 완료: isTwoPageMode=$isTwoPageMode ===")
+                        Log.d("PdfViewerActivity", "Using saved display mode: $currentDisplayMode for $pdfFileName")
+                        onComplete()
                     }
+                    return@launch
                 }
                 
                 // Get first page to check aspect ratio
@@ -372,15 +378,27 @@ class PdfViewerActivity : AppCompatActivity() {
     }
     
     private fun saveDisplayModePreference(displayMode: DisplayMode) {
+        Log.d("PdfViewerActivity", "=== saveDisplayModePreference 호출됨 ===")
+        Log.d("PdfViewerActivity", "저장할 DisplayMode: $displayMode")
+        Log.d("PdfViewerActivity", "현재 파일 ID: $currentPdfFileId")
+        Log.d("PdfViewerActivity", "현재 파일명: $pdfFileName")
+        
         currentPdfFileId?.let { fileId ->
             CoroutineScope(Dispatchers.IO).launch {
                 try {
                     musicRepository.setDisplayModeForFile(fileId, displayMode)
-                    Log.d("PdfViewerActivity", "Saved display mode preference: $displayMode for file: $fileId")
+                    Log.d("PdfViewerActivity", "=== DisplayMode 저장 성공 ===")
+                    Log.d("PdfViewerActivity", "저장된 DisplayMode: $displayMode for file: $fileId")
+                    
+                    // 저장 후 즉시 확인
+                    val savedPrefs = musicRepository.getUserPreference(fileId)
+                    Log.d("PdfViewerActivity", "저장 후 즉시 확인: $savedPrefs")
                 } catch (e: Exception) {
-                    Log.e("PdfViewerActivity", "Error saving display mode preference", e)
+                    Log.e("PdfViewerActivity", "=== DisplayMode 저장 실패 ===", e)
                 }
             }
+        } ?: run {
+            Log.e("PdfViewerActivity", "=== currentPdfFileId가 null이어서 저장 실패 ===")
         }
     }
     
@@ -428,7 +446,7 @@ class PdfViewerActivity : AppCompatActivity() {
         AlertDialog.Builder(this)
             .setTitle("페이지 표시 모드")
             .setView(linearLayout)
-            .setPositiveButton("두 페이지로 보기") { _, _ ->
+            .setPositiveButton("두 페이지씩 보기") { _, _ ->
                 isTwoPageMode = true
                 if (rememberCheckbox.isChecked) {
                     saveDisplayModePreference(DisplayMode.DOUBLE)
@@ -1847,45 +1865,6 @@ class PdfViewerActivity : AppCompatActivity() {
         }
         dialogView.addView(bottomSeekBar)
         
-        // 빠른 설정 버튼들
-        val quickButtonsLayout = android.widget.LinearLayout(this).apply {
-            orientation = android.widget.LinearLayout.HORIZONTAL
-            gravity = android.view.Gravity.CENTER
-            setPadding(0, 20, 0, 10)
-        }
-        
-        val resetButton = android.widget.Button(this).apply {
-            text = "초기화"
-            setOnClickListener {
-                topSeekBar.progress = 0
-                bottomSeekBar.progress = 0
-                setupPreview(topSeekBar)
-            }
-        }
-        quickButtonsLayout.addView(resetButton)
-        
-        val bothButton = android.widget.Button(this).apply {
-            text = "위/아래 5%"
-            setOnClickListener {
-                topSeekBar.progress = 5
-                bottomSeekBar.progress = 5
-                setupPreview(topSeekBar)
-            }
-        }
-        quickButtonsLayout.addView(bothButton)
-        
-        dialogView.addView(quickButtonsLayout)
-        
-        // 미리보기 텍스트
-        val previewLabel = android.widget.TextView(this).apply {
-            text = "실시간 미리보기가 적용됩니다"
-            textSize = 12f
-            setTextColor(android.graphics.Color.GRAY)
-            gravity = android.view.Gravity.CENTER
-            setPadding(0, 10, 0, 0)
-        }
-        dialogView.addView(previewLabel)
-        
         // 실시간 미리보기를 위한 변수
         var previewHandler: android.os.Handler? = null
         var previewRunnable: Runnable? = null
@@ -1908,6 +1887,45 @@ class PdfViewerActivity : AppCompatActivity() {
             
             Log.d("PdfViewerActivity", "미리보기 적용: 위 ${(topPercent * 100).toInt()}%, 아래 ${(bottomPercent * 100).toInt()}%")
         }
+        
+        // 빠른 설정 버튼들
+        val quickButtonsLayout = android.widget.LinearLayout(this).apply {
+            orientation = android.widget.LinearLayout.HORIZONTAL
+            gravity = android.view.Gravity.CENTER
+            setPadding(0, 20, 0, 10)
+        }
+        
+        val resetButton = android.widget.Button(this).apply {
+            text = "초기화"
+            setOnClickListener {
+                topSeekBar.progress = 0
+                bottomSeekBar.progress = 0
+                applyPreview()
+            }
+        }
+        quickButtonsLayout.addView(resetButton)
+        
+        val bothButton = android.widget.Button(this).apply {
+            text = "위/아래 5%"
+            setOnClickListener {
+                topSeekBar.progress = 5
+                bottomSeekBar.progress = 5
+                applyPreview()
+            }
+        }
+        quickButtonsLayout.addView(bothButton)
+        
+        dialogView.addView(quickButtonsLayout)
+        
+        // 미리보기 텍스트
+        val previewLabel = android.widget.TextView(this).apply {
+            text = "실시간 미리보기가 적용됩니다"
+            textSize = 12f
+            setTextColor(android.graphics.Color.GRAY)
+            gravity = android.view.Gravity.CENTER
+            setPadding(0, 10, 0, 0)
+        }
+        dialogView.addView(previewLabel)
         
         val setupPreview = { _: android.widget.SeekBar ->
             previewRunnable?.let { previewHandler?.removeCallbacks(it) }
@@ -2151,52 +2169,6 @@ class PdfViewerActivity : AppCompatActivity() {
         }
         dialogView.addView(paddingSeekBar)
         
-        // 빠른 설정 버튼들
-        val quickButtonsLayout = android.widget.LinearLayout(this).apply {
-            orientation = android.widget.LinearLayout.HORIZONTAL
-            gravity = android.view.Gravity.CENTER
-            setPadding(0, 20, 0, 10)
-        }
-        
-        val resetButton = android.widget.Button(this).apply {
-            text = "여백 없음"
-            setOnClickListener {
-                paddingSeekBar.progress = 0
-                setupPreview(paddingSeekBar)
-            }
-        }
-        quickButtonsLayout.addView(resetButton)
-        
-        val preset5Button = android.widget.Button(this).apply {
-            text = "5%"
-            setOnClickListener {
-                paddingSeekBar.progress = 5
-                setupPreview(paddingSeekBar)
-            }
-        }
-        quickButtonsLayout.addView(preset5Button)
-        
-        val preset10Button = android.widget.Button(this).apply {
-            text = "10%"
-            setOnClickListener {
-                paddingSeekBar.progress = 10
-                setupPreview(paddingSeekBar)
-            }
-        }
-        quickButtonsLayout.addView(preset10Button)
-        
-        dialogView.addView(quickButtonsLayout)
-        
-        // 미리보기 텍스트
-        val previewLabel = android.widget.TextView(this).apply {
-            text = "실시간 미리보기가 적용됩니다"
-            textSize = 12f
-            setTextColor(android.graphics.Color.GRAY)
-            gravity = android.view.Gravity.CENTER
-            setPadding(0, 10, 0, 0)
-        }
-        dialogView.addView(previewLabel)
-        
         // 실시간 미리보기를 위한 변수
         var previewHandler: android.os.Handler? = null
         var previewRunnable: Runnable? = null
@@ -2216,6 +2188,52 @@ class PdfViewerActivity : AppCompatActivity() {
             
             Log.d("PdfViewerActivity", "미리보기 적용: 가운데 여백 ${(paddingPercent * 100).toInt()}%")
         }
+        
+        // 빠른 설정 버튼들
+        val quickButtonsLayout = android.widget.LinearLayout(this).apply {
+            orientation = android.widget.LinearLayout.HORIZONTAL
+            gravity = android.view.Gravity.CENTER
+            setPadding(0, 20, 0, 10)
+        }
+        
+        val resetButton = android.widget.Button(this).apply {
+            text = "여백 없음"
+            setOnClickListener {
+                paddingSeekBar.progress = 0
+                applyPreview()
+            }
+        }
+        quickButtonsLayout.addView(resetButton)
+        
+        val preset5Button = android.widget.Button(this).apply {
+            text = "5%"
+            setOnClickListener {
+                paddingSeekBar.progress = 5
+                applyPreview()
+            }
+        }
+        quickButtonsLayout.addView(preset5Button)
+        
+        val preset10Button = android.widget.Button(this).apply {
+            text = "10%"
+            setOnClickListener {
+                paddingSeekBar.progress = 10
+                applyPreview()
+            }
+        }
+        quickButtonsLayout.addView(preset10Button)
+        
+        dialogView.addView(quickButtonsLayout)
+        
+        // 미리보기 텍스트
+        val previewLabel = android.widget.TextView(this).apply {
+            text = "실시간 미리보기가 적용됩니다"
+            textSize = 12f
+            setTextColor(android.graphics.Color.GRAY)
+            gravity = android.view.Gravity.CENTER
+            setPadding(0, 10, 0, 0)
+        }
+        dialogView.addView(previewLabel)
         
         val setupPreview = { _: android.widget.SeekBar ->
             previewRunnable?.let { previewHandler?.removeCallbacks(it) }
@@ -2370,8 +2388,11 @@ class PdfViewerActivity : AppCompatActivity() {
                         currentTopClipping = prefs.topClippingPercent
                         currentBottomClipping = prefs.bottomClippingPercent
                         currentCenterPadding = prefs.centerPadding
+                        
+                        // DisplayMode도 로드하여 적용
+                        currentDisplayMode = prefs.displayMode
                         Log.d("PdfViewerActivity", "=== 데이터베이스에서 설정 로드 완료 ===")
-                        Log.d("PdfViewerActivity", "로드된 설정: 위 클리핑 ${currentTopClipping * 100}%, 아래 클리핑 ${currentBottomClipping * 100}%, 여백 ${currentCenterPadding}px")
+                        Log.d("PdfViewerActivity", "로드된 설정: 위 클리핑 ${currentTopClipping * 100}%, 아래 클리핑 ${currentBottomClipping * 100}%, 여백 ${currentCenterPadding}px, 표시 모드 $currentDisplayMode")
                     }
                 } else {
                     // 기본값 사용
@@ -2379,16 +2400,17 @@ class PdfViewerActivity : AppCompatActivity() {
                         currentTopClipping = 0f
                         currentBottomClipping = 0f
                         currentCenterPadding = 0f
+                        currentDisplayMode = DisplayMode.AUTO
                     }
                     Log.d("PdfViewerActivity", "표시 설정 없음, 기본값 사용")
                 }
             } catch (e: Exception) {
-                Log.e("PdfViewerActivity", "표시 설정 로드 실패", e)
-                // 기본값으로 폴백
+                Log.e("PdfViewerActivity", "표시 설정 로드 실패", e) // 기본값으로 폴백
                 withContext(Dispatchers.Main) {
                     currentTopClipping = 0f
                     currentBottomClipping = 0f
                     currentCenterPadding = 0f
+                    currentDisplayMode = DisplayMode.AUTO
                 }
             }
         } ?: run {
@@ -2408,12 +2430,14 @@ class PdfViewerActivity : AppCompatActivity() {
                         currentTopClipping = prefs.topClippingPercent
                         currentBottomClipping = prefs.bottomClippingPercent
                         currentCenterPadding = prefs.centerPadding
-                        Log.d("PdfViewerActivity", "표시 설정 로드 완료: 위 클리핑 ${currentTopClipping * 100}%, 아래 클리핑 ${currentBottomClipping * 100}%, 여백 ${currentCenterPadding}px")
+                        currentDisplayMode = prefs.displayMode
+                        Log.d("PdfViewerActivity", "표시 설정 로드 완료: 위 클리핑 ${currentTopClipping * 100}%, 아래 클리핑 ${currentBottomClipping * 100}%, 여백 ${currentCenterPadding}px, 표시 모드 $currentDisplayMode")
                     } else {
                         // 기본값 사용
                         currentTopClipping = 0f
                         currentBottomClipping = 0f
                         currentCenterPadding = 0f
+                        currentDisplayMode = DisplayMode.AUTO
                         Log.d("PdfViewerActivity", "표시 설정 없음, 기본값 사용")
                     }
                 } catch (e: Exception) {
@@ -2422,6 +2446,7 @@ class PdfViewerActivity : AppCompatActivity() {
                     currentTopClipping = 0f
                     currentBottomClipping = 0f
                     currentCenterPadding = 0f
+                    currentDisplayMode = DisplayMode.AUTO
                 }
             }
         }

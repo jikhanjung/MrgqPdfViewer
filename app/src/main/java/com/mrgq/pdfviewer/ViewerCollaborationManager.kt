@@ -16,11 +16,6 @@ class ViewerCollaborationManager(
     private var isInitialized = false
     private var currentMode: CollaborationMode = CollaborationMode.NONE
     
-    enum class CollaborationMode {
-        CONDUCTOR,
-        PERFORMER,
-        NONE
-    }
     
     interface CollaborationListener {
         fun onRemotePageChange(pageIndex: Int)
@@ -167,7 +162,7 @@ class ViewerCollaborationManager(
     fun updateCollaborationStatus(): String {
         return when (currentMode) {
             CollaborationMode.CONDUCTOR -> {
-                val connectedCount = globalCollaborationManager.getConnectedClientsCount()
+                val connectedCount = globalCollaborationManager.getConnectedClientCount()
                 "지휘자 모드 ($connectedCount 명 연결됨)"
             }
             CollaborationMode.PERFORMER -> {

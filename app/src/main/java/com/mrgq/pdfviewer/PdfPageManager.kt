@@ -130,7 +130,7 @@ class PdfPageManager(
                         forceDirectRendering = false
                         renderSinglePageDirect(pageIndex)
                     } else {
-                        pageCache?.getPage(pageIndex) ?: renderSinglePageDirect(pageIndex)
+                        pageCache?.getPageImmediate(pageIndex) ?: renderSinglePageDirect(pageIndex)
                     }
                 }
                 

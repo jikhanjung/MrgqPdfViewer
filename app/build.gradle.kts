@@ -51,6 +51,10 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+            buildConfigField("String", "KEYSTORE_PASSWORD", "\"mrgqpdfviewerpass\"")
+        }
+        debug {
+            buildConfigField("String", "KEYSTORE_PASSWORD", "\"mrgqpdfviewerpass\"")
         }
     }
     
@@ -84,6 +88,7 @@ android {
     
     buildFeatures {
         viewBinding = true
+        buildConfig = true
     }
 }
 
