@@ -1,0 +1,99 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/splash_gradient_background"
+    tools:context=".SplashActivity">
+
+    <!-- Logo Image with shadow effect -->
+    <ImageView
+        android:id="@+id/logoImage"
+        android:layout_width="180dp"
+        android:layout_height="180dp"
+        android:src="@mipmap/ic_launcher_round"
+        android:elevation="8dp"
+        app:layout_constraintBottom_toTopOf="@+id/appNameText"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintVertical_chainStyle="packed"
+        android:layout_marginBottom="32dp" />
+
+    <!-- App Name -->
+    <TextView
+        android:id="@+id/appNameText"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="MRGQ PDF Viewer"
+        android:textColor="@android:color/white"
+        android:textSize="36sp"
+        android:textStyle="bold"
+        android:fontFamily="sans-serif-medium"
+        android:shadowColor="#40000000"
+        android:shadowDx="2"
+        android:shadowDy="2"
+        android:shadowRadius="4"
+        app:layout_constraintBottom_toTopOf="@+id/taglineText"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@+id/logoImage"
+        android:layout_marginTop="32dp" />
+
+    <!-- Version Number -->
+    <TextView
+        android:id="@+id/versionText"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="v0.1.8"
+        android:textColor="#E0E0E0"
+        android:textSize="14sp"
+        app:layout_constraintEnd_toEndOf="@+id/appNameText"
+        app:layout_constraintStart_toStartOf="@+id/appNameText"
+        app:layout_constraintTop_toBottomOf="@+id/appNameText"
+        android:layout_marginTop="4dp" />
+
+    <!-- Tagline -->
+    <TextView
+        android:id="@+id/taglineText"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Android TV를 위한 스마트 악보 리더"
+        android:textColor="#B0B0B0"
+        android:textSize="16sp"
+        android:fontFamily="sans-serif-light"
+        app:layout_constraintBottom_toTopOf="@+id/loadingProgressBar"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@+id/versionText"
+        android:layout_marginTop="24dp" />
+
+    <!-- Loading Progress Bar -->
+    <ProgressBar
+        android:id="@+id/loadingProgressBar"
+        style="@style/Widget.AppCompat.ProgressBar.Horizontal"
+        android:layout_width="200dp"
+        android:layout_height="4dp"
+        android:indeterminate="true"
+        android:progressTint="@android:color/white"
+        android:progressBackgroundTint="#40FFFFFF"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        android:layout_marginBottom="80dp" />
+
+    <!-- Bottom Text -->
+    <TextView
+        android:id="@+id/copyrightText"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="© 2025 MRGQ"
+        android:textColor="#80FFFFFF"
+        android:textSize="12sp"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        android:layout_marginBottom="24dp" />
+
+</androidx.constraintlayout.widget.ConstraintLayout>

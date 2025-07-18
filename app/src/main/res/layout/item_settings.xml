@@ -4,20 +4,23 @@
     android:layout_height="wrap_content"
     android:orientation="horizontal"
     android:gravity="center_vertical"
-    android:padding="@dimen/tv_padding"
-    android:background="?android:attr/selectableItemBackground"
+    android:background="@drawable/elegant_file_item_background"
+    android:paddingHorizontal="20dp"
+    android:paddingVertical="12dp"
+    android:layout_marginVertical="4dp"
+    android:layout_marginHorizontal="16dp"
     android:focusable="true"
-    android:clickable="true"
-    android:minHeight="72dp">
+    android:clickable="true">
 
     <TextView
         android:id="@+id/iconText"
-        android:layout_width="56dp"
-        android:layout_height="56dp"
+        android:layout_width="32dp"
+        android:layout_height="32dp"
         android:gravity="center"
-        android:textSize="24sp"
-        android:background="@drawable/circle_background"
-        android:layout_marginEnd="@dimen/tv_padding" />
+        android:textSize="16sp"
+        android:textColor="@android:color/white"
+        android:background="@drawable/elegant_icon_background"
+        android:layout_marginEnd="16dp" />
 
     <LinearLayout
         android:layout_width="0dp"
@@ -29,27 +32,26 @@
             android:id="@+id/titleText"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:textSize="@dimen/body_text_size"
+            android:textSize="16sp"
             android:textStyle="bold"
-            android:textColor="@color/tv_text_primary" />
+            android:textColor="@android:color/white" />
 
         <TextView
             android:id="@+id/subtitleText"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:textSize="@dimen/small_text_size"
-            android:textColor="@color/tv_text_secondary"
-            android:layout_marginTop="4dp"
+            android:textSize="12sp"
+            android:textColor="#B0FFFFFF"
+            android:layout_marginTop="2dp"
             android:visibility="gone" />
-
     </LinearLayout>
 
     <TextView
         android:id="@+id/arrowText"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:textSize="18sp"
-        android:textColor="@color/tv_text_secondary"
-        android:layout_marginStart="@dimen/tv_padding" />
+        android:textSize="14sp"
+        android:textColor="#B0FFFFFF"
+        android:layout_marginStart="12dp" />
 
 </LinearLayout>

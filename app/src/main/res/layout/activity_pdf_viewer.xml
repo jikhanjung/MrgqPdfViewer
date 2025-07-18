@@ -18,6 +18,16 @@
         android:focusable="true"
         android:focusableInTouchMode="true" />
 
+    <!-- Second ImageView for page transition animations -->
+    <ImageView
+        android:id="@+id/pdfViewNext"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:scaleType="matrix"
+        android:background="@color/white"
+        android:contentDescription="@string/app_name"
+        android:visibility="gone" />
+
     <TextView
         android:id="@+id/pageInfo"
         android:layout_width="wrap_content"

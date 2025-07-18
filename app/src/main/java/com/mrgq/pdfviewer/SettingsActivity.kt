@@ -8,12 +8,15 @@ import android.util.Log
 import android.view.KeyEvent
 import android.view.View
 import android.view.inputmethod.InputMethodManager
+import android.widget.EditText
+import android.widget.SeekBar
+import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.recyclerview.widget.LinearLayoutManager
-import com.mrgq.pdfviewer.databinding.ActivitySettingsBinding
+import com.mrgq.pdfviewer.databinding.ActivitySettingsNewBinding
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -25,7 +28,7 @@ import com.mrgq.pdfviewer.database.entity.DisplayMode
 
 class SettingsActivity : AppCompatActivity() {
     
-    private lateinit var binding: ActivitySettingsBinding
+    private lateinit var binding: ActivitySettingsNewBinding
     private lateinit var preferences: SharedPreferences
     
     // Web server manager
@@ -35,10 +38,13 @@ class SettingsActivity : AppCompatActivity() {
     // Database repository
     private lateinit var musicRepository: MusicRepository
     
+    // Settings adapter
+    private lateinit var settingsAdapter: SettingsAdapter
+    private var currentItems = mutableListOf<SettingsItem>()
     
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        binding = ActivitySettingsBinding.inflate(layoutInflater)
+        binding = ActivitySettingsNewBinding.inflate(layoutInflater)
         setContentView(binding.root)
         
         preferences = getSharedPreferences("pdf_viewer_prefs", MODE_PRIVATE)
@@ -47,96 +53,319 @@ class SettingsActivity : AppCompatActivity() {
         musicRepository = MusicRepository(this)
         
         setupUI()
-        setupPdfFileInfo()
-        setupDisplayModeInfo()
         checkWebServerStatus()
-        updateWebServerUI()
+        setupMainMenu()
     }
     
     private fun setupUI() {
-        // Load current port setting
-        val savedPort = preferences.getInt("web_server_port", 8080)
-        binding.portEditText.setText(savedPort.toString())
+        // RecyclerView 설정
+        binding.settingsRecyclerView.layoutManager = LinearLayoutManager(this)
         
-        binding.savePortBtn.setOnClickListener {
-            savePortSetting()
-        }
-        
+        // 뒤로 가기 버튼
         binding.backButton.setOnClickListener {
-            finish()
-        }
-        
-        binding.deleteAllPdfBtn.setOnClickListener {
-            showDeleteAllPdfDialog()
-        }
-        
-        binding.webServerToggleBtn.setOnClickListener {
-            toggleWebServer()
-        }
-        
-        binding.resetDisplayModeBtn.setOnClickListener {
-            showResetDisplayModeDialog()
-        }
-        
-        binding.viewDisplayModeBtn.setOnClickListener {
-            showDisplayModeListDialog()
-        }
-        
-        // Focus management - 키보드 숨기기
-        hideKeyboard()
-        binding.savePortBtn.requestFocus() // 저장 버튼에 초기 포커스
-        
-        // EditText 설정 - Enter 키로 키보드 표시
-        binding.portEditText.setOnFocusChangeListener { _, hasFocus ->
-            if (hasFocus) {
-                // 포커스 받으면 키보드 표시
-                showKeyboard(binding.portEditText)
+            if (binding.detailPanelLayout.visibility == View.VISIBLE) {
+                hideDetailPanel()
             } else {
-                // 포커스 잃으면 키보드 숨김
-                hideKeyboard()
+                finish()
             }
         }
         
-        // Enter 키로도 키보드 표시
-        binding.portEditText.setOnKeyListener { _, keyCode, event ->
-            if (keyCode == KeyEvent.KEYCODE_ENTER && event.action == KeyEvent.ACTION_DOWN) {
-                showKeyboard(binding.portEditText)
-                true
-            } else {
-                false
+        // 상세 패널 버튼들
+        binding.cancelButton.setOnClickListener {
+            hideDetailPanel()
+        }
+        
+        binding.applyButton.setOnClickListener {
+            // 현재 표시된 상세 패널에 따라 적용 로직 실행
+            hideDetailPanel()
+        }
+    }
+    
+    private fun setupMainMenu() {
+        currentItems.clear()
+        
+        // 파일 관리 섹션
+        val pdfCount = getAllPdfFiles().size
+        currentItems.add(SettingsItem(
+            id = "file_management",
+            icon = "📂",
+            title = "파일 관리",
+            subtitle = "저장된 PDF 파일: ${pdfCount}개",
+            arrow = "▶"
+        ))
+        
+        // 웹서버 섹션
+        val webStatus = if (isWebServerRunning) {
+            val port = preferences.getInt("web_server_port", 8080)
+            "실행 중 (포트: $port)"
+        } else {
+            "중지됨"
+        }
+        currentItems.add(SettingsItem(
+            id = "web_server",
+            icon = "🌐",
+            title = "웹서버",
+            subtitle = webStatus,
+            arrow = "▶"
+        ))
+        
+        // 협업 모드 섹션
+        currentItems.add(SettingsItem(
+            id = "collaboration",
+            icon = "🎼",
+            title = "협업 모드",
+            subtitle = "합주 설정 관리",
+            arrow = "▶"
+        ))
+        
+        // 애니메이션/사운드 섹션
+        currentItems.add(SettingsItem(
+            id = "animation_sound",
+            icon = "🎵",
+            title = "애니메이션 & 사운드",
+            subtitle = "페이지 전환 효과 설정",
+            arrow = "▶"
+        ))
+        
+        // 표시 모드 섹션 (비동기로 카운트 로드)
+        CoroutineScope(Dispatchers.IO).launch {
+            val displayModeCount = try {
+                musicRepository.getUserPreferenceCount()
+            } catch (e: Exception) {
+                Log.e("SettingsActivity", "Error loading display mode count", e)
+                0
+            }
+            
+            withContext(Dispatchers.Main) {
+                currentItems.add(SettingsItem(
+                    id = "display_mode",
+                    icon = "🔧",
+                    title = "표시 모드",
+                    subtitle = "저장된 설정: ${displayModeCount}개",
+                    arrow = "▶"
+                ))
+                
+                // 정보 섹션
+                currentItems.add(SettingsItem(
+                    id = "info",
+                    icon = "📊",
+                    title = "앱 정보",
+                    subtitle = "v${BuildConfig.VERSION_NAME}",
+                    arrow = "▶"
+                ))
+                
+                updateAdapter()
             }
         }
     }
     
-    private fun savePortSetting() {
-        val portText = binding.portEditText.text.toString().trim()
-        
-        if (portText.isEmpty()) {
-            Toast.makeText(this, "포트 번호를 입력해주세요", Toast.LENGTH_SHORT).show()
-            return
+    private fun updateAdapter() {
+        settingsAdapter = SettingsAdapter(currentItems) { item ->
+            handleItemClick(item)
         }
-        
-        val port = try {
-            portText.toInt()
-        } catch (e: NumberFormatException) {
-            Toast.makeText(this, "유효한 포트 번호를 입력해주세요", Toast.LENGTH_SHORT).show()
-            return
-        }
-        
-        if (port < 1024 || port > 65535) {
-            Toast.makeText(this, "포트 번호는 1024-65535 범위여야 합니다", Toast.LENGTH_SHORT).show()
-            return
-        }
-        
-        preferences.edit().putInt("web_server_port", port).apply()
-        Toast.makeText(this, "포트 설정이 저장되었습니다: $port", Toast.LENGTH_SHORT).show()
+        binding.settingsRecyclerView.adapter = settingsAdapter
     }
     
-    private fun setupPdfFileInfo() {
-        val pdfFiles = getAllPdfFiles()
-        val pdfCount = pdfFiles.size
+    private fun handleItemClick(item: SettingsItem) {
+        when (item.id) {
+            "file_management" -> showFileManagementPanel()
+            "web_server" -> showWebServerPanel()
+            "collaboration" -> showCollaborationPanel()
+            "animation_sound" -> showAnimationSoundPanel()
+            "display_mode" -> showDisplayModePanel()
+            "info" -> showInfoPanel()
+        }
+    }
+    
+    private fun showFileManagementPanel() {
+        val items = listOf(
+            SettingsItem(
+                id = "delete_all_pdf",
+                icon = "🗑️",
+                title = "모든 PDF 파일 삭제",
+                subtitle = "저장된 모든 PDF 파일을 삭제합니다",
+                type = SettingsType.ACTION
+            )
+        )
         
-        binding.pdfFilesInfo.text = "저장된 PDF 파일: ${pdfCount}개"
+        showDetailPanel("파일 관리", items)
+    }
+    
+    private fun showWebServerPanel() {
+        val port = preferences.getInt("web_server_port", 8080)
+        val status = if (isWebServerRunning) "실행 중" else "중지됨"
+        
+        val items = listOf(
+            SettingsItem(
+                id = "web_server_toggle",
+                icon = if (isWebServerRunning) "⏹️" else "▶️",
+                title = if (isWebServerRunning) "웹서버 중지" else "웹서버 시작",
+                subtitle = "현재 상태: $status",
+                type = SettingsType.TOGGLE
+            ),
+            SettingsItem(
+                id = "web_server_port",
+                icon = "🔧",
+                title = "포트 설정",
+                subtitle = "현재 포트: $port",
+                type = SettingsType.INPUT
+            )
+        )
+        
+        showDetailPanel("웹서버", items)
+    }
+    
+    private fun showCollaborationPanel() {
+        val items = listOf(
+            SettingsItem(
+                id = "collaboration_info",
+                icon = "ℹ️",
+                title = "협업 모드 정보",
+                subtitle = "메인 화면에서 협업 모드를 시작할 수 있습니다",
+                type = SettingsType.INFO
+            )
+        )
+        
+        showDetailPanel("협업 모드", items)
+    }
+    
+    private fun showAnimationSoundPanel() {
+        val animationEnabled = preferences.getBoolean("page_turn_animation_enabled", true)
+        val soundEnabled = preferences.getBoolean("page_turn_sound_enabled", true)
+        val volume = preferences.getFloat("page_turn_volume", 0.25f)
+        
+        val items = listOf(
+            SettingsItem(
+                id = "animation_toggle",
+                icon = "🎬",
+                title = "페이지 전환 애니메이션",
+                subtitle = if (animationEnabled) "활성화됨" else "비활성화됨",
+                type = SettingsType.TOGGLE
+            ),
+            SettingsItem(
+                id = "sound_toggle",
+                icon = "🔊",
+                title = "페이지 넘기기 사운드",
+                subtitle = if (soundEnabled) "활성화됨" else "비활성화됨",
+                type = SettingsType.TOGGLE
+            ),
+            SettingsItem(
+                id = "volume_setting",
+                icon = "🎚️",
+                title = "사운드 볼륨",
+                subtitle = "${(volume * 100).toInt()}%",
+                type = SettingsType.INPUT,
+                enabled = soundEnabled
+            )
+        )
+        
+        showDetailPanel("애니메이션 & 사운드", items)
+    }
+    
+    private fun showDisplayModePanel() {
+        val items = listOf(
+            SettingsItem(
+                id = "view_display_modes",
+                icon = "👁️",
+                title = "설정 목록 보기",
+                subtitle = "저장된 파일별 표시 모드를 확인합니다",
+                type = SettingsType.ACTION
+            ),
+            SettingsItem(
+                id = "reset_display_modes",
+                icon = "🔄",
+                title = "설정 초기화",
+                subtitle = "모든 파일의 표시 모드를 초기화합니다",
+                type = SettingsType.ACTION
+            )
+        )
+        
+        showDetailPanel("표시 모드", items)
+    }
+    
+    private fun showInfoPanel() {
+        val items = listOf(
+            SettingsItem(
+                id = "app_version",
+                icon = "📱",
+                title = "앱 버전",
+                subtitle = "v${BuildConfig.VERSION_NAME}",
+                type = SettingsType.INFO
+            ),
+            SettingsItem(
+                id = "app_info",
+                icon = "ℹ️",
+                title = "앱 정보",
+                subtitle = "MRGQ PDF Viewer for Android TV",
+                type = SettingsType.INFO
+            )
+        )
+        
+        showDetailPanel("앱 정보", items)
+    }
+    
+    private fun showDetailPanel(title: String, items: List<SettingsItem>) {
+        binding.detailTitle.text = title
+        
+        val detailAdapter = SettingsAdapter(items) { item ->
+            handleDetailItemClick(item)
+        }
+        binding.detailRecyclerView.layoutManager = LinearLayoutManager(this)
+        binding.detailRecyclerView.adapter = detailAdapter
+        
+        binding.settingsRecyclerView.visibility = View.GONE
+        binding.detailPanelLayout.visibility = View.VISIBLE
+    }
+    
+    private fun hideDetailPanel() {
+        binding.detailPanelLayout.visibility = View.GONE
+        binding.settingsRecyclerView.visibility = View.VISIBLE
+    }
+    
+    private fun handleDetailItemClick(item: SettingsItem) {
+        when (item.id) {
+            "delete_all_pdf" -> showDeleteAllPdfDialog()
+            "web_server_toggle" -> toggleWebServer()
+            "web_server_port" -> showPortSettingDialog()
+            "animation_toggle" -> togglePageTurnAnimation()
+            "sound_toggle" -> togglePageTurnSound()
+            "volume_setting" -> showVolumeSettingDialog()
+            "view_display_modes" -> showDisplayModeListDialog()
+            "reset_display_modes" -> showResetDisplayModeDialog()
+        }
+    }
+    
+    private fun showPortSettingDialog() {
+        val currentPort = preferences.getInt("web_server_port", 8080)
+        val editText = EditText(this)
+        editText.setText(currentPort.toString())
+        editText.hint = "포트 번호 (1024-65535)"
+        
+        AlertDialog.Builder(this)
+            .setTitle("웹서버 포트 설정")
+            .setView(editText)
+            .setPositiveButton("저장") { _, _ ->
+                val portText = editText.text.toString().trim()
+                if (portText.isNotEmpty()) {
+                    try {
+                        val port = portText.toInt()
+                        if (port in 1024..65535) {
+                            preferences.edit().putInt("web_server_port", port).apply()
+                            Toast.makeText(this, "포트 설정이 저장되었습니다: $port", Toast.LENGTH_SHORT).show()
+                            hideDetailPanel()
+                            setupMainMenu()
+                        } else {
+                            Toast.makeText(this, "포트 번호는 1024-65535 범위여야 합니다", Toast.LENGTH_SHORT).show()
+                        }
+                    } catch (e: NumberFormatException) {
+                        Toast.makeText(this, "유효한 포트 번호를 입력해주세요", Toast.LENGTH_SHORT).show()
+                    }
+                } else {
+                    Toast.makeText(this, "포트 번호를 입력해주세요", Toast.LENGTH_SHORT).show()
+                }
+            }
+            .setNegativeButton("취소", null)
+            .show()
     }
     
     private fun getAllPdfFiles(): List<File> {
@@ -150,20 +379,6 @@ class SettingsActivity : AppCompatActivity() {
             }?.let { files ->
                 pdfFiles.addAll(files)
             }
-        }
-        
-        // Check Downloads directory if accessible
-        try {
-            val downloadDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
-            if (downloadDir.exists() && downloadDir.canRead()) {
-                downloadDir.listFiles { file ->
-                    file.isFile && file.extension.equals("pdf", ignoreCase = true)
-                }?.let { files ->
-                    pdfFiles.addAll(files)
-                }
-            }
-        } catch (e: Exception) {
-            // Ignore if Downloads directory is not accessible
         }
         
         return pdfFiles
@@ -211,104 +426,111 @@ class SettingsActivity : AppCompatActivity() {
                     Toast.makeText(this@SettingsActivity, "${deletedCount}개 파일 삭제 완료, ${failedCount}개 파일 삭제 실패", Toast.LENGTH_LONG).show()
                 }
                 
-                // Update file count display
-                setupPdfFileInfo()
+                hideDetailPanel()
+                setupMainMenu()
             }
         }
     }
     
-    private fun hideKeyboard() {
-        val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
-        imm.hideSoftInputFromWindow(binding.root.windowToken, 0)
+    // 애니메이션/사운드 설정 함수들
+    private fun togglePageTurnAnimation() {
+        val currentEnabled = preferences.getBoolean("page_turn_animation_enabled", true)
+        val newEnabled = !currentEnabled
+        
+        preferences.edit().putBoolean("page_turn_animation_enabled", newEnabled).apply()
+        
+        val message = if (newEnabled) "페이지 전환 애니메이션이 활성화되었습니다" else "페이지 전환 애니메이션이 비활성화되었습니다"
+        Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
+        
+        hideDetailPanel()
+        setupMainMenu()
     }
     
-    private fun showKeyboard(editText: android.widget.EditText) {
-        editText.requestFocus()
-        val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
-        imm.showSoftInput(editText, InputMethodManager.SHOW_IMPLICIT)
+    private fun togglePageTurnSound() {
+        val currentEnabled = preferences.getBoolean("page_turn_sound_enabled", true)
+        val newEnabled = !currentEnabled
+        
+        preferences.edit().putBoolean("page_turn_sound_enabled", newEnabled).apply()
+        
+        val message = if (newEnabled) "페이지 넘기기 사운드가 활성화되었습니다" else "페이지 넘기기 사운드가 비활성화되었습니다"
+        Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
+        
+        hideDetailPanel()
+        setupMainMenu()
     }
     
-    override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
-        when (keyCode) {
-            KeyEvent.KEYCODE_BACK, KeyEvent.KEYCODE_ESCAPE -> {
-                finish()
-                return true
+    private fun showVolumeSettingDialog() {
+        val currentVolume = preferences.getFloat("page_turn_volume", 0.25f)
+        val currentPercent = (currentVolume * 100).toInt()
+        
+        val dialogView = layoutInflater.inflate(R.layout.dialog_volume_slider, null)
+        val seekBar = dialogView.findViewById<SeekBar>(R.id.volumeSeekBar)
+        val valueText = dialogView.findViewById<TextView>(R.id.volumeValueText)
+        
+        seekBar.progress = currentPercent
+        valueText.text = "${currentPercent}%"
+        
+        seekBar.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
+                if (fromUser) {
+                    valueText.text = "${progress}%"
+                }
             }
-        }
-        return super.onKeyDown(keyCode, event)
-    }
-    
-    override fun onResume() {
-        super.onResume()
+            
+            override fun onStartTrackingTouch(seekBar: SeekBar?) {}
+            override fun onStopTrackingTouch(seekBar: SeekBar?) {}
+        })
         
-        // Update settings info when returning
-        Log.d("SettingsActivity", "onResume - 설정 정보 업데이트")
-        setupPdfFileInfo()
-        setupDisplayModeInfo()
-        checkWebServerStatus()
-        updateWebServerUI()
-    }
-    
-    override fun onDestroy() {
-        super.onDestroy()
-        
-        // 리소스 정리
-        Log.d("SettingsActivity", "onDestroy - 리소스 정리")
+        AlertDialog.Builder(this)
+            .setView(dialogView)
+            .setPositiveButton("저장") { _, _ ->
+                val volumePercent = seekBar.progress
+                val volume = volumePercent / 100.0f
+                preferences.edit().putFloat("page_turn_volume", volume).apply()
+                Toast.makeText(this, "볼륨이 ${volumePercent}%로 설정되었습니다", Toast.LENGTH_SHORT).show()
+                hideDetailPanel()
+                setupMainMenu()
+            }
+            .setNegativeButton("취소", null)
+            .show()
     }
     
     // 웹서버 관리 함수들
     private fun checkWebServerStatus() {
-        // WebServerManager의 실제 상태를 확인
         isWebServerRunning = webServerManager.isServerRunning()
         Log.d("SettingsActivity", "웹서버 상태 확인: $isWebServerRunning")
     }
     
-    private fun updateWebServerUI() {
-        if (isWebServerRunning) {
-            binding.webServerToggleBtn.text = "⏹️ 웹서버 중지"
-            binding.webServerToggleBtn.backgroundTintList = ContextCompat.getColorStateList(this, R.color.tv_error)
+    private fun updateWebServerStatus() {
+        // 메인 메뉴에서 웹서버 상태 업데이트
+        val webServerItem = currentItems.find { it.id == "web_server" }
+        if (webServerItem != null && ::settingsAdapter.isInitialized) {
+            val index = currentItems.indexOf(webServerItem)
+            val status = if (isWebServerRunning) {
+                val port = preferences.getInt("web_server_port", 8080)
+                "실행 중 (포트: $port)"
+            } else {
+                "중지됨"
+            }
             
-            val currentPort = preferences.getInt("web_server_port", 8080)
-            val serverAddress = webServerManager.getServerAddress()
-            binding.webServerStatusText.text = "웹서버: 실행 중 (http://$serverAddress:$currentPort)"
-            binding.webServerStatusText.setTextColor(ContextCompat.getColor(this, R.color.tv_secondary))
-            
-            // 상태 아이콘 업데이트
-            binding.statusIcon.text = "🟢"
-        } else {
-            binding.webServerToggleBtn.text = "▶️ 웹서버 시작"
-            binding.webServerToggleBtn.backgroundTintList = ContextCompat.getColorStateList(this, R.color.tv_primary)
-            
-            binding.webServerStatusText.text = "웹서버: 중지됨"
-            binding.webServerStatusText.setTextColor(ContextCompat.getColor(this, R.color.tv_text_secondary))
-            
-            // 상태 아이콘 업데이트
-            binding.statusIcon.text = "🔴"
+            currentItems[index] = webServerItem.copy(subtitle = status)
+            settingsAdapter.notifyItemChanged(index)
         }
     }
     
     private fun toggleWebServer() {
         if (isWebServerRunning) {
-            // 웹서버 중지
             stopWebServer()
         } else {
-            // 웹서버 시작
             startWebServer()
         }
     }
     
     private fun startWebServer() {
-        binding.webServerToggleBtn.isEnabled = false
-        binding.webServerToggleBtn.text = "⏳ 시작 중..."
-        
         webServerManager.startServer(this) { success ->
             runOnUiThread {
-                binding.webServerToggleBtn.isEnabled = true
-                
                 if (success) {
                     isWebServerRunning = true
-                    updateWebServerUI()
-                    
                     val currentPort = preferences.getInt("web_server_port", 8080)
                     val serverAddress = webServerManager.getServerAddress()
                     Toast.makeText(
@@ -318,8 +540,9 @@ class SettingsActivity : AppCompatActivity() {
                     ).show()
                 } else {
                     Toast.makeText(this, "웹서버 시작 실패", Toast.LENGTH_SHORT).show()
-                    updateWebServerUI()
                 }
+                hideDetailPanel()
+                setupMainMenu()
             }
         }
     }
@@ -327,25 +550,12 @@ class SettingsActivity : AppCompatActivity() {
     private fun stopWebServer() {
         webServerManager.stopServer()
         isWebServerRunning = false
-        updateWebServerUI()
         Toast.makeText(this, "웹서버가 중지되었습니다", Toast.LENGTH_SHORT).show()
+        hideDetailPanel()
+        setupMainMenu()
     }
     
     // Display mode management functions
-    private fun setupDisplayModeInfo() {
-        CoroutineScope(Dispatchers.IO).launch {
-            try {
-                val preferenceCount = musicRepository.getUserPreferenceCount()
-                
-                withContext(Dispatchers.Main) {
-                    binding.displayModeInfo.text = "저장된 표시 모드 설정: ${preferenceCount}개"
-                }
-            } catch (e: Exception) {
-                Log.e("SettingsActivity", "Error loading display mode info", e)
-            }
-        }
-    }
-    
     private fun showResetDisplayModeDialog() {
         AlertDialog.Builder(this)
             .setTitle("표시 모드 초기화")
@@ -364,7 +574,8 @@ class SettingsActivity : AppCompatActivity() {
                 
                 withContext(Dispatchers.Main) {
                     Toast.makeText(this@SettingsActivity, "모든 표시 모드 설정이 초기화되었습니다", Toast.LENGTH_SHORT).show()
-                    setupDisplayModeInfo()
+                    hideDetailPanel()
+                    setupMainMenu()
                 }
             } catch (e: Exception) {
                 Log.e("SettingsActivity", "Error resetting display modes", e)
@@ -381,7 +592,6 @@ class SettingsActivity : AppCompatActivity() {
                 val preferences = musicRepository.getAllUserPreferences()
                 val pdfFiles = musicRepository.getAllPdfFiles()
                 
-                // Collect preferences in a coroutine context
                 val preferenceList = mutableListOf<Pair<String, DisplayMode>>()
                 preferences.collect { prefs ->
                     preferenceList.clear()
@@ -430,4 +640,23 @@ class SettingsActivity : AppCompatActivity() {
             .show()
     }
     
+    override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
+        when (keyCode) {
+            KeyEvent.KEYCODE_BACK, KeyEvent.KEYCODE_ESCAPE -> {
+                if (binding.detailPanelLayout.visibility == View.VISIBLE) {
+                    hideDetailPanel()
+                } else {
+                    finish()
+                }
+                return true
+            }
+        }
+        return super.onKeyDown(keyCode, event)
+    }
+    
+    override fun onResume() {
+        super.onResume()
+        checkWebServerStatus()
+        updateWebServerStatus()
+    }
 }

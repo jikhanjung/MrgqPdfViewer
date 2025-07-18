@@ -1,7 +1,9 @@
 package com.mrgq.pdfviewer
 
 import android.content.Intent
+import android.graphics.pdf.PdfRenderer
 import android.os.Bundle
+import android.os.ParcelFileDescriptor
 import android.util.Log
 import android.view.KeyEvent
 import android.widget.Toast
@@ -40,6 +42,12 @@ class MainActivity : AppCompatActivity() {
         setupSettingsButton()
         setupFileManagementButton()
         setupCollaborationCallbacks()
+        
+        // Set version number
+        binding.versionText.text = "v${BuildConfig.VERSION_NAME}"
+        
+        // Add fade-in animation for UI elements
+        addFadeInAnimations()
         
         // Handle file request from SettingsActivity
         handleFileRequest()
@@ -370,11 +378,13 @@ class MainActivity : AppCompatActivity() {
             appPdfDir.listFiles { file ->
                 file.isFile && file.extension.equals("pdf", ignoreCase = true)
             }?.forEach { file ->
+                val pageCount = getPdfPageCount(file)
                 pdfFiles.add(PdfFile(
                     name = file.name,
                     path = file.absolutePath,
                     lastModified = file.lastModified(),
-                    size = file.length()
+                    size = file.length(),
+                    pageCount = pageCount
                 ))
             }
         }
@@ -387,11 +397,30 @@ class MainActivity : AppCompatActivity() {
         
         Log.d("MainActivity", "=== LOADED ${pdfFiles.size} PDF FILES FROM APP DIRECTORY ===")
         pdfFiles.forEachIndexed { index, file ->
-            Log.d("MainActivity", "[$index] NAME: '${file.name}' PATH: '${file.path}'")
+            Log.d("MainActivity", "[$index] NAME: '${file.name}' PATH: '${file.path}' PAGES: ${file.pageCount}")
         }
         Log.d("MainActivity", "=== END FILE LIST ===")
         
         return pdfFiles
+    }
+    
+    /**
+     * Get page count from PDF file using PdfRenderer
+     */
+    private fun getPdfPageCount(file: File): Int {
+        return try {
+            val fileDescriptor = ParcelFileDescriptor.open(file, ParcelFileDescriptor.MODE_READ_ONLY)
+            val pdfRenderer = PdfRenderer(fileDescriptor)
+            val pageCount = pdfRenderer.pageCount
+            
+            pdfRenderer.close()
+            fileDescriptor.close()
+            
+            pageCount
+        } catch (e: Exception) {
+            Log.e("MainActivity", "Error getting page count for ${file.name}", e)
+            0
+        }
     }
     
     override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
@@ -697,21 +726,9 @@ class MainActivity : AppCompatActivity() {
     }
     
     private fun updateSortButtonStates() {
-        binding.sortByNameBtn.backgroundTintList = 
-            android.content.res.ColorStateList.valueOf(
-                if (currentSortBy == "name") 
-                    ContextCompat.getColor(this, R.color.tv_primary)
-                else 
-                    ContextCompat.getColor(this, R.color.tv_surface)
-            )
-        
-        binding.sortByTimeBtn.backgroundTintList = 
-            android.content.res.ColorStateList.valueOf(
-                if (currentSortBy == "time") 
-                    ContextCompat.getColor(this, R.color.tv_primary)
-                else 
-                    ContextCompat.getColor(this, R.color.tv_surface)
-            )
+        // Update sort buttons with elegant style
+        binding.sortByNameBtn.alpha = if (currentSortBy == "name") 1.0f else 0.7f
+        binding.sortByTimeBtn.alpha = if (currentSortBy == "time") 1.0f else 0.7f
     }
     
     private fun showDeleteConfirmationDialog(pdfFile: PdfFile) {
@@ -768,10 +785,10 @@ class MainActivity : AppCompatActivity() {
     private fun updateFileManagementUI() {
         if (isFileManagementMode) {
             binding.fileManageBtn.text = "완료"
-            binding.fileManageBtn.backgroundTintList = getColorStateList(R.color.tv_primary)
+            binding.fileManageBtn.alpha = 1.0f
         } else {
             binding.fileManageBtn.text = "파일관리"
-            binding.fileManageBtn.backgroundTintList = getColorStateList(R.color.tv_surface)
+            binding.fileManageBtn.alpha = 0.7f
         }
     }
     
@@ -785,7 +802,6 @@ class MainActivity : AppCompatActivity() {
                 binding.collaborationStatus.text = "🎼 지휘자 모드 활성 (연결된 연주자: ${clientCount}명)"
                 binding.collaborationStatus.visibility = android.view.View.VISIBLE
                 binding.collaborationStatus.setTextColor(getColor(R.color.tv_secondary)) // 녹색으로 변경
-                binding.collaborationButton.backgroundTintList = getColorStateList(R.color.tv_secondary)
             }
             CollaborationMode.PERFORMER -> {
                 val isConnected = globalCollaborationManager.isClientConnected()
@@ -811,16 +827,40 @@ class MainActivity : AppCompatActivity() {
                     Log.d("MainActivity", "🎼 UI 업데이트: 연결 끊김 상태로 표시")
                 }
                 binding.collaborationStatus.visibility = android.view.View.VISIBLE
-                binding.collaborationButton.backgroundTintList = getColorStateList(R.color.tv_secondary)
             }
             CollaborationMode.NONE -> {
                 binding.collaborationStatus.text = "합주 모드: 비활성"
                 binding.collaborationStatus.visibility = android.view.View.VISIBLE
                 binding.collaborationStatus.setTextColor(getColor(R.color.tv_text_secondary))
-                binding.collaborationButton.backgroundTintList = getColorStateList(R.color.tv_surface)
             }
         }
         
         Log.d("MainActivity", "협업 상태 업데이트: $currentMode")
+    }
+    
+    private fun addFadeInAnimations() {
+        // Initially hide all animated elements
+        binding.headerSection.alpha = 0f
+        binding.controlStrip.alpha = 0f
+        binding.recyclerView.alpha = 0f
+        
+        // Animate elements sequentially
+        binding.headerSection.animate()
+            .alpha(1f)
+            .setDuration(400)
+            .setStartDelay(100)
+            .start()
+        
+        binding.controlStrip.animate()
+            .alpha(1f)
+            .setDuration(400)
+            .setStartDelay(200)
+            .start()
+        
+        binding.recyclerView.animate()
+            .alpha(1f)
+            .setDuration(400)
+            .setStartDelay(300)
+            .start()
     }
 }

@@ -1,12 +1,19 @@
 package com.mrgq.pdfviewer
 
+import android.animation.Animator
+import android.animation.AnimatorListenerAdapter
+import android.animation.ObjectAnimator
+import android.animation.ValueAnimator
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.pdf.PdfRenderer
+import android.media.AudioAttributes
+import android.media.SoundPool
 import android.os.Bundle
 import android.os.ParcelFileDescriptor
 import android.view.KeyEvent
 import android.view.View
+import android.view.animation.DecelerateInterpolator
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.app.AlertDialog
@@ -60,6 +67,11 @@ class PdfViewerActivity : AppCompatActivity() {
     
     // Database repository
     private lateinit var musicRepository: MusicRepository
+    
+    // Sound effects
+    private var soundPool: SoundPool? = null
+    private var pageTurnSoundId: Int = 0
+    private var soundsLoaded = false
     private var currentPdfFileId: String? = null
     
     // Current display settings
@@ -91,6 +103,9 @@ class PdfViewerActivity : AppCompatActivity() {
         
         // Initialize database repository
         musicRepository = MusicRepository(this)
+        
+        // Initialize sound effects
+        initializeSoundPool()
         
         // Get screen dimensions
         val displayMetrics = DisplayMetrics()
@@ -617,34 +632,48 @@ class PdfViewerActivity : AppCompatActivity() {
         Log.d("PdfViewerActivity", "=== COMBINE TWO PAGES DEBUG ===")
         Log.d("PdfViewerActivity", "Left bitmap: ${leftBitmap.width}x${leftBitmap.height}, aspect ratio: ${leftBitmap.width.toFloat() / leftBitmap.height.toFloat()}")
         Log.d("PdfViewerActivity", "Right bitmap: ${rightBitmap.width}x${rightBitmap.height}, aspect ratio: ${rightBitmap.width.toFloat() / rightBitmap.height.toFloat()}")
-        // Calculate center padding in pixels (percentage of one page width)
-        val paddingPixels = (leftBitmap.width * currentCenterPadding).toInt()
-        Log.d("PdfViewerActivity", "Center padding: ${(currentCenterPadding * 100).toInt()}% (${paddingPixels}px)")
         
-        // Create combined bitmap with center padding
-        val combinedWidth = leftBitmap.width + rightBitmap.width + paddingPixels
-        val combinedHeight = maxOf(leftBitmap.height, rightBitmap.height)
+        // 화면 크기에 맞는 스케일 계산 (two-page mode)
+        val screenWidth = binding.pdfView.width
+        val screenHeight = binding.pdfView.height
         
-        Log.d("PdfViewerActivity", "Combined will be: ${combinedWidth}x${combinedHeight}, aspect ratio: ${combinedWidth.toFloat() / combinedHeight.toFloat()}")
+        val scaleX = (screenWidth / 2).toFloat() / leftBitmap.width
+        val scaleY = screenHeight.toFloat() / leftBitmap.height
+        val scale = kotlin.math.min(scaleX, scaleY)
+        
+        val scaledWidth = (leftBitmap.width * scale).toInt()
+        val scaledHeight = (leftBitmap.height * scale).toInt()
+        
+        val totalWidth = screenWidth
+        val totalHeight = kotlin.math.min(screenHeight, scaledHeight)
+        
+        val combinedBitmap = Bitmap.createBitmap(totalWidth, totalHeight, Bitmap.Config.ARGB_8888)
+        combinedBitmap.eraseColor(android.graphics.Color.WHITE)
+        
+        val canvas = Canvas(combinedBitmap)
+        
+        // 각 페이지를 스케일링
+        val leftScaled = Bitmap.createScaledBitmap(leftBitmap, scaledWidth, scaledHeight, true)
+        val rightScaled = Bitmap.createScaledBitmap(rightBitmap, scaledWidth, scaledHeight, true)
+        
+        // 중앙 여백 계산
+        val paddingPixels = (scaledWidth * currentCenterPadding).toInt()
+        val availableWidth = totalWidth - paddingPixels
+        val singlePageWidth = availableWidth / 2
+        
+        val leftX = ((singlePageWidth - scaledWidth) / 2).coerceAtLeast(0)
+        val rightX = singlePageWidth + paddingPixels + ((singlePageWidth - scaledWidth) / 2).coerceAtLeast(0)
+        val y = ((totalHeight - scaledHeight) / 2).coerceAtLeast(0)
+        
+        canvas.drawBitmap(leftScaled, leftX.toFloat(), y.toFloat(), null)
+        canvas.drawBitmap(rightScaled, rightX.toFloat(), y.toFloat(), null)
+        
+        leftScaled.recycle()
+        rightScaled.recycle()
+        
+        Log.d("PdfViewerActivity", "Combined will be: ${totalWidth}x${totalHeight}, scaled pages: ${scaledWidth}x${scaledHeight}")
+        Log.d("PdfViewerActivity", "Left at ($leftX, $y), Right at ($rightX, $y), padding: ${paddingPixels}px")
         Log.d("PdfViewerActivity", "===============================")
-        
-        val combinedBitmap = Bitmap.createBitmap(
-            combinedWidth,
-            combinedHeight,
-            Bitmap.Config.ARGB_8888
-        )
-        
-        val combinedCanvas = Canvas(combinedBitmap)
-        combinedCanvas.drawColor(android.graphics.Color.WHITE)
-        
-        // Draw left page
-        combinedCanvas.drawBitmap(leftBitmap, 0f, 0f, null)
-        
-        // Draw right page with center padding offset
-        val rightPageX = leftBitmap.width.toFloat() + paddingPixels
-        combinedCanvas.drawBitmap(rightBitmap, rightPageX, 0f, null)
-        
-        Log.d("PdfViewerActivity", "Combined two cached pages successfully with ${(currentCenterPadding * 100).toInt()}% center padding")
         
         return combinedBitmap
     }
@@ -652,33 +681,39 @@ class PdfViewerActivity : AppCompatActivity() {
     private fun combinePageWithEmpty(leftBitmap: Bitmap): Bitmap {
         Log.d("PdfViewerActivity", "=== COMBINE PAGE WITH EMPTY DEBUG ===")
         Log.d("PdfViewerActivity", "Left bitmap: ${leftBitmap.width}x${leftBitmap.height}")
-        // Calculate center padding in pixels (percentage of one page width)
-        val paddingPixels = (leftBitmap.width * currentCenterPadding).toInt()
-        Log.d("PdfViewerActivity", "Center padding: ${(currentCenterPadding * 100).toInt()}% (${paddingPixels}px)")
         
-        // Create combined bitmap with empty right page
-        val rightPageWidth = leftBitmap.width  // Same size as left page
-        val combinedWidth = leftBitmap.width + rightPageWidth + paddingPixels
-        val combinedHeight = leftBitmap.height
+        // 화면 크기에 맞는 스케일 계산 (two-page mode)
+        val screenWidth = binding.pdfView.width
+        val screenHeight = binding.pdfView.height
         
-        Log.d("PdfViewerActivity", "Combined will be: ${combinedWidth}x${combinedHeight}")
+        val scaleX = (screenWidth / 2).toFloat() / leftBitmap.width
+        val scaleY = screenHeight.toFloat() / leftBitmap.height
+        val scale = kotlin.math.min(scaleX, scaleY)
+        
+        val scaledWidth = (leftBitmap.width * scale).toInt()
+        val scaledHeight = (leftBitmap.height * scale).toInt()
+        
+        val totalWidth = screenWidth
+        val totalHeight = kotlin.math.min(screenHeight, scaledHeight)
+        
+        val combinedBitmap = Bitmap.createBitmap(totalWidth, totalHeight, Bitmap.Config.ARGB_8888)
+        combinedBitmap.eraseColor(android.graphics.Color.WHITE)
+        
+        val canvas = Canvas(combinedBitmap)
+        
+        // 페이지를 스케일링
+        val scaledBitmap = Bitmap.createScaledBitmap(leftBitmap, scaledWidth, scaledHeight, true)
+        
+        // 왼쪽에 페이지 배치 (화면의 왼쪽 절반에 중앙 정렬)
+        val leftX = ((totalWidth / 2 - scaledWidth) / 2).coerceAtLeast(0)
+        val y = ((totalHeight - scaledHeight) / 2).coerceAtLeast(0)
+        
+        canvas.drawBitmap(scaledBitmap, leftX.toFloat(), y.toFloat(), null)
+        scaledBitmap.recycle()
+        
+        Log.d("PdfViewerActivity", "Combined will be: ${totalWidth}x${totalHeight}, scaled page: ${scaledWidth}x${scaledHeight}")
+        Log.d("PdfViewerActivity", "Left at ($leftX, $y)")
         Log.d("PdfViewerActivity", "=====================================")
-        
-        val combinedBitmap = Bitmap.createBitmap(
-            combinedWidth,
-            combinedHeight,
-            Bitmap.Config.ARGB_8888
-        )
-        
-        val combinedCanvas = Canvas(combinedBitmap)
-        combinedCanvas.drawColor(android.graphics.Color.WHITE)
-        
-        // Draw left page
-        combinedCanvas.drawBitmap(leftBitmap, 0f, 0f, null)
-        
-        // Right side remains empty (white background already drawn)
-        
-        Log.d("PdfViewerActivity", "Combined page with empty right side successfully")
         
         return combinedBitmap
     }
@@ -1281,7 +1316,7 @@ class PdfViewerActivity : AppCompatActivity() {
                     return true
                 } else if (pageIndex > 0) {
                     val nextPageIndex = if (isTwoPageMode) pageIndex - 2 else pageIndex - 1
-                    showPage(maxOf(0, nextPageIndex))
+                    showPageWithAnimation(maxOf(0, nextPageIndex), -1)
                     return true
                 } else {
                     // 첫 페이지에서 안내 표시
@@ -1302,7 +1337,7 @@ class PdfViewerActivity : AppCompatActivity() {
                 } else {
                     val nextPageIndex = if (isTwoPageMode) pageIndex + 2 else pageIndex + 1
                     if (nextPageIndex < pageCount) {
-                        showPage(nextPageIndex)
+                        showPageWithAnimation(nextPageIndex, 1)
                         return true
                     } else {
                         // 마지막 페이지에서 안내 표시
@@ -1773,8 +1808,7 @@ class PdfViewerActivity : AppCompatActivity() {
         val options = arrayOf(
             "두 페이지 모드 전환",
             "위/아래 클리핑 설정",
-            "가운데 여백 설정",
-            "취소"
+            "가운데 여백 설정"
         )
         
         AlertDialog.Builder(this)
@@ -1787,10 +1821,9 @@ class PdfViewerActivity : AppCompatActivity() {
                     }
                     1 -> showClippingDialog()
                     2 -> showPaddingDialog()
-                    3 -> dialog.dismiss()
                 }
             }
-            .setNegativeButton("취소") { dialog, _ -> dialog.dismiss() }
+            .setNegativeButton("닫기") { dialog, _ -> dialog.dismiss() }
             .show()
     }
     
@@ -1969,6 +2002,9 @@ class PdfViewerActivity : AppCompatActivity() {
                 registerSettingsCallback()
                 forceDirectRendering = true
                 showPage(pageIndex)
+                
+                // 설정 완료 후 PDF 표시 옵션으로 돌아가기
+                showPdfDisplayOptions()
             }
             .setNegativeButton("취소") { _, _ ->
                 // 원래 설정으로 복원
@@ -2267,6 +2303,9 @@ class PdfViewerActivity : AppCompatActivity() {
                 registerSettingsCallback()
                 forceDirectRendering = true
                 showPage(pageIndex)
+                
+                // 설정 완료 후 PDF 표시 옵션으로 돌아가기
+                showPdfDisplayOptions()
             }
             .setNegativeButton("취소") { _, _ ->
                 // 원래 설정으로 복원
@@ -2569,5 +2608,355 @@ class PdfViewerActivity : AppCompatActivity() {
         } catch (e: Exception) {
             Log.w("PdfViewerActivity", "Error closing pdfRenderer in onDestroy: ${e.message}")
         }
+        
+        // Clean up sound pool
+        try {
+            soundPool?.release()
+            soundPool = null
+            Log.d("PdfViewerActivity", "SoundPool 정리 완료")
+        } catch (e: Exception) {
+            Log.w("PdfViewerActivity", "Error releasing soundPool in onDestroy: ${e.message}")
+        }
+    }
+    
+    // ================ 사운드 이펙트 ================
+    
+    private fun initializeSoundPool() {
+        try {
+            val audioAttributes = AudioAttributes.Builder()
+                .setUsage(AudioAttributes.USAGE_GAME)
+                .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                .build()
+            
+            soundPool = SoundPool.Builder()
+                .setMaxStreams(2)
+                .setAudioAttributes(audioAttributes)
+                .build()
+            
+            soundPool?.setOnLoadCompleteListener { _, sampleId, status ->
+                if (status == 0) {
+                    soundsLoaded = true
+                    Log.d("PdfViewerActivity", "Page turn sound loaded successfully")
+                } else {
+                    Log.e("PdfViewerActivity", "Failed to load page turn sound: $status")
+                }
+            }
+            
+            pageTurnSoundId = soundPool?.load(this, R.raw.page_turn, 1) ?: 0
+            
+        } catch (e: Exception) {
+            Log.e("PdfViewerActivity", "Error initializing sound pool: ${e.message}")
+        }
+    }
+    
+    private fun playPageTurnSound() {
+        if (!isPageTurnSoundEnabled()) return
+        
+        try {
+            soundPool?.let { pool ->
+                if (soundsLoaded && pageTurnSoundId > 0) {
+                    val volume = getPageTurnVolume()
+                    pool.play(pageTurnSoundId, volume, volume, 1, 0, 1.0f)
+                    Log.d("PdfViewerActivity", "Playing page turn sound at volume: $volume")
+                }
+            }
+        } catch (e: Exception) {
+            Log.e("PdfViewerActivity", "Error playing page turn sound: ${e.message}")
+        }
+    }
+    
+    private fun isPageTurnSoundEnabled(): Boolean {
+        return preferences.getBoolean("page_turn_sound_enabled", true)
+    }
+    
+    private fun getPageTurnVolume(): Float {
+        return preferences.getFloat("page_turn_volume", 0.25f)
+    }
+    
+    private fun isPageTurnAnimationEnabled(): Boolean {
+        return preferences.getBoolean("page_turn_animation_enabled", true)
+    }
+    
+    // ================ 페이지 전환 애니메이션 ================
+    
+    private var isAnimating = false
+    
+    /**
+     * 애니메이션과 함께 페이지를 전환합니다.
+     * @param index 이동할 페이지 인덱스
+     * @param direction 애니메이션 방향 (1: 오른쪽으로 이동, -1: 왼쪽으로 이동)
+     */
+    private fun showPageWithAnimation(index: Int, direction: Int) {
+        if (index < 0 || index >= pageCount || isAnimating) return
+        
+        Log.d("PdfViewerActivity", "showPageWithAnimation: index=$index, direction=$direction")
+        
+        // 애니메이션이 비활성화된 경우 기본 showPage 호출
+        if (!isPageTurnAnimationEnabled()) {
+            showPage(index)
+            return
+        }
+        
+        // 캐시에서 대상 페이지 비트맵 가져오기
+        val targetBitmap = if (isTwoPageMode) {
+            if (index + 1 < pageCount) {
+                val page1 = pageCache?.getPageImmediate(index)
+                val page2 = pageCache?.getPageImmediate(index + 1)
+                Log.d("PdfViewerActivity", "두 페이지 모드 캐시 확인: page${index}=${page1?.let { "${it.width}x${it.height}" } ?: "null"}, page${index + 1}=${page2?.let { "${it.width}x${it.height}" } ?: "null"}")
+                if (page1 != null && page2 != null) {
+                    val combined = combineTwoPages(page1, page2)
+                    Log.d("PdfViewerActivity", "두 페이지 결합 결과: ${combined.width}x${combined.height}")
+                    combined
+                } else null
+            } else {
+                val page1 = pageCache?.getPageImmediate(index)
+                Log.d("PdfViewerActivity", "마지막 페이지 캐시 확인: page${index}=${page1?.let { "${it.width}x${it.height}" } ?: "null"}")
+                if (page1 != null) combinePageWithEmpty(page1) else null
+            }
+        } else {
+            val page = pageCache?.getPageImmediate(index)
+            Log.d("PdfViewerActivity", "단일 페이지 캐시 확인: page${index}=${page?.let { "${it.width}x${it.height}" } ?: "null"}")
+            page
+        }
+        
+        if (targetBitmap != null) {
+            // 캐시에 있는 경우 즉시 애니메이션 실행
+            animatePageTransition(targetBitmap, direction, index)
+        } else {
+            // 캐시에 없는 경우 즉시 렌더링해서 애니메이션 실행
+            Log.d("PdfViewerActivity", "Target page not in cache, rendering immediately for animation")
+            
+            CoroutineScope(Dispatchers.IO).launch {
+                try {
+                    val renderedBitmap = if (isTwoPageMode) {
+                        if (index + 1 < pageCount) {
+                            // 두 페이지 즉시 렌더링
+                            val page1 = renderPageDirectly(index)
+                            val page2 = renderPageDirectly(index + 1)
+                            if (page1 != null && page2 != null) {
+                                combineTwoPages(page1, page2)
+                            } else null
+                        } else {
+                            // 마지막 페이지 즉시 렌더링
+                            val page1 = renderPageDirectly(index)
+                            if (page1 != null) combinePageWithEmpty(page1) else null
+                        }
+                    } else {
+                        // 단일 페이지 즉시 렌더링
+                        renderPageDirectly(index)
+                    }
+                    
+                    withContext(Dispatchers.Main) {
+                        if (renderedBitmap != null) {
+                            Log.d("PdfViewerActivity", "즉시 렌더링 완료: ${renderedBitmap.width}x${renderedBitmap.height}")
+                            animatePageTransition(renderedBitmap, direction, index)
+                        } else {
+                            Log.e("PdfViewerActivity", "즉시 렌더링 실패, 기본 showPage 호출")
+                            showPage(index)
+                        }
+                    }
+                } catch (e: Exception) {
+                    Log.e("PdfViewerActivity", "즉시 렌더링 중 오류: ${e.message}")
+                    withContext(Dispatchers.Main) {
+                        showPage(index)
+                    }
+                }
+            }
+        }
+    }
+    
+    /**
+     * 페이지를 즉시 렌더링합니다 (캐시 사용 안 함)
+     */
+    private fun renderPageDirectly(pageIndex: Int): Bitmap? {
+        return try {
+            if (pageIndex < 0 || pageIndex >= pageCount) {
+                Log.e("PdfViewerActivity", "잘못된 페이지 인덱스: $pageIndex")
+                return null
+            }
+            
+            pdfRenderer?.let { renderer ->
+                val page = renderer.openPage(pageIndex)
+                
+                // PageCache와 동일한 방식으로 렌더링: 개별 페이지는 항상 최적 크기로 렌더링
+                val screenWidth = binding.pdfView.width
+                val screenHeight = binding.pdfView.height
+                
+                if (screenWidth <= 0 || screenHeight <= 0) {
+                    Log.e("PdfViewerActivity", "화면 크기가 유효하지 않음: ${screenWidth}x${screenHeight}")
+                    page.close()
+                    return null
+                }
+                
+                val pageWidth = page.width
+                val pageHeight = page.height
+                
+                // 두 페이지 모드에서도 개별 페이지는 화면에 맞는 최적 크기로 렌더링
+                // (combineTwoPages에서 적절히 조정됨)
+                val scaleX = screenWidth.toFloat() / pageWidth
+                val scaleY = screenHeight.toFloat() / pageHeight
+                val scale = minOf(scaleX, scaleY)
+                
+                val bitmapWidth = (pageWidth * scale).toInt()
+                val bitmapHeight = (pageHeight * scale).toInt()
+                
+                Log.d("PdfViewerActivity", "즉시 렌더링: 페이지 $pageIndex, 크기 ${bitmapWidth}x${bitmapHeight}, 스케일 $scale")
+                
+                val bitmap = Bitmap.createBitmap(bitmapWidth, bitmapHeight, Bitmap.Config.ARGB_8888)
+                bitmap.eraseColor(android.graphics.Color.WHITE)
+                
+                page.render(bitmap, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
+                page.close()
+                
+                // 현재 설정 적용 (클리핑/여백)
+                applyDisplaySettings(bitmap, false)
+            }
+        } catch (e: Exception) {
+            Log.e("PdfViewerActivity", "즉시 렌더링 중 오류: ${e.message}", e)
+            null
+        }
+    }
+    
+    /**
+     * 현재 페이지가 두 페이지 모드로 표시되는지 확인
+     */
+    private fun isCurrentPageTwoPageMode(): Boolean {
+        return isTwoPageMode && pageIndex % 2 == 0
+    }
+    
+    /**
+     * 타겟 페이지가 두 페이지 모드로 표시되는지 확인
+     */
+    private fun isTargetPageTwoPageMode(targetIndex: Int): Boolean {
+        return isTwoPageMode && targetIndex % 2 == 0
+    }
+    
+    /**
+     * 실제 페이지 전환 애니메이션을 실행합니다.
+     */
+    private fun animatePageTransition(targetBitmap: Bitmap, direction: Int, targetIndex: Int) {
+        if (isAnimating) return
+        
+        isAnimating = true
+        
+        // 페이지 넘기기 사운드 재생
+        playPageTurnSound()
+        
+        // 다음 페이지 ImageView 설정
+        binding.pdfViewNext.setImageBitmap(targetBitmap)
+        
+        // 현재 페이지가 두 페이지 모드인지 확인
+        val currentIsTwoPage = isCurrentPageTwoPageMode()
+        // 타겟 페이지가 두 페이지 모드인지 확인
+        val targetIsTwoPage = isTargetPageTwoPageMode(targetIndex)
+        
+        Log.d("PdfViewerActivity", "애니메이션 시작: 현재 두페이지=$currentIsTwoPage, 타겟 두페이지=$targetIsTwoPage")
+        Log.d("PdfViewerActivity", "타겟 비트맵 크기: ${targetBitmap.width}x${targetBitmap.height}")
+        
+        // setImageViewMatrix를 사용하여 일관된 방식으로 매트릭스 설정
+        setImageViewMatrix(targetBitmap, binding.pdfViewNext)
+        
+        binding.pdfViewNext.visibility = View.VISIBLE
+        
+        // 화면 너비 계산
+        val screenWidth = binding.pdfView.width.toFloat()
+        
+        // 애니메이션 시작 위치 설정
+        if (direction > 0) {
+            // 오른쪽 페이지로 이동: 새 페이지는 오른쪽에서 슬라이드 인
+            binding.pdfViewNext.translationX = screenWidth
+        } else {
+            // 왼쪽 페이지로 이동: 새 페이지는 왼쪽에서 슬라이드 인
+            binding.pdfViewNext.translationX = -screenWidth
+        }
+        
+        // 애니메이션 실행
+        val currentPageAnimator = ObjectAnimator.ofFloat(
+            binding.pdfView, 
+            "translationX", 
+            0f, 
+            if (direction > 0) -screenWidth else screenWidth
+        )
+        
+        val nextPageAnimator = ObjectAnimator.ofFloat(
+            binding.pdfViewNext, 
+            "translationX", 
+            binding.pdfViewNext.translationX, 
+            0f
+        )
+        
+        // 애니메이션 설정
+        val animationDuration = 350L
+        currentPageAnimator.duration = animationDuration
+        nextPageAnimator.duration = animationDuration
+        
+        val interpolator = DecelerateInterpolator(1.8f)
+        currentPageAnimator.interpolator = interpolator
+        nextPageAnimator.interpolator = interpolator
+        
+        // 애니메이션 완료 리스너
+        nextPageAnimator.addListener(object : AnimatorListenerAdapter() {
+            override fun onAnimationEnd(animation: Animator) {
+                // 애니메이션 완료 후 정리
+                binding.pdfView.setImageBitmap(targetBitmap)
+                setImageViewMatrix(targetBitmap, binding.pdfView)
+                binding.pdfView.translationX = 0f
+                binding.pdfViewNext.visibility = View.GONE
+                binding.pdfViewNext.translationX = 0f
+                
+                // 페이지 인덱스 업데이트
+                pageIndex = targetIndex
+                updatePageInfo()
+                
+                // 로딩 프로그레스 숨기기
+                binding.loadingProgress.visibility = View.GONE
+                
+                // 마지막 페이지 번호 저장
+                saveLastPageNumber(targetIndex + 1)
+                
+                // 페이지 정보 잠시 표시
+                binding.pageInfo.animate().alpha(1f).duration = 200
+                Handler(Looper.getMainLooper()).postDelayed({
+                    binding.pageInfo.animate().alpha(0f).duration = 1000
+                }, 1500)
+                
+                isAnimating = false
+                Log.d("PdfViewerActivity", "Page transition animation completed")
+            }
+        })
+        
+        // 애니메이션 시작
+        currentPageAnimator.start()
+        nextPageAnimator.start()
+    }
+    
+    /**
+     * 특정 ImageView에 매트릭스 설정
+     */
+    private fun setImageViewMatrix(bitmap: Bitmap, imageView: android.widget.ImageView) {
+        if (bitmap.isRecycled) return
+        
+        val matrix = android.graphics.Matrix()
+        val imageWidth = bitmap.width
+        val imageHeight = bitmap.height
+        val viewWidth = imageView.width
+        val viewHeight = imageView.height
+        
+        if (viewWidth > 0 && viewHeight > 0) {
+            val scaleX = viewWidth.toFloat() / imageWidth
+            val scaleY = viewHeight.toFloat() / imageHeight
+            val scale = minOf(scaleX, scaleY)
+            
+            matrix.setScale(scale, scale)
+            
+            val scaledWidth = imageWidth * scale
+            val scaledHeight = imageHeight * scale
+            val dx = (viewWidth - scaledWidth) / 2
+            val dy = (viewHeight - scaledHeight) / 2
+            
+            matrix.postTranslate(dx, dy)
+        }
+        
+        imageView.imageMatrix = matrix
     }
 }

@@ -34,4 +34,5 @@
     
     <!-- Button Colors -->
     <color name="delete_button_color">#FFFF3B30</color>
+    <color name="ic_launcher_background">#ffffff</color>
 </resources>
