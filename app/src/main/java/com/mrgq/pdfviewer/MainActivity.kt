@@ -735,9 +735,21 @@ class MainActivity : AppCompatActivity() {
     }
     
     private fun updateSortButtonStates() {
-        // Update sort buttons with elegant style
-        binding.sortByNameBtn.alpha = if (currentSortBy == "name") 1.0f else 0.7f
-        binding.sortByTimeBtn.alpha = if (currentSortBy == "time") 1.0f else 0.7f
+        // Update sort buttons with clear visual distinction for TV
+        val selectedColor = ContextCompat.getColor(this, R.color.tv_primary)
+        val unselectedColor = ContextCompat.getColor(this, R.color.tv_text_secondary)
+        
+        if (currentSortBy == "name") {
+            binding.sortByNameBtn.setTextColor(selectedColor)
+            binding.sortByNameBtn.alpha = 1.0f
+            binding.sortByTimeBtn.setTextColor(unselectedColor)
+            binding.sortByTimeBtn.alpha = 0.8f
+        } else {
+            binding.sortByNameBtn.setTextColor(unselectedColor)
+            binding.sortByNameBtn.alpha = 0.8f
+            binding.sortByTimeBtn.setTextColor(selectedColor)
+            binding.sortByTimeBtn.alpha = 1.0f
+        }
     }
     
     private fun showDeleteConfirmationDialog(pdfFile: PdfFile) {
