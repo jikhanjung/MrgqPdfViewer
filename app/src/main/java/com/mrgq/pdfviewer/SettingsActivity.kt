@@ -97,7 +97,8 @@ class SettingsActivity : AppCompatActivity() {
         // 웹서버 섹션
         val webStatus = if (isWebServerRunning) {
             val port = preferences.getInt("web_server_port", 8080)
-            "실행 중 (포트: $port)"
+            val ipAddress = NetworkUtils.getLocalIpAddress()
+            "실행 중 ($ipAddress:$port)"
         } else {
             "중지됨"
         }
@@ -193,7 +194,8 @@ class SettingsActivity : AppCompatActivity() {
     
     private fun showWebServerPanel() {
         val port = preferences.getInt("web_server_port", 8080)
-        val status = if (isWebServerRunning) "실행 중" else "중지됨"
+        val ipAddress = NetworkUtils.getLocalIpAddress()
+        val status = if (isWebServerRunning) "실행 중 ($ipAddress:$port)" else "중지됨"
         
         val items = listOf(
             SettingsItem(
@@ -531,7 +533,8 @@ class SettingsActivity : AppCompatActivity() {
             val index = currentItems.indexOf(webServerItem)
             val status = if (isWebServerRunning) {
                 val port = preferences.getInt("web_server_port", 8080)
-                "실행 중 (포트: $port)"
+                val ipAddress = NetworkUtils.getLocalIpAddress()
+                "실행 중 ($ipAddress:$port)"
             } else {
                 "중지됨"
             }

@@ -339,9 +339,12 @@ class PdfViewerActivity : AppCompatActivity() {
                             Log.d("PdfViewerActivity", "Aspect ratios match (diff: $aspectRatioDiff), using single page mode (no saving)")
                             onComplete()
                         } else if (screenAspectRatio > 1.0f && pdfAspectRatio < 1.0f) {
-                            // Screen is landscape and PDF is portrait - ask user
-                            Log.d("PdfViewerActivity", "Landscape screen + Portrait PDF, asking user")
-                            showTwoPageModeDialog(onComplete)
+                            // Screen is landscape and PDF is portrait - automatically use two page mode
+                            Log.d("PdfViewerActivity", "Landscape screen + Portrait PDF, automatically setting two page mode")
+                            isTwoPageMode = true
+                            saveDisplayModePreference(DisplayMode.DOUBLE)
+                            Log.d("PdfViewerActivity", "✅ Auto-enabled two page mode and saved preference for $pdfFileName")
+                            onComplete()
                         } else {
                             // Other cases (portrait screen, landscape PDF, etc.) - use single page - NO SAVING
                             isTwoPageMode = false
@@ -504,7 +507,7 @@ class PdfViewerActivity : AppCompatActivity() {
                 val page2 = pageCache?.getPageImmediate(index + 1)
                 if (page1 != null && page2 != null) {
                     Log.d("PdfViewerActivity", "⚡ 페이지 $index, ${index + 1} 캐시에서 즉시 표시 (두 페이지 모드)")
-                    combineTwoPages(page1, page2)
+                    combineTwoPagesUnified(page1, page2)
                 } else {
                     null
                 }
@@ -513,7 +516,7 @@ class PdfViewerActivity : AppCompatActivity() {
                 val page1 = pageCache?.getPageImmediate(index)
                 if (page1 != null) {
                     Log.d("PdfViewerActivity", "⚡ 마지막 페이지 $index 캐시에서 왼쪽에 표시 (두 페이지 모드)")
-                    combinePageWithEmpty(page1)
+                    combineTwoPagesUnified(page1, null)
                 } else {
                     null
                 }
@@ -573,14 +576,14 @@ class PdfViewerActivity : AppCompatActivity() {
                         if (forceDirectRendering) {
                             forceDirectRendering = false // 플래그 리셋
                         }
-                        renderTwoPages(index)
+                        renderTwoPagesUnified(index)
                     } else {
                         Log.d("PdfViewerActivity", "=== 마지막 페이지 왼쪽 표시 렌더링: $index ===")
                         Log.d("PdfViewerActivity", "forceDirectRendering: $forceDirectRendering")
                         if (forceDirectRendering) {
                             forceDirectRendering = false // 플래그 리셋
                         }
-                        renderSinglePageOnLeft(index)
+                        renderTwoPagesUnified(index, true)
                     }
                 } else {
                     Log.d("PdfViewerActivity", "=== 단일 페이지 모드 렌더링: $index ===")
@@ -628,181 +631,78 @@ class PdfViewerActivity : AppCompatActivity() {
         }
     }
     
-    private fun combineTwoPages(leftBitmap: Bitmap, rightBitmap: Bitmap): Bitmap {
-        Log.d("PdfViewerActivity", "=== COMBINE TWO PAGES DEBUG ===")
-        Log.d("PdfViewerActivity", "Left bitmap: ${leftBitmap.width}x${leftBitmap.height}, aspect ratio: ${leftBitmap.width.toFloat() / leftBitmap.height.toFloat()}")
-        Log.d("PdfViewerActivity", "Right bitmap: ${rightBitmap.width}x${rightBitmap.height}, aspect ratio: ${rightBitmap.width.toFloat() / rightBitmap.height.toFloat()}")
+    /**
+     * 통합된 두 페이지 결합 함수 - 모든 두 페이지 모드 렌더링을 처리
+     * @param leftBitmap 왼쪽 페이지 비트맵 (원본 해상도)
+     * @param rightBitmap 오른쪽 페이지 비트맵 (null이면 빈 공간으로 처리)
+     * @return 결합된 고해상도 비트맵
+     */
+    private fun combineTwoPagesUnified(leftBitmap: Bitmap, rightBitmap: Bitmap? = null): Bitmap {
+        Log.d("PdfViewerActivity", "=== UNIFIED TWO PAGE COMBINE ===")
+        Log.d("PdfViewerActivity", "Left: ${leftBitmap.width}x${leftBitmap.height}")
+        if (rightBitmap != null) {
+            Log.d("PdfViewerActivity", "Right: ${rightBitmap.width}x${rightBitmap.height}")
+        } else {
+            Log.d("PdfViewerActivity", "Right: empty (last odd page)")
+        }
         
-        // 화면 크기에 맞는 스케일 계산 (two-page mode)
+        // Combine at original resolution first
+        val paddingPixels = (leftBitmap.width * currentCenterPadding).toInt()
+        val rightWidth = rightBitmap?.width ?: leftBitmap.width // Use same width for empty space
+        val combinedWidth = leftBitmap.width + rightWidth + paddingPixels
+        val combinedHeight = maxOf(leftBitmap.height, rightBitmap?.height ?: leftBitmap.height)
+        
+        val combinedBitmap = Bitmap.createBitmap(combinedWidth, combinedHeight, Bitmap.Config.ARGB_8888)
+        val combinedCanvas = Canvas(combinedBitmap)
+        combinedCanvas.drawColor(android.graphics.Color.WHITE)
+        
+        // Draw left page
+        combinedCanvas.drawBitmap(leftBitmap, 0f, 0f, null)
+        
+        // Draw right page if exists
+        if (rightBitmap != null) {
+            val rightPageX = leftBitmap.width.toFloat() + paddingPixels
+            combinedCanvas.drawBitmap(rightBitmap, rightPageX, 0f, null)
+        }
+        
+        Log.d("PdfViewerActivity", "Combined at original resolution: ${combinedWidth}x${combinedHeight}")
+        Log.d("PdfViewerActivity", "Center padding: ${(currentCenterPadding * 100).toInt()}%")
+        
+        // Calculate final scale
         val screenWidth = binding.pdfView.width
         val screenHeight = binding.pdfView.height
+        val combinedAspectRatio = combinedWidth.toFloat() / combinedHeight.toFloat()
+        val screenAspectRatio = screenWidth.toFloat() / screenHeight.toFloat()
         
-        val scaleX = (screenWidth / 2).toFloat() / leftBitmap.width
-        val scaleY = screenHeight.toFloat() / leftBitmap.height
-        val scale = kotlin.math.min(scaleX, scaleY)
-        
-        val scaledWidth = (leftBitmap.width * scale).toInt()
-        val scaledHeight = (leftBitmap.height * scale).toInt()
-        
-        val totalWidth = screenWidth
-        val totalHeight = kotlin.math.min(screenHeight, scaledHeight)
-        
-        val combinedBitmap = Bitmap.createBitmap(totalWidth, totalHeight, Bitmap.Config.ARGB_8888)
-        combinedBitmap.eraseColor(android.graphics.Color.WHITE)
-        
-        val canvas = Canvas(combinedBitmap)
-        
-        // 각 페이지를 스케일링
-        val leftScaled = Bitmap.createScaledBitmap(leftBitmap, scaledWidth, scaledHeight, true)
-        val rightScaled = Bitmap.createScaledBitmap(rightBitmap, scaledWidth, scaledHeight, true)
-        
-        // 중앙 여백 계산
-        val paddingPixels = (scaledWidth * currentCenterPadding).toInt()
-        val availableWidth = totalWidth - paddingPixels
-        val singlePageWidth = availableWidth / 2
-        
-        val leftX = ((singlePageWidth - scaledWidth) / 2).coerceAtLeast(0)
-        val rightX = singlePageWidth + paddingPixels + ((singlePageWidth - scaledWidth) / 2).coerceAtLeast(0)
-        val y = ((totalHeight - scaledHeight) / 2).coerceAtLeast(0)
-        
-        canvas.drawBitmap(leftScaled, leftX.toFloat(), y.toFloat(), null)
-        canvas.drawBitmap(rightScaled, rightX.toFloat(), y.toFloat(), null)
-        
-        leftScaled.recycle()
-        rightScaled.recycle()
-        
-        Log.d("PdfViewerActivity", "Combined will be: ${totalWidth}x${totalHeight}, scaled pages: ${scaledWidth}x${scaledHeight}")
-        Log.d("PdfViewerActivity", "Left at ($leftX, $y), Right at ($rightX, $y), padding: ${paddingPixels}px")
-        Log.d("PdfViewerActivity", "===============================")
-        
-        return combinedBitmap
-    }
-    
-    private fun combinePageWithEmpty(leftBitmap: Bitmap): Bitmap {
-        Log.d("PdfViewerActivity", "=== COMBINE PAGE WITH EMPTY DEBUG ===")
-        Log.d("PdfViewerActivity", "Left bitmap: ${leftBitmap.width}x${leftBitmap.height}")
-        
-        // 화면 크기에 맞는 스케일 계산 (two-page mode)
-        val screenWidth = binding.pdfView.width
-        val screenHeight = binding.pdfView.height
-        
-        val scaleX = (screenWidth / 2).toFloat() / leftBitmap.width
-        val scaleY = screenHeight.toFloat() / leftBitmap.height
-        val scale = kotlin.math.min(scaleX, scaleY)
-        
-        val scaledWidth = (leftBitmap.width * scale).toInt()
-        val scaledHeight = (leftBitmap.height * scale).toInt()
-        
-        val totalWidth = screenWidth
-        val totalHeight = kotlin.math.min(screenHeight, scaledHeight)
-        
-        val combinedBitmap = Bitmap.createBitmap(totalWidth, totalHeight, Bitmap.Config.ARGB_8888)
-        combinedBitmap.eraseColor(android.graphics.Color.WHITE)
-        
-        val canvas = Canvas(combinedBitmap)
-        
-        // 페이지를 스케일링
-        val scaledBitmap = Bitmap.createScaledBitmap(leftBitmap, scaledWidth, scaledHeight, true)
-        
-        // 왼쪽에 페이지 배치 (화면의 왼쪽 절반에 중앙 정렬)
-        val leftX = ((totalWidth / 2 - scaledWidth) / 2).coerceAtLeast(0)
-        val y = ((totalHeight - scaledHeight) / 2).coerceAtLeast(0)
-        
-        canvas.drawBitmap(scaledBitmap, leftX.toFloat(), y.toFloat(), null)
-        scaledBitmap.recycle()
-        
-        Log.d("PdfViewerActivity", "Combined will be: ${totalWidth}x${totalHeight}, scaled page: ${scaledWidth}x${scaledHeight}")
-        Log.d("PdfViewerActivity", "Left at ($leftX, $y)")
-        Log.d("PdfViewerActivity", "=====================================")
-        
-        return combinedBitmap
-    }
-    
-    private suspend fun renderSinglePageOnLeft(pageIndex: Int): Bitmap {
-        Log.d("PdfViewerActivity", "Starting renderSinglePageOnLeft for page $pageIndex")
-        
-        // Open the page
-        val page = try {
-            pdfRenderer?.openPage(pageIndex)
-        } catch (e: Exception) {
-            Log.e("PdfViewerActivity", "Failed to open page $pageIndex", e)
-            return renderSinglePage(pageIndex)
+        val scale = if (combinedAspectRatio > screenAspectRatio) {
+            screenWidth.toFloat() / combinedWidth.toFloat()
+        } else {
+            screenHeight.toFloat() / combinedHeight.toFloat()
         }
         
-        if (page == null) {
-            Log.e("PdfViewerActivity", "Page is null")
-            return renderSinglePage(pageIndex)
-        }
+        // Apply high-resolution multiplier
+        val finalScale = (scale * 2.5f).coerceIn(1.0f, 4.0f)
         
-        try {
-            Log.d("PdfViewerActivity", "Page (${pageIndex}): ${page.width}x${page.height}, aspect ratio: ${page.width.toFloat() / page.height.toFloat()}")
-            
-            // Create original-size bitmap for the page
-            val pageBitmap = Bitmap.createBitmap(page.width, page.height, Bitmap.Config.ARGB_8888)
-            pageBitmap.eraseColor(android.graphics.Color.WHITE)
-            page.render(pageBitmap, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
-            
-            page.close()
-            
-            // Create combined bitmap with empty right side (same size as two-page layout)
-            val paddingPixels = (pageBitmap.width * currentCenterPadding).toInt()
-            val combinedWidth = pageBitmap.width * 2 + paddingPixels
-            val combinedHeight = pageBitmap.height
-            val combinedBitmap = Bitmap.createBitmap(combinedWidth, combinedHeight, Bitmap.Config.ARGB_8888)
-            
-            val combinedCanvas = Canvas(combinedBitmap)
-            combinedCanvas.drawColor(android.graphics.Color.WHITE)
-            combinedCanvas.drawBitmap(pageBitmap, 0f, 0f, null)
-            // Right side remains empty
-            
-            // Calculate scale for the combined layout
-            val combinedAspectRatio = combinedWidth.toFloat() / combinedHeight.toFloat()
-            val screenAspectRatio = screenWidth.toFloat() / screenHeight.toFloat()
-            
-            val scale = if (combinedAspectRatio > screenAspectRatio) {
-                screenWidth.toFloat() / combinedWidth.toFloat()
-            } else {
-                screenHeight.toFloat() / combinedHeight.toFloat()
-            }
-            
-            // Apply high-resolution multiplier
-            val finalScale = (scale * 2.5f).coerceIn(1.0f, 4.0f)
-            
-            Log.d("PdfViewerActivity", "=== SINGLE PAGE ON LEFT SCALING ===")
-            Log.d("PdfViewerActivity", "Combined: ${combinedWidth}x${combinedHeight}, aspect ratio: $combinedAspectRatio")
-            Log.d("PdfViewerActivity", "Screen: ${screenWidth}x${screenHeight}, aspect ratio: $screenAspectRatio")
-            Log.d("PdfViewerActivity", "Base scale: $scale, Final scale: $finalScale")
-            Log.d("PdfViewerActivity", "===================================")
-            
-            // Create final high-resolution bitmap
-            val finalWidth = (combinedWidth * finalScale).toInt()
-            val finalHeight = (combinedHeight * finalScale).toInt()
-            val finalBitmap = Bitmap.createBitmap(finalWidth, finalHeight, Bitmap.Config.ARGB_8888)
-            
-            val finalCanvas = Canvas(finalBitmap)
-            finalCanvas.drawColor(android.graphics.Color.WHITE)
-            
-            // Scale and draw the combined bitmap
-            val scaleMatrix = android.graphics.Matrix()
-            scaleMatrix.setScale(finalScale, finalScale)
-            finalCanvas.drawBitmap(combinedBitmap, scaleMatrix, null)
-            
-            // Clean up intermediate bitmaps
-            pageBitmap.recycle()
-            combinedBitmap.recycle()
-            
-            // Apply clipping if needed
-            return applyDisplaySettings(finalBitmap, true)
-            
-        } catch (e: Exception) {
-            Log.e("PdfViewerActivity", "Error in renderSinglePageOnLeft", e)
-            try {
-                page.close()
-            } catch (closeError: Exception) {
-                Log.w("PdfViewerActivity", "Page already closed or error closing: ${closeError.message}")
-            }
-            throw e
-        }
+        // Create final high-resolution bitmap
+        val finalWidth = (combinedWidth * finalScale).toInt()
+        val finalHeight = (combinedHeight * finalScale).toInt()
+        val finalBitmap = Bitmap.createBitmap(finalWidth, finalHeight, Bitmap.Config.ARGB_8888)
+        
+        val finalCanvas = Canvas(finalBitmap)
+        finalCanvas.drawColor(android.graphics.Color.WHITE)
+        
+        // Scale and draw
+        val scaleMatrix = android.graphics.Matrix()
+        scaleMatrix.setScale(finalScale, finalScale)
+        finalCanvas.drawBitmap(combinedBitmap, scaleMatrix, null)
+        
+        // Clean up
+        combinedBitmap.recycle()
+        
+        Log.d("PdfViewerActivity", "Final result: ${finalWidth}x${finalHeight}, scale: $finalScale")
+        Log.d("PdfViewerActivity", "==============================")
+        
+        return applyDisplaySettings(finalBitmap, true)
     }
     
     private suspend fun renderSinglePage(index: Int): Bitmap {
@@ -844,8 +744,14 @@ class PdfViewerActivity : AppCompatActivity() {
         return applyDisplaySettings(bitmap, false)
     }
     
-    private suspend fun renderTwoPages(leftPageIndex: Int): Bitmap {
-        Log.d("PdfViewerActivity", "Starting renderTwoPages for pages $leftPageIndex and ${leftPageIndex + 1}")
+    /**
+     * 통합된 두 페이지 렌더링 함수 - 처음부터 렌더링하는 모든 두 페이지 모드를 처리
+     * @param leftPageIndex 왼쪽 페이지 인덱스
+     * @param isLastOddPage 마지막 홀수 페이지 모드 (오른쪽 빈 공간)
+     * @return 결합된 고해상도 비트맵
+     */
+    private suspend fun renderTwoPagesUnified(leftPageIndex: Int, isLastOddPage: Boolean = false): Bitmap {
+        Log.d("PdfViewerActivity", "Starting renderTwoPagesUnified for page $leftPageIndex${if (isLastOddPage) " (last odd page)" else " and ${leftPageIndex + 1}"}")
         
         // Open left page
         val leftPage = try {
@@ -861,109 +767,52 @@ class PdfViewerActivity : AppCompatActivity() {
         }
         
         try {
-            // Log individual page dimensions
-            Log.d("PdfViewerActivity", "=== INDIVIDUAL PAGE ASPECT RATIOS ===")
-            Log.d("PdfViewerActivity", "Left page (${leftPageIndex}): ${leftPage.width}x${leftPage.height}, aspect ratio: ${leftPage.width.toFloat() / leftPage.height.toFloat()}")
-            
-            // Create original-size bitmap for left page (no scaling yet)
+            // Create left page bitmap
             val leftBitmap = Bitmap.createBitmap(leftPage.width, leftPage.height, Bitmap.Config.ARGB_8888)
             leftBitmap.eraseColor(android.graphics.Color.WHITE)
             leftPage.render(leftBitmap, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
-            
             leftPage.close()
             
-            // Open right page
-            val rightPage = try {
-                pdfRenderer?.openPage(leftPageIndex + 1)
-            } catch (e: Exception) {
-                Log.e("PdfViewerActivity", "Failed to open right page ${leftPageIndex + 1}", e)
-                return leftBitmap // Return just the left page
-            }
-            
-            if (rightPage == null) {
-                Log.e("PdfViewerActivity", "Right page is null")
-                return leftBitmap // Return just the left page
-            }
-            
-            try {
-                Log.d("PdfViewerActivity", "Right page (${leftPageIndex + 1}): ${rightPage.width}x${rightPage.height}, aspect ratio: ${rightPage.width.toFloat() / rightPage.height.toFloat()}")
-                Log.d("PdfViewerActivity", "=====================================")
-                
-                // Create original-size bitmap for right page (no scaling yet)
-                val rightBitmap = Bitmap.createBitmap(rightPage.width, rightPage.height, Bitmap.Config.ARGB_8888)
-                rightBitmap.eraseColor(android.graphics.Color.WHITE)
-                rightPage.render(rightBitmap, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
-                
-                rightPage.close()
-                
-                // Combine two pages side by side with center padding (original resolution)
-                val paddingPixels = (leftBitmap.width * currentCenterPadding).toInt()
-                val combinedWidth = leftBitmap.width + rightBitmap.width + paddingPixels
-                val combinedHeight = maxOf(leftBitmap.height, rightBitmap.height)
-                val combinedBitmap = Bitmap.createBitmap(combinedWidth, combinedHeight, Bitmap.Config.ARGB_8888)
-                
-                val combinedCanvas = Canvas(combinedBitmap)
-                combinedCanvas.drawColor(android.graphics.Color.WHITE)
-                combinedCanvas.drawBitmap(leftBitmap, 0f, 0f, null)
-                
-                // Draw right page with center padding offset
-                val rightPageX = leftBitmap.width.toFloat() + paddingPixels
-                combinedCanvas.drawBitmap(rightBitmap, rightPageX, 0f, null)
-                
-                Log.d("PdfViewerActivity", "Combined pages with ${(currentCenterPadding * 100).toInt()}% center padding")
-                
-                // Calculate scale based on combined bitmap aspect ratio vs screen
-                val combinedAspectRatio = combinedWidth.toFloat() / combinedHeight.toFloat()
-                val screenAspectRatio = screenWidth.toFloat() / screenHeight.toFloat()
-                
-                val scale = if (combinedAspectRatio > screenAspectRatio) {
-                    // Combined bitmap is wider than screen -> scale by width
-                    screenWidth.toFloat() / combinedWidth.toFloat()
-                } else {
-                    // Combined bitmap is taller than screen -> scale by height
-                    screenHeight.toFloat() / combinedHeight.toFloat()
-                }
-                
-                // Apply high-resolution multiplier (2-4x for crisp rendering)
-                val finalScale = (scale * 2.5f).coerceIn(1.0f, 4.0f)
-                
-                Log.d("PdfViewerActivity", "=== TWO PAGE SCALING ===")
-                Log.d("PdfViewerActivity", "Combined: ${combinedWidth}x${combinedHeight}, aspect ratio: $combinedAspectRatio")
-                Log.d("PdfViewerActivity", "Screen: ${screenWidth}x${screenHeight}, aspect ratio: $screenAspectRatio")
-                Log.d("PdfViewerActivity", "Base scale: $scale, Final scale: $finalScale")
-                Log.d("PdfViewerActivity", "========================")
-                
-                // Create final high-resolution bitmap
-                val finalWidth = (combinedWidth * finalScale).toInt()
-                val finalHeight = (combinedHeight * finalScale).toInt()
-                val finalBitmap = Bitmap.createBitmap(finalWidth, finalHeight, Bitmap.Config.ARGB_8888)
-                
-                val finalCanvas = Canvas(finalBitmap)
-                finalCanvas.drawColor(android.graphics.Color.WHITE)
-                
-                // Scale and draw the combined bitmap
-                val scaleMatrix = android.graphics.Matrix()
-                scaleMatrix.setScale(finalScale, finalScale)
-                finalCanvas.drawBitmap(combinedBitmap, scaleMatrix, null)
-                
-                // Clean up intermediate bitmaps
-                leftBitmap.recycle()
-                rightBitmap.recycle()
-                combinedBitmap.recycle()
-                
-                // Apply clipping and padding if needed
-                return applyDisplaySettings(finalBitmap, true)
-                
-            } finally {
-                try {
-                    rightPage.close()
+            // Handle right page
+            val rightBitmap = if (isLastOddPage) {
+                null // No right page for last odd page
+            } else {
+                // Open right page
+                val rightPage = try {
+                    pdfRenderer?.openPage(leftPageIndex + 1)
                 } catch (e: Exception) {
-                    Log.w("PdfViewerActivity", "Right page already closed or error closing: ${e.message}")
+                    Log.e("PdfViewerActivity", "Failed to open right page ${leftPageIndex + 1}", e)
+                    null
+                }
+                
+                if (rightPage != null) {
+                    try {
+                        val bitmap = Bitmap.createBitmap(rightPage.width, rightPage.height, Bitmap.Config.ARGB_8888)
+                        bitmap.eraseColor(android.graphics.Color.WHITE)
+                        rightPage.render(bitmap, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
+                        rightPage.close()
+                        bitmap
+                    } catch (e: Exception) {
+                        Log.e("PdfViewerActivity", "Error rendering right page", e)
+                        try { rightPage.close() } catch (ex: Exception) { }
+                        null
+                    }
+                } else {
+                    null
                 }
             }
+            
+            // Use unified combine function
+            val result = combineTwoPagesUnified(leftBitmap, rightBitmap)
+            
+            // Clean up
+            leftBitmap.recycle()
+            rightBitmap?.recycle()
+            
+            return result
             
         } catch (e: Exception) {
-            Log.e("PdfViewerActivity", "Error in renderTwoPages", e)
+            Log.e("PdfViewerActivity", "Error in renderTwoPagesUnified", e)
             try {
                 leftPage.close()
             } catch (closeError: Exception) {
@@ -2378,29 +2227,15 @@ class PdfViewerActivity : AppCompatActivity() {
         canvas.drawColor(android.graphics.Color.WHITE)
         
         if (isTwoPageMode) {
-            // 두 페이지 모드에서는 여백이 이미 적용되었으므로 클리핑만 적용
-            // 여백을 고려한 최종 폭 계산 (여백이 이미 적용된 상태)
-            val actualPaddingWidth = if (currentCenterPadding > 0) {
-                (originalWidth * currentCenterPadding).toInt()
-            } else {
-                0
-            }
-            val leftPageWidth = (originalWidth - actualPaddingWidth) / 2
-            val rightPageStartX = leftPageWidth + actualPaddingWidth
+            // 두 페이지 모드에서는 여백이 이미 적용된 상태
+            // 여백이 있는 경우 원본에서 각 페이지의 위치를 정확히 계산
             
-            Log.d("PdfViewerActivity", "두 페이지 클리핑: 원본 폭=${originalWidth}, 여백=${actualPaddingWidth}, 왼쪽 페이지 폭=${leftPageWidth}")
+            Log.d("PdfViewerActivity", "두 페이지 클리핑: 원본 폭=${originalWidth}, 여백 폭=${paddingWidth}")
             
-            // 왼쪽 페이지 (클리핑된 부분)
-            val leftSrcRect = android.graphics.Rect(0, topClipPixels, leftPageWidth, originalHeight - bottomClipPixels)
-            val leftDstRect = android.graphics.Rect(0, 0, leftPageWidth, clippedHeight)
-            canvas.drawBitmap(originalBitmap, leftSrcRect, leftDstRect, null)
-            
-            // 가운데 여백 부분은 흰색으로 유지 (이미 drawColor로 처리됨)
-            
-            // 오른쪽 페이지 (클리핑된 부분)
-            val rightSrcRect = android.graphics.Rect(rightPageStartX, topClipPixels, originalWidth, originalHeight - bottomClipPixels)
-            val rightDstRect = android.graphics.Rect(rightPageStartX, 0, finalWidth, clippedHeight)
-            canvas.drawBitmap(originalBitmap, rightSrcRect, rightDstRect, null)
+            // 클리핑만 적용 (여백은 이미 적용되어 있음)
+            val srcRect = android.graphics.Rect(0, topClipPixels, originalWidth, originalHeight - bottomClipPixels)
+            val dstRect = android.graphics.Rect(0, 0, finalWidth, clippedHeight)
+            canvas.drawBitmap(originalBitmap, srcRect, dstRect, null)
             
         } else {
             // 단일 페이지 모드에서 클리핑만 적용
@@ -2712,14 +2547,14 @@ class PdfViewerActivity : AppCompatActivity() {
                 val page2 = pageCache?.getPageImmediate(index + 1)
                 Log.d("PdfViewerActivity", "두 페이지 모드 캐시 확인: page${index}=${page1?.let { "${it.width}x${it.height}" } ?: "null"}, page${index + 1}=${page2?.let { "${it.width}x${it.height}" } ?: "null"}")
                 if (page1 != null && page2 != null) {
-                    val combined = combineTwoPages(page1, page2)
+                    val combined = combineTwoPagesUnified(page1, page2)
                     Log.d("PdfViewerActivity", "두 페이지 결합 결과: ${combined.width}x${combined.height}")
                     combined
                 } else null
             } else {
                 val page1 = pageCache?.getPageImmediate(index)
                 Log.d("PdfViewerActivity", "마지막 페이지 캐시 확인: page${index}=${page1?.let { "${it.width}x${it.height}" } ?: "null"}")
-                if (page1 != null) combinePageWithEmpty(page1) else null
+                if (page1 != null) combineTwoPagesUnified(page1, null) else null
             }
         } else {
             val page = pageCache?.getPageImmediate(index)
@@ -2742,12 +2577,12 @@ class PdfViewerActivity : AppCompatActivity() {
                             val page1 = renderPageDirectly(index)
                             val page2 = renderPageDirectly(index + 1)
                             if (page1 != null && page2 != null) {
-                                combineTwoPages(page1, page2)
+                                combineTwoPagesUnified(page1, page2)
                             } else null
                         } else {
                             // 마지막 페이지 즉시 렌더링
                             val page1 = renderPageDirectly(index)
-                            if (page1 != null) combinePageWithEmpty(page1) else null
+                            if (page1 != null) combineTwoPagesUnified(page1, null) else null
                         }
                     } else {
                         // 단일 페이지 즉시 렌더링
