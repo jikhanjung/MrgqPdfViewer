@@ -29,4 +29,10 @@
     <!-- File Operations -->
     <string name="file_uploaded">파일이 업로드되었습니다</string>
     <string name="upload_failed">업로드 실패</string>
+    
+    <!-- Settings -->
+    <string name="settings_show_page_info">페이지 정보 표시</string>
+    <string name="settings_show_page_info_desc">파일명과 페이지 번호를 화면 하단에 표시합니다</string>
+    <string name="settings_animation_speed">애니메이션 속도</string>
+    <string name="settings_animation_speed_desc">페이지 넘기기 애니메이션 속도를 조절합니다</string>
 </resources>

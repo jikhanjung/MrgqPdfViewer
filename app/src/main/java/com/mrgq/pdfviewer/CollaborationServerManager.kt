@@ -213,25 +213,31 @@ class CollaborationServerManager(
         // SimpleWebSocketServer만 사용하여 중복 메시지 전송 방지
     }
     
+    @Synchronized
     internal fun addClient(clientId: String, webSocket: WebSocket, deviceName: String) {
-        // Check for duplicate device names and remove old connections
-        val duplicateClientIds = clientDeviceNames.filterValues { it == deviceName }.keys
-        if (duplicateClientIds.isNotEmpty()) {
-            Log.d(TAG, "Found duplicate device '$deviceName', removing ${duplicateClientIds.size} old connections")
-            duplicateClientIds.forEach { oldClientId ->
-                try {
-                    connectedClients[oldClientId]?.close(1000, "Duplicate connection")
-                    connectedClients.remove(oldClientId)
-                    clientDeviceNames.remove(oldClientId)
-                    Log.d(TAG, "Removed old connection: $oldClientId")
-                } catch (e: Exception) {
-                    Log.w(TAG, "Error removing old connection $oldClientId", e)
-                }
+        // IP 기반 ID로 지나친 중복 처리를 방지합니다.
+        // 같은 IP에서 연결이 끚기고 다시 연결될 때만 기존 연결을 제거합니다.
+        val existingClient = connectedClients[clientId]
+        if (existingClient != null) {
+            try {
+                Log.d(TAG, "Replacing existing connection for $clientId")
+                existingClient.close(1000, "Replaced by new connection")
+                connectedClients.remove(clientId)
+                clientDeviceNames.remove(clientId)
+            } catch (e: Exception) {
+                Log.w(TAG, "Error removing existing connection $clientId", e)
             }
         }
         
+        // 장치 이름에 고유 식별자 추가 (선택사항)
+        val uniqueDeviceName = if (deviceName == "Android TV Device" || deviceName == "Unknown Device") {
+            "$deviceName ($clientId)"
+        } else {
+            deviceName
+        }
+        
         connectedClients[clientId] = webSocket
-        clientDeviceNames[clientId] = deviceName
+        clientDeviceNames[clientId] = uniqueDeviceName
         
         Log.d(TAG, "Client connected: $clientId ($deviceName)")
         onClientConnected?.invoke(clientId, deviceName)
@@ -247,6 +253,7 @@ class CollaborationServerManager(
         webSocket.send(response.toString())
     }
     
+    @Synchronized
     internal fun removeClient(clientId: String) {
         connectedClients.remove(clientId)
         val deviceName = clientDeviceNames.remove(clientId)

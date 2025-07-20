@@ -233,6 +233,7 @@ class SettingsActivity : AppCompatActivity() {
         val animationEnabled = preferences.getBoolean("page_turn_animation_enabled", true)
         val soundEnabled = preferences.getBoolean("page_turn_sound_enabled", true)
         val volume = preferences.getFloat("page_turn_volume", 0.25f)
+        val showPageInfo = preferences.getBoolean("show_page_info", true)
         
         val items = listOf(
             SettingsItem(
@@ -256,6 +257,13 @@ class SettingsActivity : AppCompatActivity() {
                 subtitle = "${(volume * 100).toInt()}%",
                 type = SettingsType.INPUT,
                 enabled = soundEnabled
+            ),
+            SettingsItem(
+                id = "page_info_toggle",
+                icon = "📄",
+                title = getString(R.string.settings_show_page_info),
+                subtitle = if (showPageInfo) "표시함" else "숨김",
+                type = SettingsType.TOGGLE
             )
         )
         
@@ -330,6 +338,8 @@ class SettingsActivity : AppCompatActivity() {
             "animation_toggle" -> togglePageTurnAnimation()
             "sound_toggle" -> togglePageTurnSound()
             "volume_setting" -> showVolumeSettingDialog()
+            "page_info_toggle" -> togglePageInfo()
+            "animation_speed" -> showAnimationSpeedDialog()
             "view_display_modes" -> showDisplayModeListDialog()
             "reset_display_modes" -> showResetDisplayModeDialog()
         }
@@ -453,6 +463,19 @@ class SettingsActivity : AppCompatActivity() {
         preferences.edit().putBoolean("page_turn_sound_enabled", newEnabled).apply()
         
         val message = if (newEnabled) "페이지 넘기기 사운드가 활성화되었습니다" else "페이지 넘기기 사운드가 비활성화되었습니다"
+        Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
+        
+        hideDetailPanel()
+        setupMainMenu()
+    }
+    
+    private fun togglePageInfo() {
+        val currentEnabled = preferences.getBoolean("show_page_info", true)
+        val newEnabled = !currentEnabled
+        
+        preferences.edit().putBoolean("show_page_info", newEnabled).apply()
+        
+        val message = if (newEnabled) "페이지 정보가 표시됩니다" else "페이지 정보가 숨겨집니다"
         Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
         
         hideDetailPanel()
@@ -652,6 +675,43 @@ class SettingsActivity : AppCompatActivity() {
             }
         }
         return super.onKeyDown(keyCode, event)
+    }
+    
+    private fun getAnimationSpeedText(): String {
+        val duration = preferences.getLong("page_animation_duration", 350L)
+        return when (duration) {
+            0L -> "즉시"
+            200L -> "빠르게"
+            350L -> "보통"
+            500L -> "느리게"
+            800L -> "매우 느리게"
+            else -> "${duration}ms"
+        }
+    }
+    
+    private fun showAnimationSpeedDialog() {
+        val currentDuration = preferences.getLong("page_animation_duration", 350L)
+        val speeds = arrayOf("즉시 (0ms)", "빠르게 (200ms)", "보통 (350ms)", "느리게 (500ms)", "매우 느리게 (800ms)")
+        val durations = longArrayOf(0L, 200L, 350L, 500L, 800L)
+        
+        var selectedIndex = durations.indexOf(currentDuration)
+        if (selectedIndex == -1) selectedIndex = 2 // 기본값 "보통"
+        
+        AlertDialog.Builder(this)
+            .setTitle("페이지 넘기기 애니메이션 속도")
+            .setSingleChoiceItems(speeds, selectedIndex) { dialog, which ->
+                val newDuration = durations[which]
+                preferences.edit().putLong("page_animation_duration", newDuration).apply()
+                
+                val message = "애니메이션 속도가 변경되었습니다: ${speeds[which]}"
+                Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
+                
+                dialog.dismiss()
+                hideDetailPanel()
+                setupMainMenu()
+            }
+            .setNegativeButton("취소", null)
+            .show()
     }
     
     override fun onResume() {

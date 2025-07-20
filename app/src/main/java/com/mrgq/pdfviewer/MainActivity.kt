@@ -75,8 +75,17 @@ class MainActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         
-        // Setup collaboration callbacks only once during onCreate
-        // Re-registering on every onResume can cause multiple callback instances
+        // ====================[ 핵심 수정 사항 ]====================
+        // 액티비티가 다시 활성화될 때마다 협업 콜백을 재등록합니다.
+        // 이를 통해 PdfViewerActivity에서 돌아왔을 때 콜백 유실을 방지하고,
+        // 지휘자의 파일 변경 메시지를 안정적으로 수신할 수 있습니다.
+        val globalCollaborationManager = GlobalCollaborationManager.getInstance()
+        if (globalCollaborationManager.getCurrentMode() != CollaborationMode.NONE) {
+            Log.d("MainActivity", "onResume: Re-registering collaboration callbacks")
+            setupCollaborationCallbacks()
+        }
+        // ==========================================================
+        
         Log.d("MainActivity", "onResume - 협업 상태 업데이트")
         updateCollaborationStatus()
         

@@ -156,10 +156,16 @@ class PdfViewerActivity : AppCompatActivity() {
         binding.pdfView.isFocusableInTouchMode = true
         binding.pdfView.requestFocus()
         
-        // Hide page info after a few seconds
-        binding.pageInfo.postDelayed({
-            binding.pageInfo.animate().alpha(0.3f).duration = 500
-        }, 3000)
+        // 페이지 정보 표시 설정 확인
+        val showPageInfo = preferences.getBoolean("show_page_info", true)
+        if (!showPageInfo) {
+            binding.pageInfo.visibility = View.GONE
+        } else {
+            // Hide page info after a few seconds
+            binding.pageInfo.postDelayed({
+                binding.pageInfo.animate().alpha(0f).duration = 500
+            }, 3000)
+        }
     }
     
     private fun loadPdf() {
@@ -530,21 +536,19 @@ class PdfViewerActivity : AppCompatActivity() {
             // Save last page number to database
             saveLastPageNumber(index + 1)
             
-            // Show page info briefly
-            binding.pageInfo.animate().alpha(1f).duration = 200
-            binding.pageInfo.postDelayed({
-                binding.pageInfo.animate().alpha(0.3f).duration = 500
-            }, 2000)
+            // Show page info briefly if enabled
+            if (preferences.getBoolean("show_page_info", true)) {
+                binding.pageInfo.animate().alpha(1f).duration = 200
+                binding.pageInfo.postDelayed({
+                    binding.pageInfo.animate().alpha(0f).duration = 500
+                }, 2000)
+            }
             
             // Start prerendering around this page
             pageCache?.prerenderAround(index)
             
-            // Broadcast page change if in conductor mode
-            if (collaborationMode == CollaborationMode.CONDUCTOR) {
-                val actualPageNumber = if (isTwoPageMode) index + 1 else index + 1
-                Log.d("PdfViewerActivity", "🎵 지휘자 모드: 페이지 $actualPageNumber 브로드캐스트 중...")
-                globalCollaborationManager.broadcastPageChange(actualPageNumber, pdfFileName)
-            }
+            // 협업 모드 브로드캐스트
+            broadcastCollaborationPageChange(index)
             
             return
         }
@@ -606,18 +610,14 @@ class PdfViewerActivity : AppCompatActivity() {
                     // Show page info briefly
                     binding.pageInfo.animate().alpha(1f).duration = 200
                     binding.pageInfo.postDelayed({
-                        binding.pageInfo.animate().alpha(0.3f).duration = 500
+                        binding.pageInfo.animate().alpha(0f).duration = 500
                     }, 2000)
                     
                     // Start prerendering around this page
                     pageCache?.prerenderAround(index)
                     
-                    // Broadcast page change if in conductor mode
-                    if (collaborationMode == CollaborationMode.CONDUCTOR) {
-                        val actualPageNumber = if (isTwoPageMode) index + 1 else index + 1
-                        Log.d("PdfViewerActivity", "🎵 지휘자 모드: 페이지 $actualPageNumber 브로드캐스트 중...")
-                        globalCollaborationManager.broadcastPageChange(actualPageNumber, pdfFileName)
-                    }
+                    // 협업 모드 브로드캐스트
+                    broadcastCollaborationPageChange(index)
                 }
             } catch (e: Exception) {
                 withContext(Dispatchers.Main) {
@@ -1366,7 +1366,7 @@ class PdfViewerActivity : AppCompatActivity() {
             KeyEvent.KEYCODE_MENU -> {
                 // 메뉴 키로 페이지 정보 표시/숨김 토글
                 if (binding.pageInfo.alpha > 0.5f) {
-                    binding.pageInfo.animate().alpha(0.3f).duration = 200
+                    binding.pageInfo.animate().alpha(0f).duration = 200
                 } else {
                     binding.pageInfo.animate().alpha(1f).duration = 200
                 }
@@ -1390,7 +1390,7 @@ class PdfViewerActivity : AppCompatActivity() {
                     } else {
                         // Toggle page info visibility
                         if (binding.pageInfo.alpha > 0.5f) {
-                            binding.pageInfo.animate().alpha(0.3f).duration = 200
+                            binding.pageInfo.animate().alpha(0f).duration = 200
                         } else {
                             binding.pageInfo.animate().alpha(1f).duration = 200
                         }
@@ -1550,15 +1550,23 @@ class PdfViewerActivity : AppCompatActivity() {
         Log.d("PdfViewerActivity", "🎼 연주자 모드: 페이지 $page 변경 신호 수신됨 (current file: $pdfFileName, pageCount: $pageCount)")
         
         if (targetIndex >= 0 && targetIndex < pageCount) {
-            // Temporarily disable conductor mode to prevent infinite loop
-            val originalMode = collaborationMode
-            collaborationMode = CollaborationMode.NONE
+            // 재귀 방지를 위해 플래그 설정
+            isHandlingRemotePageChange = true
             
             Log.d("PdfViewerActivity", "🎼 연주자 모드: 페이지 $page 로 이동 중...")
-            showPage(targetIndex)
             
-            // Restore original mode
-            collaborationMode = originalMode
+            // 연주자도 애니메이션 설정에 따라 애니메이션을 보여줌
+            if (isPageTurnAnimationEnabled()) {
+                val direction = if (targetIndex > pageIndex) 1 else -1
+                Log.d("PdfViewerActivity", "🎼 연주자 모드: 애니메이션과 함께 페이지 전환 (방향: $direction)")
+                showPageWithAnimation(targetIndex, direction)
+            } else {
+                Log.d("PdfViewerActivity", "🎼 연주자 모드: 즉시 페이지 전환 (애니메이션 비활성화)")
+                showPage(targetIndex)
+            }
+            
+            // 플래그 해제
+            isHandlingRemotePageChange = false
             
             Log.d("PdfViewerActivity", "🎼 연주자 모드: 페이지 $page 로 이동 완료")
         } else {
@@ -2839,6 +2847,13 @@ class PdfViewerActivity : AppCompatActivity() {
         
         isAnimating = true
         
+        // ====================[ 핵심 수정 사항 ]====================
+        // 누락된 상태 업데이트와 브로드캐스트를 애니메이션 시작 전에 추가
+        pageIndex = targetIndex
+        updatePageInfo()
+        broadcastCollaborationPageChange(targetIndex)
+        // ==========================================================
+        
         // 페이지 넘기기 사운드 재생
         playPageTurnSound()
         
@@ -2885,8 +2900,32 @@ class PdfViewerActivity : AppCompatActivity() {
             0f
         )
         
-        // 애니메이션 설정
-        val animationDuration = 350L
+        // 애니메이션 설정 (사용자 설정 적용)
+        val animationDuration = preferences.getLong("page_animation_duration", 350L)
+        
+        if (animationDuration == 0L) {
+            // 애니메이션 없이 즉시 전환
+            binding.pdfView.setImageBitmap(targetBitmap)
+            setImageViewMatrix(targetBitmap, binding.pdfView)
+            binding.pdfView.translationX = 0f
+            binding.pdfViewNext.visibility = View.GONE
+            
+            // 상태 업데이트는 이미 위에서 완료됨 (pageIndex, updatePageInfo, broadcastCollaboration)
+            binding.loadingProgress.visibility = View.GONE
+            saveLastPageNumber(targetIndex + 1)
+            
+            // 페이지 정보 표시
+            if (preferences.getBoolean("show_page_info", true)) {
+                binding.pageInfo.animate().alpha(1f).duration = 200
+                Handler(Looper.getMainLooper()).postDelayed({
+                    binding.pageInfo.animate().alpha(0f).duration = 1000
+                }, 1500)
+            }
+            
+            isAnimating = false
+            return
+        }
+        
         currentPageAnimator.duration = animationDuration
         nextPageAnimator.duration = animationDuration
         
@@ -2897,16 +2936,13 @@ class PdfViewerActivity : AppCompatActivity() {
         // 애니메이션 완료 리스너
         nextPageAnimator.addListener(object : AnimatorListenerAdapter() {
             override fun onAnimationEnd(animation: Animator) {
-                // 애니메이션 완료 후 정리
+                // 애니메이션 완료 후에는 UI 정리만 수행
+                // (pageIndex 업데이트, updatePageInfo, broadcastCollaboration은 이미 위에서 완료됨)
                 binding.pdfView.setImageBitmap(targetBitmap)
                 setImageViewMatrix(targetBitmap, binding.pdfView)
                 binding.pdfView.translationX = 0f
                 binding.pdfViewNext.visibility = View.GONE
                 binding.pdfViewNext.translationX = 0f
-                
-                // 페이지 인덱스 업데이트
-                pageIndex = targetIndex
-                updatePageInfo()
                 
                 // 로딩 프로그레스 숨기기
                 binding.loadingProgress.visibility = View.GONE
@@ -2914,11 +2950,13 @@ class PdfViewerActivity : AppCompatActivity() {
                 // 마지막 페이지 번호 저장
                 saveLastPageNumber(targetIndex + 1)
                 
-                // 페이지 정보 잠시 표시
-                binding.pageInfo.animate().alpha(1f).duration = 200
-                Handler(Looper.getMainLooper()).postDelayed({
-                    binding.pageInfo.animate().alpha(0f).duration = 1000
-                }, 1500)
+                // 페이지 정보 잠시 표시 (설정이 활성화된 경우)
+                if (preferences.getBoolean("show_page_info", true)) {
+                    binding.pageInfo.animate().alpha(1f).duration = 200
+                    Handler(Looper.getMainLooper()).postDelayed({
+                        binding.pageInfo.animate().alpha(0f).duration = 1000
+                    }, 1500)
+                }
                 
                 isAnimating = false
                 Log.d("PdfViewerActivity", "Page transition animation completed")
@@ -2959,4 +2997,21 @@ class PdfViewerActivity : AppCompatActivity() {
         
         imageView.imageMatrix = matrix
     }
+    
+    /**
+     * 협업 모드에서 페이지 변경을 브로드캐스트합니다.
+     * 중복 코드를 제거하고 일관된 로직을 제공합니다.
+     */
+    private fun broadcastCollaborationPageChange(pageIndex: Int) {
+        if (collaborationMode == CollaborationMode.CONDUCTOR && !isHandlingRemotePageChange) {
+            val actualPageNumber = if (isTwoPageMode) pageIndex + 1 else pageIndex + 1
+            Log.d("PdfViewerActivity", "🎵 지휘자 모드: 페이지 $actualPageNumber 브로드캐스트 중...")
+            globalCollaborationManager.broadcastPageChange(actualPageNumber, pdfFileName)
+        }
+    }
+    
+    /**
+     * 원격 페이지 변경을 처리하고 있는지 여부를 추적하는 플래그
+     */
+    private var isHandlingRemotePageChange = false
 }

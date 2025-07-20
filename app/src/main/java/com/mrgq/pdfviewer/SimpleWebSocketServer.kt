@@ -110,8 +110,16 @@ class SimpleWebSocketServer(
             try {
                 val clientSocket = serverSocket?.accept()
                 if (clientSocket != null && isRunning) { // Check isRunning again
-                    val clientId = "client_${clientCounter.incrementAndGet()}"
-                    Log.d(TAG, "New client connection: $clientId")
+                    // IP 주소 기반으로 클라이언트 ID 생성
+                    val clientAddress = clientSocket.remoteSocketAddress
+                    val clientIp = if (clientAddress is java.net.InetSocketAddress) {
+                        clientAddress.address.hostAddress
+                    } else {
+                        "unknown_${clientCounter.incrementAndGet()}"
+                    }
+                    val clientId = clientIp ?: "client_${clientCounter.incrementAndGet()}"
+                    
+                    Log.d(TAG, "New client connection: $clientId (IP: $clientIp)")
                     
                     val connection = SimpleWebSocketConnection(
                         clientSocket,
@@ -217,15 +225,22 @@ class SimpleWebSocketServer(
         Thread {
             val disconnectedClients = mutableListOf<String>()
             
-            connections.forEach { (clientId, connection) ->
-                if (!connection.sendMessage(message)) {
+            // 연결 목록의 복사본을 사용하여 동시성 문제 방지
+            val connectionsCopy = connections.toMap()
+            
+            connectionsCopy.forEach { (clientId, connection) ->
+                try {
+                    if (!connection.sendMessage(message)) {
+                        disconnectedClients.add(clientId)
+                    }
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error broadcasting to client $clientId", e)
                     disconnectedClients.add(clientId)
                 }
             }
             
-            // Remove disconnected clients on main thread
+            // Remove disconnected clients
             if (disconnectedClients.isNotEmpty()) {
-                // Use handler to run on main thread if needed, or just run directly
                 disconnectedClients.forEach { clientId ->
                     removeClient(clientId)
                 }
