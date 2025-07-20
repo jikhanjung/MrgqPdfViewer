@@ -87,11 +87,13 @@ Android TV OS에서 PDF 악보를 편리하게 보기 위한 전용 앱입니다
 ## 📁 지원 디렉토리
 
 ```
-/storage/emulated/0/Download/
+/storage/emulated/0/Android/data/com.mrgq.pdfviewer/files/PDFs/
 ├── 악보1.pdf
 ├── 악보2.pdf
 └── 악보3.pdf
 ```
+
+**⚠️ 중요**: 앱 전용 디렉토리만 사용하여 외부 저장소 권한이 불필요합니다. 파일 추가는 웹 업로드를 통해서만 가능합니다.
 
 ## 🔧 개발 환경
 
