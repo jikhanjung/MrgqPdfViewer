@@ -11,6 +11,7 @@
     <string name="page_info">%d / %d</string>
     <string name="loading_pdf">PDF 로딩 중...</string>
     <string name="error_loading_pdf">PDF 파일을 열 수 없습니다</string>
+    <string name="error_rendering_temporary">페이지 렌더링 지연</string>
     
     <!-- Permissions -->
     <string name="permission_required">파일 접근 권한이 필요합니다</string>
@@ -35,4 +36,25 @@
     <string name="settings_show_page_info_desc">파일명과 페이지 번호를 화면 하단에 표시합니다</string>
     <string name="settings_animation_speed">애니메이션 속도</string>
     <string name="settings_animation_speed_desc">페이지 넘기기 애니메이션 속도를 조절합니다</string>
+    
+    <!-- Collaboration Settings -->
+    <string name="settings_input_block_time">입력 차단 시간</string>
+    <string name="settings_input_block_time_desc">연주자 모드에서 동기화 후 입력을 차단할 시간을 설정합니다</string>
+    <string name="settings_input_block_time_title">입력 차단 시간 설정</string>
+    <string name="settings_input_block_time_message">동기화 메시지 수신 후 연주자의 입력을 차단할 시간을 설정하세요 (밀리초)</string>
+    <string name="settings_message_queue_stats">메시지 큐 통계</string>
+    <string name="settings_message_queue_stats_desc">협업 모드 메시지 처리 통계를 확인합니다</string>
+    <string name="settings_reset_queue_stats">통계 초기화</string>
+    <string name="settings_reset_queue_stats_desc">메시지 큐 통계를 초기화합니다</string>
+    
+    <!-- Queue Stats Dialog -->
+    <string name="queue_stats_title">메시지 큐 통계</string>
+    <string name="queue_stats_queue_size">현재 큐 크기: %d</string>
+    <string name="queue_stats_total_processed">처리된 메시지: %d</string>
+    <string name="queue_stats_total_dropped">폐기된 메시지: %d</string>
+    <string name="queue_stats_total_retries">재시도 횟수: %d</string>
+    <string name="queue_stats_last_processing_time">마지막 처리 시간: %d ms</string>
+    <string name="queue_stats_reset_confirm">통계를 초기화하시겠습니까?</string>
+    <string name="ok">확인</string>
+    <string name="cancel">취소</string>
 </resources>

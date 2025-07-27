@@ -13,9 +13,31 @@ import kotlin.math.floor
 import kotlin.math.ln
 import kotlin.math.pow
 
-class WebServerManager {
+class WebServerManager private constructor() {
+    
+    companion object {
+        @Volatile
+        private var INSTANCE: WebServerManager? = null
+        
+        fun getInstance(): WebServerManager {
+            return INSTANCE ?: synchronized(this) {
+                INSTANCE ?: WebServerManager().also { INSTANCE = it }
+            }
+        }
+    }
     
     private var server: PdfUploadServer? = null
+    private var logCallback: ((String) -> Unit)? = null
+    
+    fun setLogCallback(callback: (String) -> Unit) {
+        logCallback = callback
+        server?.setLogCallback(callback)
+    }
+    
+    fun clearLogCallback() {
+        logCallback = null
+        server?.setLogCallback(null)
+    }
     
     fun startServer(context: Context, callback: (Boolean) -> Unit) {
         try {
@@ -28,6 +50,8 @@ class WebServerManager {
             
             // Create and start new server
             server = PdfUploadServer(context, port)
+            // Apply log callback if set
+            logCallback?.let { server?.setLogCallback(it) }
             server?.start()
             callback(true)
         } catch (e: Exception) {
@@ -81,19 +105,54 @@ class WebServerManager {
     
     private class PdfUploadServer(private val context: Context, port: Int) : NanoHTTPD(port) {
         
+        private var logCallback: ((String) -> Unit)? = null
+        
         companion object {
             private const val TAG = "PdfUploadServer"
             private const val MAX_FILE_SIZE = 50 * 1024 * 1024 // 50MB
         }
         
+        fun setLogCallback(callback: ((String) -> Unit)?) {
+            logCallback = callback
+        }
+        
+        private fun addLog(message: String) {
+            val timestamp = java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.getDefault()).format(java.util.Date())
+            val logMessage = "[$timestamp] $message"
+            Log.d(TAG, logMessage)
+            logCallback?.invoke(logMessage)
+        }
+        
         override fun serve(session: IHTTPSession): Response {
+            val clientIp = session.headers["http-client-ip"] ?: session.headers["x-forwarded-for"] ?: "unknown"
+            
             return when {
-                session.method == Method.GET && session.uri == "/" -> handleGetRequest()
-                session.method == Method.GET && session.uri == "/list" -> handleListRequest()
-                session.method == Method.DELETE && session.uri.startsWith("/delete/") -> handleDeleteRequest(session)
-                session.method == Method.DELETE && session.uri == "/deleteAll" -> handleDeleteAllRequest()
-                session.method == Method.POST && session.uri == "/upload" -> handlePostRequest(session)
-                else -> newFixedLengthResponse(Response.Status.NOT_FOUND, MIME_PLAINTEXT, "Not found")
+                session.method == Method.GET && session.uri == "/" -> {
+                    addLog("📄 웹 인터페이스 접속 - $clientIp")
+                    handleGetRequest()
+                }
+                session.method == Method.GET && session.uri == "/list" -> {
+                    addLog("📋 파일 목록 요청 - $clientIp")
+                    handleListRequest()
+                }
+                session.method == Method.DELETE && session.uri.startsWith("/delete/") -> {
+                    val fileName = session.uri.substring("/delete/".length)
+                    val decodedFileName = java.net.URLDecoder.decode(fileName, "UTF-8")
+                    addLog("🗑️ 파일 삭제 요청: $decodedFileName - $clientIp")
+                    handleDeleteRequest(session)
+                }
+                session.method == Method.DELETE && session.uri == "/deleteAll" -> {
+                    addLog("🗑️ 전체 파일 삭제 요청 - $clientIp")
+                    handleDeleteAllRequest()
+                }
+                session.method == Method.POST && session.uri == "/upload" -> {
+                    addLog("📤 파일 업로드 시작 - $clientIp")
+                    handlePostRequest(session)
+                }
+                else -> {
+                    addLog("❓ 알 수 없는 요청: ${session.method} ${session.uri} - $clientIp")
+                    newFixedLengthResponse(Response.Status.NOT_FOUND, MIME_PLAINTEXT, "Not found")
+                }
             }
         }
         
@@ -789,16 +848,22 @@ class WebServerManager {
                     }
                     
                     Log.d(TAG, "Saving $paramName as: $fileName")
+                    addLog("💾 파일 저장 중: $fileName")
                     
                     val targetFile = saveFile(tempFile, fileName)
                     if (targetFile != null) {
                         uploadedFiles.add(fileName)
+                        addLog("✅ 파일 저장 완료: $fileName (${formatFileSize(targetFile.length())})")
+                    } else {
+                        addLog("❌ 파일 저장 실패: $fileName")
                     }
                     
                     tempFile.delete()
                 }
                 
                 return if (uploadedFiles.isNotEmpty()) {
+                    addLog("🎉 업로드 완료: ${uploadedFiles.size}개 파일 (${uploadedFiles.joinToString(", ")})")
+                    
                     // Refresh file list in MainActivity
                     (context as? com.mrgq.pdfviewer.MainActivity)?.runOnUiThread {
                         context.refreshFileList()
@@ -810,6 +875,7 @@ class WebServerManager {
                         "성공적으로 업로드됨: ${uploadedFiles.joinToString(", ")}"
                     )
                 } else {
+                    addLog("❌ 업로드 실패: PDF 파일이 없음")
                     newFixedLengthResponse(
                         Response.Status.BAD_REQUEST,
                         MIME_PLAINTEXT,
@@ -864,15 +930,19 @@ class WebServerManager {
                 
                 return if (fileToDelete.exists() && fileToDelete.isFile && fileToDelete.name.endsWith(".pdf", ignoreCase = true)) {
                     if (fileToDelete.delete()) {
+                        addLog("✅ 파일 삭제 완료: $decodedFileName")
+                        
                         // Refresh file list in MainActivity
                         (context as? com.mrgq.pdfviewer.MainActivity)?.runOnUiThread {
                             context.refreshFileList()
                         }
                         newFixedLengthResponse(Response.Status.OK, MIME_PLAINTEXT, "File deleted successfully")
                     } else {
+                        addLog("❌ 파일 삭제 실패: $decodedFileName")
                         newFixedLengthResponse(Response.Status.INTERNAL_ERROR, MIME_PLAINTEXT, "Failed to delete file")
                     }
                 } else {
+                    addLog("❌ 파일을 찾을 수 없음: $decodedFileName")
                     newFixedLengthResponse(Response.Status.NOT_FOUND, MIME_PLAINTEXT, "File not found")
                 }
             } catch (e: Exception) {
@@ -913,12 +983,14 @@ class WebServerManager {
                 }
                 
                 return if (failedCount == 0) {
+                    addLog("🧹 전체 삭제 완료: ${deletedCount}개 파일")
                     newFixedLengthResponse(
                         Response.Status.OK,
                         MIME_PLAINTEXT,
                         "Deleted $deletedCount files successfully"
                     )
                 } else {
+                    addLog("⚠️ 전체 삭제 일부 실패: ${deletedCount}개 성공, ${failedCount}개 실패")
                     newFixedLengthResponse(
                         Response.Status.INTERNAL_ERROR,
                         MIME_PLAINTEXT,

@@ -45,6 +45,9 @@ class GlobalCollaborationManager private constructor() {
     
     private var isInitialized = false
     
+    // Message queue for ordered processing
+    private val messageQueue = CollaborationMessageQueue()
+    
     fun initialize(context: Context) {
         if (isInitialized) {
             Log.d(TAG, "GlobalCollaborationManager already initialized - skipping")
@@ -54,6 +57,9 @@ class GlobalCollaborationManager private constructor() {
         applicationContext = context.applicationContext
         preferences = context.getSharedPreferences("pdf_viewer_prefs", Context.MODE_PRIVATE)
         isInitialized = true
+        
+        // Initialize message queue (disabled for performance)
+        // setupMessageQueue()
         
         // Restore collaboration mode from preferences
         val savedMode = preferences?.getString("collaboration_mode", "none") ?: "none"
@@ -118,6 +124,9 @@ class GlobalCollaborationManager private constructor() {
         
         currentMode = CollaborationMode.NONE
         preferences?.edit()?.putString("collaboration_mode", "none")?.apply()
+        
+        // Clean up message queue (disabled)
+        // cleanupMessageQueue()
         
         // Force stop collaboration server with multiple attempts
         collaborationServerManager?.let { server ->
@@ -481,5 +490,60 @@ class GlobalCollaborationManager private constructor() {
             }
             else -> "합주 모드: 비활성화"
         }
+    }
+    
+    /**
+     * Setup message queue and processing
+     */
+    private fun setupMessageQueue() {
+        messageQueue.setOnMessageProcessed { message ->
+            processQueuedMessage(message)
+        }
+        messageQueue.startProcessing()
+        Log.d(TAG, "Message queue initialized and started")
+    }
+    
+    /**
+     * Process a message from the queue (DISABLED for performance)
+     * Messages are now processed directly via callbacks for maximum responsiveness
+     */
+    private fun processQueuedMessage(message: CollaborationMessageQueue.CollaborationMessage) {
+        // This method is no longer used - direct callbacks are used instead for better performance
+        Log.d(TAG, "Queue-based message processing is disabled - using direct callbacks")
+    }
+    
+    /**
+     * Enqueue a collaboration message
+     */
+    fun enqueueMessage(type: CollaborationMessageQueue.MessageType, payload: String, priority: CollaborationMessageQueue.Priority = CollaborationMessageQueue.Priority.NORMAL) {
+        val message = CollaborationMessageQueue.CollaborationMessage(
+            type = type,
+            payload = payload,
+            priority = priority
+        )
+        messageQueue.enqueueMessage(message)
+    }
+    
+    /**
+     * Get message queue statistics
+     */
+    fun getMessageQueueStats(): CollaborationMessageQueue.QueueStats {
+        return messageQueue.getQueueStats()
+    }
+    
+    /**
+     * Reset message queue statistics
+     */
+    fun resetMessageQueueStats() {
+        messageQueue.resetStats()
+        Log.d(TAG, "Message queue statistics reset")
+    }
+    
+    /**
+     * Clean up message queue
+     */
+    private fun cleanupMessageQueue() {
+        messageQueue.cleanup()
+        Log.d(TAG, "Message queue cleaned up")
     }
 }

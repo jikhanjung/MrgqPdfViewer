@@ -65,18 +65,22 @@
         app:layout_constraintBottom_toBottomOf="parent" />
 
     <!-- Detail Panel (initially hidden) -->
-    <LinearLayout
+    <ScrollView
         android:id="@+id/detailPanelLayout"
         android:layout_width="0dp"
         android:layout_height="0dp"
-        android:orientation="vertical"
-        android:background="@drawable/elegant_file_item_background"
-        android:padding="24dp"
         android:visibility="gone"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintTop_toBottomOf="@id/headerSection"
         app:layout_constraintBottom_toBottomOf="parent">
+        
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:background="@drawable/elegant_file_item_background"
+        android:padding="24dp">
 
         <TextView
             android:id="@+id/detailTitle"
@@ -91,10 +95,83 @@
         <androidx.recyclerview.widget.RecyclerView
             android:id="@+id/detailRecyclerView"
             android:layout_width="match_parent"
-            android:layout_height="0dp"
-            android:layout_weight="1"
+            android:layout_height="wrap_content"
             android:clipToPadding="false"
             android:clipChildren="false" />
+
+        <!-- Web Server Log Section (initially hidden) -->
+        <LinearLayout
+            android:id="@+id/webServerLogSection"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:visibility="gone"
+            android:background="@drawable/elegant_file_item_background"
+            android:paddingHorizontal="20dp"
+            android:paddingVertical="12dp"
+            android:layout_marginVertical="4dp"
+            android:layout_marginHorizontal="16dp">
+
+            <!-- Header with icon and title -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:layout_marginBottom="12dp">
+                
+                <TextView
+                    android:layout_width="32dp"
+                    android:layout_height="32dp"
+                    android:gravity="center"
+                    android:text="🌐"
+                    android:textSize="16sp"
+                    android:textColor="@android:color/white"
+                    android:background="@drawable/elegant_icon_background"
+                    android:layout_marginEnd="16dp" />
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="웹서버 활동 로그"
+                    android:textColor="@android:color/white"
+                    android:textSize="16sp"
+                    android:textStyle="bold" />
+
+                <Button
+                    android:id="@+id/clearLogButton"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="지우기"
+                    android:textSize="11sp"
+                    android:textColor="@android:color/white"
+                    android:background="@drawable/elegant_button_background"
+                    android:paddingHorizontal="12dp"
+                    android:paddingVertical="4dp"
+                    android:focusable="true"
+                    android:minHeight="0dp" />
+            </LinearLayout>
+
+            <!-- Log content area -->
+            <ScrollView
+                android:id="@+id/logScrollView"
+                android:layout_width="match_parent"
+                android:layout_height="250dp"
+                android:background="#22FFFFFF"
+                android:padding="12dp">
+
+                <TextView
+                    android:id="@+id/webServerLogText"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="웹서버 로그가 여기에 표시됩니다..."
+                    android:textColor="#CCFFFFFF"
+                    android:textSize="11sp"
+                    android:fontFamily="monospace"
+                    android:lineSpacingExtra="2dp" />
+            </ScrollView>
+        </LinearLayout>
 
         <LinearLayout
             android:layout_width="match_parent"
@@ -131,5 +208,7 @@
                 android:minHeight="0dp" />
         </LinearLayout>
     </LinearLayout>
+    
+    </ScrollView>
 
 </androidx.constraintlayout.widget.ConstraintLayout>

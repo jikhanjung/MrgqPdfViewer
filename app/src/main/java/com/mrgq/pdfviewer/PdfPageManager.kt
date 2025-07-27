@@ -8,6 +8,8 @@ import android.util.Log
 import android.widget.Toast
 import com.mrgq.pdfviewer.repository.MusicRepository
 import kotlinx.coroutines.*
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import java.io.File
 import kotlin.math.*
 
@@ -26,6 +28,9 @@ class PdfPageManager(
     private var pdfRenderer: PdfRenderer? = null
     private var pageCache: PageCache? = null
     private var currentPage: PdfRenderer.Page? = null
+    
+    // PDF Renderer synchronization to prevent concurrency issues
+    private val renderMutex = Mutex()
     
     // Current state
     private var currentPageIndex: Int = 0

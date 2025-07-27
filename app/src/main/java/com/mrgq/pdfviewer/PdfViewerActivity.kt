@@ -22,6 +22,8 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import android.util.Log
 import android.content.SharedPreferences
 import android.util.DisplayMetrics
@@ -62,8 +64,21 @@ class PdfViewerActivity : AppCompatActivity() {
     private var collaborationMode = CollaborationMode.NONE
     private val globalCollaborationManager = GlobalCollaborationManager.getInstance()
     
+    // Input blocking for synchronization
+    private var lastSyncTime = 0L
+    private fun getInputBlockDuration(): Long {
+        return preferences.getLong("input_block_duration", 500L) // Default 0.5 seconds
+    }
+    
     // Page caching for instant page switching
     private var pageCache: PageCache? = null
+    
+    // PDF Renderer synchronization to prevent concurrency issues
+    private val renderMutex = Mutex()
+    
+    // Rendering state management
+    private var isRenderingInProgress = false
+    private var lastRenderTime = 0L
     
     // Database repository
     private lateinit var musicRepository: MusicRepository
@@ -97,6 +112,9 @@ class PdfViewerActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         binding = ActivityPdfViewerBinding.inflate(layoutInflater)
         setContentView(binding.root)
+        
+        // Keep screen on while viewing PDF
+        window.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         
         // Initialize preferences
         preferences = getSharedPreferences("pdf_viewer_prefs", MODE_PRIVATE)
@@ -497,7 +515,15 @@ class PdfViewerActivity : AppCompatActivity() {
     private fun showPage(index: Int) {
         if (index < 0 || index >= pageCount) return
         
+        // Throttle rapid page changes to reduce rendering load
+        val currentTime = System.currentTimeMillis()
+        if (isRenderingInProgress && currentTime - lastRenderTime < 100) {
+            Log.d("PdfViewerActivity", "⏭️ Skipping rapid page change request for index $index (throttling)")
+            return
+        }
+        
         Log.d("PdfViewerActivity", "showPage called: index=$index, isTwoPageMode=$isTwoPageMode, pageCount=$pageCount")
+        lastRenderTime = currentTime
         
         // Check cache first for instant display
         val cachedBitmap = if (isTwoPageMode) {
@@ -559,53 +585,20 @@ class PdfViewerActivity : AppCompatActivity() {
         // Cache miss - fallback to traditional rendering with loading indicator
         Log.d("PdfViewerActivity", "⏳ 페이지 $index 캐시 미스 - 기존 방식으로 렌더링")
         binding.loadingProgress.visibility = View.VISIBLE
+        isRenderingInProgress = true
         
         CoroutineScope(Dispatchers.IO).launch {
-            try {
-                try {
-                    currentPage?.close()
-                } catch (e: Exception) {
-                    Log.w("PdfViewerActivity", "Current page already closed or error closing in showPage: ${e.message}")
-                }
+            val renderResult = renderWithRetry(index, maxRetries = 2)
+            
+            withContext(Dispatchers.Main) {
+                binding.loadingProgress.visibility = View.GONE
+                isRenderingInProgress = false
                 
-                val bitmap = if (isTwoPageMode) {
-                    if (index + 1 < pageCount) {
-                        Log.d("PdfViewerActivity", "=== 두 페이지 모드 렌더링: $index and ${index + 1} ===")
-                        Log.d("PdfViewerActivity", "forceDirectRendering: $forceDirectRendering")
-                        // For two-page mode, always use direct rendering to preserve aspect ratio
-                        if (forceDirectRendering) {
-                            forceDirectRendering = false // 플래그 리셋
-                        }
-                        renderTwoPagesUnified(index)
-                    } else {
-                        Log.d("PdfViewerActivity", "=== 마지막 페이지 왼쪽 표시 렌더링: $index ===")
-                        Log.d("PdfViewerActivity", "forceDirectRendering: $forceDirectRendering")
-                        if (forceDirectRendering) {
-                            forceDirectRendering = false // 플래그 리셋
-                        }
-                        renderTwoPagesUnified(index, true)
-                    }
-                } else {
-                    Log.d("PdfViewerActivity", "=== 단일 페이지 모드 렌더링: $index ===")
-                    Log.d("PdfViewerActivity", "forceDirectRendering: $forceDirectRendering")
-                    
-                    if (forceDirectRendering) {
-                        Log.d("PdfViewerActivity", "설정 변경으로 인한 강제 직접 렌더링 - 캐시 완전 우회")
-                        forceDirectRendering = false // 플래그 리셋
-                        renderSinglePage(index)
-                    } else {
-                        Log.d("PdfViewerActivity", "일반 렌더링 - PageCache 자동 설정 관리 사용")
-                        // PageCache will automatically handle settings changes and cache invalidation
-                        pageCache?.getPageImmediate(index) ?: renderSinglePage(index)
-                    }
-                }
-                
-                withContext(Dispatchers.Main) {
-                    binding.pdfView.setImageBitmap(bitmap)
-                    setImageViewMatrix(bitmap)
+                if (renderResult != null) {
+                    binding.pdfView.setImageBitmap(renderResult)
+                    setImageViewMatrix(renderResult)
                     pageIndex = index
                     updatePageInfo()
-                    binding.loadingProgress.visibility = View.GONE
                     
                     // Save last page number to database
                     saveLastPageNumber(index + 1)
@@ -621,14 +614,73 @@ class PdfViewerActivity : AppCompatActivity() {
                     
                     // 협업 모드 브로드캐스트
                     broadcastCollaborationPageChange(index)
-                }
-            } catch (e: Exception) {
-                withContext(Dispatchers.Main) {
-                    binding.loadingProgress.visibility = View.GONE
-                    Toast.makeText(this@PdfViewerActivity, getString(R.string.error_loading_pdf), Toast.LENGTH_SHORT).show()
+                } else {
+                    // Only show error message after all retries failed
+                    Log.e("PdfViewerActivity", "Failed to render page $index after retries")
+                    // Use more user-friendly message for temporary rendering issues
+                    Toast.makeText(this@PdfViewerActivity, getString(R.string.error_rendering_temporary), Toast.LENGTH_SHORT).show()
                 }
             }
         }
+    }
+    
+    /**
+     * Render page with retry logic for handling concurrency issues
+     */
+    private suspend fun renderWithRetry(index: Int, maxRetries: Int = 2): Bitmap? {
+        repeat(maxRetries) { attempt ->
+            try {
+                try {
+                    currentPage?.close()
+                } catch (e: Exception) {
+                    Log.w("PdfViewerActivity", "Current page already closed or error closing in renderWithRetry: ${e.message}")
+                }
+                
+                val bitmap = if (isTwoPageMode) {
+                    if (index + 1 < pageCount) {
+                        Log.d("PdfViewerActivity", "=== 두 페이지 모드 렌더링: $index and ${index + 1} (attempt ${attempt + 1}) ===")
+                        Log.d("PdfViewerActivity", "forceDirectRendering: $forceDirectRendering")
+                        // For two-page mode, always use direct rendering to preserve aspect ratio
+                        if (forceDirectRendering) {
+                            forceDirectRendering = false // 플래그 리셋
+                        }
+                        renderTwoPagesUnified(index)
+                    } else {
+                        Log.d("PdfViewerActivity", "=== 마지막 페이지 왼쪽 표시 렌더링: $index (attempt ${attempt + 1}) ===")
+                        Log.d("PdfViewerActivity", "forceDirectRendering: $forceDirectRendering")
+                        if (forceDirectRendering) {
+                            forceDirectRendering = false // 플래그 리셋
+                        }
+                        renderTwoPagesUnified(index, true)
+                    }
+                } else {
+                    Log.d("PdfViewerActivity", "=== 단일 페이지 모드 렌더링: $index (attempt ${attempt + 1}) ===")
+                    Log.d("PdfViewerActivity", "forceDirectRendering: $forceDirectRendering")
+                    
+                    if (forceDirectRendering) {
+                        Log.d("PdfViewerActivity", "설정 변경으로 인한 강제 직접 렌더링 - 캐시 완전 우회")
+                        forceDirectRendering = false // 플래그 리셋
+                        renderSinglePage(index)
+                    } else {
+                        Log.d("PdfViewerActivity", "일반 렌더링 - PageCache 자동 설정 관리 사용")
+                        // PageCache will automatically handle settings changes and cache invalidation
+                        pageCache?.getPageImmediate(index) ?: renderSinglePage(index)
+                    }
+                }
+                
+                Log.d("PdfViewerActivity", "✅ Successfully rendered page $index on attempt ${attempt + 1}")
+                return bitmap
+                
+            } catch (e: Exception) {
+                if (attempt < maxRetries - 1) {
+                    Log.w("PdfViewerActivity", "⚠️ Rendering attempt ${attempt + 1}/$maxRetries failed for page $index, retrying...", e)
+                    kotlinx.coroutines.delay(50) // Short delay before retry
+                } else {
+                    Log.e("PdfViewerActivity", "❌ All rendering attempts failed for page $index", e)
+                }
+            }
+        }
+        return null
     }
     
     /**
@@ -706,6 +758,146 @@ class PdfViewerActivity : AppCompatActivity() {
     }
     
     private suspend fun renderSinglePage(index: Int): Bitmap {
+        return renderMutex.withLock {
+            Log.d("PdfViewerActivity", "🔒 Acquired render lock for single page $index")
+            try {
+                currentPage = pdfRenderer?.openPage(index)
+                val page = currentPage ?: throw Exception("Failed to open page $index")
+                
+                // Calculate high-resolution dimensions
+                val scale = calculateOptimalScale(page.width, page.height)
+                val renderWidth = (page.width * scale).toInt()
+                val renderHeight = (page.height * scale).toInt()
+                
+                val originalPageRatio = page.width.toFloat() / page.height.toFloat()
+                val renderedPageRatio = renderWidth.toFloat() / renderHeight.toFloat()
+                
+                Log.d("PdfViewerActivity", "=== SINGLE PAGE RENDER ===")
+                Log.d("PdfViewerActivity", "Original PDF page: ${page.width}x${page.height}, aspect ratio: $originalPageRatio")
+                Log.d("PdfViewerActivity", "Rendered bitmap: ${renderWidth}x${renderHeight}, aspect ratio: $renderedPageRatio")
+                Log.d("PdfViewerActivity", "Scale: $scale, aspect ratio preserved: ${kotlin.math.abs(originalPageRatio - renderedPageRatio) < 0.001f}")
+                Log.d("PdfViewerActivity", "==========================")
+                
+                val bitmap = Bitmap.createBitmap(
+                    renderWidth,
+                    renderHeight,
+                    Bitmap.Config.ARGB_8888
+                )
+                
+                // Fill with white background
+                val canvas = Canvas(bitmap)
+                canvas.drawColor(android.graphics.Color.WHITE)
+                
+                // Create transform matrix for scaling
+                val matrix = android.graphics.Matrix()
+                matrix.setScale(scale, scale)
+                
+                // Render with scaling (Matrix only to preserve aspect ratio)
+                page.render(bitmap, null, matrix, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
+                
+                // Apply clipping and padding if needed
+                applyDisplaySettings(bitmap, false)
+            } finally {
+                Log.d("PdfViewerActivity", "🔓 Released render lock for single page $index")
+            }
+        }
+    }
+    
+    /**
+     * 통합된 두 페이지 렌더링 함수 - 처음부터 렌더링하는 모든 두 페이지 모드를 처리
+     * @param leftPageIndex 왼쪽 페이지 인덱스
+     * @param isLastOddPage 마지막 홀수 페이지 모드 (오른쪽 빈 공간)
+     * @return 결합된 고해상도 비트맵
+     */
+    private suspend fun renderTwoPagesUnified(leftPageIndex: Int, isLastOddPage: Boolean = false): Bitmap {
+        return renderMutex.withLock {
+            Log.d("PdfViewerActivity", "🔒 Acquired render lock for two pages $leftPageIndex${if (isLastOddPage) " (last odd page)" else " and ${leftPageIndex + 1}"}")
+            try {
+                Log.d("PdfViewerActivity", "Starting renderTwoPagesUnified for page $leftPageIndex${if (isLastOddPage) " (last odd page)" else " and ${leftPageIndex + 1}"}")
+                
+                // Open left page
+                val leftPage = try {
+                    pdfRenderer?.openPage(leftPageIndex)
+                } catch (e: Exception) {
+                    Log.e("PdfViewerActivity", "Failed to open left page $leftPageIndex", e)
+                    return@withLock renderSinglePageInternal(leftPageIndex)
+                }
+                
+                if (leftPage == null) {
+                    Log.e("PdfViewerActivity", "Left page is null")
+                    return@withLock renderSinglePageInternal(leftPageIndex)
+                }
+                
+                var leftBitmap: Bitmap? = null
+                var rightBitmap: Bitmap? = null
+                
+                try {
+                    // Create left page bitmap
+                    leftBitmap = Bitmap.createBitmap(leftPage.width, leftPage.height, Bitmap.Config.ARGB_8888)
+                    leftBitmap.eraseColor(android.graphics.Color.WHITE)
+                    leftPage.render(leftBitmap, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
+                    leftPage.close()
+                    
+                    // Handle right page
+                    rightBitmap = if (isLastOddPage) {
+                        null // No right page for last odd page
+                    } else {
+                        // Open right page
+                        val rightPage = try {
+                            pdfRenderer?.openPage(leftPageIndex + 1)
+                        } catch (e: Exception) {
+                            Log.e("PdfViewerActivity", "Failed to open right page ${leftPageIndex + 1}", e)
+                            null
+                        }
+                        
+                        if (rightPage != null) {
+                            try {
+                                val bitmap = Bitmap.createBitmap(rightPage.width, rightPage.height, Bitmap.Config.ARGB_8888)
+                                bitmap.eraseColor(android.graphics.Color.WHITE)
+                                rightPage.render(bitmap, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
+                                rightPage.close()
+                                bitmap
+                            } catch (e: Exception) {
+                                Log.e("PdfViewerActivity", "Error rendering right page", e)
+                                try { rightPage.close() } catch (ex: Exception) { }
+                                null
+                            }
+                        } else {
+                            null
+                        }
+                    }
+                    
+                    // Use unified combine function
+                    val result = combineTwoPagesUnified(leftBitmap, rightBitmap)
+                    
+                    // Clean up
+                    leftBitmap.recycle()
+                    rightBitmap?.recycle()
+                    
+                    result
+                    
+                } catch (e: Exception) {
+                    Log.e("PdfViewerActivity", "Error in renderTwoPagesUnified", e)
+                    try {
+                        leftPage.close()
+                    } catch (closeError: Exception) {
+                        Log.w("PdfViewerActivity", "Left page already closed or error closing: ${closeError.message}")
+                    }
+                    leftBitmap?.recycle()
+                    rightBitmap?.recycle()
+                    renderSinglePageInternal(leftPageIndex)
+                }
+            } finally {
+                Log.d("PdfViewerActivity", "🔓 Released render lock for two pages $leftPageIndex")
+            }
+        }
+    }
+    
+    /**
+     * Internal single page rendering without mutex (for use within mutex-protected context)
+     */
+    private suspend fun renderSinglePageInternal(index: Int): Bitmap {
+        Log.d("PdfViewerActivity", "Internal single page rendering for $index (within mutex)")
         currentPage = pdfRenderer?.openPage(index)
         val page = currentPage ?: throw Exception("Failed to open page $index")
         
@@ -713,15 +905,6 @@ class PdfViewerActivity : AppCompatActivity() {
         val scale = calculateOptimalScale(page.width, page.height)
         val renderWidth = (page.width * scale).toInt()
         val renderHeight = (page.height * scale).toInt()
-        
-        val originalPageRatio = page.width.toFloat() / page.height.toFloat()
-        val renderedPageRatio = renderWidth.toFloat() / renderHeight.toFloat()
-        
-        Log.d("PdfViewerActivity", "=== SINGLE PAGE RENDER ===")
-        Log.d("PdfViewerActivity", "Original PDF page: ${page.width}x${page.height}, aspect ratio: $originalPageRatio")
-        Log.d("PdfViewerActivity", "Rendered bitmap: ${renderWidth}x${renderHeight}, aspect ratio: $renderedPageRatio")
-        Log.d("PdfViewerActivity", "Scale: $scale, aspect ratio preserved: ${kotlin.math.abs(originalPageRatio - renderedPageRatio) < 0.001f}")
-        Log.d("PdfViewerActivity", "==========================")
         
         val bitmap = Bitmap.createBitmap(
             renderWidth,
@@ -742,84 +925,6 @@ class PdfViewerActivity : AppCompatActivity() {
         
         // Apply clipping and padding if needed
         return applyDisplaySettings(bitmap, false)
-    }
-    
-    /**
-     * 통합된 두 페이지 렌더링 함수 - 처음부터 렌더링하는 모든 두 페이지 모드를 처리
-     * @param leftPageIndex 왼쪽 페이지 인덱스
-     * @param isLastOddPage 마지막 홀수 페이지 모드 (오른쪽 빈 공간)
-     * @return 결합된 고해상도 비트맵
-     */
-    private suspend fun renderTwoPagesUnified(leftPageIndex: Int, isLastOddPage: Boolean = false): Bitmap {
-        Log.d("PdfViewerActivity", "Starting renderTwoPagesUnified for page $leftPageIndex${if (isLastOddPage) " (last odd page)" else " and ${leftPageIndex + 1}"}")
-        
-        // Open left page
-        val leftPage = try {
-            pdfRenderer?.openPage(leftPageIndex)
-        } catch (e: Exception) {
-            Log.e("PdfViewerActivity", "Failed to open left page $leftPageIndex", e)
-            return renderSinglePage(leftPageIndex)
-        }
-        
-        if (leftPage == null) {
-            Log.e("PdfViewerActivity", "Left page is null")
-            return renderSinglePage(leftPageIndex)
-        }
-        
-        try {
-            // Create left page bitmap
-            val leftBitmap = Bitmap.createBitmap(leftPage.width, leftPage.height, Bitmap.Config.ARGB_8888)
-            leftBitmap.eraseColor(android.graphics.Color.WHITE)
-            leftPage.render(leftBitmap, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
-            leftPage.close()
-            
-            // Handle right page
-            val rightBitmap = if (isLastOddPage) {
-                null // No right page for last odd page
-            } else {
-                // Open right page
-                val rightPage = try {
-                    pdfRenderer?.openPage(leftPageIndex + 1)
-                } catch (e: Exception) {
-                    Log.e("PdfViewerActivity", "Failed to open right page ${leftPageIndex + 1}", e)
-                    null
-                }
-                
-                if (rightPage != null) {
-                    try {
-                        val bitmap = Bitmap.createBitmap(rightPage.width, rightPage.height, Bitmap.Config.ARGB_8888)
-                        bitmap.eraseColor(android.graphics.Color.WHITE)
-                        rightPage.render(bitmap, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
-                        rightPage.close()
-                        bitmap
-                    } catch (e: Exception) {
-                        Log.e("PdfViewerActivity", "Error rendering right page", e)
-                        try { rightPage.close() } catch (ex: Exception) { }
-                        null
-                    }
-                } else {
-                    null
-                }
-            }
-            
-            // Use unified combine function
-            val result = combineTwoPagesUnified(leftBitmap, rightBitmap)
-            
-            // Clean up
-            leftBitmap.recycle()
-            rightBitmap?.recycle()
-            
-            return result
-            
-        } catch (e: Exception) {
-            Log.e("PdfViewerActivity", "Error in renderTwoPagesUnified", e)
-            try {
-                leftPage.close()
-            } catch (closeError: Exception) {
-                Log.w("PdfViewerActivity", "Left page already closed or error closing: ${closeError.message}")
-            }
-            return renderSinglePage(leftPageIndex)
-        }
     }
     
     private fun calculateOptimalScale(pageWidth: Int, pageHeight: Int, forTwoPageMode: Boolean = false): Float {
@@ -1154,6 +1259,12 @@ class PdfViewerActivity : AppCompatActivity() {
     override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
         when (keyCode) {
             KeyEvent.KEYCODE_DPAD_LEFT -> {
+                // Check if input is blocked due to synchronization
+                if (isInputBlocked()) {
+                    showInputBlockedMessage()
+                    return true
+                }
+                
                 if (isNavigationGuideVisible) {
                     if (navigationGuideType == "start" && currentFileIndex > 0) {
                         // 첫 페이지 안내에서 왼쪽 키 -> 이전 파일로 이동
@@ -1174,6 +1285,12 @@ class PdfViewerActivity : AppCompatActivity() {
                 }
             }
             KeyEvent.KEYCODE_DPAD_RIGHT -> {
+                // Check if input is blocked due to synchronization
+                if (isInputBlocked()) {
+                    showInputBlockedMessage()
+                    return true
+                }
+                
                 if (isNavigationGuideVisible) {
                     if (navigationGuideType == "end" && currentFileIndex < filePathList.size - 1) {
                         // 마지막 페이지 안내에서 오른쪽 키 -> 다음 파일로 이동
@@ -1393,12 +1510,38 @@ class PdfViewerActivity : AppCompatActivity() {
     }
     
     private fun handleRemotePageChange(page: Int) {
+        // Update sync time for input blocking
+        updateSyncTime()
+        
         // Convert to 0-based index
         val targetIndex = page - 1
         
-        Log.d("PdfViewerActivity", "🎼 연주자 모드: 페이지 $page 변경 신호 수신됨 (current file: $pdfFileName, pageCount: $pageCount)")
+        Log.d("PdfViewerActivity", "🎼 연주자 모드: 페이지 $page 변경 신호 수신됨 (current: ${pageIndex + 1}, target: $page, file: $pdfFileName)")
         
         if (targetIndex >= 0 && targetIndex < pageCount) {
+            // Check if already on the same page or screen
+            val isOnSamePage = if (isTwoPageMode) {
+                // In two-page mode, check if target is on the same screen
+                val currentScreenStart = (pageIndex / 2) * 2
+                val targetScreenStart = (targetIndex / 2) * 2
+                currentScreenStart == targetScreenStart
+            } else {
+                // In single page mode, simple comparison
+                targetIndex == pageIndex
+            }
+            
+            if (isOnSamePage) {
+                val currentDisplayRange = if (isTwoPageMode) {
+                    val screenStart = (pageIndex / 2) * 2
+                    val screenEnd = minOf(screenStart + 1, pageCount - 1)
+                    "${screenStart + 1}-${screenEnd + 1}"
+                } else {
+                    "${pageIndex + 1}"
+                }
+                Log.d("PdfViewerActivity", "🎼 연주자 모드: 이미 페이지 $page 가 포함된 화면에 있음. 페이지 전환 생략 (현재 표시: $currentDisplayRange, 두 페이지 모드: $isTwoPageMode)")
+                return
+            }
+            
             // 재귀 방지를 위해 플래그 설정
             isHandlingRemotePageChange = true
             
@@ -1424,6 +1567,9 @@ class PdfViewerActivity : AppCompatActivity() {
     }
     
     private fun handleRemoteFileChange(file: String, targetPage: Int) {
+        // Update sync time for input blocking
+        updateSyncTime()
+        
         // Check if the requested file exists in our file list
         val fileIndex = fileNameList.indexOf(file)
         
@@ -2849,4 +2995,37 @@ class PdfViewerActivity : AppCompatActivity() {
      * 원격 페이지 변경을 처리하고 있는지 여부를 추적하는 플래그
      */
     private var isHandlingRemotePageChange = false
+    
+    /**
+     * Check if input is currently blocked due to recent synchronization
+     */
+    private fun isInputBlocked(): Boolean {
+        if (collaborationMode != CollaborationMode.PERFORMER) {
+            return false // Only block input for performers
+        }
+        val inputBlockDuration = getInputBlockDuration()
+        val timeSinceSync = System.currentTimeMillis() - lastSyncTime
+        val isBlocked = timeSinceSync < inputBlockDuration
+        if (isBlocked) {
+            Log.d("PdfViewerActivity", "Input blocked for ${inputBlockDuration - timeSinceSync}ms more")
+        }
+        return isBlocked
+    }
+    
+    /**
+     * Show message when input is blocked
+     */
+    private fun showInputBlockedMessage() {
+        val inputBlockDuration = getInputBlockDuration()
+        val remainingTime = inputBlockDuration - (System.currentTimeMillis() - lastSyncTime)
+        Toast.makeText(this, "동기화 중... ${remainingTime}ms 후 다시 시도하세요", Toast.LENGTH_SHORT).show()
+    }
+    
+    /**
+     * Update sync time when receiving remote page change
+     */
+    private fun updateSyncTime() {
+        lastSyncTime = System.currentTimeMillis()
+        Log.d("PdfViewerActivity", "Sync time updated for input blocking")
+    }
 }

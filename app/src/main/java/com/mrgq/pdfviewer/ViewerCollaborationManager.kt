@@ -16,6 +16,13 @@ class ViewerCollaborationManager(
     private var isInitialized = false
     private var currentMode: CollaborationMode = CollaborationMode.NONE
     
+    // Input blocking for synchronization
+    private var lastSyncTime = 0L
+    private fun getInputBlockDuration(): Long {
+        val preferences = context.getSharedPreferences("pdf_viewer_prefs", android.content.Context.MODE_PRIVATE)
+        return preferences.getLong("input_block_duration", 500L)
+    }
+    
     
     interface CollaborationListener {
         fun onRemotePageChange(pageIndex: Int)
@@ -133,6 +140,8 @@ class ViewerCollaborationManager(
         
         globalCollaborationManager.setOnPageChangeReceived { page, file ->
             Log.d("ViewerCollaborationManager", "🎼 Received page change: $page in $file")
+            // Update sync time for input blocking
+            lastSyncTime = System.currentTimeMillis()
             // Convert to 0-based index and notify listener
             val targetIndex = page - 1
             if (targetIndex >= 0) {
@@ -142,6 +151,8 @@ class ViewerCollaborationManager(
         
         globalCollaborationManager.setOnFileChangeReceived { file, page ->
             Log.d("ViewerCollaborationManager", "🎼 Received file change: $file at page $page")
+            // Update sync time for input blocking
+            lastSyncTime = System.currentTimeMillis()
             listener.onRemoteFileChange(file, page)
         }
         
@@ -177,6 +188,31 @@ class ViewerCollaborationManager(
      * Check if should show collaboration status
      */
     fun shouldShowCollaborationStatus(): Boolean = currentMode != CollaborationMode.NONE
+    
+    /**
+     * Check if input is currently blocked due to recent synchronization
+     */
+    fun isInputBlocked(): Boolean {
+        if (currentMode != CollaborationMode.PERFORMER) {
+            return false // Only block input for performers
+        }
+        val inputBlockDuration = getInputBlockDuration()
+        val timeSinceSync = System.currentTimeMillis() - lastSyncTime
+        val isBlocked = timeSinceSync < inputBlockDuration
+        if (isBlocked) {
+            Log.d("ViewerCollaborationManager", "Input blocked for ${inputBlockDuration - timeSinceSync}ms more")
+        }
+        return isBlocked
+    }
+    
+    /**
+     * Get remaining block time in milliseconds
+     */
+    fun getRemainingBlockTime(): Long {
+        if (!isInputBlocked()) return 0
+        val inputBlockDuration = getInputBlockDuration()
+        return inputBlockDuration - (System.currentTimeMillis() - lastSyncTime)
+    }
     
     /**
      * Clean up collaboration resources

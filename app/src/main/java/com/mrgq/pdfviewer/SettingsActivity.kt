@@ -31,8 +31,8 @@ class SettingsActivity : AppCompatActivity() {
     private lateinit var binding: ActivitySettingsNewBinding
     private lateinit var preferences: SharedPreferences
     
-    // Web server manager
-    private val webServerManager = WebServerManager()
+    // Web server manager (singleton)
+    private val webServerManager = WebServerManager.getInstance()
     private var isWebServerRunning = false
     
     // Database repository
@@ -41,6 +41,10 @@ class SettingsActivity : AppCompatActivity() {
     // Settings adapter
     private lateinit var settingsAdapter: SettingsAdapter
     private var currentItems = mutableListOf<SettingsItem>()
+    
+    // Web server log management
+    private val webServerLogs = mutableListOf<String>()
+    private var isWebServerLogVisible = false
     
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -66,7 +70,7 @@ class SettingsActivity : AppCompatActivity() {
             if (binding.detailPanelLayout.visibility == View.VISIBLE) {
                 hideDetailPanel()
             } else {
-                finish()
+                handleBackPress()
             }
         }
         
@@ -79,10 +83,18 @@ class SettingsActivity : AppCompatActivity() {
             // 현재 표시된 상세 패널에 따라 적용 로직 실행
             hideDetailPanel()
         }
+        
+        // 로그 지우기 버튼
+        binding.clearLogButton.setOnClickListener {
+            clearWebServerLog()
+        }
     }
     
     private fun setupMainMenu() {
         currentItems.clear()
+        
+        // 웹서버 상태를 메뉴 생성 전에 다시 확인
+        checkWebServerStatus()
         
         // 파일 관리 섹션
         val pdfCount = getAllPdfFiles().size
@@ -197,7 +209,7 @@ class SettingsActivity : AppCompatActivity() {
         val ipAddress = NetworkUtils.getLocalIpAddress()
         val status = if (isWebServerRunning) "실행 중 ($ipAddress:$port)" else "중지됨"
         
-        val items = listOf(
+        val items = mutableListOf(
             SettingsItem(
                 id = "web_server_toggle",
                 icon = if (isWebServerRunning) "⏹️" else "▶️",
@@ -214,16 +226,50 @@ class SettingsActivity : AppCompatActivity() {
             )
         )
         
+        // 웹서버가 실행 중이면 로그 정보 아이템 추가
+        if (isWebServerRunning) {
+            items.add(
+                SettingsItem(
+                    id = "web_server_log_info",
+                    icon = "🌐",
+                    title = "활동 로그",
+                    subtitle = "실시간 웹서버 활동이 아래에 표시됩니다",
+                    type = SettingsType.INFO
+                )
+            )
+        }
+        
         showDetailPanel("웹서버", items)
+        
+        // 웹서버가 실행 중이면 로그 섹션 표시
+        if (isWebServerRunning) {
+            showWebServerLogSection()
+        }
     }
     
     private fun showCollaborationPanel() {
+        val inputBlockTime = preferences.getLong("input_block_duration", 500L)
+        
         val items = listOf(
             SettingsItem(
                 id = "collaboration_info",
                 icon = "ℹ️",
                 title = "협업 모드 정보",
                 subtitle = "메인 화면에서 협업 모드를 시작할 수 있습니다",
+                type = SettingsType.INFO
+            ),
+            SettingsItem(
+                id = "input_block_time",
+                icon = "⏱️",
+                title = "입력 차단 시간",
+                subtitle = "현재: ${inputBlockTime}ms",
+                type = SettingsType.ACTION
+            ),
+            SettingsItem(
+                id = "message_queue_stats",
+                icon = "📊",
+                title = "메시지 큐 통계",
+                subtitle = "비활성화됨 (성능 최적화)",
                 type = SettingsType.INFO
             )
         )
@@ -330,6 +376,8 @@ class SettingsActivity : AppCompatActivity() {
     private fun hideDetailPanel() {
         binding.detailPanelLayout.visibility = View.GONE
         binding.settingsRecyclerView.visibility = View.VISIBLE
+        // 로그 섹션도 숨김
+        hideWebServerLogSection()
     }
     
     private fun handleDetailItemClick(item: SettingsItem) {
@@ -344,6 +392,8 @@ class SettingsActivity : AppCompatActivity() {
             "animation_speed" -> showAnimationSpeedDialog()
             "view_display_modes" -> showDisplayModeListDialog()
             "reset_display_modes" -> showResetDisplayModeDialog()
+            "input_block_time" -> showInputBlockTimeDialog()
+            "message_queue_stats" -> showMessageQueueDisabledDialog()
         }
     }
     
@@ -522,8 +572,9 @@ class SettingsActivity : AppCompatActivity() {
     
     // 웹서버 관리 함수들
     private fun checkWebServerStatus() {
-        isWebServerRunning = webServerManager.isServerRunning()
-        Log.d("SettingsActivity", "웹서버 상태 확인: $isWebServerRunning")
+        val serverStatus = webServerManager.isServerRunning()
+        Log.d("SettingsActivity", "웹서버 상태 확인 - 이전: $isWebServerRunning, 현재: $serverStatus")
+        isWebServerRunning = serverStatus
     }
     
     private fun updateWebServerStatus() {
@@ -559,6 +610,22 @@ class SettingsActivity : AppCompatActivity() {
                     isWebServerRunning = true
                     val currentPort = preferences.getInt("web_server_port", 8080)
                     val serverAddress = webServerManager.getServerAddress()
+                    
+                    // 웹서버 로그 콜백 설정
+                    webServerManager.setLogCallback { logMessage ->
+                        runOnUiThread {
+                            addWebServerLog(logMessage)
+                        }
+                    }
+                    
+                    // 로그에 시작 메시지 추가
+                    addWebServerLog("✅ 웹서버 시작됨 - http://$serverAddress:$currentPort")
+                    addWebServerLog("📁 업로드 대기 중...")
+                    
+                    // 웹서버 패널 업데이트 (설정으로 돌아가지 않고 패널에 머물기)
+                    updateWebServerPanel()
+                    showWebServerLogSection()
+                    
                     Toast.makeText(
                         this,
                         "웹서버가 시작되었습니다\nhttp://$serverAddress:$currentPort",
@@ -566,16 +633,20 @@ class SettingsActivity : AppCompatActivity() {
                     ).show()
                 } else {
                     Toast.makeText(this, "웹서버 시작 실패", Toast.LENGTH_SHORT).show()
+                    hideDetailPanel()
+                    setupMainMenu()
                 }
-                hideDetailPanel()
-                setupMainMenu()
             }
         }
     }
     
     private fun stopWebServer() {
+        // 로그 콜백 해제
+        webServerManager.clearLogCallback()
+        
         webServerManager.stopServer()
         isWebServerRunning = false
+        addWebServerLog("⏹️ 웹서버 중지됨")
         Toast.makeText(this, "웹서버가 중지되었습니다", Toast.LENGTH_SHORT).show()
         hideDetailPanel()
         setupMainMenu()
@@ -672,7 +743,7 @@ class SettingsActivity : AppCompatActivity() {
                 if (binding.detailPanelLayout.visibility == View.VISIBLE) {
                     hideDetailPanel()
                 } else {
-                    finish()
+                    handleBackPress()
                 }
                 return true
             }
@@ -720,6 +791,160 @@ class SettingsActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         checkWebServerStatus()
-        updateWebServerStatus()
+        // 메인 화면으로 돌아올 때 전체 메뉴를 다시 로드하여 웹서버 상태 반영
+        if (binding.detailPanelLayout.visibility == android.view.View.GONE) {
+            setupMainMenu()
+        } else {
+            updateWebServerStatus()
+        }
+    }
+    
+    /**
+     * Handle back press with web server confirmation
+     */
+    private fun handleBackPress() {
+        if (isWebServerRunning) {
+            showWebServerExitConfirmDialog()
+        } else {
+            finish()
+        }
+    }
+    
+    /**
+     * Show confirmation dialog when exiting with web server running
+     */
+    private fun showWebServerExitConfirmDialog() {
+        val port = preferences.getInt("web_server_port", 8080)
+        val ipAddress = NetworkUtils.getLocalIpAddress()
+        
+        AlertDialog.Builder(this)
+            .setTitle("웹서버 실행 중")
+            .setMessage("웹서버가 실행 중입니다 ($ipAddress:$port)\n\n설정을 나가면 웹서버가 중지됩니다.\n계속하시겠습니까?")
+            .setPositiveButton("나가기") { _, _ ->
+                // Stop web server and exit
+                Log.d("SettingsActivity", "User confirmed exit, stopping web server")
+                webServerManager.stopServer()
+                isWebServerRunning = false
+                finish()
+            }
+            .setNegativeButton("머물기", null)
+            .setCancelable(true)
+            .show()
+    }
+    
+    override fun onDestroy() {
+        super.onDestroy()
+        // Clean up web server when leaving settings (if not already stopped by user confirmation)
+        if (isWebServerRunning) {
+            Log.d("SettingsActivity", "Activity destroyed, stopping web server for proper cleanup")
+            webServerManager.clearLogCallback()
+            webServerManager.stopServer()
+            isWebServerRunning = false
+        }
+    }
+    
+    /**
+     * Show input block time setting dialog
+     */
+    private fun showInputBlockTimeDialog() {
+        val currentTime = preferences.getLong("input_block_duration", 500L)
+        val editText = EditText(this).apply {
+            setText(currentTime.toString())
+            hint = "밀리초 (100-2000)"
+            inputType = android.text.InputType.TYPE_CLASS_NUMBER
+        }
+        
+        AlertDialog.Builder(this)
+            .setTitle(getString(R.string.settings_input_block_time_title))
+            .setMessage(getString(R.string.settings_input_block_time_message))
+            .setView(editText)
+            .setPositiveButton(getString(R.string.ok)) { dialog, _ ->
+                try {
+                    val newTime = editText.text.toString().toLongOrNull()
+                    if (newTime != null && newTime in 100..2000) {
+                        preferences.edit().putLong("input_block_duration", newTime).apply()
+                        Toast.makeText(this, "입력 차단 시간이 ${newTime}ms로 변경되었습니다", Toast.LENGTH_SHORT).show()
+                        hideDetailPanel()
+                        setupMainMenu()
+                    } else {
+                        Toast.makeText(this, "100-2000 사이의 값을 입력하세요", Toast.LENGTH_SHORT).show()
+                    }
+                } catch (e: Exception) {
+                    Toast.makeText(this, "올바른 숫자를 입력하세요", Toast.LENGTH_SHORT).show()
+                }
+                dialog.dismiss()
+            }
+            .setNegativeButton(getString(R.string.cancel), null)
+            .show()
+    }
+    
+    
+    /**
+     * Show message queue disabled dialog
+     */
+    private fun showMessageQueueDisabledDialog() {
+        AlertDialog.Builder(this)
+            .setTitle("메시지 큐 시스템")
+            .setMessage("메시지 큐 시스템은 성능 최적화를 위해 비활성화되었습니다.\n\n" +
+                        "협업 메시지는 이제 직접 처리되어 더 빠른 반응 속도를 제공합니다.")
+            .setPositiveButton(getString(R.string.ok), null)
+            .show()
+    }
+    
+    /**
+     * Add a log message to the web server log
+     */
+    private fun addWebServerLog(message: String) {
+        webServerLogs.add(message)
+        // 로그가 너무 많아지면 오래된 것부터 제거 (최대 100개)
+        if (webServerLogs.size > 100) {
+            webServerLogs.removeAt(0)
+        }
+        updateWebServerLogDisplay()
+    }
+    
+    /**
+     * Update the web server log display
+     */
+    private fun updateWebServerLogDisplay() {
+        if (isWebServerLogVisible) {
+            binding.webServerLogText.text = webServerLogs.joinToString("\n")
+            // 스크롤을 맨 아래로 이동
+            binding.logScrollView.post {
+                binding.logScrollView.fullScroll(android.view.View.FOCUS_DOWN)
+            }
+        }
+    }
+    
+    /**
+     * Show the web server log section
+     */
+    private fun showWebServerLogSection() {
+        isWebServerLogVisible = true
+        binding.webServerLogSection.visibility = android.view.View.VISIBLE
+        updateWebServerLogDisplay()
+    }
+    
+    /**
+     * Hide the web server log section
+     */
+    private fun hideWebServerLogSection() {
+        isWebServerLogVisible = false
+        binding.webServerLogSection.visibility = android.view.View.GONE
+    }
+    
+    /**
+     * Update the web server panel with current status
+     */
+    private fun updateWebServerPanel() {
+        if (binding.detailPanelLayout.visibility == android.view.View.VISIBLE) {
+            // 웹서버 패널이 열려있으면 새로고침
+            showWebServerPanel()
+        }
+    }
+    
+    private fun clearWebServerLog() {
+        webServerLogs.clear()
+        updateWebServerLogDisplay()
     }
 }

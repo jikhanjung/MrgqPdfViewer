@@ -9,7 +9,10 @@ import android.view.KeyEvent
  * Handles all input events for the PDF viewer.
  * Single responsibility: Process D-pad and key events.
  */
-class ViewerInputHandler(private val listener: InputListener) {
+class ViewerInputHandler(
+    private val listener: InputListener,
+    private val collaborationManager: ViewerCollaborationManager? = null
+) {
     
     // Navigation state
     private var isNavigationGuideVisible: Boolean = false
@@ -44,6 +47,7 @@ class ViewerInputHandler(private val listener: InputListener) {
         fun canGoToPreviousFile(): Boolean
         fun isAtFirstPage(): Boolean
         fun isAtLastPage(): Boolean
+        fun onInputBlocked(remainingTime: Long) // New callback for blocked input
     }
     
     /**
@@ -116,6 +120,14 @@ class ViewerInputHandler(private val listener: InputListener) {
      * Handle left key press
      */
     private fun handleLeftKey(): Boolean {
+        // Check if input is blocked due to synchronization
+        if (collaborationManager?.isInputBlocked() == true) {
+            val remainingTime = collaborationManager.getRemainingBlockTime()
+            Log.d("ViewerInputHandler", "Input blocked for page navigation ($remainingTime ms remaining)")
+            listener.onInputBlocked(remainingTime)
+            return true
+        }
+        
         if (isNavigationGuideVisible) {
             if (navigationGuideType == "start" && listener.canGoToPreviousFile()) {
                 // At start of file guide, left key -> go to previous file
@@ -140,6 +152,14 @@ class ViewerInputHandler(private val listener: InputListener) {
      * Handle right key press
      */
     private fun handleRightKey(): Boolean {
+        // Check if input is blocked due to synchronization
+        if (collaborationManager?.isInputBlocked() == true) {
+            val remainingTime = collaborationManager.getRemainingBlockTime()
+            Log.d("ViewerInputHandler", "Input blocked for page navigation ($remainingTime ms remaining)")
+            listener.onInputBlocked(remainingTime)
+            return true
+        }
+        
         if (isNavigationGuideVisible) {
             if (navigationGuideType == "end" && listener.canGoToNextFile()) {
                 // At end of file guide, right key -> go to next file
