@@ -347,20 +347,24 @@ class MainActivity : AppCompatActivity() {
     }
     
     private fun openPdfFile(pdfFile: PdfFile, position: Int) {
-        // 어댑터에서 전달받은 position을 직접 사용
         val currentPdfFiles = pdfAdapter.currentList
         
-        if (position < 0 || position >= currentPdfFiles.size) {
-            Toast.makeText(this, "잘못된 파일 위치입니다", Toast.LENGTH_SHORT).show()
+        // Use the stable file path to find the ACTUAL current index.
+        // This is the crucial fix for the race condition.
+        val actualIndex = currentPdfFiles.indexOfFirst { it.path == pdfFile.path }
+        
+        // Safety check: if file was deleted in the meantime, abort.
+        if (actualIndex == -1) {
+            Toast.makeText(this, getString(R.string.error_file_not_found_or_moved), Toast.LENGTH_SHORT).show()
             return
         }
         
         val filePathList = currentPdfFiles.map { it.path }
         val fileNameList = currentPdfFiles.map { it.name }
         
-        Log.d("MainActivity", "Opening file: ${pdfFile.name} at position $position")
+        Log.d("MainActivity", "Opening file: ${pdfFile.name} at actual index $actualIndex (clicked position was $position)")
         Log.d("MainActivity", "File list size: ${currentPdfFiles.size}")
-        Log.d("MainActivity", "Actual file at position $position: ${currentPdfFiles[position].name}")
+        Log.d("MainActivity", "Actual file at index $actualIndex: ${currentPdfFiles[actualIndex].name}")
         
         // 지휘자 모드에서 파일 변경 브로드캐스트
         val globalCollaborationManager = GlobalCollaborationManager.getInstance()
@@ -371,9 +375,10 @@ class MainActivity : AppCompatActivity() {
         }
         
         val intent = Intent(this, PdfViewerActivity::class.java).apply {
-            putExtra("current_index", position)  // position을 직접 사용
-            putStringArrayListExtra("file_path_list", ArrayList(filePathList))
-            putStringArrayListExtra("file_name_list", ArrayList(fileNameList))
+            // Use the reliable, just-in-time calculated index.
+            putExtra(PdfViewerActivity.EXTRA_CURRENT_INDEX, actualIndex)
+            putStringArrayListExtra(PdfViewerActivity.EXTRA_FILE_PATH_LIST, ArrayList(filePathList))
+            putStringArrayListExtra(PdfViewerActivity.EXTRA_FILE_NAME_LIST, ArrayList(fileNameList))
         }
         startActivity(intent)
     }

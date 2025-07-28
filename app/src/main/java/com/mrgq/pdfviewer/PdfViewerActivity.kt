@@ -39,6 +39,13 @@ import android.os.Looper
 
 class PdfViewerActivity : AppCompatActivity() {
     
+    companion object {
+        // Intent extra keys
+        const val EXTRA_CURRENT_INDEX = "current_index"
+        const val EXTRA_FILE_PATH_LIST = "file_path_list"
+        const val EXTRA_FILE_NAME_LIST = "file_name_list"
+    }
+    
     private lateinit var binding: ActivityPdfViewerBinding
     private var pdfRenderer: PdfRenderer? = null
     private var currentPage: PdfRenderer.Page? = null
@@ -131,9 +138,9 @@ class PdfViewerActivity : AppCompatActivity() {
         screenWidth = displayMetrics.widthPixels
         screenHeight = displayMetrics.heightPixels
         
-        currentFileIndex = intent.getIntExtra("current_index", 0)
-        filePathList = intent.getStringArrayListExtra("file_path_list") ?: emptyList()
-        fileNameList = intent.getStringArrayListExtra("file_name_list") ?: emptyList()
+        currentFileIndex = intent.getIntExtra(EXTRA_CURRENT_INDEX, 0)
+        filePathList = intent.getStringArrayListExtra(EXTRA_FILE_PATH_LIST) ?: emptyList()
+        fileNameList = intent.getStringArrayListExtra(EXTRA_FILE_NAME_LIST) ?: emptyList()
         
         // Check if there's a target page from collaboration
         val targetPage = intent.getIntExtra("target_page", -1)

@@ -22,6 +22,16 @@ class PdfFileAdapter(
     
     private var isFileManagementMode = false
     
+    init {
+        // Enable stable IDs for better RecyclerView performance and consistency
+        setHasStableIds(true)
+    }
+    
+    override fun getItemId(position: Int): Long {
+        // Use the file's path to generate a stable, unique ID
+        return getItem(position).path.hashCode().toLong()
+    }
+    
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): PdfViewHolder {
         val view = LayoutInflater.from(parent.context)
             .inflate(R.layout.item_pdf_file, parent, false)
