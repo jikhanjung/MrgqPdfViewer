@@ -705,31 +705,52 @@ class PdfViewerActivity : AppCompatActivity() {
             Log.d("PdfViewerActivity", "Right: empty (last odd page)")
         }
         
-        // Combine at original resolution first
-        val paddingPixels = (leftBitmap.width * currentCenterPadding).toInt()
-        val rightWidth = rightBitmap?.width ?: leftBitmap.width // Use same width for empty space
-        val combinedWidth = leftBitmap.width + rightWidth + paddingPixels
-        val combinedHeight = maxOf(leftBitmap.height, rightBitmap?.height ?: leftBitmap.height)
+        // Calculate half-screen dimensions for centering each page
+        val screenWidth = binding.pdfView.width
+        val screenHeight = binding.pdfView.height
+        val halfScreenWidth = screenWidth / 2
+        val paddingPixels = (halfScreenWidth * currentCenterPadding).toInt()
+        
+        // Calculate each page's centered position within its half-screen area
+        val leftPageWidth = leftBitmap.width
+        val leftPageHeight = leftBitmap.height
+        val rightPageWidth = rightBitmap?.width ?: leftPageWidth
+        val rightPageHeight = rightBitmap?.height ?: leftPageHeight
+        
+        // Combined canvas dimensions
+        val combinedWidth = screenWidth + paddingPixels  // Full screen width + center padding
+        val combinedHeight = maxOf(leftPageHeight, rightPageHeight)
         
         val combinedBitmap = Bitmap.createBitmap(combinedWidth, combinedHeight, Bitmap.Config.ARGB_8888)
         val combinedCanvas = Canvas(combinedBitmap)
         combinedCanvas.drawColor(android.graphics.Color.WHITE)
         
-        // Draw left page
-        combinedCanvas.drawBitmap(leftBitmap, 0f, 0f, null)
+        // Calculate centered positions for each page
+        // Left page: center within left half of screen
+        val leftPageX = (halfScreenWidth - leftPageWidth) / 2f
+        val leftPageY = (combinedHeight - leftPageHeight) / 2f
         
-        // Draw right page if exists
+        // Right page: center within right half of screen (after padding)
+        val rightAreaStart = halfScreenWidth + paddingPixels
+        val rightPageX = rightAreaStart + (halfScreenWidth - rightPageWidth) / 2f
+        val rightPageY = (combinedHeight - rightPageHeight) / 2f
+        
+        Log.d("PdfViewerActivity", "Screen: ${screenWidth}x${screenHeight}, Half: $halfScreenWidth")
+        Log.d("PdfViewerActivity", "Left page position: (${leftPageX}, ${leftPageY})")
+        Log.d("PdfViewerActivity", "Right page position: (${rightPageX}, ${rightPageY})")
+        
+        // Draw left page centered in left half
+        combinedCanvas.drawBitmap(leftBitmap, leftPageX, leftPageY, null)
+        
+        // Draw right page centered in right half if exists
         if (rightBitmap != null) {
-            val rightPageX = leftBitmap.width.toFloat() + paddingPixels
-            combinedCanvas.drawBitmap(rightBitmap, rightPageX, 0f, null)
+            combinedCanvas.drawBitmap(rightBitmap, rightPageX, rightPageY, null)
         }
         
         Log.d("PdfViewerActivity", "Combined at original resolution: ${combinedWidth}x${combinedHeight}")
         Log.d("PdfViewerActivity", "Center padding: ${(currentCenterPadding * 100).toInt()}%")
         
-        // Calculate final scale
-        val screenWidth = binding.pdfView.width
-        val screenHeight = binding.pdfView.height
+        // Calculate final scale based on the combined canvas fitting the screen
         val combinedAspectRatio = combinedWidth.toFloat() / combinedHeight.toFloat()
         val screenAspectRatio = screenWidth.toFloat() / screenHeight.toFloat()
         
@@ -739,7 +760,7 @@ class PdfViewerActivity : AppCompatActivity() {
             screenHeight.toFloat() / combinedHeight.toFloat()
         }
         
-        // Apply high-resolution multiplier
+        // Apply high-resolution multiplier for crisp rendering
         val finalScale = (scale * 2.5f).coerceIn(1.0f, 4.0f)
         
         // Create final high-resolution bitmap
@@ -1233,7 +1254,23 @@ class PdfViewerActivity : AppCompatActivity() {
                             pageCache?.clear()
                             pageCache?.updateSettings(isTwoPageMode, finalScale)
                             
-                            val targetPage = if (goToLastPage) pageCount - 1 else 0
+                            val targetPage = if (goToLastPage) {
+                                // 두 페이지 모드에서 마지막 페이지 계산
+                                if (isTwoPageMode) {
+                                    // 짝수 페이지: 마지막 두 페이지 표시 (예: 8페이지 파일이면 7,8페이지를 보여주려면 인덱스 6)  
+                                    // 홀수 페이지: 마지막 페이지만 왼쪽에 표시 (예: 7페이지 파일이면 7페이지만 보여주려면 인덱스 6)
+                                    if (pageCount % 2 == 0) {
+                                        // 짝수 페이지: 마지막 두 페이지를 표시하기 위해 마지막에서 두 번째 페이지로 이동
+                                        pageCount - 2
+                                    } else {
+                                        // 홀수 페이지: 마지막 페이지를 왼쪽에 표시
+                                        pageCount - 1
+                                    }
+                                } else {
+                                    // 단일 페이지 모드: 항상 마지막 페이지
+                                    pageCount - 1
+                                }
+                            } else 0
                             showPage(targetPage)
                             
                             // Broadcast file change if in conductor mode
