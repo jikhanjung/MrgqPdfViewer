@@ -622,10 +622,8 @@ class PdfViewerActivity : AppCompatActivity() {
                     // 협업 모드 브로드캐스트
                     broadcastCollaborationPageChange(index)
                 } else {
-                    // Only show error message after all retries failed
+                    // Only log error after all retries failed - no user notification needed
                     Log.e("PdfViewerActivity", "Failed to render page $index after retries")
-                    // Use more user-friendly message for temporary rendering issues
-                    Toast.makeText(this@PdfViewerActivity, getString(R.string.error_rendering_temporary), Toast.LENGTH_SHORT).show()
                 }
             }
         }
@@ -717,69 +715,67 @@ class PdfViewerActivity : AppCompatActivity() {
         val rightPageWidth = rightBitmap?.width ?: leftPageWidth
         val rightPageHeight = rightBitmap?.height ?: leftPageHeight
         
-        // Combined canvas dimensions
-        val combinedWidth = screenWidth + paddingPixels  // Full screen width + center padding
-        val combinedHeight = maxOf(leftPageHeight, rightPageHeight)
-        
-        val combinedBitmap = Bitmap.createBitmap(combinedWidth, combinedHeight, Bitmap.Config.ARGB_8888)
-        val combinedCanvas = Canvas(combinedBitmap)
-        combinedCanvas.drawColor(android.graphics.Color.WHITE)
-        
-        // Calculate centered positions for each page
-        // Left page: center within left half of screen
-        val leftPageX = (halfScreenWidth - leftPageWidth) / 2f
-        val leftPageY = (combinedHeight - leftPageHeight) / 2f
-        
-        // Right page: center within right half of screen (after padding)
-        val rightAreaStart = halfScreenWidth + paddingPixels
-        val rightPageX = rightAreaStart + (halfScreenWidth - rightPageWidth) / 2f
-        val rightPageY = (combinedHeight - rightPageHeight) / 2f
-        
-        Log.d("PdfViewerActivity", "Screen: ${screenWidth}x${screenHeight}, Half: $halfScreenWidth")
-        Log.d("PdfViewerActivity", "Left page position: (${leftPageX}, ${leftPageY})")
-        Log.d("PdfViewerActivity", "Right page position: (${rightPageX}, ${rightPageY})")
-        
-        // Draw left page centered in left half
-        combinedCanvas.drawBitmap(leftBitmap, leftPageX, leftPageY, null)
-        
-        // Draw right page centered in right half if exists
-        if (rightBitmap != null) {
-            combinedCanvas.drawBitmap(rightBitmap, rightPageX, rightPageY, null)
-        }
-        
-        Log.d("PdfViewerActivity", "Combined at original resolution: ${combinedWidth}x${combinedHeight}")
-        Log.d("PdfViewerActivity", "Center padding: ${(currentCenterPadding * 100).toInt()}%")
-        
-        // Calculate final scale based on the combined canvas fitting the screen
-        val combinedAspectRatio = combinedWidth.toFloat() / combinedHeight.toFloat()
-        val screenAspectRatio = screenWidth.toFloat() / screenHeight.toFloat()
-        
-        val scale = if (combinedAspectRatio > screenAspectRatio) {
-            screenWidth.toFloat() / combinedWidth.toFloat()
-        } else {
-            screenHeight.toFloat() / combinedHeight.toFloat()
-        }
-        
         // Apply high-resolution multiplier for crisp rendering
-        val finalScale = (scale * 2.5f).coerceIn(1.0f, 4.0f)
+        val finalScale = 2.5f
         
         // Create final high-resolution bitmap
-        val finalWidth = (combinedWidth * finalScale).toInt()
-        val finalHeight = (combinedHeight * finalScale).toInt()
-        val finalBitmap = Bitmap.createBitmap(finalWidth, finalHeight, Bitmap.Config.ARGB_8888)
+        val finalWidth = (screenWidth * finalScale).toInt()
+        val finalHeight = (screenHeight * finalScale).toInt()
         
+        val finalBitmap = Bitmap.createBitmap(finalWidth, finalHeight, Bitmap.Config.ARGB_8888)
         val finalCanvas = Canvas(finalBitmap)
         finalCanvas.drawColor(android.graphics.Color.WHITE)
         
-        // Scale and draw
-        val scaleMatrix = android.graphics.Matrix()
-        scaleMatrix.setScale(finalScale, finalScale)
-        finalCanvas.drawBitmap(combinedBitmap, scaleMatrix, null)
+        // Calculate page scales to fit within half screen (minus padding) at high resolution
+        val availableHalfWidth = (halfScreenWidth - paddingPixels / 2) * finalScale
+        val leftScale = minOf(
+            availableHalfWidth / leftPageWidth,
+            (screenHeight * finalScale) / leftPageHeight
+        )
+        val rightScale = minOf(
+            availableHalfWidth / rightPageWidth,
+            (screenHeight * finalScale) / rightPageHeight
+        )
         
-        // Clean up
-        combinedBitmap.recycle()
+        // Use the smaller scale to keep both pages the same size
+        val pageScale = minOf(leftScale, rightScale)
         
-        Log.d("PdfViewerActivity", "Final result: ${finalWidth}x${finalHeight}, scale: $finalScale")
+        // Calculate scaled dimensions at high resolution
+        val scaledLeftWidth = (leftPageWidth * pageScale).toInt()
+        val scaledLeftHeight = (leftPageHeight * pageScale).toInt()
+        val scaledRightWidth = (rightPageWidth * pageScale).toInt()
+        val scaledRightHeight = (rightPageHeight * pageScale).toInt()
+        
+        // Calculate centered positions for each page at high resolution
+        // Left page: center within left half of screen
+        val leftPageX = ((halfScreenWidth * finalScale) - scaledLeftWidth) / 2f
+        val leftPageY = ((screenHeight * finalScale) - scaledLeftHeight) / 2f
+        
+        // Right page: center within right half of screen
+        val rightPageX = (halfScreenWidth * finalScale) + ((halfScreenWidth * finalScale) - scaledRightWidth) / 2f
+        val rightPageY = ((screenHeight * finalScale) - scaledRightHeight) / 2f
+        
+        Log.d("PdfViewerActivity", "Screen: ${screenWidth}x${screenHeight}, Half: $halfScreenWidth")
+        Log.d("PdfViewerActivity", "Final scale: $finalScale, Page scale: $pageScale")
+        Log.d("PdfViewerActivity", "Left page position: (${leftPageX}, ${leftPageY}), size: ${scaledLeftWidth}x${scaledLeftHeight}")
+        Log.d("PdfViewerActivity", "Right page position: (${rightPageX}, ${rightPageY}), size: ${scaledRightWidth}x${scaledRightHeight}")
+        
+        // Draw left page centered in left half with scaling directly to high-res canvas
+        val leftMatrix = android.graphics.Matrix()
+        leftMatrix.postScale(pageScale, pageScale)
+        leftMatrix.postTranslate(leftPageX, leftPageY)
+        finalCanvas.drawBitmap(leftBitmap, leftMatrix, null)
+        
+        // Draw right page centered in right half if exists
+        if (rightBitmap != null) {
+            val rightMatrix = android.graphics.Matrix()
+            rightMatrix.postScale(pageScale, pageScale)
+            rightMatrix.postTranslate(rightPageX, rightPageY)
+            finalCanvas.drawBitmap(rightBitmap, rightMatrix, null)
+        }
+        
+        Log.d("PdfViewerActivity", "Final result: ${finalWidth}x${finalHeight}")
+        Log.d("PdfViewerActivity", "Center padding: ${(currentCenterPadding * 100).toInt()}%")
         Log.d("PdfViewerActivity", "==============================")
         
         return applyDisplaySettings(finalBitmap, true)
@@ -1854,8 +1850,7 @@ class PdfViewerActivity : AppCompatActivity() {
         
         val options = arrayOf(
             "두 페이지 모드 전환",
-            "위/아래 클리핑 설정",
-            "가운데 여백 설정"
+            "위/아래 클리핑 설정"
         )
         
         AlertDialog.Builder(this)
@@ -1867,7 +1862,6 @@ class PdfViewerActivity : AppCompatActivity() {
                         showPage(pageIndex)
                     }
                     1 -> showClippingDialog()
-                    2 -> showPaddingDialog()
                 }
             }
             .setNegativeButton("닫기") { dialog, _ -> dialog.dismiss() }

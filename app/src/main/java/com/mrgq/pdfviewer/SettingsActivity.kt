@@ -150,22 +150,27 @@ class SettingsActivity : AppCompatActivity() {
             }
             
             withContext(Dispatchers.Main) {
-                currentItems.add(SettingsItem(
-                    id = "display_mode",
-                    icon = "🔧",
-                    title = "표시 모드",
-                    subtitle = "저장된 설정: ${displayModeCount}개",
-                    arrow = "▶"
-                ))
+                // 중복 방지를 위해 기존 항목이 있는지 확인
+                if (currentItems.none { it.id == "display_mode" }) {
+                    currentItems.add(SettingsItem(
+                        id = "display_mode",
+                        icon = "🔧",
+                        title = "표시 모드",
+                        subtitle = "저장된 설정: ${displayModeCount}개",
+                        arrow = "▶"
+                    ))
+                }
                 
-                // 정보 섹션
-                currentItems.add(SettingsItem(
-                    id = "info",
-                    icon = "📊",
-                    title = "앱 정보",
-                    subtitle = "v${BuildConfig.VERSION_NAME}",
-                    arrow = "▶"
-                ))
+                // 정보 섹션도 중복 확인
+                if (currentItems.none { it.id == "info" }) {
+                    currentItems.add(SettingsItem(
+                        id = "info",
+                        icon = "📊",
+                        title = "앱 정보",
+                        subtitle = "v${BuildConfig.VERSION_NAME}",
+                        arrow = "▶"
+                    ))
+                }
                 
                 updateAdapter()
             }
@@ -180,13 +185,30 @@ class SettingsActivity : AppCompatActivity() {
     }
     
     private fun handleItemClick(item: SettingsItem) {
-        when (item.id) {
-            "file_management" -> showFileManagementPanel()
-            "web_server" -> showWebServerPanel()
-            "collaboration" -> showCollaborationPanel()
-            "animation_sound" -> showAnimationSoundPanel()
-            "display_mode" -> showDisplayModePanel()
-            "info" -> showInfoPanel()
+        // 웹서버 설정 화면에서 다른 메뉴로 이동할 때 웹서버가 실행 중이면 확인
+        if (binding.detailPanelLayout.visibility == View.VISIBLE && 
+            binding.detailTitle.text == "웹서버" && 
+            isWebServerRunning && 
+            item.id != "web_server") {
+            showWebServerDetailExitConfirmDialog {
+                // 확인 후 다음 메뉴로 이동
+                when (item.id) {
+                    "file_management" -> showFileManagementPanel()
+                    "collaboration" -> showCollaborationPanel()
+                    "animation_sound" -> showAnimationSoundPanel()
+                    "display_mode" -> showDisplayModePanel()
+                    "info" -> showInfoPanel()
+                }
+            }
+        } else {
+            when (item.id) {
+                "file_management" -> showFileManagementPanel()
+                "web_server" -> showWebServerPanel()
+                "collaboration" -> showCollaborationPanel()
+                "animation_sound" -> showAnimationSoundPanel()
+                "display_mode" -> showDisplayModePanel()
+                "info" -> showInfoPanel()
+            }
         }
     }
     
@@ -374,10 +396,15 @@ class SettingsActivity : AppCompatActivity() {
     }
     
     private fun hideDetailPanel() {
-        binding.detailPanelLayout.visibility = View.GONE
-        binding.settingsRecyclerView.visibility = View.VISIBLE
-        // 로그 섹션도 숨김
-        hideWebServerLogSection()
+        // 웹서버 설정 화면에서 벗어날 때 웹서버가 실행 중이면 확인
+        if (binding.detailTitle.text == "웹서버" && isWebServerRunning) {
+            showWebServerDetailExitConfirmDialog()
+        } else {
+            binding.detailPanelLayout.visibility = View.GONE
+            binding.settingsRecyclerView.visibility = View.VISIBLE
+            // 로그 섹션도 숨김
+            hideWebServerLogSection()
+        }
     }
     
     private fun handleDetailItemClick(item: SettingsItem) {
@@ -504,8 +531,8 @@ class SettingsActivity : AppCompatActivity() {
         val message = if (newEnabled) "페이지 전환 애니메이션이 활성화되었습니다" else "페이지 전환 애니메이션이 비활성화되었습니다"
         Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
         
-        hideDetailPanel()
-        setupMainMenu()
+        // 상세 패널 새로고침
+        showAnimationSoundPanel()
     }
     
     private fun togglePageTurnSound() {
@@ -517,8 +544,8 @@ class SettingsActivity : AppCompatActivity() {
         val message = if (newEnabled) "페이지 넘기기 사운드가 활성화되었습니다" else "페이지 넘기기 사운드가 비활성화되었습니다"
         Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
         
-        hideDetailPanel()
-        setupMainMenu()
+        // 상세 패널 새로고침
+        showAnimationSoundPanel()
     }
     
     private fun togglePageInfo() {
@@ -530,8 +557,8 @@ class SettingsActivity : AppCompatActivity() {
         val message = if (newEnabled) "페이지 정보가 표시됩니다" else "페이지 정보가 숨겨집니다"
         Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
         
-        hideDetailPanel()
-        setupMainMenu()
+        // 상세 패널 새로고침
+        showAnimationSoundPanel()
     }
     
     private fun showVolumeSettingDialog() {
@@ -563,8 +590,8 @@ class SettingsActivity : AppCompatActivity() {
                 val volume = volumePercent / 100.0f
                 preferences.edit().putFloat("page_turn_volume", volume).apply()
                 Toast.makeText(this, "볼륨이 ${volumePercent}%로 설정되었습니다", Toast.LENGTH_SHORT).show()
-                hideDetailPanel()
-                setupMainMenu()
+                // 상세 패널 새로고침
+                showAnimationSoundPanel()
             }
             .setNegativeButton("취소", null)
             .show()
@@ -800,14 +827,11 @@ class SettingsActivity : AppCompatActivity() {
     }
     
     /**
-     * Handle back press with web server confirmation
+     * Handle back press without web server confirmation
+     * (웹서버는 이미 웹서버 설정 화면에서 벗어날 때 확인했으므로)
      */
     private fun handleBackPress() {
-        if (isWebServerRunning) {
-            showWebServerExitConfirmDialog()
-        } else {
-            finish()
-        }
+        finish()
     }
     
     /**
@@ -941,6 +965,39 @@ class SettingsActivity : AppCompatActivity() {
             // 웹서버 패널이 열려있으면 새로고침
             showWebServerPanel()
         }
+    }
+    
+    /**
+     * Show confirmation dialog when exiting web server detail panel
+     */
+    private fun showWebServerDetailExitConfirmDialog(onConfirm: (() -> Unit)? = null) {
+        val port = preferences.getInt("web_server_port", 8080)
+        val ipAddress = NetworkUtils.getLocalIpAddress()
+        
+        AlertDialog.Builder(this)
+            .setTitle("웹서버 실행 중")
+            .setMessage("웹서버가 실행 중입니다 ($ipAddress:$port)\n\n웹서버 설정을 나가면 웹서버가 중지됩니다.\n계속하시겠습니까?")
+            .setPositiveButton("나가기") { _, _ ->
+                // Stop web server and exit detail panel
+                Log.d("SettingsActivity", "User confirmed exit from web server panel, stopping web server")
+                webServerManager.clearLogCallback()
+                webServerManager.stopServer()
+                isWebServerRunning = false
+                
+                // Actually hide the panel
+                binding.detailPanelLayout.visibility = View.GONE
+                binding.settingsRecyclerView.visibility = View.VISIBLE
+                hideWebServerLogSection()
+                
+                // Refresh main menu to show updated web server status
+                setupMainMenu()
+                
+                // Execute callback if provided
+                onConfirm?.invoke()
+            }
+            .setNegativeButton("머물기", null)
+            .setCancelable(true)
+            .show()
     }
     
     private fun clearWebServerLog() {
