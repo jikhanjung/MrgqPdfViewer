@@ -1,6 +1,6 @@
 # 🎵 MrgqPdfViewer
 
-**v0.1.10** - Android TV용 PDF 악보 리더 앱 (PDF 렌더링 안정성 완전 해결 & 실시간 웹서버 모니터링)
+**v0.1.11** - Android TV용 PDF 악보 리더 앱 (두 페이지 모드 오선 렌더링 품질 개선)
 
 ## 📖 소개
 

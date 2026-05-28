@@ -4,6 +4,26 @@
 
 ---
 
+## [0.1.11] - 2026-05-28
+
+### 🎼 두 페이지 모드 오선 렌더링 개선
+- **2단계 fractional scaling 안티패턴 제거**: 두 페이지 모드에서 PDF → 비트맵 → Canvas Matrix scale → ImageView fit 의 2회 fractional scaling 이 PDF → oversampled 비트맵 → ImageView 다운스케일 1회로 단순화. 오선 두께가 줄마다 들쭉날쭉하던 현상 해결.
+- **크롭(위/아래 클리핑) 을 vector 변환에 흡수**: `Matrix.postTranslate` 로 PDF 좌표계에서 직접 잘라낸 영역만 래스터화. 렌더 후 비트맵을 다시 잘라내고 ImageView 가 재fit 하던 단계 제거.
+- **렌더 정책 단일화**: 단일/두 페이지 모드, 캐시 히트/미스 4 가지 경로가 모두 같은 헬퍼 (`renderPageAtSinglePageTarget`, `renderPageAtTwoPageTarget`, `PageCache.renderPageToTargetBitmap`) 를 거치도록 통합. `OVERSAMPLE_FACTOR = 2.5f` 한 곳에서 정의.
+- **`applyDisplaySettings` 함수 제거**: 크롭이 렌더 단계에 흡수되어 후처리 불필요. Activity / PageCache 양쪽에서 삭제.
+
+### 🧹 코드 정리
+- **PdfPageManager.kt 제거**: v0.1.8 매니저 분리 시도 잔재. 클래스 작성까지만 되고 PdfViewerActivity 에 통합되지 않은 dead code (어디서도 인스턴스화 안 됨) 였음. 라이브 렌더는 PdfViewerActivity + PageCache 가 담당.
+- **CLAUDE.md / README 갱신**: 실제 아키텍처와 렌더 정책에 맞게 문구 수정.
+- **HANDOFF.md 추가**: 인계 노트로 작업 요약, 검증 체크리스트, 후속 작업 트리 명시.
+
+### 🛡️ 기술적 세부 개선
+- 코드 순 −400 라인 (안티패턴 정리로 두 페이지 모드 합성 로직이 절반 이하로 축소)
+- `combineTwoPagesUnified` 가 Canvas `postScale` 대신 단순 `drawBitmap` 만 수행
+- PageCache 가 displaySettings 변경 시 자동 invalidation (기존 메커니즘 유지) — 크롭 슬라이더 변경이 다음 렌더에 정확히 반영됨
+
+---
+
 ## [0.1.10] - 2025-07-27
 
 ### 🚨 중요 버그 수정

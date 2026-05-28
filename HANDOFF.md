@@ -1,7 +1,8 @@
 # HANDOFF — 현재 작업 인계 노트
 
 마지막 갱신: 2026-05-28
-브랜치: `main` (origin/main 보다 2 커밋 앞섬, 푸시 안 함)
+브랜치: `main` (origin/main 보다 4 커밋 앞섬, 푸시 안 함)
+대상 버전: **v0.1.11** (현재 main 의 build.gradle.kts 값)
 
 ---
 
