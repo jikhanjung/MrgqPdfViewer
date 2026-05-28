@@ -6,7 +6,7 @@
 
 ## 1. 기존 계획 문서의 문제점
 
-`devlog/20250720_05_animation_sync_race_condition_fix_plan.md` 문서에서 제시된 분석이 **실제 코드와 일치하지 않음**을 확인했습니다.
+`devlog/20250720_015_animation_sync_race_condition_fix_plan.md` 문서에서 제시된 분석이 **실제 코드와 일치하지 않음**을 확인했습니다.
 
 ### 1.1. 잘못된 가정
 

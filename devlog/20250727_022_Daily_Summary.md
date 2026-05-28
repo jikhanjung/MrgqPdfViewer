@@ -171,42 +171,42 @@ if (isRenderingInProgress && currentTime - lastRenderTime < 100) {
 ### 작업 흐름별 문서화
 
 #### 1. 합주 모드 최적화 관련 (이전 세션 연계)
-**`20250727_01_delay_minimization_guide.md`**
+**`20250727_023_delay_minimization_guide.md`**
 - 실시간 악보 넘김 시스템의 딜레이 최소화 전략
 - 블루투스 페달 → 지휘자 → 연주자 각 단계별 최적화 방안
 - WebSocket vs UDP 통신 방식 비교 및 권장사항
 
-**`20250727_02_ensemble_mode_performance_optimization.md`**
+**`20250727_024_ensemble_mode_performance_optimization.md`**
 - 합주 모드 성능 최적화 완료 보고서
 - 5가지 주요 기능 구현 상세 내용
 - 메시지 큐 비활성화 결정과 60-150ms 성능 향상 결과
 
 #### 2. PDF 렌더러 동시성 문제 해결
-**`20250727_03_pdf_renderer_concurrency_issue.md`**
+**`20250727_025_pdf_renderer_concurrency_issue.md`**
 - 문제 현상 및 원인 상세 분석
 - 4가지 해결 방안 제시 및 비교 (Mutex, 상태관리, 큐잉, 에러처리)
 - 구현 우선순위 및 테스트 계획
 
-**`20250727_04_pdf_renderer_concurrency_fix_implementation.md`**
+**`20250727_026_pdf_renderer_concurrency_fix_implementation.md`**
 - 실제 구현 내용 상세 기록
 - Mutex 기반 동기화, 재시도 로직, 에러 처리 개선
 - 성능 지표 및 테스트 결과 (에러 발생률 0% 달성)
 
 #### 3. 향후 계획
-**`20250727_05_v0.2.x_roadmap.md`**
+**`20250727_027_v0.2.x_roadmap.md`**
 - v0.2.x에서 구현할 고급 기능 계획
 - 마우스 포인터 공유, 하이라이트 시스템, 고급 협업 기능
 - 8-10주 개발 일정 및 기술적 도전 과제
 
 #### 4. 웹서버 UI 개선 및 실시간 모니터링
-**`20250727_06_webserver_ui_improvements.md`** (신규 추가)
+**`20250727_028_webserver_ui_improvements.md`** (신규 추가)
 - 웹서버 상태 동기화 문제 해결 (싱글톤 패턴 적용)
 - 실시간 활동 로그 시스템 구현 (투명한 모니터링)
 - UI 일관성 개선 (통일된 elegant 카드 스타일)
 - 사용자 경험 대폭 향상 (패널 유지 + 실시간 피드백)
 
 #### 5. 기반 자료
-**`20250726_01_ensemble_mode_improvements.md`** (이전 세션)
+**`20250726_021_ensemble_mode_improvements.md`** (이전 세션)
 - 합주 모드 개선 요구사항 정의
 - 화면 꺼짐 방지, 입력 보호, 실시간 공유 기능 계획
 

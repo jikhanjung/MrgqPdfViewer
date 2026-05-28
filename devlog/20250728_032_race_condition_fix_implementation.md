@@ -4,7 +4,7 @@
 
 ## 1. 구현 개요
 
-devlog/20250728_03_main_screen_file_open_race_condition_fix.md에서 계획한 race condition 해결 방안을 완전히 구현했습니다. 파일 업로드 중에 파일을 클릭해도 항상 올바른 파일이 열리도록 안정성을 대폭 개선했습니다.
+devlog/20250728_031_main_screen_file_open_race_condition_fix.md에서 계획한 race condition 해결 방안을 완전히 구현했습니다. 파일 업로드 중에 파일을 클릭해도 항상 올바른 파일이 열리도록 안정성을 대폭 개선했습니다.
 
 ## 2. 구현 내용
 

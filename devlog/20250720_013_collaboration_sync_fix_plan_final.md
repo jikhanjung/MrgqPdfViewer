@@ -10,7 +10,7 @@
 
 ## 2. 수정된 근본 원인 분석
 
-`devlog/20250720_02_collaboration_sync_deep_analysis.md` 문서의 심층 분석을 통해, 문제의 가장 유력한 원인은 **콜백 유실**로 재정의되었다.
+`devlog/20250720_012_collaboration_sync_deep_analysis.md` 문서의 심층 분석을 통해, 문제의 가장 유력한 원인은 **콜백 유실**로 재정의되었다.
 
 1.  연주자 기기에서 `PdfViewerActivity`가 활성화되어 있는 동안, `MainActivity`는 백그라운드 상태에 놓인다.
 2.  이 과정에서 `MainActivity`에 등록되어 있던 `GlobalCollaborationManager`의 콜백(특히 `setOnFileChangeReceived`)이 안드로이드 생명주기에 따라 비활성화되거나, `PdfViewerActivity`의 콜백으로 덮어씌워지면서 유실될 가능성이 매우 높다.

@@ -6,7 +6,7 @@
 
 ## 1. 구현 배경
 
-`devlog/20250720_06_animation_sync_analysis_correction.md` 문서에서 분석한 애니메이션 동기화 문제를 해결하기 위해 실제 코드 수정을 진행했습니다.
+`devlog/20250720_016_animation_sync_analysis_correction.md` 문서에서 분석한 애니메이션 동기화 문제를 해결하기 위해 실제 코드 수정을 진행했습니다.
 
 ### 1.1. 확인된 실제 문제
 
