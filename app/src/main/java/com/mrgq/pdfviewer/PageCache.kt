@@ -1,13 +1,13 @@
 package com.mrgq.pdfviewer
 
 import android.graphics.Bitmap
-import android.graphics.Canvas
+import android.graphics.Color
+import android.graphics.Matrix
 import android.graphics.pdf.PdfRenderer
 import android.util.Log
 import android.util.LruCache
 import kotlinx.coroutines.*
 import java.util.concurrent.ConcurrentHashMap
-import android.graphics.Rect
 
 /**
  * PDF 페이지 프리렌더링 및 캐싱 시스템
@@ -22,6 +22,9 @@ class PageCache(
     companion object {
         private const val TAG = "PageCache"
         private const val PRERENDER_DISTANCE = 2 // 현재 페이지 앞뒤로 몇 페이지까지 프리렌더링
+        // PDF vector를 화면 최종 픽셀의 N배로 래스터화. 화면 표시 시 다운스케일에서 anti-alias 효과.
+        // combineTwoPagesUnified 의 finalScale 과 반드시 일치해야 함.
+        const val OVERSAMPLE_FACTOR = 2.5f
     }
     
     // LRU 캐시로 메모리 사용량 제한
@@ -162,7 +165,6 @@ class PageCache(
      * 동기 페이지 렌더링 (즉시 필요한 경우)
      */
     private fun renderPageSync(pageIndex: Int): Bitmap? {
-        // Safety check: ensure PDF renderer is still valid
         val pageCount = try {
             pdfRenderer.pageCount
         } catch (e: IllegalStateException) {
@@ -172,45 +174,36 @@ class PageCache(
             Log.w(TAG, "Error accessing page count for sync render page $pageIndex", e)
             return null
         }
-        
+
         if (pageIndex < 0 || pageIndex >= pageCount) {
             return null
         }
-        
+
         return try {
-            // Safety check: ensure PDF renderer is still valid before opening page
             val page = try {
                 pdfRenderer.openPage(pageIndex)
             } catch (e: IllegalStateException) {
                 Log.w(TAG, "PdfRenderer is closed, cannot render page $pageIndex", e)
                 return null
             }
-            
-            val bitmap = createBitmapForPage(page)
-            
-            // 렌더링
-            page.render(bitmap, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
+
+            val bitmap = renderPageToTargetBitmap(page)
             page.close()
-            
-            // 설정 적용
-            val finalBitmap = applyDisplaySettings(bitmap)
-            
-            // 캐시에 저장 (설정이 적용된 비트맵)
-            bitmapCache.put(pageIndex, finalBitmap)
-            
-            Log.d(TAG, "페이지 $pageIndex 동기 렌더링 완료")
-            finalBitmap
+
+            bitmapCache.put(pageIndex, bitmap)
+
+            Log.d(TAG, "페이지 $pageIndex 동기 렌더링 완료 (${bitmap.width}x${bitmap.height})")
+            bitmap
         } catch (e: Exception) {
             Log.e(TAG, "페이지 $pageIndex 동기 렌더링 실패", e)
             null
         }
     }
-    
+
     /**
      * 비동기 페이지 렌더링 (프리렌더링용)
      */
     private suspend fun renderPageAsync(pageIndex: Int) = withContext(Dispatchers.IO) {
-        // Safety check: ensure PDF renderer is still valid
         val pageCount = try {
             pdfRenderer.pageCount
         } catch (e: IllegalStateException) {
@@ -220,131 +213,79 @@ class PageCache(
             Log.w(TAG, "Error accessing page count for page $pageIndex", e)
             return@withContext
         }
-        
+
         if (pageIndex < 0 || pageIndex >= pageCount) {
             return@withContext
         }
-        
-        // 이미 캐시에 있으면 스킵
+
         if (bitmapCache.get(pageIndex) != null) {
             return@withContext
         }
-        
+
         try {
-            // Safety check: ensure PDF renderer is still valid before opening page
             val page = try {
                 pdfRenderer.openPage(pageIndex)
             } catch (e: IllegalStateException) {
                 Log.w(TAG, "PdfRenderer is closed, cannot async render page $pageIndex", e)
                 return@withContext
             }
-            
-            val bitmap = createBitmapForPage(page)
-            
-            // 렌더링
-            page.render(bitmap, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
+
+            val bitmap = renderPageToTargetBitmap(page)
             page.close()
-            
-            // 설정 적용
-            val finalBitmap = applyDisplaySettings(bitmap)
-            
-            // 캐시에 저장 (설정이 적용된 비트맵)
-            bitmapCache.put(pageIndex, finalBitmap)
-            
-            Log.d(TAG, "페이지 $pageIndex 비동기 렌더링 완료")
+
+            bitmapCache.put(pageIndex, bitmap)
+
+            Log.d(TAG, "페이지 $pageIndex 비동기 렌더링 완료 (${bitmap.width}x${bitmap.height})")
         } catch (e: Exception) {
             Log.w(TAG, "페이지 $pageIndex 비동기 렌더링 실패", e)
         }
     }
-    
+
     /**
-     * 페이지에 맞는 Bitmap 생성
+     * PDF 페이지를 목표 크기로 직접 래스터화한다.
+     *
+     * PdfRenderer 가 vector 단계에서 한 번에 (크롭 + fit + oversample) 변환을 수행하도록
+     * Matrix 를 명시적으로 넘긴다. 이후 비트맵 재스케일/재크롭이 없어 fractional scaling
+     * 으로 인한 오선 두께 불균일이 사라진다.
+     *
+     * 두 페이지 모드의 비트맵 크기는 combineTwoPagesUnified 가 기대하는 위치+크기에 정확히
+     * 맞아야 하므로, 양쪽이 동일한 공식을 사용한다 (화면 절반 - 중앙 여백/2 영역에 fit).
      */
-    private fun createBitmapForPage(page: PdfRenderer.Page): Bitmap {
+    private fun renderPageToTargetBitmap(page: PdfRenderer.Page): Bitmap {
         val pdfWidth = page.width
         val pdfHeight = page.height
-        
-        // 화면 크기에 맞춰 스케일 계산
-        val screenAspectRatio = screenWidth.toFloat() / screenHeight.toFloat()
-        val pdfAspectRatio = pdfWidth.toFloat() / pdfHeight.toFloat()
-        
-        val targetWidth: Int
-        val targetHeight: Int
-        
-        if (isTwoPageMode) {
-            // 두 페이지 모드: 원본 PDF 비율 유지하면서 스케일 적용
-            targetWidth = (pdfWidth * renderScale).toInt()
-            targetHeight = (pdfHeight * renderScale).toInt()
+
+        val settings = displaySettingsProvider?.invoke() ?: Triple(0f, 0f, 0f)
+        val topClipping = settings.first.coerceIn(0f, 0.45f)
+        val bottomClipping = settings.second.coerceIn(0f, 0.45f)
+        val centerPadding = settings.third.coerceIn(0f, 0.5f)
+        val visibleFraction = (1f - topClipping - bottomClipping).coerceAtLeast(0.1f)
+        val visiblePdfHeight = pdfHeight * visibleFraction
+
+        val fitScale = if (isTwoPageMode) {
+            val halfScreenW = screenWidth / 2f
+            val halfPadPx = screenWidth * centerPadding / 2f
+            val availW = (halfScreenW - halfPadPx).coerceAtLeast(1f)
+            minOf(availW / pdfWidth, screenHeight / visiblePdfHeight)
         } else {
-            // 단일 페이지 모드: 화면에 맞춤
-            if (pdfAspectRatio > screenAspectRatio) {
-                // PDF가 더 가로로 길면 폭에 맞춤
-                targetWidth = (screenWidth * renderScale).toInt()
-                targetHeight = (screenWidth / pdfAspectRatio * renderScale).toInt()
-            } else {
-                // PDF가 더 세로로 길면 높이에 맞춤
-                targetWidth = (screenHeight * pdfAspectRatio * renderScale).toInt()
-                targetHeight = (screenHeight * renderScale).toInt()
-            }
+            minOf(screenWidth / pdfWidth.toFloat(), screenHeight / visiblePdfHeight)
         }
-        
-        return Bitmap.createBitmap(targetWidth, targetHeight, Bitmap.Config.ARGB_8888)
-    }
-    
-    /**
-     * 클리핑과 여백 설정을 비트맵에 적용
-     */
-    private fun applyDisplaySettings(originalBitmap: Bitmap): Bitmap {
-        val settings = displaySettingsProvider?.invoke()
-        if (settings == null) {
-            Log.d(TAG, "설정 프로바이더가 null입니다")
-            return originalBitmap
+
+        val finalScale = fitScale * OVERSAMPLE_FACTOR
+        val targetWidth = (pdfWidth * finalScale).toInt().coerceAtLeast(1)
+        val targetHeight = (visiblePdfHeight * finalScale).toInt().coerceAtLeast(1)
+
+        val bitmap = Bitmap.createBitmap(targetWidth, targetHeight, Bitmap.Config.ARGB_8888)
+        bitmap.eraseColor(Color.WHITE)
+
+        val matrix = Matrix().apply {
+            setScale(finalScale, finalScale)
+            // PDF 좌표 y=topClipping*pdfHeight 를 비트맵 y=0 으로 매핑하여
+            // 크롭을 vector 변환 단계에 흡수.
+            postTranslate(0f, -pdfHeight * topClipping * finalScale)
         }
-        
-        val (topClipping, bottomClipping, centerPadding) = settings
-        Log.d(TAG, "PageCache에서 받은 설정: 위 클리핑 ${topClipping * 100}%, 아래 클리핑 ${bottomClipping * 100}%, 여백 ${centerPadding * 100}%, 두페이지모드: $isTwoPageMode")
-        
-        val hasClipping = topClipping > 0f || bottomClipping > 0f
-        // PageCache는 개별 페이지만 처리하므로 여백은 PdfViewerActivity에서 처리
-        
-        if (!hasClipping) {
-            Log.d(TAG, "적용할 클리핑이 없습니다")
-            return originalBitmap
-        }
-        
-        val originalWidth = originalBitmap.width
-        val originalHeight = originalBitmap.height
-        
-        // 클리핑 계산만 수행 (여백은 PdfViewerActivity에서 처리)
-        val topClipPixels = (originalHeight * topClipping).toInt()
-        val bottomClipPixels = (originalHeight * bottomClipping).toInt()
-        val clippedHeight = originalHeight - topClipPixels - bottomClipPixels
-        
-        val finalWidth = originalWidth
-        val finalHeight = clippedHeight
-        
-        if (finalWidth <= 0 || finalHeight <= 0) {
-            Log.w(TAG, "클리핑 결과가 유효하지 않음: ${finalWidth}x${finalHeight}")
-            return originalBitmap
-        }
-        
-        // 새 비트맵 생성
-        val resultBitmap = Bitmap.createBitmap(finalWidth, finalHeight, Bitmap.Config.ARGB_8888)
-        val canvas = Canvas(resultBitmap)
-        canvas.drawColor(android.graphics.Color.WHITE)
-        
-        // PageCache는 개별 페이지만 처리하므로 클리핑만 적용
-        val srcRect = Rect(0, topClipPixels, originalWidth, originalHeight - bottomClipPixels)
-        val dstRect = Rect(0, 0, originalWidth, clippedHeight)
-        canvas.drawBitmap(originalBitmap, srcRect, dstRect, null)
-        
-        // 원본 비트맵을 재사용하지 않을 때만 해제
-        if (resultBitmap != originalBitmap) {
-            originalBitmap.recycle()
-        }
-        
-        Log.d(TAG, "PageCache 클리핑 적용: ${originalWidth}x${originalHeight} → ${finalWidth}x${finalHeight}")
-        return resultBitmap
+        page.render(bitmap, null, matrix, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
+        return bitmap
     }
     
     /**
