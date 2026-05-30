@@ -28,7 +28,7 @@ android {
                 val signingProps = Properties()
                 signingPropsFile.inputStream().use { signingProps.load(it) }
                 
-                storeFile = file(signingProps.getProperty("storeFile"))
+                storeFile = rootProject.file(signingProps.getProperty("storeFile"))
                 storePassword = signingProps.getProperty("storePassword")
                 keyAlias = signingProps.getProperty("keyAlias")
                 keyPassword = signingProps.getProperty("keyPassword")
