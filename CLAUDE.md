@@ -263,7 +263,7 @@ adb install app/build/outputs/apk/debug/app-debug.apk
 - [x] 설정 화면 모든 기능 (포트 설정, 파일 관리, 설정 초기화)
 - [x] PDF 파일 전체 삭제 (앱 내)
 - [x] PDF 렌더링 기본 기능
-- [x] 고해상도 PDF 렌더링 (단일 단계 Matrix 렌더 + 2.5× oversample, v0.1.11+)
+- [x] 고해상도 PDF 렌더링 (단일 단계 Matrix 렌더 + 4× oversample, v0.1.12+)
 - [x] 두 페이지 모드 (가로/세로 비율 자동 판단)
 - [x] 파일별 설정 저장/불러오기
 - [x] 웹서버 파일 업로드 (진행률 표시)
@@ -309,8 +309,9 @@ adb install app/build/outputs/apk/debug/app-debug.apk
    - 파일별 개별 설정 저장
 
 3. **고해상도 PDF 렌더링**
-   - 단일 단계 Matrix 렌더 + 2.5× oversample (v0.1.11+)
+   - 단일 단계 Matrix 렌더 + 4× oversample (v0.1.12+, P01 단계에서는 2.5×)
    - 크롭(위/아래 클리핑) 을 vector 변환 단계에 흡수 → fractional scaling 없는 깔끔한 오선
+   - 오선 sub-pixel 위치가 0.5 근처일 때 dark coverage 0.83 → 0.94 로 상승 (P2)
 
 4. **웹 인터페이스 고도화**
    - 실시간 업로드 진행률 표시

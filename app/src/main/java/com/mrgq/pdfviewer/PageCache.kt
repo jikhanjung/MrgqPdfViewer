@@ -22,9 +22,12 @@ class PageCache(
     companion object {
         private const val TAG = "PageCache"
         private const val PRERENDER_DISTANCE = 2 // 현재 페이지 앞뒤로 몇 페이지까지 프리렌더링
-        // PDF vector를 화면 최종 픽셀의 N배로 래스터화. 화면 표시 시 다운스케일에서 anti-alias 효과.
-        // combineTwoPagesUnified 의 finalScale 과 반드시 일치해야 함.
-        const val OVERSAMPLE_FACTOR = 2.5f
+        // PDF vector를 화면 최종 픽셀의 N배로 래스터화한 뒤 즉시 화면 크기로 다운스케일.
+        // 캐시/표시 비트맵은 항상 화면 크기 (작음); oversample 비트맵은 transient.
+        // 2.5 → 4.0 (P2, 2026-05-30): 오선 sub-pixel 위치가 0.5 근처일 때 dark coverage 개선.
+        // Oversample 비트맵을 ImageView 에 넘기던 P2-A 안은 Canvas MAX_BITMAP_SIZE (~100MB)
+        // 초과로 크래시 → 렌더 직후 createScaledBitmap 으로 다운스케일하는 P2-B 안으로 전환.
+        const val OVERSAMPLE_FACTOR = 4.0f
     }
     
     // LRU 캐시로 메모리 사용량 제한
@@ -242,14 +245,16 @@ class PageCache(
     }
 
     /**
-     * PDF 페이지를 목표 크기로 직접 래스터화한다.
+     * PDF 페이지를 화면 크기 비트맵으로 래스터화한다.
      *
-     * PdfRenderer 가 vector 단계에서 한 번에 (크롭 + fit + oversample) 변환을 수행하도록
-     * Matrix 를 명시적으로 넘긴다. 이후 비트맵 재스케일/재크롭이 없어 fractional scaling
-     * 으로 인한 오선 두께 불균일이 사라진다.
+     * 1단계: oversample 해상도 (fitScale × OVERSAMPLE_FACTOR) 로 transient 비트맵에 렌더.
+     *        Matrix 로 크롭을 vector 단계에 흡수 → fractional scaling 으로 인한 오선 두께
+     *        불균일 없음.
+     * 2단계: createScaledBitmap 으로 표시 크기 (fitScale ×) 로 다운스케일. 이 과정의 필터링
+     *        이 anti-alias 역할 (오선 dark coverage 균일화).
+     * 3단계: oversample 비트맵 recycle, 화면 크기 비트맵만 캐시/반환.
      *
-     * 두 페이지 모드의 비트맵 크기는 combineTwoPagesUnified 가 기대하는 위치+크기에 정확히
-     * 맞아야 하므로, 양쪽이 동일한 공식을 사용한다 (화면 절반 - 중앙 여백/2 영역에 fit).
+     * Canvas MAX_BITMAP_SIZE (~100MB) 한계 회피 + 캐시 메모리 절감.
      */
     private fun renderPageToTargetBitmap(page: PdfRenderer.Page): Bitmap {
         val pdfWidth = page.width
@@ -271,21 +276,27 @@ class PageCache(
             minOf(screenWidth / pdfWidth.toFloat(), screenHeight / visiblePdfHeight)
         }
 
-        val finalScale = fitScale * OVERSAMPLE_FACTOR
-        val targetWidth = (pdfWidth * finalScale).toInt().coerceAtLeast(1)
-        val targetHeight = (visiblePdfHeight * finalScale).toInt().coerceAtLeast(1)
+        val displayW = (pdfWidth * fitScale).toInt().coerceAtLeast(1)
+        val displayH = (visiblePdfHeight * fitScale).toInt().coerceAtLeast(1)
 
-        val bitmap = Bitmap.createBitmap(targetWidth, targetHeight, Bitmap.Config.ARGB_8888)
-        bitmap.eraseColor(Color.WHITE)
+        val finalScale = fitScale * OVERSAMPLE_FACTOR
+        val oversampleW = (pdfWidth * finalScale).toInt().coerceAtLeast(1)
+        val oversampleH = (visiblePdfHeight * finalScale).toInt().coerceAtLeast(1)
+
+        val oversampleBitmap = Bitmap.createBitmap(oversampleW, oversampleH, Bitmap.Config.ARGB_8888)
+        oversampleBitmap.eraseColor(Color.WHITE)
 
         val matrix = Matrix().apply {
             setScale(finalScale, finalScale)
-            // PDF 좌표 y=topClipping*pdfHeight 를 비트맵 y=0 으로 매핑하여
-            // 크롭을 vector 변환 단계에 흡수.
             postTranslate(0f, -pdfHeight * topClipping * finalScale)
         }
-        page.render(bitmap, null, matrix, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
-        return bitmap
+        page.render(oversampleBitmap, null, matrix, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
+
+        val displayBitmap = Bitmap.createScaledBitmap(oversampleBitmap, displayW, displayH, true)
+        if (displayBitmap !== oversampleBitmap) {
+            oversampleBitmap.recycle()
+        }
+        return displayBitmap
     }
     
     /**

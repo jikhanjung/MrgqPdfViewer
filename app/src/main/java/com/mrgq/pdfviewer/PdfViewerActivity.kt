@@ -691,18 +691,15 @@ class PdfViewerActivity : AppCompatActivity() {
     /**
      * 통합된 두 페이지 결합 함수.
      *
-     * 입력 비트맵(leftBitmap, rightBitmap)은 이미 다음 형태로 와있다고 가정:
-     *  - 각 페이지가 "화면 절반 - 중앙 여백/2" 영역에 fit 된 크기
-     *  - OVERSAMPLE_FACTOR 적용된 oversample 해상도
-     *  - 위/아래 크롭이 vector 단계에서 적용된 상태 (비트맵 높이 = visibleFraction × ... )
+     * 입력 비트맵은 이미 화면 좌표계에서 "화면 절반 - 중앙 여백/2" 영역에 fit 된 크기로 와있다고
+     * 가정 (renderPageAtTwoPageTarget / PageCache.renderPageToTargetBitmap 이 보장). 따라서
+     * 이 함수는 추가 스케일링 없이 두 비트맵을 좌/우 영역 가운데에 배치만 한다.
      *
-     * 따라서 이 함수는 추가 스케일링 없이 두 비트맵을 좌우 영역의 중앙에 배치만 한다.
-     * Canvas Matrix scale 단계가 제거되어 fractional scaling 으로 인한 오선 깨짐이 사라진다.
+     * 결과는 화면 크기 비트맵 (screenWidth × pageHeight) — ImageView 가 안전하게 draw 가능.
      */
     private fun combineTwoPagesUnified(leftBitmap: Bitmap, rightBitmap: Bitmap? = null): Bitmap {
-        val oversample = PageCache.OVERSAMPLE_FACTOR
-        val finalWidth = (screenWidth * oversample).toInt().coerceAtLeast(1)
-        // 크롭 이후 입력 비트맵 높이가 화면 높이 × oversample 보다 작을 수 있다.
+        val finalWidth = screenWidth.coerceAtLeast(1)
+        // 크롭 이후 입력 비트맵 높이가 화면 높이보다 작을 수 있다.
         // finalHeight 는 입력 비트맵 높이에 맞춘다 (위아래 letterbox 방지).
         val pageHeight = maxOf(leftBitmap.height, rightBitmap?.height ?: 0)
         val finalHeight = pageHeight.coerceAtLeast(1)
@@ -711,14 +708,12 @@ class PdfViewerActivity : AppCompatActivity() {
         val finalCanvas = Canvas(finalBitmap)
         finalCanvas.drawColor(android.graphics.Color.WHITE)
 
-        // 중앙 여백: 사용자 설정값을 oversample 좌표계로 변환
-        val centerPadOversamplePx = (screenWidth * currentCenterPadding * oversample).toInt()
+        val centerPadPx = (screenWidth * currentCenterPadding).toInt()
         val halfWidth = finalWidth / 2
-        val halfPadPx = centerPadOversamplePx / 2
+        val halfPadPx = centerPadPx / 2
         val leftAreaWidth = halfWidth - halfPadPx
         val rightAreaWidth = halfWidth - halfPadPx
 
-        // 왼쪽 페이지: 왼쪽 절반 영역의 가운데에 배치
         val leftX = (leftAreaWidth - leftBitmap.width) / 2f
         val leftY = (finalHeight - leftBitmap.height) / 2f
         finalCanvas.drawBitmap(leftBitmap, leftX, leftY, null)
@@ -730,9 +725,7 @@ class PdfViewerActivity : AppCompatActivity() {
             finalCanvas.drawBitmap(rightBitmap, rightX, rightY, null)
         }
 
-        Log.d("PdfViewerActivity", "=== UNIFIED TWO PAGE COMBINE ===")
-        Log.d("PdfViewerActivity", "Inputs: left=${leftBitmap.width}x${leftBitmap.height}, right=${rightBitmap?.let{"${it.width}x${it.height}"} ?: "none"}")
-        Log.d("PdfViewerActivity", "Final: ${finalWidth}x${finalHeight}, centerPad(oversample px)=$centerPadOversamplePx")
+        Log.d("PdfViewerActivity", "=== UNIFIED TWO PAGE COMBINE === Inputs: ${leftBitmap.width}x${leftBitmap.height} + ${rightBitmap?.let{"${it.width}x${it.height}"} ?: "none"} -> Final: ${finalWidth}x${finalHeight}, centerPad=$centerPadPx")
 
         return finalBitmap
     }
@@ -753,12 +746,11 @@ class PdfViewerActivity : AppCompatActivity() {
     /**
      * 단일 페이지 모드용 직접 렌더 (캐시 미스 / forceDirectRendering 경로).
      *
-     * PageCache.renderPageToTargetBitmap 와 동일한 정책:
-     *  - 화면 전체에 fit 되는 fitScale 계산 (visibleFraction 반영)
-     *  - OVERSAMPLE_FACTOR 곱해서 oversample 해상도로 비트맵 생성
-     *  - Matrix.setScale + postTranslate(0, -topClip*pageH*scale) 로 크롭을 vector 단계에 흡수
+     * 1단계: oversample 해상도로 transient 렌더 (크롭은 Matrix.postTranslate 로 vector 흡수).
+     * 2단계: createScaledBitmap 으로 화면 크기 (fitScale × pdf 크기) 다운스케일.
+     * 3단계: oversample 비트맵 recycle, 화면 크기 비트맵만 반환.
      *
-     * 결과 비트맵은 추가 스케일/크롭 후처리 없이 ImageView Matrix(setImageViewMatrix) 가 화면에 맞춘다.
+     * ImageView 는 화면 크기 비트맵을 받으므로 Canvas MAX_BITMAP_SIZE 한계 회피.
      */
     private fun renderPageAtSinglePageTarget(page: PdfRenderer.Page): Bitmap {
         val pdfW = page.width
@@ -772,29 +764,38 @@ class PdfViewerActivity : AppCompatActivity() {
             screenWidth / pdfW.toFloat(),
             screenHeight / visiblePdfH
         )
+
+        val displayW = (pdfW * fitScale).toInt().coerceAtLeast(1)
+        val displayH = (visiblePdfH * fitScale).toInt().coerceAtLeast(1)
+
         val finalScale = fitScale * PageCache.OVERSAMPLE_FACTOR
+        val oversampleW = (pdfW * finalScale).toInt().coerceAtLeast(1)
+        val oversampleH = (visiblePdfH * finalScale).toInt().coerceAtLeast(1)
 
-        val targetW = (pdfW * finalScale).toInt().coerceAtLeast(1)
-        val targetH = (visiblePdfH * finalScale).toInt().coerceAtLeast(1)
-
-        val bitmap = Bitmap.createBitmap(targetW, targetH, Bitmap.Config.ARGB_8888)
-        bitmap.eraseColor(android.graphics.Color.WHITE)
+        val oversampleBitmap = Bitmap.createBitmap(oversampleW, oversampleH, Bitmap.Config.ARGB_8888)
+        oversampleBitmap.eraseColor(android.graphics.Color.WHITE)
 
         val matrix = android.graphics.Matrix().apply {
             setScale(finalScale, finalScale)
             postTranslate(0f, -pdfH * topClip * finalScale)
         }
-        page.render(bitmap, null, matrix, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
+        page.render(oversampleBitmap, null, matrix, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
 
-        Log.d("PdfViewerActivity", "=== SINGLE PAGE RENDER === pdf=${pdfW}x${pdfH} -> bitmap=${targetW}x${targetH}, scale=$finalScale, topClip=$topClip, bottomClip=$bottomClip")
-        return bitmap
+        val displayBitmap = Bitmap.createScaledBitmap(oversampleBitmap, displayW, displayH, true)
+        if (displayBitmap !== oversampleBitmap) {
+            oversampleBitmap.recycle()
+        }
+
+        Log.d("PdfViewerActivity", "=== SINGLE PAGE RENDER === pdf=${pdfW}x${pdfH} -> oversample=${oversampleW}x${oversampleH} -> display=${displayW}x${displayH}")
+        return displayBitmap
     }
 
     /**
      * 두 페이지 모드용 직접 렌더 (캐시 미스 경로).
      *
-     * PageCache.renderPageToTargetBitmap 와 동일한 정책으로 한 페이지를 렌더한다.
-     * combineTwoPagesUnified 가 결과를 추가 스케일 없이 좌/우 영역에 배치한다.
+     * renderPageAtSinglePageTarget 와 동일한 oversample → downscale 정책. 화면 절반 - 중앙
+     * 여백/2 영역에 fit 되는 크기로 다운스케일된 비트맵을 반환. combineTwoPagesUnified 가
+     * 추가 스케일 없이 좌/우 영역 가운데에 배치한다.
      */
     private fun renderPageAtTwoPageTarget(page: PdfRenderer.Page): Bitmap {
         val pdfW = page.width
@@ -809,20 +810,28 @@ class PdfViewerActivity : AppCompatActivity() {
         val halfPadPx = screenWidth * centerPadding / 2f
         val availW = (halfScreenW - halfPadPx).coerceAtLeast(1f)
         val fitScale = minOf(availW / pdfW, screenHeight / visiblePdfH)
+
+        val displayW = (pdfW * fitScale).toInt().coerceAtLeast(1)
+        val displayH = (visiblePdfH * fitScale).toInt().coerceAtLeast(1)
+
         val finalScale = fitScale * PageCache.OVERSAMPLE_FACTOR
+        val oversampleW = (pdfW * finalScale).toInt().coerceAtLeast(1)
+        val oversampleH = (visiblePdfH * finalScale).toInt().coerceAtLeast(1)
 
-        val targetW = (pdfW * finalScale).toInt().coerceAtLeast(1)
-        val targetH = (visiblePdfH * finalScale).toInt().coerceAtLeast(1)
-
-        val bitmap = Bitmap.createBitmap(targetW, targetH, Bitmap.Config.ARGB_8888)
-        bitmap.eraseColor(android.graphics.Color.WHITE)
+        val oversampleBitmap = Bitmap.createBitmap(oversampleW, oversampleH, Bitmap.Config.ARGB_8888)
+        oversampleBitmap.eraseColor(android.graphics.Color.WHITE)
 
         val matrix = android.graphics.Matrix().apply {
             setScale(finalScale, finalScale)
             postTranslate(0f, -pdfH * topClip * finalScale)
         }
-        page.render(bitmap, null, matrix, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
-        return bitmap
+        page.render(oversampleBitmap, null, matrix, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
+
+        val displayBitmap = Bitmap.createScaledBitmap(oversampleBitmap, displayW, displayH, true)
+        if (displayBitmap !== oversampleBitmap) {
+            oversampleBitmap.recycle()
+        }
+        return displayBitmap
     }
     
     /**
