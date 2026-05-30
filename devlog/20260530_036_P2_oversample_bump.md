@@ -210,3 +210,59 @@ P2-A 의 §6 와 동일하되 추가로:
   - (b) RenderScript Toolkit (androidx.renderscript-toolkit) 의 resize → Lanczos 가능
   - (c) PdfRenderer 대신 PDFium / MuPDF
 - 렌더 속도 너무 느림 → oversample 3.0 후퇴 (cache 는 여전히 screen-size 라 메모리 안전)
+
+---
+
+## 11. P2-C — Multi-step bilinear downscale (2026-05-30, **시도 후 revert**)
+
+### 동기
+P2-B 실기기 검증 (IMG_2611) 에서 staff line dropout 은 해결됐지만 **줄 두께가 위치에 따라 미세하게 다른** 잔존 현상 확인. 2/4번 줄이 1/3/5번 줄보다 살짝 두껍게 보임. PC PDF reader (IMG_2610) 의 균일성과는 여전히 차이.
+
+### 원인 — 단일 bilinear 의 sample window 한계
+`Bitmap.createScaledBitmap(filter=true)` = bilinear interpolation. **ratio 와 무관하게 항상 2×2 sample window**. 4:1 다운스케일이면:
+- output 한 픽셀이 source 의 4×4 영역에 해당하지만
+- bilinear 는 가운데 2×2 만 샘플링, **나머지 12 픽셀 무시**
+- source 영역 가장자리 (row 0, 3) 의 오선이 sampling 에 안 잡힘 → 줄 위치에 따라 출력 dark coverage 불균일
+
+### Multi-step 의 원리
+**2:1 ratio 에서는 bilinear 가 정확한 box 평균과 동등** (sample window 2×2 = source 영역 전체). 4:1 을 2:1 두 번으로 분해:
+
+```
+Step 1 (8×8 → 4×4): 각 intermediate = avg(source 2×2)   ← 정확한 box
+Step 2 (4×4 → 2×2): 각 output = avg(intermediate 2×2)
+                            = avg(avg(source 2×2), avg(source 2×2), ...)
+                            = avg(source 4×4 전체)       ← 진짜 4:1 box filter
+```
+
+source 4×4 의 모든 픽셀이 동등하게 출력에 기여 → 가장자리 오선도 손실 없이 반영. Nyquist 관점: N:1 다운샘플은 너비 N kernel low-pass 가 필요한데, 단일 bilinear (kernel 폭 2) 는 4:1 에 부족 → 2:1 두 번 = 효과적 kernel 폭 4.
+
+### 변경
+- `PageCache.companion.downscaleMultiStep(src, targetW, targetH)` 신설 — 2:1 단계를 반복하다가 마지막에 잔여 ratio 처리. 임의 ratio 안전.
+- `PageCache.renderPageToTargetBitmap`, `PdfViewerActivity.renderPageAtSinglePageTarget` / `renderPageAtTwoPageTarget` — 단일 `createScaledBitmap` → `downscaleMultiStep` 호출로 교체.
+- Docstring / 주석 갱신.
+
+### 트레이드오프
+- **중간 비트맵**: 두 페이지 모드 half-page 기준 oversample 3056×4320 → mid 1528×2160 (~13MB) → final 764×1080. peak transient = oversample + mid 동시 보유 ~64MB. 안전.
+- **CPU 시간**: bilinear 2번. native skia 라 둘이 합쳐 ~150~200ms 예상 (단일 ~100ms 대비). 첫 페이지 진입 시간 약간 증가.
+- **시각**: 이론적으로 4:1 box filter 와 동등 → 줄 위치 무관 균일 darkness 기대.
+
+### 검증 (예정)
+- 두 페이지 모드 매크로 사진 → IMG_2611 (P2-B) 과 비교. 줄 두께 균일 여부.
+- 50+ 페이지 PDF 페이지 전환 안정성. 메모리 OOM 없는지.
+- 첫 페이지 진입 시간 측정 (logcat).
+
+### 채택 기준
+- 시각 차이가 IMG_2610 (PC) 수준에 가까워지면 → 채택, 버전 그대로 0.1.12 (마이너 빌드) 또는 0.1.13.
+- 차이 미미하면 → multi-step rollback (단일 bilinear 가 더 빠르므로). devlog 에 기록.
+
+### 결과 → Revert
+
+실기기 검증 결과 **단일 bilinear (P2-B) 와 시각 차이 거의 없음**. 이론적으로는 multi-step 이 4:1 box filter 와 동등 → 잔존 두께 불균일 해소 기대였으나 실제 결과는 IMG_2611 과 동등 수준.
+
+**이유 추정** — 오선이 oversample 공간에서 ~4 픽셀 두께로 AA 렌더되면 line 중심부 (input row 1, 2) 가 진하고 가장자리 (row 0, 3) 는 soft. 단일 bilinear 의 2×2 sample window 가 정확히 그 진한 중심부를 잡음. "버려진" 12 픽셀 (= AA 가장자리) 의 dark coverage 기여도가 실제로 미미. → bilinear 의 정보 손실이 이론만큼 크지 않음.
+
+**잔존 두께 불균일의 진짜 원인**: bilinear/box 가 아니라 **PdfRenderer 의 vector → raster AA 자체**. line snap-to-pixel hinting 이 없어 vector y fractional 위치에 따라 source bitmap 자체의 line darkness 가 줄마다 다름. Downscale 단계로 회피 불가.
+
+**Revert** — 코드 복잡도/렌더 시간 ↑ vs 시각 효과 ≈ 0. 단일 bilinear 가 같은 결과에 더 빠르고 단순. 헬퍼 제거, 3 render path 의 호출도 `Bitmap.createScaledBitmap` 으로 환원.
+
+**이번 시도의 가치** (devlog 에 남기는 이유): 이 길은 가도 효과 없음을 확인했으므로 미래에 같은 시도 안 함. 두께 미세 차이를 더 줄이려면 P5 (PDFium/MuPDF) 등 line hinting 있는 렌더러로 가야 함.

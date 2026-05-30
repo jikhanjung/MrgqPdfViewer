@@ -747,7 +747,7 @@ class PdfViewerActivity : AppCompatActivity() {
      * 단일 페이지 모드용 직접 렌더 (캐시 미스 / forceDirectRendering 경로).
      *
      * 1단계: oversample 해상도로 transient 렌더 (크롭은 Matrix.postTranslate 로 vector 흡수).
-     * 2단계: createScaledBitmap 으로 화면 크기 (fitScale × pdf 크기) 다운스케일.
+     * 2단계: createScaledBitmap (bilinear) 으로 화면 크기 (fitScale × pdf 크기) 다운스케일.
      * 3단계: oversample 비트맵 recycle, 화면 크기 비트맵만 반환.
      *
      * ImageView 는 화면 크기 비트맵을 받으므로 Canvas MAX_BITMAP_SIZE 한계 회피.

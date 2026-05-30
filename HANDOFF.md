@@ -102,8 +102,10 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 
 ### 3-1. 외부 환경 한계 (앱 코드로 해결 불가)
 - Google TV Streamer 1080p 출력 → QHD 모니터 1.333× 업스케일. EDID 협상이 4K 출력 막음.
-- 해결책은 사용자 측 (모니터 sharpness/HDR/Noise Reduction OFF, 또는 1:1 픽셀 모드, 또는 UHD 모니터로 교체).
-- README/설정 화면 도움말에 가이드 추가 필요 (P4, 미착수).
+- **HDMI→USB-C 컨버터 시도 (2026-05-30)**: 컨버터 끼워서 4K EDID 가 협상되길 기대했으나 여전히 FHD 출력. 컨버터가 단순 FHD pass-through 이거나 끝단 모니터의 EDID 가 그대로 보임. 효과 없음.
+- **결론: UHD 모니터로 교체가 최선**. EDID emulator (4K 강제 주입) 도 가능하지만 1.5× 다운스케일 단계가 또 들어가서 깔끔하지 않음.
+- P01/P2 의 앱 측 oversample 최적화는 **1:1 매핑 환경 (FHD TV 또는 향후 UHD 모니터)** 에서만 본 효과를 봄. QHD 모니터 + 1.333× 업스케일 시나리오에서는 모니터 스케일러가 망쳐서 앱 개선 폭이 의미 없어짐.
+- README/설정 화면 도움말에 가이드 추가 필요 (P4, 미착수): "UHD 모니터 또는 FHD TV 권장. QHD 모니터 사용 시 sharpness/noise reduction OFF, 1:1 픽셀 모드 활성화."
 
 ### 3-2. 코드 cleanup 남은 항목
 - `calculateOptimalScale` (PdfViewerActivity 945줄 부근) — 더 이상 실제 렌더에 사용 안 되지만 호출부 호환을 위해 시그니처만 유지. PageCache.updateSettings 가 받는 scale 값도 PageCache 내부에서 무시됨. 여러 호출부 (line 238, 252, 1083, 1096, 1197, 1211, 1773, 1782) 같이 정리 가능.

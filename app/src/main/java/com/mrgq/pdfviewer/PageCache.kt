@@ -250,8 +250,8 @@ class PageCache(
      * 1단계: oversample 해상도 (fitScale × OVERSAMPLE_FACTOR) 로 transient 비트맵에 렌더.
      *        Matrix 로 크롭을 vector 단계에 흡수 → fractional scaling 으로 인한 오선 두께
      *        불균일 없음.
-     * 2단계: createScaledBitmap 으로 표시 크기 (fitScale ×) 로 다운스케일. 이 과정의 필터링
-     *        이 anti-alias 역할 (오선 dark coverage 균일화).
+     * 2단계: createScaledBitmap (bilinear) 으로 표시 크기 (fitScale ×) 로 다운스케일.
+     *        이 과정의 필터링이 anti-alias 역할 (오선 dark coverage 균일화).
      * 3단계: oversample 비트맵 recycle, 화면 크기 비트맵만 캐시/반환.
      *
      * Canvas MAX_BITMAP_SIZE (~100MB) 한계 회피 + 캐시 메모리 절감.
