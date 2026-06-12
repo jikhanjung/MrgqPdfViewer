@@ -1,12 +1,18 @@
 # HANDOFF — 현재 작업 인계 노트
 
-마지막 갱신: 2026-05-30
-브랜치: `main` (origin/main 보다 4 커밋 앞섬 + P2 변경 미커밋)
-대상 버전: **v0.1.11** (현재 main 의 build.gradle.kts 값, P2 빌드 전 v0.1.12 로 올릴 것)
+마지막 갱신: 2026-06-12
+브랜치: `main` (origin/main 과 동기화됨, 미푸시 커밋 0개)
+대상 버전: **v0.1.12** (build.gradle.kts versionCode 12 / versionName 0.1.12, 커밋·푸시 완료)
+미커밋 변경: `app/release/output-metadata.json` (릴리스 빌드 자동 산출물, 의미 없음)
+
+> 오선(staff line) 렌더링 개선 작업(P01 → P2-A/B/C)이 일단락됨. P2-B 채택, P2-C 는 시도 후 revert.
+> 모두 커밋·푸시 완료. 실기기(FHD)에서 dropout 해결 확인됨. QHD 모니터에서도 "그럭저럭 볼만한" 수준으로 사용 가능.
 
 ---
 
-## 0. 방금 끝낸 작업 — P2 (2026-05-30)
+## 0. 방금 끝낸 작업 — P2 (커밋 완료)
+
+> 아래 P2-A/B 의 "미커밋"·"검증 예정" 서술은 작성 당시 기준. **현재 P2-B 는 커밋 `47507d7` 로 적용·푸시 완료, P2-C 는 `2fce7ca` 에 revert 기록 완료.** 자세한 최종 결과는 §0.5 참조.
 
 ### 배경
 - P01 (v0.1.11) 실기기 검증: **두 페이지 모드에서 "맨 아래 오선만 흐려지는" 현상 잔존** (IMG_2609 매크로). P01 의 두께 균일성 개선과 별개 증상.
@@ -45,12 +51,18 @@
 - **첫 페이지 진입 1s+** → bilinear downscale 이 병목. (a) oversample 3.0 후퇴, (b) downscale 을 백그라운드 prefetch 와 같은 코루틴에서 미리 수행 등.
 - **다시 크래시** → 다른 종류 한계. logcat 보고 분석.
 
-### 미커밋 변경
-- `app/src/main/java/com/mrgq/pdfviewer/PageCache.kt` (P2-B 적용)
-- `app/src/main/java/com/mrgq/pdfviewer/PdfViewerActivity.kt` (P2-B 적용)
-- `CLAUDE.md` (4× oversample 언급)
-- `HANDOFF.md` (이 문서)
-- `devlog/20260530_036_P2_oversample_bump.md` (P2-A 1차 시도 기록, P2-B 후속 섹션 추가됨)
+### 관련 커밋 (모두 푸시 완료)
+- `47507d7` — `fix: 두 페이지 모드 오선 dropout 개선 (P2-B, v0.1.12)` (PageCache.kt, PdfViewerActivity.kt, CLAUDE.md, 버전)
+- `2fce7ca` — `docs: P2-C multi-step downscale 시도 결과 + 외부 환경 한계 정리`
+- 상세 기록: `devlog/20260530_036_P2_oversample_bump.md` (P2-A 실패 → P2-B 채택 → P2-C revert 까지 전 과정)
+
+---
+
+## 0.5. P2 최종 결과 (실기기 검증 후)
+
+- **P2-B 채택 (`47507d7`)**: oversample 4× 렌더 → 화면 크기로 `createScaledBitmap` 다운스케일. 두 페이지 모드의 **오선 dropout(특정 줄 회색화) 해결 확인**. 캐시 메모리는 오히려 300MB→50MB 로 감소. 크래시/OOM 없음.
+- **P2-C 시도 후 revert (`2fce7ca`)**: 잔존하는 미세 두께 불균일을 줄이려 multi-step bilinear 다운스케일을 시도했으나, 단일 bilinear 와 **시각 차이 거의 없음** → 복잡도/렌더 시간만 늘어 revert. 잔존 두께 차이의 진짜 원인은 다운스케일이 아니라 **PdfRenderer 의 vector→raster AA (line snap-to-pixel hinting 부재)** 로 결론. 더 줄이려면 P5(PDFium/MuPDF) 필요.
+- **QHD 모니터**: 1.333× 업스케일 경유에도 실사용상 "그럭저럭 볼만한" 수준으로 확인됨. UHD 교체는 더 이상 시급하지 않음(§3-1 참조).
 
 ---
 
@@ -73,16 +85,23 @@
 
 ---
 
-## 2. 다음 작업자가 가장 먼저 해야 할 일
+## 2. 다음 작업자가 할 수 있는 일
 
-**실기기 검증.** WSL2 에서 gradle 빌드 못 하므로 Windows 의 Android Studio 에서:
+오선 렌더링 작업(P01~P2)은 일단락됨. P2-B 실기기 검증 통과·커밋 완료. 남은 선택지:
+
+- **코드 cleanup** (§3-2): `calculateOptimalScale` 시그니처/dead field 정리. 저위험.
+- **P4 — 사용자 환경 가이드** (§3-1): README/설정 도움말에 모니터 권장 사항 추가. 미착수.
+- **P5 — PDFium/MuPDF** (§4): 잔존 두께 미세차까지 잡으려면. 장기·고비용.
+- **v0.2.x 로드맵** (§3-3): 신규 기능.
+
+회귀 재검증이 필요하면 WSL2 에서 gradle 빌드 불가하므로 Windows 의 Android Studio 에서:
 
 ```
 ./gradlew assembleDebug
 adb install -r app/build/outputs/apk/debug/app-debug.apk
 ```
 
-### 검증 체크리스트
+### 회귀 체크리스트 (코드 수정 시)
 
 | 항목 | 확인 포인트 |
 |---|---|
@@ -103,9 +122,9 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 ### 3-1. 외부 환경 한계 (앱 코드로 해결 불가)
 - Google TV Streamer 1080p 출력 → QHD 모니터 1.333× 업스케일. EDID 협상이 4K 출력 막음.
 - **HDMI→USB-C 컨버터 시도 (2026-05-30)**: 컨버터 끼워서 4K EDID 가 협상되길 기대했으나 여전히 FHD 출력. 컨버터가 단순 FHD pass-through 이거나 끝단 모니터의 EDID 가 그대로 보임. 효과 없음.
-- **결론: UHD 모니터로 교체가 최선**. EDID emulator (4K 강제 주입) 도 가능하지만 1.5× 다운스케일 단계가 또 들어가서 깔끔하지 않음.
-- P01/P2 의 앱 측 oversample 최적화는 **1:1 매핑 환경 (FHD TV 또는 향후 UHD 모니터)** 에서만 본 효과를 봄. QHD 모니터 + 1.333× 업스케일 시나리오에서는 모니터 스케일러가 망쳐서 앱 개선 폭이 의미 없어짐.
-- README/설정 화면 도움말에 가이드 추가 필요 (P4, 미착수): "UHD 모니터 또는 FHD TV 권장. QHD 모니터 사용 시 sharpness/noise reduction OFF, 1:1 픽셀 모드 활성화."
+- **현재 판단 (2026-06-12)**: QHD 모니터 + 1.333× 업스케일 환경에서도 P2-B 적용 후 **"그럭저럭 볼만한"** 수준으로 실사용 가능 확인. 1:1 매핑 환경(FHD TV 또는 UHD 모니터)에서 가장 깔끔하지만, **UHD 모니터 교체는 더 이상 시급하지 않음**.
+- 더 완벽한 1:1 매핑을 원하면 UHD 모니터 교체가 최선. EDID emulator(4K 강제 주입)는 1.5× 다운스케일 단계가 또 들어가서 깔끔하지 않음.
+- README/설정 화면 도움말에 가이드 추가하면 좋음 (P4, 미착수, 우선순위 낮음): "UHD 모니터 또는 FHD TV 권장. QHD 모니터 사용 시 sharpness/noise reduction OFF, 1:1 픽셀 모드 활성화."
 
 ### 3-2. 코드 cleanup 남은 항목
 - `calculateOptimalScale` (PdfViewerActivity 945줄 부근) — 더 이상 실제 렌더에 사용 안 되지만 호출부 호환을 위해 시그니처만 유지. PageCache.updateSettings 가 받는 scale 값도 PageCache 내부에서 무시됨. 여러 호출부 (line 238, 252, 1083, 1096, 1197, 1211, 1773, 1782) 같이 정리 가능.
@@ -116,23 +135,17 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 
 ---
 
-## 4. P01 후속 (실기기 검증 후 결정)
+## 4. 장기 후속 — P5 (PDFium/MuPDF)
 
-오선 품질이 충분히 개선됐으면:
-- P2 (oversampling 강화) 불필요
-- P4 (사용자 환경 가이드) 만 추가
+P2-B 로 dropout 은 해결됐고 QHD 에서도 실사용 가능. 다만 **줄 두께 미세 불균일**은 PdfRenderer 의 vector→raster AA 한계(line snap-to-pixel hinting 부재)라 다운스케일·oversample 로는 더 못 줄임(P2-C 가 이를 확인).
 
-부족하면:
-- **P2**: OVERSAMPLE_FACTOR 를 2.5 → 3.0 또는 동적. 메모리 영향 실측 필요 (Google TV Streamer 메모리에서 4K 캐시 6장 = ~200MB 감당 가능한지).
-- **P5 (장기)**: PDFium / MuPDF 도입. PdfRenderer 의 stroke alignment 제어 불가 한계 회피. 빌드 크기 / 통합 비용 큼.
-
-하드웨어 시나리오 결정 대기 중 (QHD vs UHD 모니터).
+- **P5**: PDFium / MuPDF 도입. PdfRenderer 의 stroke alignment 제어 불가 한계 회피. line hinting 으로 근본 해결 가능하나 빌드 크기 / 통합 비용 큼. 현재 품질로 충분하다면 굳이 착수할 필요 없음.
 
 ---
 
 ## 5. 환경 메모
 
 - 코딩: WSL2 + Claude Code
-- 빌드/테스트: Windows 11 Android Studio
-- 타깃: Z18TV Pro (Android TV, FHD), 향후 Google TV Streamer + 외부 모니터
-- 미푸시 커밋 2개. 푸시 전에 빌드 검증 권장.
+- 빌드/테스트: Windows 11 Android Studio (WSL2 에서 gradle 빌드 불가)
+- 타깃: Z18TV Pro (Android TV, FHD), Google TV Streamer + QHD 외부 모니터
+- main 은 origin/main 과 동기화 완료. 미푸시 커밋 없음.
