@@ -1,0 +1,42 @@
+=== PAGE 1: 2 systems, 7 measures (m1..m7) ===
+  system 1: 5 staves, y=[133,411] x=[75,553]  4 measures (m1..m4)  bars=[75.1, 212.1, 312.2, 432.3, 552.7]
+  system 2: 5 staves, y=[472,751] x=[54,553]  3 measures (m5..m7)  bars=[53.8, 238.3, 395.6, 552.7]
+=== PAGE 2: 2 systems, 6 measures (m8..m13) ===
+  system 1: 5 staves, y=[97,382] x=[54,553]  3 measures (m8..m10)  bars=[53.8, 239.7, 396.2, 552.7]
+  system 2: 5 staves, y=[484,769] x=[54,553]  3 measures (m11..m13)  bars=[53.8, 238.8, 394.5, 552.7]
+=== PAGE 3: 2 systems, 6 measures (m14..m19) ===
+  system 1: 5 staves, y=[97,382] x=[54,553]  3 measures (m14..m16)  bars=[53.8, 241.4, 396.4, 552.7]
+  system 2: 5 staves, y=[484,769] x=[54,553]  3 measures (m17..m19)  bars=[53.8, 240.5, 396.7, 552.7]
+=== PAGE 4: 2 systems, 6 measures (m20..m25) ===
+  system 1: 5 staves, y=[97,382] x=[54,553]  3 measures (m20..m22)  bars=[53.8, 240.8, 398.2, 552.7]
+  system 2: 5 staves, y=[484,769] x=[54,553]  3 measures (m23..m25)  bars=[53.8, 238.6, 395.9, 552.7]
+=== PAGE 5: 2 systems, 6 measures (m26..m31) ===
+  system 1: 5 staves, y=[97,382] x=[54,553]  3 measures (m26..m28)  bars=[53.8, 237.8, 395.3, 552.7]
+  system 2: 5 staves, y=[484,769] x=[54,553]  3 measures (m29..m31)  bars=[53.8, 238.3, 398.0, 552.7]
+=== PAGE 6: 2 systems, 6 measures (m32..m37) ===
+  system 1: 5 staves, y=[97,382] x=[54,553]  3 measures (m32..m34)  bars=[53.8, 234.4, 401.5, 552.7]
+  system 2: 5 staves, y=[484,769] x=[54,553]  3 measures (m35..m37)  bars=[53.8, 243.4, 398.0, 552.7]
+=== PAGE 7: 2 systems, 6 measures (m38..m43) ===
+  system 1: 5 staves, y=[97,382] x=[54,553]  3 measures (m38..m40)  bars=[53.8, 239.7, 396.2, 552.7]
+  system 2: 5 staves, y=[484,769] x=[54,553]  3 measures (m41..m43)  bars=[53.8, 237.1, 394.8, 552.7]
+=== PAGE 8: 2 systems, 6 measures (m44..m49) ===
+  system 1: 5 staves, y=[97,382] x=[54,553]  3 measures (m44..m46)  bars=[53.8, 238.1, 391.4, 552.7]
+  system 2: 5 staves, y=[484,769] x=[54,553]  3 measures (m47..m49)  bars=[53.8, 240.7, 396.7, 552.7]
+=== PAGE 9: 2 systems, 6 measures (m50..m55) ===
+  system 1: 5 staves, y=[97,382] x=[54,553]  3 measures (m50..m52)  bars=[53.8, 240.0, 396.8, 552.7]
+  system 2: 5 staves, y=[484,769] x=[54,553]  3 measures (m53..m55)  bars=[53.8, 231.5, 390.6, 551.9]
+=== PAGE 10: 2 systems, 6 measures (m56..m61) ===
+  system 1: 5 staves, y=[97,382] x=[54,553]  3 measures (m56..m58)  bars=[53.8, 240.8, 396.8, 552.7]
+  system 2: 5 staves, y=[484,769] x=[54,553]  3 measures (m59..m61)  bars=[53.8, 239.7, 396.2, 552.7]
+=== PAGE 11: 2 systems, 6 measures (m62..m67) ===
+  system 1: 5 staves, y=[97,382] x=[54,553]  3 measures (m62..m64)  bars=[53.8, 246.1, 394.0, 552.7]
+  system 2: 5 staves, y=[484,769] x=[54,553]  3 measures (m65..m67)  bars=[53.8, 240.2, 395.7, 552.7]
+=== PAGE 12: 2 systems, 6 measures (m68..m73) ===
+  system 1: 5 staves, y=[97,382] x=[54,553]  3 measures (m68..m70)  bars=[53.8, 238.3, 398.0, 552.7]
+  system 2: 5 staves, y=[484,769] x=[54,553]  3 measures (m71..m73)  bars=[53.8, 239.7, 393.7, 552.7]
+=== PAGE 13: 2 systems, 8 measures (m74..m81) ===
+  system 1: 5 staves, y=[97,382] x=[54,553]  3 measures (m74..m76)  bars=[53.8, 240.8, 396.8, 552.7]
+  system 2: 5 staves, y=[484,769] x=[54,553]  5 measures (m77..m81)  bars=[53.8, 209.9, 334.7, 471.4, 514.1, 552.7]
+
+TOTAL: 81 measures across 26 systems, 13 pages
+written /tmp/score_layout.json
