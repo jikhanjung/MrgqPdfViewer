@@ -36,7 +36,7 @@ class GlobalCollaborationManager private constructor() {
     private var onServerClientConnected: ((String, String) -> Unit)? = null
     private var onServerClientDisconnected: ((String) -> Unit)? = null
     private var onClientConnectionStatusChanged: ((Boolean) -> Unit)? = null
-    private var onPageChangeReceived: ((Int, String) -> Unit)? = null
+    private var onPageChangeReceived: ((Int, String, Long?) -> Unit)? = null
     private var onFileChangeReceived: ((String, Int) -> Unit)? = null // Updated to include page
     private var onBackToListReceived: (() -> Unit)? = null
     private var onConductorDiscovered: ((ConductorDiscovery.ConductorInfo) -> Unit)? = null
@@ -253,9 +253,9 @@ class GlobalCollaborationManager private constructor() {
     private fun initializePerformerMode(): Boolean {
         return try {
             collaborationClientManager = CollaborationClientManager(
-                onPageChangeReceived = { page, file ->
-                    Log.d(TAG, "Page change received: $page, $file")
-                    onPageChangeReceived?.invoke(page, file)
+                onPageChangeReceived = { page, file, turnAt ->
+                    Log.d(TAG, "Page change received: $page, $file, turnAt=$turnAt")
+                    onPageChangeReceived?.invoke(page, file, turnAt)
                 },
                 onFileChangeReceived = { file, page ->
                     Log.d(TAG, "File change received: $file, page: $page")
@@ -296,8 +296,8 @@ class GlobalCollaborationManager private constructor() {
         return collaborationServerManager?.getConnectedClients() ?: emptyList()
     }
     
-    fun broadcastPageChange(pageNumber: Int, fileName: String) {
-        collaborationServerManager?.broadcastPageChange(pageNumber, fileName)
+    fun broadcastPageChange(pageNumber: Int, fileName: String, turnAt: Long? = null) {
+        collaborationServerManager?.broadcastPageChange(pageNumber, fileName, turnAt)
     }
     
     fun broadcastFileChange(fileName: String, pageNumber: Int = 1) {
@@ -369,7 +369,7 @@ class GlobalCollaborationManager private constructor() {
         onClientConnectionStatusChanged = callback
     }
     
-    fun setOnPageChangeReceived(callback: (Int, String) -> Unit) {
+    fun setOnPageChangeReceived(callback: (Int, String, Long?) -> Unit) {
         onPageChangeReceived = callback
     }
     

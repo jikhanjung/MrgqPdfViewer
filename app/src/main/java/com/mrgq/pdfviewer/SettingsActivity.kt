@@ -271,7 +271,9 @@ class SettingsActivity : AppCompatActivity() {
     
     private fun showCollaborationPanel() {
         val inputBlockTime = preferences.getLong("input_block_duration", 500L)
-        
+        val syncEnabled = preferences.getBoolean("sync_page_turn_enabled", false)
+        val syncLeadMs = preferences.getLong("sync_turn_lead_ms", 2000L)
+
         val items = listOf(
             SettingsItem(
                 id = "collaboration_info",
@@ -279,6 +281,21 @@ class SettingsActivity : AppCompatActivity() {
                 title = "협업 모드 정보",
                 subtitle = "메인 화면에서 협업 모드를 시작할 수 있습니다",
                 type = SettingsType.INFO
+            ),
+            SettingsItem(
+                id = "sync_turn_toggle",
+                icon = "🎯",
+                title = "동기 페이지 넘김",
+                subtitle = if (syncEnabled) "현재: ON · 예약 후 모든 기기 동시 넘김" else "현재: OFF · 신호 즉시 넘김(기존)",
+                type = SettingsType.TOGGLE
+            ),
+            SettingsItem(
+                id = "sync_turn_lead",
+                icon = "⏲️",
+                title = "예약 시간",
+                subtitle = "현재: ${syncLeadMs}ms · 누른 뒤 넘기까지 여유",
+                type = SettingsType.ACTION,
+                enabled = syncEnabled
             ),
             SettingsItem(
                 id = "input_block_time",
@@ -420,6 +437,8 @@ class SettingsActivity : AppCompatActivity() {
             "view_display_modes" -> showDisplayModeListDialog()
             "reset_display_modes" -> showResetDisplayModeDialog()
             "input_block_time" -> showInputBlockTimeDialog()
+            "sync_turn_toggle" -> toggleSyncPageTurn()
+            "sync_turn_lead" -> showSyncTurnLeadDialog()
             "message_queue_stats" -> showMessageQueueDisabledDialog()
         }
     }
@@ -903,6 +922,49 @@ class SettingsActivity : AppCompatActivity() {
     }
     
     
+    /**
+     * 동기 페이지 넘김 ON/OFF (Phase 0). OFF = 기존처럼 신호 즉시 넘김.
+     * ON = 지휘자가 누르면 예약 시간 후 모든 기기가 동시에 넘김.
+     */
+    private fun toggleSyncPageTurn() {
+        val newEnabled = !preferences.getBoolean("sync_page_turn_enabled", false)
+        preferences.edit().putBoolean("sync_page_turn_enabled", newEnabled).apply()
+        val msg = if (newEnabled) "동기 페이지 넘김 ON (예약 후 동시 넘김)" else "동기 페이지 넘김 OFF (즉시 넘김)"
+        Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
+        showCollaborationPanel()  // 패널 새로고침
+    }
+
+    /**
+     * 예약 시간(lead, ms) 설정 다이얼로그. 지휘자가 누른 뒤 실제로 넘기까지의 시간이며,
+     * 모든 기기가 이 절대 시각에 동시에 넘긴다.
+     */
+    private fun showSyncTurnLeadDialog() {
+        val currentMs = preferences.getLong("sync_turn_lead_ms", 2000L)
+        val editText = EditText(this).apply {
+            setText(currentMs.toString())
+            hint = "밀리초 (500-5000)"
+            inputType = android.text.InputType.TYPE_CLASS_NUMBER
+        }
+
+        AlertDialog.Builder(this)
+            .setTitle("예약 시간 설정")
+            .setMessage("지휘자가 페이지 넘김을 누른 뒤 실제로 넘어가기까지의 시간(ms)입니다.\n모든 기기가 이 시각에 동시에 넘깁니다. (권장 1000~2500)")
+            .setView(editText)
+            .setPositiveButton(getString(R.string.ok)) { dialog, _ ->
+                val v = editText.text.toString().toLongOrNull()
+                if (v != null && v in 500..5000) {
+                    preferences.edit().putLong("sync_turn_lead_ms", v).apply()
+                    Toast.makeText(this, "예약 시간이 ${v}ms로 변경되었습니다", Toast.LENGTH_SHORT).show()
+                    showCollaborationPanel()
+                } else {
+                    Toast.makeText(this, "500-5000 사이의 값을 입력하세요", Toast.LENGTH_SHORT).show()
+                }
+                dialog.dismiss()
+            }
+            .setNegativeButton(getString(R.string.cancel), null)
+            .show()
+    }
+
     /**
      * Show message queue disabled dialog
      */

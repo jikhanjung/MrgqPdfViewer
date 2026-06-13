@@ -15,7 +15,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 
 class CollaborationClientManager(
-    private val onPageChangeReceived: (Int, String) -> Unit,
+    private val onPageChangeReceived: (Int, String, Long?) -> Unit,
     private val onFileChangeReceived: (String, Int) -> Unit,
     private val onConnectionStatusChanged: (Boolean) -> Unit,
     private val onBackToListReceived: (() -> Unit)? = null
@@ -158,7 +158,10 @@ class CollaborationClientManager(
                 "page_change" -> {
                     val page = json.get("page")?.asInt ?: 1
                     val file = json.get("file")?.asString ?: ""
-                    onPageChangeReceived(page, file)
+                    // Phase 0: 예약 넘김 목표 시각(없으면 즉시 넘김)
+                    val turnAt = if (json.has("turn_at") && !json.get("turn_at").isJsonNull)
+                        json.get("turn_at").asLong else null
+                    onPageChangeReceived(page, file, turnAt)
                 }
                 "file_change" -> {
                     val file = json.get("file")?.asString ?: ""

@@ -108,6 +108,15 @@ class PdfViewerActivity : AppCompatActivity() {
     // Long press handling for OK button
     private var isLongPressing = false
     private val longPressHandler = Handler(Looper.getMainLooper())
+
+    // Phase 0: 합주 동기 페이지 넘김 (예약 넘김)
+    private val syncTurnHandler = Handler(Looper.getMainLooper())
+    private var pendingSyncTurn: Runnable? = null
+    private var suppressBroadcastUntil = 0L   // 예약 넘김 실행 중 재브로드캐스트 억제 창
+    /** 동기 예약 넘김 사용 여부 (지휘자 기준). 기본 false = 기존처럼 즉시 넘김 */
+    private fun isSyncTurnEnabled(): Boolean = preferences.getBoolean("sync_page_turn_enabled", false)
+    /** 예약 lead time(ms). 신호 전달 후 실제 넘기까지 여유 */
+    private fun syncTurnLeadMs(): Long = preferences.getLong("sync_turn_lead_ms", 2000L)
     private val longPressRunnable = Runnable {
         if (isLongPressing) {
             showPdfDisplayOptions()
@@ -1278,7 +1287,12 @@ class PdfViewerActivity : AppCompatActivity() {
                     return true
                 } else if (pageIndex > 0) {
                     val nextPageIndex = if (isTwoPageMode) pageIndex - 2 else pageIndex - 1
-                    showPageWithAnimation(maxOf(0, nextPageIndex), -1)
+                    val target = maxOf(0, nextPageIndex)
+                    if (collaborationMode == CollaborationMode.CONDUCTOR && isSyncTurnEnabled()) {
+                        conductorScheduledTurn(target, -1)
+                    } else {
+                        showPageWithAnimation(target, -1)
+                    }
                     return true
                 } else {
                     // 첫 페이지에서 안내 표시
@@ -1305,7 +1319,11 @@ class PdfViewerActivity : AppCompatActivity() {
                 } else {
                     val nextPageIndex = if (isTwoPageMode) pageIndex + 2 else pageIndex + 1
                     if (nextPageIndex < pageCount) {
-                        showPageWithAnimation(nextPageIndex, 1)
+                        if (collaborationMode == CollaborationMode.CONDUCTOR && isSyncTurnEnabled()) {
+                            conductorScheduledTurn(nextPageIndex, 1)
+                        } else {
+                            showPageWithAnimation(nextPageIndex, 1)
+                        }
                         return true
                     } else {
                         // 마지막 페이지에서 안내 표시
@@ -1481,10 +1499,20 @@ class PdfViewerActivity : AppCompatActivity() {
     }
     
     private fun setupPerformerCallbacks() {
-        globalCollaborationManager.setOnPageChangeReceived { page, file ->
+        globalCollaborationManager.setOnPageChangeReceived { page, file, turnAt ->
             runOnUiThread {
-                if (file == pdfFileName) {
+                if (file != pdfFileName) return@runOnUiThread
+                // Phase 0: turn_at 이 있으면 그 절대 시각(벽시계)에 맞춰 예약, 없거나 이미 지났으면 즉시
+                val delay = if (turnAt != null) turnAt - System.currentTimeMillis() else 0L
+                pendingSyncTurn?.let { syncTurnHandler.removeCallbacks(it) }
+                if (turnAt == null || delay <= 0L) {
+                    if (turnAt != null) Log.w("PdfViewerActivity", "🎼 동기 넘김: turn_at 이미 지남(delay=${delay}ms) → 즉시 넘김")
                     handleRemotePageChange(page)
+                } else {
+                    Log.d("PdfViewerActivity", "🎼 동기 넘김 예약: page $page, ${delay}ms 후 (turn_at=$turnAt)")
+                    val r = Runnable { handleRemotePageChange(page) }
+                    pendingSyncTurn = r
+                    syncTurnHandler.postDelayed(r, delay)
                 }
             }
         }
@@ -2500,7 +2528,11 @@ class PdfViewerActivity : AppCompatActivity() {
         
         // Clean up long press handler
         longPressHandler.removeCallbacks(longPressRunnable)
-        
+
+        // Phase 0: 예약된 동기 페이지 넘김 취소
+        pendingSyncTurn?.let { syncTurnHandler.removeCallbacks(it) }
+        pendingSyncTurn = null
+
         // Clean up collaboration resources
         // Note: 전역 매니저가 관리하므로 여기서 서버를 중지하지 않음
         // Note: 전역 매니저가 관리하므로 여기서 클라이언트를 끊지 않음
@@ -2894,11 +2926,38 @@ class PdfViewerActivity : AppCompatActivity() {
      * 중복 코드를 제거하고 일관된 로직을 제공합니다.
      */
     private fun broadcastCollaborationPageChange(pageIndex: Int) {
+        // Phase 0: 동기 예약 넘김이 실행되는 중에는 이미 turn_at 과 함께 브로드캐스트했으므로 재전송 억제
+        if (System.currentTimeMillis() < suppressBroadcastUntil) {
+            Log.d("PdfViewerActivity", "🎵 동기 예약 넘김 실행 중 - 재브로드캐스트 억제")
+            return
+        }
         if (collaborationMode == CollaborationMode.CONDUCTOR && !isHandlingRemotePageChange) {
             val actualPageNumber = if (isTwoPageMode) pageIndex + 1 else pageIndex + 1
             Log.d("PdfViewerActivity", "🎵 지휘자 모드: 페이지 $actualPageNumber 브로드캐스트 중...")
             globalCollaborationManager.broadcastPageChange(actualPageNumber, pdfFileName)
         }
+    }
+
+    /**
+     * 합주(지휘자) 동기 페이지 넘김 (Phase 0, 설계: devlog P03).
+     * 넘길 목표 절대 시각(turn_at = 지금 + lead)을 먼저 연주자에게 브로드캐스트하고,
+     * 지휘자 자신도 그 시각에 넘긴다. 모든 기기가 같은 벽시계 시각에 동시에 넘어가게 한다.
+     * (기기들이 네트워크 자동 시간으로 동기돼 있다는 전제 — 설계 P03 접근법 A)
+     */
+    private fun conductorScheduledTurn(targetIndex: Int, direction: Int) {
+        val lead = syncTurnLeadMs()
+        val turnAt = System.currentTimeMillis() + lead
+        Log.d("PdfViewerActivity", "🎵 지휘자 동기 넘김 예약: page ${targetIndex + 1}, ${lead}ms 후 (turn_at=$turnAt)")
+        // 1) 연주자에게 목표 시각 즉시 브로드캐스트
+        globalCollaborationManager.broadcastPageChange(targetIndex + 1, pdfFileName, turnAt)
+        // 2) 지휘자 자신도 같은 시각에 넘김 (이미 브로드캐스트했으므로 실행 시 재브로드캐스트 억제)
+        pendingSyncTurn?.let { syncTurnHandler.removeCallbacks(it) }
+        val runnable = Runnable {
+            suppressBroadcastUntil = System.currentTimeMillis() + 2000L
+            showPageWithAnimation(targetIndex, direction)
+        }
+        pendingSyncTurn = runnable
+        syncTurnHandler.postDelayed(runnable, lead)
     }
     
     /**
