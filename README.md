@@ -102,6 +102,13 @@ Android TV OS에서 PDF 악보를 편리하게 보기 위한 전용 앱입니다
 - Android 5.0+ (API 21+)
 - Android TV 지원 기기
 
+## 📚 개발 문서
+
+- [`devlog/`](devlog/) — 개발 로그 모음 ([인덱스](devlog/README.md))
+- [전체 개발 연대기](devlog/20260619_039_project_timeline.md) — 커밋 히스토리 기반
+- [HANDOFF.md](HANDOFF.md) — 현재 작업 인계 노트
+- [CHANGELOG.md](CHANGELOG.md) — 버전별 변경 이력
+
 ## 📱 화면 구성
 
 ### 🏠 메인 화면
