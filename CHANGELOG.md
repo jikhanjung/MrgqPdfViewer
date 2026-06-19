@@ -4,6 +4,38 @@
 
 ---
 
+## [Unreleased]
+
+### 🎵 합주 자동화 & 악보 분석 (2026-06, 버전 미증가)
+- **합주 Phase 0 — 동기 페이지 넘김** (⚠️ 실기기 미검증): 지휘자가 페이지 넘김 시 "실제 넘길 절대 시각(`turn_at = now + lead`)"을 함께 브로드캐스트 → 모든 기기(지휘자 포함)가 그 벽시계 시각에 동시에 넘김. 기존 수신-즉시-넘김의 기기 간 시점 어긋남 완화.
+  - `page_change` 메시지에 `turn_at` 필드 추가 (Server/Client/Global/Viewer 일관 반영)
+  - 지휘자 예약 넘김 + 연주자 예약 실행 + 재브로드캐스트 억제 창
+  - 설정 토글 추가: `sync_page_turn_enabled`(기본 OFF, 하위호환), `sync_turn_lead_ms`(기본 2000ms)
+  - WSL 환경이라 빌드·2기기 실측 미수행
+- **벡터 PDF 악보 분석 파이프라인 탐색** (`data/`, 앱 미통합): 콘텐츠 스트림 CTM 파싱으로 시스템/마디 검출(Sibelius 인쇄본과 마디 번호 일치), 파트보 PDF 생성, OMR(음고·쉼표 인식), 전사·5파트 합주 MP3 합성. 자동 넘김·메트로놈·스코어 팔로잉 장기 로드맵(P02)의 기반.
+
+---
+
+## [0.1.12] - 2026-05-30
+
+### 🎼 두 페이지 모드 오선 dropout 개선 (P2)
+- **오선 dropout 해결 (P2-B)**: PDF vector y × scale 의 fractional 이 0.5 근처인 줄이 두 픽셀 행에 분배되어 회색으로 흐려지던 현상. oversample 을 2.5×→**4×** 로 올리고, 렌더 직후 화면 크기로 즉시 `createScaledBitmap` 다운스케일(transient 비트맵)하는 방식으로 해결.
+- **Canvas 한계 우회**: oversample 4× 비트맵(~132MB)을 ImageView 에 직접 draw 하면 RecordingCanvas ~100MB 한계 초과로 크래시(P2-A). 캐시/ImageView 는 화면 크기 비트맵만 취급하도록 변경하여 우회.
+- **캐시 메모리 감소**: 캐시 풀 ≈300MB(oversample × 6장) → ≈50MB(display × 6장).
+- **P2-C multi-step downscale 시도 후 revert**: 단일 bilinear 와 시각 차이 거의 없어 복잡도/렌더 시간만 증가. 잔존 두께 미세차의 원인은 PdfRenderer 의 vector→raster AA 한계(line snap-to-pixel hinting 부재)로 결론. 근본 해결은 P5(PDFium/MuPDF) 필요.
+
+### 🔧 빌드 설정
+- **AGP 8.11.1 → 8.11.2**: Android Studio 자동 제안 패치 업데이트.
+- **signing.properties storeFile 경로 수정**: app 모듈 기준이 아닌 rootProject 기준으로 해석하여 `assembleRelease` 실패 수정.
+
+### 🛡️ 기술적 세부 개선
+- `PageCache.renderPageToTargetBitmap`: oversample 렌더 → 다운스케일 → recycle
+- `combineTwoPagesUnified`: 입력/출력 모두 display 좌표계 (oversample 제거)
+- `OVERSAMPLE_FACTOR = 4.0f` (transient 렌더 단계에서만 사용)
+- 실기기(Z18TV Pro) 검증: 크래시 없음, 메모리 안정, 5개 오선 모두 검정 확인
+
+---
+
 ## [0.1.11] - 2026-05-28
 
 ### 🎼 두 페이지 모드 오선 렌더링 개선
