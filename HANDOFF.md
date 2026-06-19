@@ -4,6 +4,7 @@
 브랜치: `main` (origin/main 과 동기화됨, 미푸시 커밋 0개)
 대상 버전: **v0.1.12** (build.gradle.kts versionCode 12 / versionName 0.1.12). 6/13 이후 작업은 버전 미증가.
 미커밋 변경: 없음 (clean)
+관련 문서: [devlog 인덱스](devlog/README.md) · [전체 개발 연대기](devlog/20260619_039_project_timeline.md)
 
 > **최근 작업 두 갈래:**
 > 1. **합주 Phase 0 — 동기 페이지 넘김** (`ec26ac7`, 06-14): 예약 timestamp 방식. ⚠️ **WSL 환경이라 빌드·실측 미수행**. Windows + 2기기 검증 필요 (§0 1순위).
