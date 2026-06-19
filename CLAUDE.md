@@ -3,10 +3,10 @@
 ## 프로젝트 개요
 Android TV OS (Z18TV Pro)용 PDF 악보 리더 앱으로, 무선 파일 업로드와 리모컨을 이용한 탐색 기능을 제공합니다.
 
-**현재 버전**: v0.1.11 (2026-05-28)  
+**현재 버전**: v0.1.12 (2026-05-30)  
 **빌드 상태**: 🟢 빌드 가능  
-**테스트 상태**: 🟢 기본 기능 테스트 완료
-**최근 업데이트**: PDF 렌더러 동시성 문제 완전 해결, 웹서버 실시간 모니터링 시스템 구현, UI 일관성 개선
+**테스트 상태**: 🟢 기본 기능 테스트 완료 (합주 Phase 0 동기 넘김은 실기기 미검증)
+**최근 업데이트**: 두 페이지 모드 오선 dropout 해결(P2-B, 4× oversample→다운스케일), 벡터 PDF 악보 분석 파이프라인 탐색(data/, 앱 미통합), 합주 Phase 0 동기 페이지 넘김(예약 timestamp 방식, 기본 OFF·실기기 미검증)
 
 ## 주요 기능
 - **전문적인 스플래시 스크린**: 브랜딩 강화된 2.5초 애니메이션 시퀀스로 앱 시작
@@ -143,6 +143,22 @@ adb install app/build/outputs/apk/debug/app-debug.apk
 ## 현재 구현 상태
 
 ### ✅ 완료된 기능
+
+#### 🎵 v0.1.12 이후 작업 (2026-06)
+- [x] **벡터 PDF 악보 분석 파이프라인 탐색** (2026-06-13, `data/`, **앱 미통합**): 콘텐츠 스트림 CTM 파싱으로 시스템/마디 검출(Sibelius 인쇄본과 마디 번호 일치), 파트보 PDF 생성, OMR(음고·쉼표), 전사·5파트 합주 MP3 합성. 자동 넘김·메트로놈·스코어 팔로잉 장기 로드맵(P02)의 기반.
+- [~] **합주 Phase 0 — 동기 페이지 넘김** (2026-06-14, ⚠️ **실기기 미검증**): 지휘자가 "넘길 절대 시각(turn_at = now + lead)"을 브로드캐스트 → 모든 기기가 벽시계 기준 동시 넘김. 설정 토글(기본 OFF, 하위호환), 재브로드캐스트 억제 창. WSL 환경이라 빌드·2기기 실측 필요. (설계 P03 / 구현 devlog #038)
+
+#### 🎼 v0.1.12 주요 업데이트 (2026-05-30) — 오선 dropout 해결 (P2)
+- [x] **두 페이지 모드 오선 dropout 개선 (P2-B)**: PDF vector y × scale 의 fractional 0.5 근처 줄이 회색으로 흐려지던 문제. oversample을 2.5×→**4×**로 올리고, 렌더 직후 화면 크기로 즉시 다운스케일(transient 비트맵)하여 Canvas ~100MB 한계 우회.
+- [x] **캐시 메모리 감소**: 캐시/ImageView는 화면 크기 비트맵만 취급 → 캐시 풀 ≈300MB→50MB.
+- [x] **P2-C multi-step downscale 시도 후 revert**: 단일 bilinear와 시각 차이 거의 없어 복잡도만 증가. 잔존 두께 미세차의 원인은 PdfRenderer의 vector→raster AA 한계로 결론(근본 해결은 P5 PDFium/MuPDF 필요).
+- [x] **빌드 설정 수정**: AGP 8.11.2, signing.properties storeFile 경로를 rootProject 기준으로 해석.
+
+#### 🎼 v0.1.11 주요 업데이트 (2026-05-28) — 오선 두께 균일화 (P01)
+- [x] **두 페이지 모드 오선 두께 불균일 해결 (P01)**: 2단계 fractional scaling 안티패턴을 **단일 단계 Matrix 렌더 + oversample**로 교체. 크롭(위/아래 클리핑)을 Matrix.postTranslate로 vector 변환 단계에 흡수.
+- [x] **렌더 경로 통합**: `renderPageToTargetBitmap` 단일 함수로 통합, `applyDisplaySettings` 제거. PageCache와 동일 공식 사용으로 캐시 히트/미스 좌표계 일치.
+- [x] **dead code 정리**: `PdfPageManager.kt` 삭제 (v0.1.8 미통합 매니저 잔재).
+- [x] **devlog 파일명 체계 정리**: `YYYYMMDD_NNN_` 형식(작성 순 연속 번호), 계획 문서는 `PNN` 별도 체계.
 
 #### 🎼 v0.1.9+ 추가 업데이트 (2025-07-20)
 - [x] **합주 모드 파일 동기화 버그 수정**: Activity 생명주기로 인한 콜백 유실 문제 해결
