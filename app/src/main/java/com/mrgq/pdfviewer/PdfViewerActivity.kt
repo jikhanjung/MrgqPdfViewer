@@ -141,11 +141,26 @@ class PdfViewerActivity : AppCompatActivity() {
         // Initialize sound effects
         initializeSoundPool()
         
-        // Get screen dimensions
+        // Get screen dimensions.
+        // getRealMetrics: 시스템 데코 제외 없는 실제 논리 해상도. 4K 기기에서 물리 모드와
+        // 논리 해상도가 다를 수 있으므로 (SurfaceFlinger 업스케일) 둘 다 로그로 남긴다.
         val displayMetrics = DisplayMetrics()
-        windowManager.defaultDisplay.getMetrics(displayMetrics)
+        windowManager.defaultDisplay.getRealMetrics(displayMetrics)
         screenWidth = displayMetrics.widthPixels
         screenHeight = displayMetrics.heightPixels
+
+        if (android.os.Build.VERSION.SDK_INT >= 23) {
+            val display = windowManager.defaultDisplay
+            val mode = display.mode
+            val supported = display.supportedModes.joinToString {
+                "${it.physicalWidth}x${it.physicalHeight}@${it.refreshRate.toInt()}"
+            }
+            Log.i("PdfViewerActivity", "=== DISPLAY INFO === app=${screenWidth}x${screenHeight} " +
+                    "(${displayMetrics.densityDpi}dpi), physicalMode=${mode.physicalWidth}x${mode.physicalHeight}" +
+                    "@${mode.refreshRate.toInt()}Hz, supportedModes=[$supported]")
+        } else {
+            Log.i("PdfViewerActivity", "=== DISPLAY INFO === app=${screenWidth}x${screenHeight}")
+        }
         
         currentFileIndex = intent.getIntExtra(EXTRA_CURRENT_INDEX, 0)
         filePathList = intent.getStringArrayListExtra(EXTRA_FILE_PATH_LIST) ?: emptyList()
@@ -777,7 +792,7 @@ class PdfViewerActivity : AppCompatActivity() {
         val displayW = (pdfW * fitScale).toInt().coerceAtLeast(1)
         val displayH = (visiblePdfH * fitScale).toInt().coerceAtLeast(1)
 
-        val finalScale = fitScale * PageCache.OVERSAMPLE_FACTOR
+        val finalScale = fitScale * PageCache.effectiveOversampleFactor(displayW, displayH)
         val oversampleW = (pdfW * finalScale).toInt().coerceAtLeast(1)
         val oversampleH = (visiblePdfH * finalScale).toInt().coerceAtLeast(1)
 
@@ -823,7 +838,7 @@ class PdfViewerActivity : AppCompatActivity() {
         val displayW = (pdfW * fitScale).toInt().coerceAtLeast(1)
         val displayH = (visiblePdfH * fitScale).toInt().coerceAtLeast(1)
 
-        val finalScale = fitScale * PageCache.OVERSAMPLE_FACTOR
+        val finalScale = fitScale * PageCache.effectiveOversampleFactor(displayW, displayH)
         val oversampleW = (pdfW * finalScale).toInt().coerceAtLeast(1)
         val oversampleH = (visiblePdfH * finalScale).toInt().coerceAtLeast(1)
 

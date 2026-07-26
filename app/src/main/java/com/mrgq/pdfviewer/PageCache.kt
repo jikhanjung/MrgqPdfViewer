@@ -28,6 +28,21 @@ class PageCache(
         // Oversample 비트맵을 ImageView 에 넘기던 P2-A 안은 Canvas MAX_BITMAP_SIZE (~100MB)
         // 초과로 크래시 → 렌더 직후 createScaledBitmap 으로 다운스케일하는 P2-B 안으로 전환.
         const val OVERSAMPLE_FACTOR = 4.0f
+
+        // Transient oversample 비트맵의 픽셀 상한. 1080p 최악 케이스(가로 PDF 전체화면
+        // 1920×1080 × 4² ≈ 33MP, ~133MB)는 그대로 허용하는 값이라 1080p 동작은 불변.
+        // 4K 화면에서 4× 를 그대로 쓰면 페이지당 ~210MB 이상 필요하므로, 이 상한에 맞춰
+        // factor 를 자동 축소한다. 화면 해상도가 높을수록 oversample 필요성 자체가 줄므로
+        // (4K 에서 ~3.2×, 가로 전체화면 ~2×) 품질 손실은 없다.
+        const val MAX_OVERSAMPLE_PIXELS = 34_000_000L
+
+        /** 표시 크기 기준으로 MAX_OVERSAMPLE_PIXELS 를 넘지 않는 oversample 배율을 반환. */
+        fun effectiveOversampleFactor(displayW: Int, displayH: Int): Float {
+            val displayPixels = displayW.toLong() * displayH
+            if (displayPixels <= 0L) return 1f
+            val maxFactor = kotlin.math.sqrt(MAX_OVERSAMPLE_PIXELS.toDouble() / displayPixels).toFloat()
+            return OVERSAMPLE_FACTOR.coerceAtMost(maxFactor).coerceAtLeast(1f)
+        }
     }
     
     // LRU 캐시로 메모리 사용량 제한
@@ -279,7 +294,7 @@ class PageCache(
         val displayW = (pdfWidth * fitScale).toInt().coerceAtLeast(1)
         val displayH = (visiblePdfHeight * fitScale).toInt().coerceAtLeast(1)
 
-        val finalScale = fitScale * OVERSAMPLE_FACTOR
+        val finalScale = fitScale * effectiveOversampleFactor(displayW, displayH)
         val oversampleW = (pdfWidth * finalScale).toInt().coerceAtLeast(1)
         val oversampleH = (visiblePdfHeight * finalScale).toInt().coerceAtLeast(1)
 
