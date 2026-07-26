@@ -1,0 +1,6 @@
+# Unix 셸 스크립트는 항상 LF (CRLF 면 Linux 에서 셔뱅 해석 실패)
+gradlew text eol=lf
+*.sh text eol=lf
+
+# Windows 배치 파일은 항상 CRLF
+*.bat text eol=crlf
