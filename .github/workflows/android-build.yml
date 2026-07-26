@@ -38,6 +38,18 @@ jobs:
           keyPassword=${{ secrets.RELEASE_KEY_PASSWORD }}
           EOF
 
+      # release 서명 폴백(~/.android/debug.keystore)은 AGP 가 자동 생성해주지
+      # 않으므로 (기본 debug 서명 설정에서만 자동 생성) CI 에서 직접 만들어 둔다.
+      - name: Ensure debug keystore
+        if: ${{ env.HAS_RELEASE_KEYSTORE != 'true' }}
+        run: |
+          mkdir -p ~/.android
+          [ -f ~/.android/debug.keystore ] || keytool -genkeypair -v \
+            -keystore ~/.android/debug.keystore -storepass android \
+            -alias androiddebugkey -keypass android \
+            -dname "CN=Android Debug,O=Android,C=US" \
+            -keyalg RSA -keysize 2048 -validity 10000
+
       - name: Build debug APK
         run: ./gradlew assembleDebug
 
