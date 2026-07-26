@@ -104,8 +104,5 @@ lint/tmp/
 Thumbs.db
 ehthumbs.db
 
-# Gradle Wrapper jar file
-gradle/wrapper/gradle-wrapper.jar
-
 # Claude Code settings
 .claude/
