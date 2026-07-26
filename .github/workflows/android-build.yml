@@ -10,6 +10,9 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      # step 의 if 에서는 secrets 컨텍스트를 쓸 수 없어 job env 로 우회
+      HAS_RELEASE_KEYSTORE: ${{ secrets.RELEASE_KEYSTORE_BASE64 != '' }}
     steps:
       - uses: actions/checkout@v4
 
@@ -25,7 +28,7 @@ jobs:
       # 릴리즈 서명 키가 secrets 에 등록된 경우에만 signing.properties 생성.
       # 없으면 app/build.gradle.kts 의 폴백(debug keystore)으로 서명됨.
       - name: Restore release keystore (optional)
-        if: ${{ secrets.RELEASE_KEYSTORE_BASE64 != '' }}
+        if: ${{ env.HAS_RELEASE_KEYSTORE == 'true' }}
         run: |
           echo "${{ secrets.RELEASE_KEYSTORE_BASE64 }}" | base64 -d > release.keystore
           cat > signing.properties <<EOF
