@@ -1,12 +1,13 @@
 # MrgqPdfViewer 프로젝트 가이드
 
 ## 프로젝트 개요
-Android TV OS (Z18TV Pro)용 PDF 악보 리더 앱으로, 무선 파일 업로드와 리모컨을 이용한 탐색 기능을 제공합니다.
+Android TV OS용 PDF 악보 리더 앱으로, 무선 파일 업로드와 리모컨을 이용한 탐색 기능을 제공합니다.
 
+**타깃 기기**: Google TV Streamer + UPerfect 23.8" 4K 모니터 (2026-07 전환. 이전: Z18TV Pro, 1080p)  
 **현재 버전**: v0.1.12 (2026-05-30)  
 **빌드 상태**: 🟢 빌드 가능  
-**테스트 상태**: 🟢 기본 기능 테스트 완료 (합주 Phase 0 동기 넘김은 실기기 미검증)
-**최근 업데이트**: 두 페이지 모드 오선 dropout 해결(P2-B, 4× oversample→다운스케일), 벡터 PDF 악보 분석 파이프라인 탐색(data/, 앱 미통합), 합주 Phase 0 동기 페이지 넘김(예약 timestamp 방식, 기본 OFF·실기기 미검증)
+**테스트 상태**: 🟢 기본 기능 테스트 완료 (합주 Phase 0 동기 넘김·4K 대응은 실기기 미검증)
+**최근 업데이트**: 4K 디스플레이 대응(getRealMetrics + oversample 자동 축소, 실기기 미검증), GitHub Actions CI 빌드 추가, 합주 Phase 0 동기 페이지 넘김(예약 timestamp 방식, 기본 OFF·실기기 미검증)
 
 ## 주요 기능
 - **전문적인 스플래시 스크린**: 브랜딩 강화된 2.5초 애니메이션 시퀀스로 앱 시작
@@ -91,6 +92,7 @@ Android TV OS (Z18TV Pro)용 PDF 악보 리더 앱으로, 무선 파일 업로�
 ### 개발 워크플로우
 - **코딩**: WSL2의 Claude Code에서 소스 코드 편집
 - **빌드/테스트**: Windows 11의 Android Studio에서 실행
+- **CI 빌드**: GitHub Actions (`.github/workflows/android-build.yml`) — main 푸시/PR/`v*` 태그/수동 실행 시 debug+release APK를 아티팩트로 생성. 컴파일 검증을 WSL에서 커밋만으로 수행 가능. release 는 기본 debug keystore 서명 (정식 서명은 `RELEASE_KEYSTORE_*` secrets 등록 시)
 - **디버깅**: Windows 11에서 로그 확인 및 에뮬레이터/실기기 테스트
 
 ### 빌드 명령어 (Windows 11에서 실행)
@@ -144,7 +146,9 @@ adb install app/build/outputs/apk/debug/app-debug.apk
 
 ### ✅ 완료된 기능
 
-#### 🎵 v0.1.12 이후 작업 (2026-06)
+#### 🎵 v0.1.12 이후 작업 (2026-06 ~ 07)
+- [~] **4K 디스플레이 대응** (2026-07-26, ⚠️ **실기기 미검증**): Google TV Streamer + 4K 모니터에서 슬러 등 곡선의 계단현상 보고됨. 렌더 파이프라인엔 1080 하드코딩 없음(모두 런타임 해상도 기준) → 기기가 앱에 1080 을 보고하는지가 관건. `getMetrics`→`getRealMetrics` 교체, 시작 시 `DISPLAY INFO` 로그(앱 해상도/물리 모드/지원 모드) 추가, `PageCache.effectiveOversampleFactor()` 로 transient 비트맵 34MP 상한(1080p 동작 불변, 4K 에서 4×→~3.2× 자동 축소). 기기 연결 후 logcat 의 `DISPLAY INFO` 로 판정: `app=1920x1080, physicalMode=3840x2160` 이면 시스템이 UI 를 1080p 로 돌리는 것 → `wm size` 오버라이드 테스트 또는 4K SurfaceView 경로 검토 필요.
+- [x] **GitHub Actions CI 빌드** (2026-07-26): `android-build.yml` 추가, gradlew 실행 비트 수정(100644→100755). JDK 17 + Gradle 캐시, debug/release APK 아티팩트 업로드.
 - [x] **벡터 PDF 악보 분석 파이프라인 탐색** (2026-06-13, `data/`, **앱 미통합**): 콘텐츠 스트림 CTM 파싱으로 시스템/마디 검출(Sibelius 인쇄본과 마디 번호 일치), 파트보 PDF 생성, OMR(음고·쉼표), 전사·5파트 합주 MP3 합성. 자동 넘김·메트로놈·스코어 팔로잉 장기 로드맵(P02)의 기반.
 - [~] **합주 Phase 0 — 동기 페이지 넘김** (2026-06-14, ⚠️ **실기기 미검증**): 지휘자가 "넘길 절대 시각(turn_at = now + lead)"을 브로드캐스트 → 모든 기기가 벽시계 기준 동시 넘김. 설정 토글(기본 OFF, 하위호환), 재브로드캐스트 억제 창. WSL 환경이라 빌드·2기기 실측 필요. (설계 P03 / 구현 devlog #038)
 
