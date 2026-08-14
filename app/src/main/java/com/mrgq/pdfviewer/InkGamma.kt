@@ -26,12 +26,16 @@ import android.util.Log
  * 감마 보정은 균일성을 거의 그대로 둔 채 대비만 1× 수준 가까이 회복시킨다.
  * (참고: MuPDF 로 엔진을 교체하면 오히려 더 흐려지므로 P5 는 이 문제의 해법이 아니다.)
  *
- * ## 주의 — 기기에서 값을 튜닝해야 한다
+ * ## 기본값 2.0 의 근거 (2026-08-15 실기기 튜닝)
  *
- * 위 측정의 다운스케일은 PIL(면적 평균에 가까움)이고, Android `createScaledBitmap` 은
- * mipmap 없는 2×2 bilinear 라 언더샘플링이 있다. 실측에서 그 근사는 darkness 0.719 로
- * 더 진했으므로, **실기기의 적정 감마는 2.0 보다 낮을 수 있다.** PDF 표시 옵션의
- * "오선 진하기" 슬라이더로 실시간 미리보기를 보며 맞출 것.
+ * 위 측정의 다운스케일은 PIL(면적 평균에 가까움)이고 Android `createScaledBitmap` 은 mipmap
+ * 없는 2×2 bilinear 라 언더샘플링이 있어, 실기기 적정값이 측정값보다 **낮을** 가능성을
+ * 열어뒀었다. 실제로는 Google TV Streamer + 4K 모니터에서 2.0 이 1.0 대비 오선·슬러가
+ * 뚜렷하게 개선되고 **크레센도 헤어핀 같은 얇은 사선이 덜 끊겨 보였으며**, 음표 머리·마디선
+ * 등 검은 덩어리가 뭉개지는 부작용은 관측되지 않았다. → `DEFAULT = 2.0f` 확정.
+ *
+ * 디스플레이 특성에 따르는 값이므로 PDF 표시 옵션 → "오선 진하기" 슬라이더로 언제든 조정 가능
+ * (전역 설정, SharedPreferences `ink_gamma`).
  */
 object InkGamma {
 
@@ -39,7 +43,7 @@ object InkGamma {
 
     const val MIN = 1.0f          // 1.0 = 보정 없음
     const val MAX = 3.0f
-    const val DEFAULT = 1.5f      // 눈에 띄되 과하지 않은 출발점. 기기에서 튜닝 전제.
+    const val DEFAULT = 2.0f      // 2026-08-15 Google TV Streamer 실기기 육안 튜닝으로 확정.
 
     const val PREF_KEY = "ink_gamma"
 
@@ -95,6 +99,8 @@ object InkGamma {
             copy
         }
 
+        val started = android.os.SystemClock.elapsedRealtime()
+
         val w = target.width
         val h = target.height
         val table = lutFor(g)
@@ -111,6 +117,9 @@ object InkGamma {
         }
 
         target.setPixels(pixels, 0, w, 0, 0, w, h)
+
+        // 실기기 비용 확인용. 모두 백그라운드 렌더 스레드에서 도는 값이다.
+        Log.d(TAG, "감마 $g 적용: ${w}x${h} (${w * h / 1000}k px) ${android.os.SystemClock.elapsedRealtime() - started}ms")
         return target
     }
 }

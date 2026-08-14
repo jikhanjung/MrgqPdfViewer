@@ -20,7 +20,7 @@
 - **`InkGamma.kt` 신규**: `gamma <= 1.0` 이면 무비용 패스스루, immutable 비트맵 방어, LUT 캐시.
 - **렌더 경로 3곳에 적용**: `PageCache.renderPageToTargetBitmap`, `renderPageAtSinglePageTarget`, `renderPageAtTwoPageTarget`. 두 페이지 결합은 이미 보정된 비트맵을 배치만 하므로 중복 없음.
 - **설정 UI**: PDF 표시 옵션(OK 길게 누르기) → "오선 진하기 (감마)" 슬라이더 1.00~3.00, 실시간 미리보기. 파일별이 아닌 **전역 설정**(SharedPreferences `ink_gamma`). 미리보기/적용/취소 모두 `pageCache.clear()` 동반 — 캐시 비트맵에 이전 감마가 구워져 있기 때문.
-- ⚠️ **기본값 1.5 는 잠정치**. Android `createScaledBitmap` 의 2×2 bilinear 언더샘플링 때문에 실기기 적정값이 측정값보다 낮을 수 있어, 슬라이더 튜닝 후 `InkGamma.DEFAULT` 확정 예정.
+- **기본값 2.0 확정** (2026-08-15 Google TV Streamer 실기기 육안 튜닝): 1.0 대비 오선·슬러가 뚜렷하고 **크레센도 헤어핀 같은 얇은 사선이 덜 끊겨** 보임. 음표 머리·마디선이 뭉개지는 부작용은 없음.
 
 ### 🔬 PDF 렌더러 비교 — P5 로드맵에서 제외
 - Android `PdfRenderer` 가 내부적으로 PDFium 이므로 실질적 대안은 MuPDF 뿐. 앱에 붙이기 전에 데스크톱에서 동일 파이프라인으로 판정한 결과 **MuPDF 가 오히려 더 흐림**(오선 darkness 0.652 → 0.562, 픽셀 RMS 차이 3%).

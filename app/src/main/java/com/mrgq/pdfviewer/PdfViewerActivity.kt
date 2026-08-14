@@ -1939,7 +1939,7 @@ class PdfViewerActivity : AppCompatActivity() {
             gravity = android.view.Gravity.CENTER
             setPadding(0, 20, 0, 10)
         }
-        listOf("보정 없음" to 1.0f, "1.5" to 1.5f, "2.0" to 2.0f).forEach { (btnLabel, btnGamma) ->
+        listOf("보정 없음" to 1.0f, "기본 2.0" to 2.0f, "2.5" to 2.5f).forEach { (btnLabel, btnGamma) ->
             quickButtons.addView(android.widget.Button(this).apply {
                 text = btnLabel
                 setOnClickListener {
