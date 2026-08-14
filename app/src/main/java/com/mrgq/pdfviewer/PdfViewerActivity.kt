@@ -135,9 +135,6 @@ class PdfViewerActivity : AppCompatActivity() {
         // Initialize preferences
         preferences = getSharedPreferences("pdf_viewer_prefs", MODE_PRIVATE)
 
-        // 잉크 감마 (오선 진하기) — 전역 설정. 렌더 경로가 읽으므로 렌더 시작 전에 적용.
-        InkGamma.gamma = preferences.getFloat(InkGamma.PREF_KEY, InkGamma.DEFAULT)
-        Log.i("PdfViewerActivity", "잉크 감마: ${InkGamma.gamma}")
 
         // Initialize database repository
         musicRepository = MusicRepository(this)
@@ -165,7 +162,13 @@ class PdfViewerActivity : AppCompatActivity() {
         } else {
             Log.i("PdfViewerActivity", "=== DISPLAY INFO === app=${screenWidth}x${screenHeight}")
         }
-        
+
+        // 잉크 감마 (오선 진하기) — 전역 설정. 렌더 경로가 읽으므로 렌더 시작 전에 적용.
+        // 기본값은 화면 세로 해상도에 연동된다 (화면이 고울수록 보정이 덜 필요). 저장된 값이 있으면 그쪽 우선.
+        val gammaDefault = InkGamma.defaultFor(screenHeight)
+        InkGamma.gamma = preferences.getFloat(InkGamma.PREF_KEY, gammaDefault)
+        Log.i("PdfViewerActivity", "잉크 감마: ${InkGamma.gamma} (해상도 ${screenHeight}p 기준 기본값 $gammaDefault)")
+
         currentFileIndex = intent.getIntExtra(EXTRA_CURRENT_INDEX, 0)
         filePathList = intent.getStringArrayListExtra(EXTRA_FILE_PATH_LIST) ?: emptyList()
         fileNameList = intent.getStringArrayListExtra(EXTRA_FILE_NAME_LIST) ?: emptyList()
@@ -1912,9 +1915,10 @@ class PdfViewerActivity : AppCompatActivity() {
         }
         dialogView.addView(seekBar)
 
+        val resDefault = InkGamma.defaultFor(screenHeight)
         val hint = android.widget.TextView(this).apply {
             text = "1.00 = 보정 없음. 값을 올리면 오선·슬러가 진해집니다.\n" +
-                    "실시간 미리보기가 적용됩니다."
+                    "현재 해상도(${screenWidth}x${screenHeight}) 기준 기본값 %.2f. 실시간 미리보기가 적용됩니다.".format(resDefault)
             textSize = 12f
             setTextColor(android.graphics.Color.GRAY)
             setPadding(0, 10, 0, 0)
@@ -1939,7 +1943,11 @@ class PdfViewerActivity : AppCompatActivity() {
             gravity = android.view.Gravity.CENTER
             setPadding(0, 20, 0, 10)
         }
-        listOf("보정 없음" to 1.0f, "기본 2.0" to 2.0f, "2.5" to 2.5f).forEach { (btnLabel, btnGamma) ->
+        listOf(
+            "보정 없음" to InkGamma.MIN,
+            "기본 %.2f".format(resDefault) to resDefault,
+            "%.2f".format((resDefault + 0.5f).coerceAtMost(InkGamma.MAX)) to (resDefault + 0.5f).coerceAtMost(InkGamma.MAX)
+        ).forEach { (btnLabel, btnGamma) ->
             quickButtons.addView(android.widget.Button(this).apply {
                 text = btnLabel
                 setOnClickListener {

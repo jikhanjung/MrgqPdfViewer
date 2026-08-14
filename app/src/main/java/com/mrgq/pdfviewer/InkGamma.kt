@@ -43,13 +43,48 @@ object InkGamma {
 
     const val MIN = 1.0f          // 1.0 = 보정 없음
     const val MAX = 3.0f
-    const val DEFAULT = 2.0f      // 2026-08-15 Google TV Streamer 실기기 육안 튜닝으로 확정.
 
     const val PREF_KEY = "ink_gamma"
 
-    /** 현재 감마. 렌더 스레드에서 읽으므로 @Volatile. */
+    /** 실측 앵커: 1080p 에서 육안 튜닝으로 확정한 값 (2026-08-15, Google TV Streamer). */
+    const val REFERENCE_HEIGHT = 1080
+    const val REFERENCE_GAMMA = 2.0f
+
+    /** 이 세로 해상도면 오선이 1픽셀 이상을 차지해 보정이 사실상 불필요해지는 지점. */
+    const val NEUTRAL_HEIGHT = 2160
+
+    /**
+     * 화면 세로 해상도에 맞춘 기본 감마.
+     *
+     * 보정이 필요한 이유는 오선이 **표시 픽셀 기준으로 1픽셀 미만**이기 때문이다.
+     * A4 악보의 오선(≈0.5pt)은 1080p 에서 fitScale 1.283 → 약 0.64px 라 회색이 되지만,
+     * 4K(fitScale 2.57)에서는 약 1.28px 로 1픽셀을 넘겨 스스로 또렷해진다.
+     * 즉 **화면이 고와질수록 필요한 보정량은 줄어든다.**
+     *
+     * 그래서 실측 앵커(1080p → 2.0)와 중립점(2160p → 1.0) 사이를 선형 보간하고,
+     * 그보다 낮은 해상도는 같은 기울기로 외삽한다(더 많은 보정이 필요하므로).
+     *
+     * | 세로 해상도 | 기본 감마 |
+     * |------------|----------|
+     * | 720        | 2.33     |
+     * | 1080       | **2.00** (실측 앵커) |
+     * | 1440 (QHD) | 1.67     |
+     * | 2160 (4K)  | **1.00** (보정 없음) |
+     *
+     * 어디까지나 앵커 하나를 지나는 휴리스틱이다. 4K UI 를 렌더하는 기기를 실제로 쓰게 되면
+     * 그 해상도에서 다시 육안 확인하고 중립점을 조정할 것. 사용자가 슬라이더로 저장한 값이
+     * 있으면 언제나 그쪽이 우선한다.
+     */
+    fun defaultFor(screenHeight: Int): Float {
+        if (screenHeight <= 0) return REFERENCE_GAMMA
+        val span = (NEUTRAL_HEIGHT - REFERENCE_HEIGHT).toFloat()
+        val t = (NEUTRAL_HEIGHT - screenHeight) / span
+        return (1f + (REFERENCE_GAMMA - 1f) * t).coerceIn(MIN, MAX)
+    }
+
+    /** 현재 감마. 렌더 스레드에서 읽으므로 @Volatile. 실제 값은 onCreate 에서 주입한다. */
     @Volatile
-    var gamma: Float = DEFAULT
+    var gamma: Float = REFERENCE_GAMMA
         set(value) {
             val clamped = value.coerceIn(MIN, MAX)
             if (field != clamped) {
