@@ -311,7 +311,8 @@ class PageCache(
         if (displayBitmap !== oversampleBitmap) {
             oversampleBitmap.recycle()
         }
-        return displayBitmap
+        // 4단계: 다운스케일로 희석된 잉크를 톤 커브로 되살린다 (오선/슬러 대비 회복).
+        return InkGamma.apply(displayBitmap)
     }
     
     /**

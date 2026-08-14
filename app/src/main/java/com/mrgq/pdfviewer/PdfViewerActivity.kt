@@ -134,7 +134,11 @@ class PdfViewerActivity : AppCompatActivity() {
         
         // Initialize preferences
         preferences = getSharedPreferences("pdf_viewer_prefs", MODE_PRIVATE)
-        
+
+        // 잉크 감마 (오선 진하기) — 전역 설정. 렌더 경로가 읽으므로 렌더 시작 전에 적용.
+        InkGamma.gamma = preferences.getFloat(InkGamma.PREF_KEY, InkGamma.DEFAULT)
+        Log.i("PdfViewerActivity", "잉크 감마: ${InkGamma.gamma}")
+
         // Initialize database repository
         musicRepository = MusicRepository(this)
         
@@ -811,7 +815,8 @@ class PdfViewerActivity : AppCompatActivity() {
         }
 
         Log.d("PdfViewerActivity", "=== SINGLE PAGE RENDER === pdf=${pdfW}x${pdfH} -> oversample=${oversampleW}x${oversampleH} -> display=${displayW}x${displayH}")
-        return displayBitmap
+        // 다운스케일로 희석된 잉크를 톤 커브로 되살린다 (PageCache 와 동일 정책).
+        return InkGamma.apply(displayBitmap)
     }
 
     /**
@@ -855,9 +860,10 @@ class PdfViewerActivity : AppCompatActivity() {
         if (displayBitmap !== oversampleBitmap) {
             oversampleBitmap.recycle()
         }
-        return displayBitmap
+        // 다운스케일로 희석된 잉크를 톤 커브로 되살린다 (PageCache 와 동일 정책).
+        return InkGamma.apply(displayBitmap)
     }
-    
+
     /**
      * 통합된 두 페이지 렌더링 함수 - 처음부터 렌더링하는 모든 두 페이지 모드를 처리
      * @param leftPageIndex 왼쪽 페이지 인덱스
@@ -1855,24 +1861,140 @@ class PdfViewerActivity : AppCompatActivity() {
         
         val options = arrayOf(
             "두 페이지 모드 전환",
-            "위/아래 클리핑 설정"
+            "위/아래 클리핑 설정",
+            "오선 진하기 (감마)"
         )
-        
+
         AlertDialog.Builder(this)
             .setTitle("PDF 표시 옵션")
             .setItems(options) { dialog, which ->
                 when (which) {
-                    0 -> showTwoPageModeDialog { 
+                    0 -> showTwoPageModeDialog {
                         // 두 페이지 모드 변경 완료 후 현재 페이지 다시 렌더링
                         showPage(pageIndex)
                     }
                     1 -> showClippingDialog()
+                    2 -> showInkGammaDialog()
                 }
             }
             .setNegativeButton("닫기") { dialog, _ -> dialog.dismiss() }
             .show()
     }
-    
+
+    /**
+     * 오선 진하기(잉크 감마) 설정 다이얼로그.
+     *
+     * oversample → 다운스케일 과정에서 1픽셀 미만 stroke 의 잉크가 희석돼 오선이 회색으로
+     * 보이는 문제를 톤 커브로 보정한다. 근거와 측정치는 [InkGamma] 문서 참고.
+     * 파일별이 아니라 **전역 설정**(디스플레이 특성에 따르는 값)이라 SharedPreferences 에 저장한다.
+     */
+    private fun showInkGammaDialog() {
+        val originalGamma = InkGamma.gamma
+
+        val dialogView = android.widget.LinearLayout(this).apply {
+            orientation = android.widget.LinearLayout.VERTICAL
+            setPadding(50, 30, 50, 30)
+        }
+
+        val label = android.widget.TextView(this).apply {
+            text = "오선 진하기: %.2f".format(originalGamma)
+            textSize = 16f
+            setPadding(0, 0, 0, 10)
+        }
+        dialogView.addView(label)
+
+        // 1.00 ~ 3.00 을 0.05 단위로
+        val steps = ((InkGamma.MAX - InkGamma.MIN) / 0.05f).toInt()
+        val seekBar = android.widget.SeekBar(this).apply {
+            max = steps
+            progress = (((originalGamma - InkGamma.MIN) / 0.05f).toInt()).coerceIn(0, steps)
+            setPadding(0, 0, 0, 20)
+        }
+        dialogView.addView(seekBar)
+
+        val hint = android.widget.TextView(this).apply {
+            text = "1.00 = 보정 없음. 값을 올리면 오선·슬러가 진해집니다.\n" +
+                    "실시간 미리보기가 적용됩니다."
+            textSize = 12f
+            setTextColor(android.graphics.Color.GRAY)
+            setPadding(0, 10, 0, 0)
+        }
+        dialogView.addView(hint)
+
+        var previewHandler: android.os.Handler? = null
+        var previewRunnable: Runnable? = null
+
+        val applyPreview = { g: Float ->
+            InkGamma.gamma = g
+            // 캐시된 비트맵에는 이전 감마가 구워져 있으므로 비우고 다시 렌더한다.
+            pageCache?.clear()
+            forceDirectRendering = true
+            showPage(pageIndex)
+        }
+
+        val progressToGamma = { p: Int -> InkGamma.MIN + p * 0.05f }
+
+        val quickButtons = android.widget.LinearLayout(this).apply {
+            orientation = android.widget.LinearLayout.HORIZONTAL
+            gravity = android.view.Gravity.CENTER
+            setPadding(0, 20, 0, 10)
+        }
+        listOf("보정 없음" to 1.0f, "1.5" to 1.5f, "2.0" to 2.0f).forEach { (btnLabel, btnGamma) ->
+            quickButtons.addView(android.widget.Button(this).apply {
+                text = btnLabel
+                setOnClickListener {
+                    seekBar.progress = (((btnGamma - InkGamma.MIN) / 0.05f).toInt()).coerceIn(0, steps)
+                    applyPreview(btnGamma)
+                }
+            })
+        }
+        dialogView.addView(quickButtons)
+
+        seekBar.setOnSeekBarChangeListener(object : android.widget.SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(sb: android.widget.SeekBar?, progress: Int, fromUser: Boolean) {
+                val g = progressToGamma(progress)
+                label.text = "오선 진하기: %.2f".format(g)
+                if (fromUser) {
+                    previewRunnable?.let { previewHandler?.removeCallbacks(it) }
+                    previewRunnable = Runnable { applyPreview(g) }
+                    previewHandler = android.os.Handler(android.os.Looper.getMainLooper())
+                    previewHandler?.postDelayed(previewRunnable!!, 250)
+                }
+            }
+            override fun onStartTrackingTouch(sb: android.widget.SeekBar?) {}
+            override fun onStopTrackingTouch(sb: android.widget.SeekBar?) {}
+        })
+
+        val restore = {
+            previewRunnable?.let { previewHandler?.removeCallbacks(it) }
+            InkGamma.gamma = originalGamma
+            pageCache?.clear()
+            forceDirectRendering = true
+            showPage(pageIndex)
+        }
+
+        AlertDialog.Builder(this)
+            .setTitle("오선 진하기 (감마)")
+            .setView(dialogView)
+            .setPositiveButton("적용") { _, _ ->
+                previewRunnable?.let { previewHandler?.removeCallbacks(it) }
+                val g = progressToGamma(seekBar.progress)
+                InkGamma.gamma = g
+                preferences.edit().putFloat(InkGamma.PREF_KEY, g).apply()
+                Log.i("PdfViewerActivity", "잉크 감마 저장: $g")
+
+                pageCache?.clear()
+                forceDirectRendering = true
+                showPage(pageIndex)
+                Toast.makeText(this, "오선 진하기 %.2f 적용".format(g), Toast.LENGTH_SHORT).show()
+
+                showPdfDisplayOptions()
+            }
+            .setNegativeButton("취소") { _, _ -> restore() }
+            .setOnCancelListener { restore() }
+            .show()
+    }
+
     /**
      * PageCache에 설정 콜백을 등록하는 헬퍼 함수
      */

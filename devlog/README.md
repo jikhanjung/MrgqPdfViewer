@@ -67,8 +67,9 @@ MrgqPdfViewer 개발 로그 모음. 구현 기록은 `YYYYMMDD_NNN_` 형식(NNN 
 - [`P03`](20260613_P03_clock_sync_design.md) — 클럭 동기화 **설계**
 - [`038`](20260614_038_phase0_sync_page_turn_implementation.md) — 합주 Phase 0 동기 페이지 넘김 **구현** (⚠️ 실기기 미검증)
 
-## 🖥️ 4K 디스플레이 조사 (2026-07~08)
+## 🖥️ 4K 디스플레이 조사 · 잉크 감마 (2026-07~08)
 - [`040`](20260815_040_4k_display_investigation.md) — 4K 계단현상 조사 → **기기 한계로 종결** (`ro.surface_flinger.max_graphics_*` = 1920×1080 하드코딩, SurfaceView 경로도 불가)
+- [`041`](20260815_041_ink_gamma_and_renderer_comparison.md) — PDFium vs MuPDF 비교(**교체 무익, P5 제외**) → 다운스케일 잉크 희석 발견 → **감마 보정 도입**
 
 ## 📚 메타
 - [`039`](20260619_039_project_timeline.md) — 커밋 히스토리 기반 전체 개발 연대기
