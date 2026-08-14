@@ -3,7 +3,7 @@
 MrgqPdfViewer 개발 로그 모음. 구현 기록은 `YYYYMMDD_NNN_` 형식(NNN 은 작성 순
 연속 번호, 날짜와 무관), 계획 문서는 `YYYYMMDD_PNN_` 별도 체계(P01 부터).
 
-**기준 버전**: v0.1.12 (2026-05-30) · 최종 갱신: 2026-06-19
+**기준 버전**: v0.1.12 (2026-05-30) · 최종 갱신: 2026-08-15
 
 > 전체 개발 연대기(커밋 히스토리 기반, devlog 이전 구간 포함)는
 > [`20260619_039_project_timeline.md`](20260619_039_project_timeline.md) 참고.
@@ -66,6 +66,9 @@ MrgqPdfViewer 개발 로그 모음. 구현 기록은 `YYYYMMDD_NNN_` 형식(NNN 
 - [`P02`](20260613_P02_score_sync_autoturn_plan.md) — 재생·자동 넘김·메트로놈·스코어 팔로잉 단계별 **계획**
 - [`P03`](20260613_P03_clock_sync_design.md) — 클럭 동기화 **설계**
 - [`038`](20260614_038_phase0_sync_page_turn_implementation.md) — 합주 Phase 0 동기 페이지 넘김 **구현** (⚠️ 실기기 미검증)
+
+## 🖥️ 4K 디스플레이 조사 (2026-07~08)
+- [`040`](20260815_040_4k_display_investigation.md) — 4K 계단현상 조사 → **기기 한계로 종결** (`ro.surface_flinger.max_graphics_*` = 1920×1080 하드코딩, SurfaceView 경로도 불가)
 
 ## 📚 메타
 - [`039`](20260619_039_project_timeline.md) — 커밋 히스토리 기반 전체 개발 연대기

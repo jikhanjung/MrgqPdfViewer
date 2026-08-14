@@ -4,10 +4,15 @@
 Android TV OS용 PDF 악보 리더 앱으로, 무선 파일 업로드와 리모컨을 이용한 탐색 기능을 제공합니다.
 
 **타깃 기기**: Google TV Streamer + UPerfect 23.8" 4K 모니터 (2026-07 전환. 이전: Z18TV Pro, 1080p)  
+> ⚠️ **이 기기의 앱 UI 는 물리적으로 1080p 를 넘을 수 없다.** `ro.surface_flinger.max_graphics_width/height`
+> 가 1920×1080 으로 빌드에 고정돼 있어(read-only, 루팅 없이 변경 불가) 앱은 1080p 로 그리고
+> SurfaceFlinger 가 4K 로 업스케일한다. 4K 관련 작업을 시작하기 전에
+> [`devlog/20260815_040_4k_display_investigation.md`](devlog/20260815_040_4k_display_investigation.md) 를 먼저 읽을 것.
+
 **현재 버전**: v0.1.12 (2026-05-30)  
-**빌드 상태**: 🟢 빌드 가능  
-**테스트 상태**: 🟢 기본 기능 테스트 완료 (합주 Phase 0 동기 넘김·4K 대응은 실기기 미검증)
-**최근 업데이트**: 4K 디스플레이 대응(getRealMetrics + oversample 자동 축소, 실기기 미검증), GitHub Actions CI 빌드 추가, 합주 Phase 0 동기 페이지 넘김(예약 timestamp 방식, 기본 OFF·실기기 미검증)
+**빌드 상태**: 🟢 빌드 가능 (GitHub Actions CI 로 커밋마다 검증)  
+**테스트 상태**: 🟡 기기 전환(Google TV Streamer) 후 전반 재검증 미실시. 합주 Phase 0 동기 넘김 실기기 미검증
+**최근 업데이트**: 4K 계단현상 조사 종결(기기 하드 제약 확정), GitHub Actions CI 빌드, 합주 Phase 0 동기 페이지 넘김(예약 timestamp 방식, 기본 OFF·**접근법 재검토 중**)
 
 ## 주요 기능
 - **전문적인 스플래시 스크린**: 브랜딩 강화된 2.5초 애니메이션 시퀀스로 앱 시작
@@ -147,10 +152,15 @@ adb install app/build/outputs/apk/debug/app-debug.apk
 ### ✅ 완료된 기능
 
 #### 🎵 v0.1.12 이후 작업 (2026-06 ~ 07)
-- [~] **4K 디스플레이 대응** (2026-07-26, ⚠️ **실기기 미검증**): Google TV Streamer + 4K 모니터에서 슬러 등 곡선의 계단현상 보고됨. 렌더 파이프라인엔 1080 하드코딩 없음(모두 런타임 해상도 기준) → 기기가 앱에 1080 을 보고하는지가 관건. `getMetrics`→`getRealMetrics` 교체, 시작 시 `DISPLAY INFO` 로그(앱 해상도/물리 모드/지원 모드) 추가, `PageCache.effectiveOversampleFactor()` 로 transient 비트맵 34MP 상한(1080p 동작 불변, 4K 에서 4×→~3.2× 자동 축소). 기기 연결 후 logcat 의 `DISPLAY INFO` 로 판정: `app=1920x1080, physicalMode=3840x2160` 이면 시스템이 UI 를 1080p 로 돌리는 것 → `wm size` 오버라이드 테스트 또는 4K SurfaceView 경로 검토 필요.
+- [x] **4K 디스플레이 조사 — 기기 한계로 종결** (2026-08-15 판정, 선행 커밋 `822db08` 2026-07-26): Google TV Streamer + 4K 모니터에서 슬러 등 곡선의 계단현상 보고 → 실기기 `DISPLAY INFO` 로그로 판정한 결과 **`app=1920x1080, physicalMode=3840x2160`**. 원인은 렌더 품질이 아니라 **시스템 다운스케일**이며, `ro.surface_flinger.max_graphics_width/height=1920x1080` 빌드 프로퍼티가 근원. `wm size` 오버라이드·`wm size reset` 모두 무효(SurfaceFlinger 가 즉시 되돌림). **SurfaceView `setFixedSize(4K)` 경로도 성립 불가** — 제한이 개별 레이어가 아닌 논리 디스플레이 레벨이라 최종 합성에서 원위치. 이 기기 설계는 "UI/그래픽=1080p, 4K=비디오 레이어 전용". 남은 선택지는 1080p 내 화질 극대화(P5) 또는 UI 4K 렌더 지원 기기로 교체. 상세: `devlog/20260815_040_4k_display_investigation.md`
+  - 커밋 `822db08` 의 코드는 유지: `getRealMetrics`+`DISPLAY INFO` 로그는 판정 도구로 유효, `PageCache.effectiveOversampleFactor()`(transient 비트맵 34MP 상한)는 1080p 동작 불변이며 향후 4K 기기 대비 안전장치.
+  - ⚠️ 4K 기기로 갈 경우 전제 조건: `PageCache` 캐시가 바이트가 아닌 **페이지 수(6장) 기준**(`PageCache.kt:20`)이라 4K 에서 33MB×6≈200MB → OOM. 바이트 기반 재설계 필요.
+  - 부수 발견: 현재 HDMI 가 `3840x2160@30`(30Hz)로 협상됨. 60Hz 모드 지원하므로 설정/케이블 점검 필요(350ms 페이지 전환 애니메이션 부드러움에 직결).
 - [x] **GitHub Actions CI 빌드** (2026-07-26): `android-build.yml` 추가, gradlew 실행 비트 수정(100644→100755). JDK 17 + Gradle 캐시, debug/release APK 아티팩트 업로드.
 - [x] **벡터 PDF 악보 분석 파이프라인 탐색** (2026-06-13, `data/`, **앱 미통합**): 콘텐츠 스트림 CTM 파싱으로 시스템/마디 검출(Sibelius 인쇄본과 마디 번호 일치), 파트보 PDF 생성, OMR(음고·쉼표), 전사·5파트 합주 MP3 합성. 자동 넘김·메트로놈·스코어 팔로잉 장기 로드맵(P02)의 기반.
-- [~] **합주 Phase 0 — 동기 페이지 넘김** (2026-06-14, ⚠️ **실기기 미검증**): 지휘자가 "넘길 절대 시각(turn_at = now + lead)"을 브로드캐스트 → 모든 기기가 벽시계 기준 동시 넘김. 설정 토글(기본 OFF, 하위호환), 재브로드캐스트 억제 창. WSL 환경이라 빌드·2기기 실측 필요. (설계 P03 / 구현 devlog #038)
+- [~] **합주 Phase 0 — 동기 페이지 넘김** (2026-06-14 구현, ⚠️ **실기기 미검증 · 접근법 보류**): 지휘자가 "넘길 절대 시각(turn_at = now + lead)"을 브로드캐스트 → 모든 기기가 벽시계 기준 동시 넘김. 설정 토글(기본 OFF, 하위호환), 재브로드캐스트 억제 창. (설계 P03 / 구현 devlog #038)
+  - **2026-08-15 보류 결정**: 예약 방식은 `lead`(기본 2000ms) 만큼 **항상** 기다리므로, 깜박 잊고 늦게 넘길 때 또 1~2초를 기다려야 해 **돌발 상황 대처가 불가능**. 합주 현장에서 이 비용이 동기화 이득보다 크다는 판단. 코드는 기본 OFF 로 유지하고 접근법 재검토.
+  - **재설계 시 먼저 할 일**: 기기 간 편차의 실체를 측정하지 않고 클럭 동기부터 붙인 것이 문제. LAN WebSocket 전파 지연은 수~수십 ms 로 체감되지 않으므로, 실제 원인은 **렌더 지연**(캐시 미스로 한 기기만 늦게 그림)일 가능성이 큼. 그렇다면 해법은 클럭 동기가 아니라 **즉시 넘김 + 타깃 페이지 프리렌더 완료 보장**(지연 0, 돌발 대처 가능).
 
 #### 🎼 v0.1.12 주요 업데이트 (2026-05-30) — 오선 dropout 해결 (P2)
 - [x] **두 페이지 모드 오선 dropout 개선 (P2-B)**: PDF vector y × scale 의 fractional 0.5 근처 줄이 회색으로 흐려지던 문제. oversample을 2.5×→**4×**로 올리고, 렌더 직후 화면 크기로 즉시 다운스케일(transient 비트맵)하여 Canvas ~100MB 한계 우회.
