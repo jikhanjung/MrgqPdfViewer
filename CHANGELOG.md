@@ -6,7 +6,39 @@
 
 ## [Unreleased]
 
-### 🎵 합주 자동화 & 악보 분석 (2026-06, 버전 미증가)
+---
+
+## [0.1.13] - 2026-08-15
+
+> 6/13 이후 버전 미증가로 누적돼 있던 작업을 한데 묶어 올린 버전.
+> ⚠️ 기기 전환(Z18TV Pro → Google TV Streamer) 후 전반 실기기 재검증은 아직 진행 중이며,
+> 합주 Phase 0 동기 넘김은 실기기 미검증 상태(기본 OFF)로 포함됨.
+
+### 🎼 오선 잉크 감마 보정 (신규)
+- **다운스케일로 희석된 잉크를 톤 커브로 회복**: PDFium(= Android PdfRenderer 의 내부 엔진)이 1픽셀 미만 stroke 를 최소 1px 로 스냅하므로, oversample 배율을 올릴수록 오선의 상대 두께가 얇아져 다운스케일 시 회색이 된다. 표시 크기 비트맵에 256엔트리 LUT 감마를 적용해 균일성을 유지한 채 대비를 회복.
+  - 측정(A4 악보, 764×1080, 오선 54개): 1× darkness **0.957** vs 4×→다운 **0.652**. 감마 2.0 적용 시 **0.844**, 두께 편차는 0.85→0.88 로 거의 불변.
+- **`InkGamma.kt` 신규**: `gamma <= 1.0` 이면 무비용 패스스루, immutable 비트맵 방어, LUT 캐시.
+- **렌더 경로 3곳에 적용**: `PageCache.renderPageToTargetBitmap`, `renderPageAtSinglePageTarget`, `renderPageAtTwoPageTarget`. 두 페이지 결합은 이미 보정된 비트맵을 배치만 하므로 중복 없음.
+- **설정 UI**: PDF 표시 옵션(OK 길게 누르기) → "오선 진하기 (감마)" 슬라이더 1.00~3.00, 실시간 미리보기. 파일별이 아닌 **전역 설정**(SharedPreferences `ink_gamma`). 미리보기/적용/취소 모두 `pageCache.clear()` 동반 — 캐시 비트맵에 이전 감마가 구워져 있기 때문.
+- ⚠️ **기본값 1.5 는 잠정치**. Android `createScaledBitmap` 의 2×2 bilinear 언더샘플링 때문에 실기기 적정값이 측정값보다 낮을 수 있어, 슬라이더 튜닝 후 `InkGamma.DEFAULT` 확정 예정.
+
+### 🔬 PDF 렌더러 비교 — P5 로드맵에서 제외
+- Android `PdfRenderer` 가 내부적으로 PDFium 이므로 실질적 대안은 MuPDF 뿐. 앱에 붙이기 전에 데스크톱에서 동일 파이프라인으로 판정한 결과 **MuPDF 가 오히려 더 흐림**(오선 darkness 0.652 → 0.562, 픽셀 RMS 차이 3%).
+- 네이티브 라이브러리 추가 + AGPL v3 비용까지 감안해 **P5(렌더러 교체) 제외 확정**.
+- 측정 스크립트 추가: `data/renderer_compare.py`, `data/staffline_profile.py`.
+
+### 🖥️ 4K 디스플레이 조사 — 기기 한계로 종결
+- Google TV Streamer + 4K 모니터의 곡선 계단현상을 실기기 `DISPLAY INFO` 로그로 판정: **`app=1920x1080, physicalMode=3840x2160`**. 원인은 렌더 품질이 아니라 시스템 다운스케일.
+- 근원은 **`ro.surface_flinger.max_graphics_width/height = 1920x1080`** 빌드 프로퍼티(read-only, 루팅 없이 변경 불가). `wm size` 오버라이드·`reset` 모두 SurfaceFlinger 가 즉시 되돌림.
+- 검토 항목이던 **SurfaceView `setFixedSize(4K)` 경로도 성립 불가** — 제한이 개별 레이어가 아닌 논리 디스플레이 레벨.
+- 선행 커밋(`822db08`)의 `getRealMetrics` 교체 + `DISPLAY INFO` 로그 + `PageCache.effectiveOversampleFactor()`(transient 비트맵 34MP 상한)는 판정 도구·향후 기기 대비 안전장치로 유지. 1080p 동작은 불변.
+- 부수 발견: HDMI 가 `3840x2160@30`(30Hz)로 협상됨. `PageCache` 캐시가 페이지 수(6장) 기준이라 4K 기기에서는 ≈200MB → 바이트 기반 재설계가 전제 조건.
+
+### 🤖 CI
+- **GitHub Actions 빌드 워크플로우 추가** (`android-build.yml`): main 푸시/PR/`v*` 태그/수동 실행 시 debug+release APK 아티팩트 생성. WSL 에서 커밋만으로 컴파일 검증 가능해짐.
+- gradlew 실행 비트·CRLF→LF 수정, `gradle-wrapper.jar` 커밋, release 서명 폴백용 debug keystore 를 러너에서 생성, 액션 버전 업그레이드(Node 24 런타임).
+
+### 🎵 합주 자동화 & 악보 분석 (2026-06)
 - **합주 Phase 0 — 동기 페이지 넘김** (⚠️ 실기기 미검증): 지휘자가 페이지 넘김 시 "실제 넘길 절대 시각(`turn_at = now + lead`)"을 함께 브로드캐스트 → 모든 기기(지휘자 포함)가 그 벽시계 시각에 동시에 넘김. 기존 수신-즉시-넘김의 기기 간 시점 어긋남 완화.
   - `page_change` 메시지에 `turn_at` 필드 추가 (Server/Client/Global/Viewer 일관 반영)
   - 지휘자 예약 넘김 + 연주자 예약 실행 + 재브로드캐스트 억제 창

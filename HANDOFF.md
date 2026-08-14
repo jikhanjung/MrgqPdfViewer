@@ -2,7 +2,9 @@
 
 마지막 갱신: 2026-06-19
 브랜치: `main` (origin/main 과 동기화됨, 미푸시 커밋 0개)
-대상 버전: **v0.1.12** (build.gradle.kts versionCode 12 / versionName 0.1.12). 6/13 이후 작업은 버전 미증가.
+대상 버전: **v0.1.13** (build.gradle.kts versionCode 13 / versionName 0.1.13, 2026-08-15 버전업).
+> ⚠️ 본문 나머지는 2026-06-19 시점 기준이라 낡았다. 최신 상태는 [`TODOs.md`](TODOs.md) 와
+> devlog [`040`](devlog/20260815_040_4k_display_investigation.md) / [`041`](devlog/20260815_041_ink_gamma_and_renderer_comparison.md) 참고.
 미커밋 변경: 없음 (clean)
 관련 문서: [devlog 인덱스](devlog/README.md) · [전체 개발 연대기](devlog/20260619_039_project_timeline.md)
 

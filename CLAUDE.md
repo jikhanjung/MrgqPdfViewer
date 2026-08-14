@@ -9,10 +9,10 @@ Android TV OS용 PDF 악보 리더 앱으로, 무선 파일 업로드와 리모�
 > SurfaceFlinger 가 4K 로 업스케일한다. 4K 관련 작업을 시작하기 전에
 > [`devlog/20260815_040_4k_display_investigation.md`](devlog/20260815_040_4k_display_investigation.md) 를 먼저 읽을 것.
 
-**현재 버전**: v0.1.12 (2026-05-30)  
+**현재 버전**: v0.1.13 (2026-08-15)  
 **빌드 상태**: 🟢 빌드 가능 (GitHub Actions CI 로 커밋마다 검증)  
 **테스트 상태**: 🟡 기기 전환(Google TV Streamer) 후 전반 재검증 미실시. 합주 Phase 0 동기 넘김 실기기 미검증
-**최근 업데이트**: 4K 계단현상 조사 종결(기기 하드 제약 확정), GitHub Actions CI 빌드, 합주 Phase 0 동기 페이지 넘김(예약 timestamp 방식, 기본 OFF·**접근법 재검토 중**)
+**최근 업데이트**: 오선 잉크 감마 보정 도입(실기기 튜닝 필요), PDF 렌더러 비교로 P5 제외, 4K 계단현상 조사 종결(기기 하드 제약 확정), GitHub Actions CI 빌드, 합주 Phase 0 동기 페이지 넘김(기본 OFF·**접근법 재검토 중**)
 
 ## 주요 기능
 - **전문적인 스플래시 스크린**: 브랜딩 강화된 2.5초 애니메이션 시퀀스로 앱 시작
@@ -151,7 +151,9 @@ adb install app/build/outputs/apk/debug/app-debug.apk
 
 ### ✅ 완료된 기능
 
-#### 🎵 v0.1.12 이후 작업 (2026-06 ~ 07)
+#### 🎼 v0.1.13 주요 업데이트 (2026-08-15) — 잉크 감마 · 4K 조사 · CI
+- [~] **오선 잉크 감마 보정** (2026-08-15, ⚠️ **실기기 튜닝 필요**): PDFium(= PdfRenderer 내부 엔진)이 1px 미만 stroke 를 최소 1px 로 스냅하므로, oversample 배율을 올릴수록 오선의 상대 두께가 얇아져 다운스케일 시 회색이 된다(1× darkness 0.957 vs 4×→다운 0.652). 표시 크기 비트맵에 256엔트리 LUT 감마를 적용해 균일성을 유지한 채 대비 회복(감마 2.0 → 0.844, 두께 편차 0.85→0.88). `InkGamma.kt` 신규 + 렌더 경로 3곳 적용 + PDF 표시 옵션에 "오선 진하기" 슬라이더(전역 설정, 실시간 미리보기). **기본값 1.5 는 잠정치** — Android `createScaledBitmap` 의 2×2 bilinear 언더샘플링 때문에 실기기 적정값이 더 낮을 수 있어 슬라이더 튜닝 후 `InkGamma.DEFAULT` 확정 필요. 상세: `devlog/20260815_041_ink_gamma_and_renderer_comparison.md`
+- [x] **PDF 렌더러 비교 → P5 제외 확정** (2026-08-15): Android `PdfRenderer` 가 내부적으로 PDFium 이므로 실질적 대안은 MuPDF 뿐. 앱에 붙이기 전 데스크톱에서 동일 파이프라인으로 판정한 결과 **MuPDF 가 오히려 더 흐림**(0.652 → 0.562, 픽셀 RMS 차이 3%). 네이티브 라이브러리 + AGPL v3 비용까지 감안해 로드맵에서 제외. 측정 스크립트: `data/renderer_compare.py`, `data/staffline_profile.py`
 - [x] **4K 디스플레이 조사 — 기기 한계로 종결** (2026-08-15 판정, 선행 커밋 `822db08` 2026-07-26): Google TV Streamer + 4K 모니터에서 슬러 등 곡선의 계단현상 보고 → 실기기 `DISPLAY INFO` 로그로 판정한 결과 **`app=1920x1080, physicalMode=3840x2160`**. 원인은 렌더 품질이 아니라 **시스템 다운스케일**이며, `ro.surface_flinger.max_graphics_width/height=1920x1080` 빌드 프로퍼티가 근원. `wm size` 오버라이드·`wm size reset` 모두 무효(SurfaceFlinger 가 즉시 되돌림). **SurfaceView `setFixedSize(4K)` 경로도 성립 불가** — 제한이 개별 레이어가 아닌 논리 디스플레이 레벨이라 최종 합성에서 원위치. 이 기기 설계는 "UI/그래픽=1080p, 4K=비디오 레이어 전용". 남은 선택지는 1080p 내 화질 극대화(P5) 또는 UI 4K 렌더 지원 기기로 교체. 상세: `devlog/20260815_040_4k_display_investigation.md`
   - 커밋 `822db08` 의 코드는 유지: `getRealMetrics`+`DISPLAY INFO` 로그는 판정 도구로 유효, `PageCache.effectiveOversampleFactor()`(transient 비트맵 34MP 상한)는 1080p 동작 불변이며 향후 4K 기기 대비 안전장치.
   - ⚠️ 4K 기기로 갈 경우 전제 조건: `PageCache` 캐시가 바이트가 아닌 **페이지 수(6장) 기준**(`PageCache.kt:20`)이라 4K 에서 33MB×6≈200MB → OOM. 바이트 기반 재설계 필요.
