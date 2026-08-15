@@ -116,13 +116,6 @@ jobs:
           path: app/build/reports/tests/
           if-no-files-found: ignore
 
-      - name: Upload Room schemas
-        uses: actions/upload-artifact@v7
-        with:
-          name: room-schemas${{ inputs.artifact-suffix }}
-          path: app/schemas/
-          if-no-files-found: warn
-
       - name: Android Lint
         run: ./gradlew lintDebug
 
@@ -137,6 +130,24 @@ jobs:
       # ── 산출물 ────────────────────────────────────────────────────────────
       - name: Build debug APK
         run: ./gradlew assembleDebug
+
+      # Room 스키마 드리프트 게이트.
+      # 엔티티를 고치면 kapt 가 app/schemas 를 다시 쓴다. 커밋된 것과 달라졌다는 것은
+      # version 을 안 올렸거나(→ 사용자 기기에서 "Room cannot verify the data integrity")
+      # 스키마 JSON 커밋을 빠뜨렸다는 뜻이다.
+      - name: Room schema drift check
+        run: |
+          set -euo pipefail
+          if [ -n "$(git status --porcelain app/schemas)" ]; then
+            echo "::error::Room 스키마가 커밋된 것과 다릅니다."
+            echo "엔티티를 바꿨다면 @Database(version=) 을 올리고 Migration 을 추가한 뒤"
+            echo "app/schemas 의 새 JSON 을 함께 커밋하세요."
+            git status --porcelain app/schemas
+            git --no-pager diff -- app/schemas | head -60
+            exit 1
+          fi
+          echo "스키마 일치 ✓"
+          ls app/schemas/*/ >> "$GITHUB_STEP_SUMMARY" || true
 
       - name: Build release APK
         run: ./gradlew assembleRelease
