@@ -83,6 +83,51 @@ jobs:
             -dname "CN=Android Debug,O=Android,C=US" \
             -keyalg RSA -keysize 2048 -validity 10000
 
+      # ── 게이트: 빌드보다 먼저 돌려 빨리 실패시킨다 ──────────────────────────
+      - name: Unit tests
+        run: ./gradlew testDebugUnitTest
+
+      # guides/desktop/ci.md §8 — "아무것도 안 보면서 통과하는 게이트" 방지.
+      # 테스트 소스가 통째로 사라지거나 태스크가 no-op 이 돼도 gradle 은 성공한다.
+      # 실제로 몇 개가 실행됐는지 세어서 0 이면 실패시킨다.
+      - name: Assert unit tests actually ran
+        run: |
+          set -euo pipefail
+          shopt -s nullglob globstar
+          files=(app/build/test-results/testDebugUnitTest/**/*.xml)
+          if [ ${#files[@]} -eq 0 ]; then
+            echo "::error::테스트 결과 XML 이 없습니다 — 테스트가 실행되지 않았습니다"
+            exit 1
+          fi
+          total=$(grep -ho 'tests="[0-9]*"' "${files[@]}" | grep -o '[0-9]*' | paste -sd+ | bc)
+          fails=$(grep -ho 'failures="[0-9]*"' "${files[@]}" | grep -o '[0-9]*' | paste -sd+ | bc)
+          echo "실행된 테스트: $total (실패 $fails)"
+          if [ "${total:-0}" -eq 0 ]; then
+            echo "::error::테스트가 0개 실행됐습니다. 게이트가 아무것도 보고 있지 않습니다"
+            exit 1
+          fi
+          echo "- 단위 테스트 **$total 개** 실행 (실패 $fails)" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload test report (on failure)
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: test-report${{ inputs.artifact-suffix }}
+          path: app/build/reports/tests/
+          if-no-files-found: ignore
+
+      - name: Android Lint
+        run: ./gradlew lintDebug
+
+      - name: Upload lint report (on failure)
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: lint-report${{ inputs.artifact-suffix }}
+          path: app/build/reports/lint-results-*.html
+          if-no-files-found: ignore
+
+      # ── 산출물 ────────────────────────────────────────────────────────────
       - name: Build debug APK
         run: ./gradlew assembleDebug
 
