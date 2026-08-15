@@ -97,7 +97,9 @@ Android TV OS용 PDF 악보 리더 앱으로, 무선 파일 업로드와 리모�
 ### 개발 워크플로우
 - **코딩**: WSL2의 Claude Code에서 소스 코드 편집
 - **빌드/테스트**: Windows 11의 Android Studio에서 실행
-- **CI 빌드**: GitHub Actions (`.github/workflows/android-build.yml`) — main 푸시/PR/`v*` 태그/수동 실행 시 debug+release APK를 아티팩트로 생성. 컴파일 검증을 WSL에서 커밋만으로 수행 가능. release 는 기본 debug keystore 서명 (정식 서명은 `RELEASE_KEYSTORE_*` secrets 등록 시)
+- **CI 빌드**: GitHub Actions. 빌드 정의는 `build.yml`(재사용 워크플로우) 한 곳에 있고 `android-build.yml`(main 푸시/PR/수동)과 `release.yml`(`v*` 태그)이 이를 호출한다. 컴파일 검증을 WSL에서 커밋만으로 수행 가능. release 는 기본 debug keystore 서명 (정식 서명은 `RELEASE_KEYSTORE_*` secrets 등록 시 자동 전환)
+- **릴리스**: `v*` 태그 푸시 → 검증(태그==versionName, CHANGELOG 섹션 존재) → 빌드 → GitHub Release 생성(APK + `SHA256SUMS.txt`, **본문은 `CHANGELOG.md` 의 해당 섹션 그대로**). `-alpha`/`-beta`/`-rc` 는 pre-release 자동 표시. 이미 푸시된 태그로 재생성하려면 Actions → Release → workflow_dispatch 에 태그 입력 (태그는 삭제·재사용하지 않는다)
+- **빌드/CI/릴리스 표준 점검**: `docs/4_Build_CI_Release.md` — 무엇을 채택했고 무엇을 의도적으로 안 했는지, 남은 갭이 무엇인지. **가장 큰 갭은 CI 에 테스트가 하나도 없다는 것**
 - **디버깅**: Windows 11에서 로그 확인 및 에뮬레이터/실기기 테스트
 
 ### 빌드 명령어 (Windows 11에서 실행)
