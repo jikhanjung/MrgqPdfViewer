@@ -827,7 +827,7 @@ class MainActivity : AppCompatActivity() {
                 val clientCount = globalCollaborationManager.getConnectedClientCount()
                 binding.collaborationStatus.text = "🎼 지휘자 모드 활성 (연결된 연주자: ${clientCount}명)"
                 binding.collaborationStatus.visibility = android.view.View.VISIBLE
-                binding.collaborationStatus.setTextColor(getColor(R.color.tv_secondary)) // 녹색으로 변경
+                binding.collaborationStatus.setTextColor(ContextCompat.getColor(this, R.color.tv_secondary)) // 녹색으로 변경
             }
             CollaborationMode.PERFORMER -> {
                 val isConnected = globalCollaborationManager.isClientConnected()
@@ -845,11 +845,11 @@ class MainActivity : AppCompatActivity() {
                 if (isConnected) {
                     val displayIp = if (conductorIp.isNotEmpty()) conductorIp else "지휘자"
                     binding.collaborationStatus.text = "🎵 연주자 모드 (지휘자: $displayIp)"
-                    binding.collaborationStatus.setTextColor(getColor(R.color.tv_secondary)) // 녹색으로 변경
+                    binding.collaborationStatus.setTextColor(ContextCompat.getColor(this, R.color.tv_secondary)) // 녹색으로 변경
                     Log.d("MainActivity", "🎼 UI 업데이트: 연결됨 상태로 표시 - '$displayIp'")
                 } else {
                     binding.collaborationStatus.text = "🎵 연주자 모드 (연결 끊김)"
-                    binding.collaborationStatus.setTextColor(getColor(R.color.tv_error))
+                    binding.collaborationStatus.setTextColor(ContextCompat.getColor(this, R.color.tv_error))
                     Log.d("MainActivity", "🎼 UI 업데이트: 연결 끊김 상태로 표시")
                 }
                 binding.collaborationStatus.visibility = android.view.View.VISIBLE
@@ -857,7 +857,7 @@ class MainActivity : AppCompatActivity() {
             CollaborationMode.NONE -> {
                 binding.collaborationStatus.text = "합주 모드: 비활성"
                 binding.collaborationStatus.visibility = android.view.View.VISIBLE
-                binding.collaborationStatus.setTextColor(getColor(R.color.tv_text_secondary))
+                binding.collaborationStatus.setTextColor(ContextCompat.getColor(this, R.color.tv_text_secondary))
             }
         }
         

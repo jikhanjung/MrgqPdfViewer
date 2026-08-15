@@ -13,7 +13,7 @@ import java.util.concurrent.TimeUnit
  */
 class CollaborationMessageQueue {
     companion object {
-        private const val TAG = "CollaborationMessageQueue"
+        private const val TAG = "CollabMessageQueue"
         private const val QUEUE_POLL_TIMEOUT = 100L // milliseconds
         private const val MAX_RETRY_COUNT = 3
         private const val MESSAGE_CACHE_SIZE = 100

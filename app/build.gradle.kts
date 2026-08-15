@@ -72,9 +72,18 @@ android {
     }
     
     lint {
+        // CI 는 lintDebug 를 게이트로 돌린다 (release 빌드에서 중복 실행 방지)
         checkReleaseBuilds = false
-        // 또는 특정 오류만 무시하려면:
-        // disable.add("ExpiredTargetSdkVersion")
+        // 오류가 있으면 빌드를 실패시킨다 (기본값이지만 의도를 명시)
+        abortOnError = true
+
+        // 의도적 예외 — 사유를 남긴다. 이유 없는 disable 은 만들지 않는다.
+        disable += setOf(
+            // targetSdk 30. Play 스토어에 배포하지 않고 사이드로딩만 하므로 Play 의
+            // target API 요구사항이 적용되지 않는다. 올릴 경우 Android 11+ 의
+            // 스토리지/패키지 가시성 변경을 재검증해야 하므로 별도 작업으로 다룬다.
+            "ExpiredTargetSdkVersion"
+        )
     }
     
     compileOptions {

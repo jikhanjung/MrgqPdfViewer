@@ -39,7 +39,7 @@ class ViewerCollaborationManager(
      */
     fun initialize() {
         currentMode = globalCollaborationManager.getCurrentMode()
-        Log.d("ViewerCollaborationManager", "Initializing collaboration mode: $currentMode")
+        Log.d("ViewerCollabManager", "Initializing collaboration mode: $currentMode")
         
         when (currentMode) {
             CollaborationMode.CONDUCTOR -> setupConductorMode()
@@ -58,7 +58,7 @@ class ViewerCollaborationManager(
     fun broadcastPageChange(pageIndex: Int, fileName: String) {
         if (currentMode == CollaborationMode.CONDUCTOR) {
             val actualPageNumber = pageIndex + 1 // Convert to 1-based
-            Log.d("ViewerCollaborationManager", "🎵 Broadcasting page change: $actualPageNumber in $fileName")
+            Log.d("ViewerCollabManager", "🎵 Broadcasting page change: $actualPageNumber in $fileName")
             globalCollaborationManager.broadcastPageChange(actualPageNumber, fileName)
         }
     }
@@ -68,7 +68,7 @@ class ViewerCollaborationManager(
      */
     fun broadcastFileChange(fileName: String, page: Int) {
         if (currentMode == CollaborationMode.CONDUCTOR) {
-            Log.d("ViewerCollaborationManager", "🎵 Broadcasting file change: $fileName at page $page")
+            Log.d("ViewerCollabManager", "🎵 Broadcasting file change: $fileName at page $page")
             globalCollaborationManager.broadcastFileChange(fileName, page)
         }
     }
@@ -78,7 +78,7 @@ class ViewerCollaborationManager(
      */
     fun broadcastBackToList() {
         if (currentMode == CollaborationMode.CONDUCTOR) {
-            Log.d("ViewerCollaborationManager", "🎵 Broadcasting back to list signal")
+            Log.d("ViewerCollabManager", "🎵 Broadcasting back to list signal")
             globalCollaborationManager.broadcastBackToList()
         }
     }
@@ -88,7 +88,7 @@ class ViewerCollaborationManager(
      */
     fun addFileToServer(fileName: String, filePath: String) {
         if (currentMode == CollaborationMode.CONDUCTOR) {
-            Log.d("ViewerCollaborationManager", "🎵 Adding file to server: $fileName")
+            Log.d("ViewerCollabManager", "🎵 Adding file to server: $fileName")
             globalCollaborationManager.addFileToServer(fileName, filePath)
         }
     }
@@ -117,16 +117,16 @@ class ViewerCollaborationManager(
      * Setup conductor mode callbacks
      */
     private fun setupConductorMode() {
-        Log.d("ViewerCollaborationManager", "Setting up conductor mode callbacks")
+        Log.d("ViewerCollabManager", "Setting up conductor mode callbacks")
         
         globalCollaborationManager.setOnServerClientConnected { clientId, deviceName ->
-            Log.d("ViewerCollaborationManager", "🎵 New performer connected: $deviceName")
+            Log.d("ViewerCollabManager", "🎵 New performer connected: $deviceName")
             listener.onClientConnected(deviceName)
             listener.onCollaborationStatusChanged(true)
         }
         
         globalCollaborationManager.setOnServerClientDisconnected { clientId ->
-            Log.d("ViewerCollaborationManager", "🎵 Performer disconnected")
+            Log.d("ViewerCollabManager", "🎵 Performer disconnected")
             listener.onClientDisconnected()
             listener.onCollaborationStatusChanged(false)
         }
@@ -136,10 +136,10 @@ class ViewerCollaborationManager(
      * Setup performer mode callbacks
      */
     private fun setupPerformerMode() {
-        Log.d("ViewerCollaborationManager", "Setting up performer mode callbacks")
+        Log.d("ViewerCollabManager", "Setting up performer mode callbacks")
         
         globalCollaborationManager.setOnPageChangeReceived { page, file, _ ->
-            Log.d("ViewerCollaborationManager", "🎼 Received page change: $page in $file")
+            Log.d("ViewerCollabManager", "🎼 Received page change: $page in $file")
             // Update sync time for input blocking
             lastSyncTime = System.currentTimeMillis()
             // Convert to 0-based index and notify listener
@@ -150,19 +150,19 @@ class ViewerCollaborationManager(
         }
         
         globalCollaborationManager.setOnFileChangeReceived { file, page ->
-            Log.d("ViewerCollaborationManager", "🎼 Received file change: $file at page $page")
+            Log.d("ViewerCollabManager", "🎼 Received file change: $file at page $page")
             // Update sync time for input blocking
             lastSyncTime = System.currentTimeMillis()
             listener.onRemoteFileChange(file, page)
         }
         
         globalCollaborationManager.setOnClientConnectionStatusChanged { isConnected ->
-            Log.d("ViewerCollaborationManager", "🎼 Connection status changed: $isConnected")
+            Log.d("ViewerCollabManager", "🎼 Connection status changed: $isConnected")
             listener.onCollaborationStatusChanged(isConnected)
         }
         
         globalCollaborationManager.setOnBackToListReceived {
-            Log.d("ViewerCollaborationManager", "🎼 Received back to list signal")
+            Log.d("ViewerCollabManager", "🎼 Received back to list signal")
             listener.onBackToList()
         }
     }
@@ -200,7 +200,7 @@ class ViewerCollaborationManager(
         val timeSinceSync = System.currentTimeMillis() - lastSyncTime
         val isBlocked = timeSinceSync < inputBlockDuration
         if (isBlocked) {
-            Log.d("ViewerCollaborationManager", "Input blocked for ${inputBlockDuration - timeSinceSync}ms more")
+            Log.d("ViewerCollabManager", "Input blocked for ${inputBlockDuration - timeSinceSync}ms more")
         }
         return isBlocked
     }
@@ -218,7 +218,7 @@ class ViewerCollaborationManager(
      * Clean up collaboration resources
      */
     fun cleanup() {
-        Log.d("ViewerCollaborationManager", "Cleaning up collaboration manager")
+        Log.d("ViewerCollabManager", "Cleaning up collaboration manager")
         // The global collaboration manager handles its own cleanup
         // We just reset our local state
         currentMode = CollaborationMode.NONE
