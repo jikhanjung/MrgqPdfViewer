@@ -744,23 +744,22 @@ class PdfViewerActivity : AppCompatActivity() {
         val finalCanvas = Canvas(finalBitmap)
         finalCanvas.drawColor(android.graphics.Color.WHITE)
 
+        // 배치 좌표는 TwoPageOffsets 가 계산한다 (정수 — 소수점 blit 은 Canvas 재샘플링을
+        // 일으켜 oversample 1× 로 얻은 device-pixel 스냅을 무효화한다, #042).
+        val offsets = TwoPageOffsets.compute(
+            canvasWidth = finalWidth,
+            canvasHeight = finalHeight,
+            centerPadding = currentCenterPadding,
+            leftWidth = leftBitmap.width,
+            leftHeight = leftBitmap.height,
+            rightWidth = rightBitmap?.width ?: 0,
+            rightHeight = rightBitmap?.height ?: 0,
+        )
         val centerPadPx = (screenWidth * currentCenterPadding).toInt()
-        val halfWidth = finalWidth / 2
-        val halfPadPx = centerPadPx / 2
-        val leftAreaWidth = halfWidth - halfPadPx
-        val rightAreaWidth = halfWidth - halfPadPx
 
-        // ⚠️ 정수 좌표 필수. 소수점 좌표로 blit 하면 Canvas 가 재샘플링해서 오선이 뭉개진다.
-        // oversample 1× 로 어렵게 얻은 device-pixel 스냅이 여기서 도로 날아간다.
-        val leftX = ((leftAreaWidth - leftBitmap.width) / 2).toFloat()
-        val leftY = ((finalHeight - leftBitmap.height) / 2).toFloat()
-        finalCanvas.drawBitmap(leftBitmap, leftX, leftY, null)
-
+        finalCanvas.drawBitmap(leftBitmap, offsets.leftX.toFloat(), offsets.leftY.toFloat(), null)
         if (rightBitmap != null) {
-            val rightAreaStartX = halfWidth + halfPadPx
-            val rightX = (rightAreaStartX + (rightAreaWidth - rightBitmap.width) / 2).toFloat()
-            val rightY = ((finalHeight - rightBitmap.height) / 2).toFloat()
-            finalCanvas.drawBitmap(rightBitmap, rightX, rightY, null)
+            finalCanvas.drawBitmap(rightBitmap, offsets.rightX.toFloat(), offsets.rightY.toFloat(), null)
         }
 
         Log.d("PdfViewerActivity", "=== UNIFIED TWO PAGE COMBINE === Inputs: ${leftBitmap.width}x${leftBitmap.height} + ${rightBitmap?.let{"${it.width}x${it.height}"} ?: "none"} -> Final: ${finalWidth}x${finalHeight}, centerPad=$centerPadPx")
@@ -791,42 +790,19 @@ class PdfViewerActivity : AppCompatActivity() {
      * ImageView 는 화면 크기 비트맵을 받으므로 Canvas MAX_BITMAP_SIZE 한계 회피.
      */
     private fun renderPageAtSinglePageTarget(page: PdfRenderer.Page): Bitmap {
-        val pdfW = page.width
-        val pdfH = page.height
-        val topClip = currentTopClipping.coerceIn(0f, 0.45f)
-        val bottomClip = currentBottomClipping.coerceIn(0f, 0.45f)
-        val visibleFraction = (1f - topClip - bottomClip).coerceAtLeast(0.1f)
-        val visiblePdfH = pdfH * visibleFraction
-
-        val fitScale = minOf(
-            screenWidth / pdfW.toFloat(),
-            screenHeight / visiblePdfH
+        val geometry = PageGeometry.compute(
+            pdfWidth = page.width,
+            pdfHeight = page.height,
+            screenWidth = screenWidth,
+            screenHeight = screenHeight,
+            topClipping = currentTopClipping,
+            bottomClipping = currentBottomClipping,
+            twoPageMode = false,
         )
-
-        val displayW = (pdfW * fitScale).toInt().coerceAtLeast(1)
-        val displayH = (visiblePdfH * fitScale).toInt().coerceAtLeast(1)
-
-        val finalScale = fitScale * PageCache.effectiveOversampleFactor(displayW, displayH)
-        val oversampleW = (pdfW * finalScale).toInt().coerceAtLeast(1)
-        val oversampleH = (visiblePdfH * finalScale).toInt().coerceAtLeast(1)
-
-        val oversampleBitmap = Bitmap.createBitmap(oversampleW, oversampleH, Bitmap.Config.ARGB_8888)
-        oversampleBitmap.eraseColor(android.graphics.Color.WHITE)
-
-        val matrix = android.graphics.Matrix().apply {
-            setScale(finalScale, finalScale)
-            postTranslate(0f, -pdfH * topClip * finalScale)
-        }
-        page.render(oversampleBitmap, null, matrix, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
-
-        val displayBitmap = Bitmap.createScaledBitmap(oversampleBitmap, displayW, displayH, true)
-        if (displayBitmap !== oversampleBitmap) {
-            oversampleBitmap.recycle()
-        }
-
-        Log.d("PdfViewerActivity", "=== SINGLE PAGE RENDER === pdf=${pdfW}x${pdfH} -> oversample=${oversampleW}x${oversampleH} -> display=${displayW}x${displayH}")
-        // 다운스케일로 희석된 잉크를 톤 커브로 되살린다 (PageCache 와 동일 정책).
-        return InkGamma.apply(displayBitmap)
+        Log.d("PdfViewerActivity", "=== SINGLE PAGE RENDER === pdf=${page.width}x${page.height} " +
+                "-> render=${geometry.renderWidth}x${geometry.renderHeight} " +
+                "-> display=${geometry.displayWidth}x${geometry.displayHeight}")
+        return PageRenderer.render(page, geometry)
     }
 
     /**
@@ -837,41 +813,17 @@ class PdfViewerActivity : AppCompatActivity() {
      * 추가 스케일 없이 좌/우 영역 가운데에 배치한다.
      */
     private fun renderPageAtTwoPageTarget(page: PdfRenderer.Page): Bitmap {
-        val pdfW = page.width
-        val pdfH = page.height
-        val topClip = currentTopClipping.coerceIn(0f, 0.45f)
-        val bottomClip = currentBottomClipping.coerceIn(0f, 0.45f)
-        val centerPadding = currentCenterPadding.coerceIn(0f, 0.5f)
-        val visibleFraction = (1f - topClip - bottomClip).coerceAtLeast(0.1f)
-        val visiblePdfH = pdfH * visibleFraction
-
-        val halfScreenW = screenWidth / 2f
-        val halfPadPx = screenWidth * centerPadding / 2f
-        val availW = (halfScreenW - halfPadPx).coerceAtLeast(1f)
-        val fitScale = minOf(availW / pdfW, screenHeight / visiblePdfH)
-
-        val displayW = (pdfW * fitScale).toInt().coerceAtLeast(1)
-        val displayH = (visiblePdfH * fitScale).toInt().coerceAtLeast(1)
-
-        val finalScale = fitScale * PageCache.effectiveOversampleFactor(displayW, displayH)
-        val oversampleW = (pdfW * finalScale).toInt().coerceAtLeast(1)
-        val oversampleH = (visiblePdfH * finalScale).toInt().coerceAtLeast(1)
-
-        val oversampleBitmap = Bitmap.createBitmap(oversampleW, oversampleH, Bitmap.Config.ARGB_8888)
-        oversampleBitmap.eraseColor(android.graphics.Color.WHITE)
-
-        val matrix = android.graphics.Matrix().apply {
-            setScale(finalScale, finalScale)
-            postTranslate(0f, -pdfH * topClip * finalScale)
-        }
-        page.render(oversampleBitmap, null, matrix, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
-
-        val displayBitmap = Bitmap.createScaledBitmap(oversampleBitmap, displayW, displayH, true)
-        if (displayBitmap !== oversampleBitmap) {
-            oversampleBitmap.recycle()
-        }
-        // 다운스케일로 희석된 잉크를 톤 커브로 되살린다 (PageCache 와 동일 정책).
-        return InkGamma.apply(displayBitmap)
+        val geometry = PageGeometry.compute(
+            pdfWidth = page.width,
+            pdfHeight = page.height,
+            screenWidth = screenWidth,
+            screenHeight = screenHeight,
+            topClipping = currentTopClipping,
+            bottomClipping = currentBottomClipping,
+            centerPadding = currentCenterPadding,
+            twoPageMode = true,
+        )
+        return PageRenderer.render(page, geometry)
     }
 
     /**
@@ -975,14 +927,17 @@ class PdfViewerActivity : AppCompatActivity() {
      * 이 함수의 반환값은 더 이상 렌더에 직접 사용되지 않지만, 호출부 호환을 위해 유지.
      */
     private fun calculateOptimalScale(pageWidth: Int, pageHeight: Int, forTwoPageMode: Boolean = false): Float {
-        val visibleFraction = (1f - currentTopClipping - currentBottomClipping).coerceAtLeast(0.1f)
-        val visibleHeight = pageHeight * visibleFraction
-        val effectiveWidth = if (forTwoPageMode) pageWidth * 2 else pageWidth
-        val fit = minOf(
-            screenWidth.toFloat() / effectiveWidth,
-            screenHeight.toFloat() / visibleHeight
-        )
-        return fit * PageCache.oversampleFactor
+        // 공식은 PageGeometry 하나만 쓴다 (이 함수는 호출부 호환용 얇은 래퍼).
+        return PageGeometry.compute(
+            pdfWidth = pageWidth,
+            pdfHeight = pageHeight,
+            screenWidth = screenWidth,
+            screenHeight = screenHeight,
+            topClipping = currentTopClipping,
+            bottomClipping = currentBottomClipping,
+            centerPadding = currentCenterPadding,
+            twoPageMode = forTwoPageMode,
+        ).renderScale
     }
     
     private fun setImageViewMatrix(bitmap: Bitmap) {

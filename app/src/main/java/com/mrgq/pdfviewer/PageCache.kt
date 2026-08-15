@@ -298,6 +298,9 @@ class PageCache(
     /**
      * PDF 페이지를 화면 크기 비트맵으로 래스터화한다.
      *
+     * 좌표 계산은 [PageGeometry], 래스터화는 [PageRenderer] 가 담당한다 — 캐시 미스 경로
+     * (PdfViewerActivity)와 **같은 함수**를 지나므로 경로별로 다른 결과가 나올 수 없다.
+     *
      * 1단계: oversample 해상도 (fitScale × oversampleFactor) 로 transient 비트맵에 렌더.
      *        기본 1× 이면 이 단계가 곧 표시 크기 렌더이고 2단계는 no-op 이다.
      *        Matrix 로 크롭을 vector 단계에 흡수 → fractional scaling 으로 인한 오선 두께
@@ -309,47 +312,18 @@ class PageCache(
      * Canvas MAX_BITMAP_SIZE (~100MB) 한계 회피 + 캐시 메모리 절감.
      */
     private fun renderPageToTargetBitmap(page: PdfRenderer.Page): Bitmap {
-        val pdfWidth = page.width
-        val pdfHeight = page.height
-
         val settings = displaySettingsProvider?.invoke() ?: Triple(0f, 0f, 0f)
-        val topClipping = settings.first.coerceIn(0f, 0.45f)
-        val bottomClipping = settings.second.coerceIn(0f, 0.45f)
-        val centerPadding = settings.third.coerceIn(0f, 0.5f)
-        val visibleFraction = (1f - topClipping - bottomClipping).coerceAtLeast(0.1f)
-        val visiblePdfHeight = pdfHeight * visibleFraction
-
-        val fitScale = if (isTwoPageMode) {
-            val halfScreenW = screenWidth / 2f
-            val halfPadPx = screenWidth * centerPadding / 2f
-            val availW = (halfScreenW - halfPadPx).coerceAtLeast(1f)
-            minOf(availW / pdfWidth, screenHeight / visiblePdfHeight)
-        } else {
-            minOf(screenWidth / pdfWidth.toFloat(), screenHeight / visiblePdfHeight)
-        }
-
-        val displayW = (pdfWidth * fitScale).toInt().coerceAtLeast(1)
-        val displayH = (visiblePdfHeight * fitScale).toInt().coerceAtLeast(1)
-
-        val finalScale = fitScale * effectiveOversampleFactor(displayW, displayH)
-        val oversampleW = (pdfWidth * finalScale).toInt().coerceAtLeast(1)
-        val oversampleH = (visiblePdfHeight * finalScale).toInt().coerceAtLeast(1)
-
-        val oversampleBitmap = Bitmap.createBitmap(oversampleW, oversampleH, Bitmap.Config.ARGB_8888)
-        oversampleBitmap.eraseColor(Color.WHITE)
-
-        val matrix = Matrix().apply {
-            setScale(finalScale, finalScale)
-            postTranslate(0f, -pdfHeight * topClipping * finalScale)
-        }
-        page.render(oversampleBitmap, null, matrix, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
-
-        val displayBitmap = Bitmap.createScaledBitmap(oversampleBitmap, displayW, displayH, true)
-        if (displayBitmap !== oversampleBitmap) {
-            oversampleBitmap.recycle()
-        }
-        // 4단계: 다운스케일로 희석된 잉크를 톤 커브로 되살린다 (오선/슬러 대비 회복).
-        return InkGamma.apply(displayBitmap)
+        val geometry = PageGeometry.compute(
+            pdfWidth = page.width,
+            pdfHeight = page.height,
+            screenWidth = screenWidth,
+            screenHeight = screenHeight,
+            topClipping = settings.first,
+            bottomClipping = settings.second,
+            centerPadding = settings.third,
+            twoPageMode = isTwoPageMode,
+        )
+        return PageRenderer.render(page, geometry)
     }
     
     /**
