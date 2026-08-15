@@ -77,9 +77,10 @@ p1 1528x2160 scale 2.566 34.2ms
 - [ ] **발열/소음** — `vcgencmd measure_temp`, 패시브 케이스로 버틸 수 있는지
 - [ ] **부팅 시간** — `systemd-analyze`
 
-## 5. ⚠️ 전원 확인 (이 프로젝트에선 하드 제약)
+## 5. 전원 — 배터리 구동 예산 확인
 
-별도 AC 어댑터는 허용되지 않는다. 모니터 USB 포트에서 급전돼야 한다.
+현행 셋업은 배터리 2개로 모니터+기기를 구동하는 휴대 구성이다. 급전 가능 여부보다
+**소비 전력이 배터리 지속시간에 주는 영향**과 **강제 종료에 의한 SD 손상**이 실질 관심사다.
 
 **Pi 5 는 5V 를 요구한다.** PD 소스가 9V/12V/20V 로 협상하려 들면 안 된다. 확인 순서:
 
@@ -97,5 +98,9 @@ vcgencmd get_throttled
 dmesg | grep -i -E "under-?voltage|low voltage"
 ```
 
-모니터가 5V/3A 를 못 주면 **이 안은 여기서 탈락**이다. 그 경우 Pi 4(소비 전력 더 낮음)나
-현행 Google TV Streamer 유지로 방향을 튼다.
+USB 전력계로 아이들/렌더 버스트 소비를 실측해 둘 것. 현행 Google TV Streamer(~3~4W) 대비
++2W 내외면 시스템 전체(모니터 15~25W 지배)에서 8% 안팎의 지속시간 감소라 수용 가능하다.
+
+### ⚠️ 강제 종료 대비는 필수
+배터리 구동 = 전원을 그냥 끊는다. **overlayfs 읽기전용 rootfs 를 반드시 켤 것**
+(`sudo raspi-config` → Performance → Overlay File System). PDF/설정만 별도 쓰기 파티션에 둔다.
