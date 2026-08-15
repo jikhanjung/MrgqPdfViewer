@@ -155,23 +155,15 @@ class CollaborationClientManager(
             Log.d(TAG, "Received message: $action")
             
             when (action) {
-                "page_change" -> {
-                    val page = json.get("page")?.asInt ?: 1
-                    val file = json.get("file")?.asString ?: ""
-                    // Phase 0: 예약 넘김 목표 시각(없으면 즉시 넘김)
-                    val turnAt = if (json.has("turn_at") && !json.get("turn_at").isJsonNull)
-                        json.get("turn_at").asLong else null
-                    onPageChangeReceived(page, file, turnAt)
+                CollaborationProtocol.ACTION_PAGE_CHANGE -> {
+                    // turn_at 이 없거나 null 이면 turnAt == null → 즉시 넘김 (Phase 0 하위호환).
+                    val m = CollaborationProtocol.parsePageChange(json)
+                    onPageChangeReceived(m.page, m.file, m.turnAt)
                 }
-                "file_change" -> {
-                    val file = json.get("file")?.asString ?: ""
-                    val page = json.get("page")?.asInt ?: 1
-                    Log.d(TAG, "Received file change: file=$file, page=$page")
-                    
-                    // Call file change callback with page information
-                    onFileChangeReceived(file, page)
-                    
-                    Log.d(TAG, "File change callback triggered with page $page")
+                CollaborationProtocol.ACTION_FILE_CHANGE -> {
+                    val m = CollaborationProtocol.parseFileChange(json)
+                    Log.d(TAG, "Received file change: file=${m.file}, page=${m.page}")
+                    onFileChangeReceived(m.file, m.page)
                 }
                 "connect_response" -> {
                     val status = json.get("status")?.asString
@@ -183,7 +175,7 @@ class CollaborationClientManager(
                         Log.d(TAG, "Successfully connected to conductor")
                     }
                 }
-                "back_to_list" -> {
+                CollaborationProtocol.ACTION_BACK_TO_LIST -> {
                     Log.d(TAG, "Received back to list command")
                     onBackToListReceived?.invoke()
                 }

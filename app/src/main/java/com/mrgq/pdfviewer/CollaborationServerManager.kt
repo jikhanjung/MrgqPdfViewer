@@ -171,37 +171,22 @@ class CollaborationServerManager(
     }
     
     fun broadcastPageChange(pageNumber: Int, fileName: String, turnAt: Long? = null) {
-        val message = JsonObject().apply {
-            addProperty("action", "page_change")
-            addProperty("page", pageNumber)
-            addProperty("file", fileName)
-            addProperty("timestamp", System.currentTimeMillis())
-            // Phase 0: 예약 넘김. 지정 시 모든 기기가 이 절대 시각(벽시계)에 동시에 넘긴다.
-            turnAt?.let { addProperty("turn_at", it) }
-        }
+        // 와이어 포맷은 CollaborationProtocol 이 단일 출처다 (키가 클라이언트와 갈라지지 않도록).
+        val message = CollaborationProtocol.buildPageChange(pageNumber, fileName, turnAt)
 
         broadcastToClients(message.toString())
         Log.d(TAG, "Broadcasted page change: page=$pageNumber, file=$fileName" + (turnAt?.let { ", turn_at=$it" } ?: ""))
     }
     
     fun broadcastFileChange(fileName: String, pageNumber: Int = 1, fileServerUrl: String? = null) {
-        val message = JsonObject().apply {
-            addProperty("action", "file_change")
-            addProperty("file", fileName)
-            addProperty("page", pageNumber)
-            addProperty("timestamp", System.currentTimeMillis())
-            fileServerUrl?.let { addProperty("file_server_url", it) }
-        }
+        val message = CollaborationProtocol.buildFileChange(fileName, pageNumber, fileServerUrl)
         
         broadcastToClients(message.toString())
         Log.d(TAG, "Broadcasted file change: $fileName, page: $pageNumber" + if (fileServerUrl != null) " (with file server: $fileServerUrl)" else "")
     }
     
     fun broadcastBackToList() {
-        val message = JsonObject().apply {
-            addProperty("action", "back_to_list")
-            addProperty("timestamp", System.currentTimeMillis())
-        }
+        val message = CollaborationProtocol.buildBackToList()
         
         broadcastToClients(message.toString())
         Log.d(TAG, "Broadcasted back to list")

@@ -745,7 +745,7 @@ class MainActivity : AppCompatActivity() {
         val selectedColor = ContextCompat.getColor(this, R.color.tv_primary)
         val unselectedColor = ContextCompat.getColor(this, R.color.tv_text_secondary)
         
-        if (currentSortBy == "name") {
+        if (currentSortBy == PdfFileSorter.BY_NAME) {
             binding.sortByNameBtn.setTextColor(selectedColor)
             binding.sortByNameBtn.alpha = 1.0f
             binding.sortByTimeBtn.setTextColor(unselectedColor)
