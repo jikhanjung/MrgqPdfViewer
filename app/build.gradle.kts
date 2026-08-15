@@ -101,6 +101,20 @@ android {
     }
 }
 
+// Room 스키마를 app/schemas 에 JSON 으로 내보낸다 (이 프로젝트는 ksp 가 아니라 kapt 를 쓴다).
+//
+// 꺼져 있으면 두 가지를 잃는다:
+//  1. **마이그레이션 테스트를 쓸 수 없다** — MigrationTestHelper 는 과거 버전 스키마 JSON 이
+//     있어야 그 시점 DB 를 만들 수 있다.
+//  2. **스키마 드리프트 감지가 없다** — 엔티티를 고치고 version 을 안 올려도 아무도 막지
+//     않다가, 사용자 기기에서 "Room cannot verify the data integrity" 로 죽는다.
+//     내보낸 JSON 을 커밋해 두면 CI 가 git diff 로 잡는다.
+kapt {
+    arguments {
+        arg("room.schemaLocation", "$projectDir/schemas")
+    }
+}
+
 dependencies {
     implementation("androidx.core:core-ktx:1.12.0")
     implementation("androidx.leanback:leanback:1.0.0")

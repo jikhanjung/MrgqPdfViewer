@@ -116,6 +116,13 @@ jobs:
           path: app/build/reports/tests/
           if-no-files-found: ignore
 
+      - name: Upload Room schemas
+        uses: actions/upload-artifact@v7
+        with:
+          name: room-schemas${{ inputs.artifact-suffix }}
+          path: app/schemas/
+          if-no-files-found: warn
+
       - name: Android Lint
         run: ./gradlew lintDebug
 

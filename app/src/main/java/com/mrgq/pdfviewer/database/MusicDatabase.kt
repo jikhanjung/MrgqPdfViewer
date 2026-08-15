@@ -16,7 +16,7 @@ import com.mrgq.pdfviewer.database.entity.UserPreference
 @Database(
     entities = [PdfFile::class, UserPreference::class],
     version = 4,
-    exportSchema = false
+    exportSchema = true   // app/schemas 로 내보낸다 — 마이그레이션 테스트·드리프트 감지의 전제
 )
 @TypeConverters(Converters::class)
 abstract class MusicDatabase : RoomDatabase() {
