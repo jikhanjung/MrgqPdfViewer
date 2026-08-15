@@ -75,7 +75,11 @@ object InkGamma {
      * 그 해상도에서 다시 육안 확인하고 중립점을 조정할 것. 사용자가 슬라이더로 저장한 값이
      * 있으면 언제나 그쪽이 우선한다.
      */
-    fun defaultFor(screenHeight: Int): Float {
+    fun defaultFor(screenHeight: Int, oversample: Float): Float {
+        // 감마는 oversample 다운스케일이 희석한 잉크를 되돌리는 보정이다. oversample 이
+        // 없으면(1×) PDFium 이 device pixel 에 스냅해 오선이 이미 순수 검정이므로 보정 불필요.
+        // 이때 감마를 걸면 중간톤만 괜히 어두워져 음표·슬러가 무거워진다.
+        if (oversample <= 1.001f) return MIN
         if (screenHeight <= 0) return REFERENCE_GAMMA
         val span = (NEUTRAL_HEIGHT - REFERENCE_HEIGHT).toFloat()
         val t = (NEUTRAL_HEIGHT - screenHeight) / span

@@ -163,11 +163,16 @@ class PdfViewerActivity : AppCompatActivity() {
             Log.i("PdfViewerActivity", "=== DISPLAY INFO === app=${screenWidth}x${screenHeight}")
         }
 
-        // 잉크 감마 (오선 진하기) — 전역 설정. 렌더 경로가 읽으므로 렌더 시작 전에 적용.
-        // 기본값은 화면 세로 해상도에 연동된다 (화면이 고울수록 보정이 덜 필요). 저장된 값이 있으면 그쪽 우선.
-        val gammaDefault = InkGamma.defaultFor(screenHeight)
+        // 렌더 선명도 관련 전역 설정 — 렌더 경로가 읽으므로 렌더 시작 전에 적용.
+        // oversample 1× 가 기본: PDFium 의 device-pixel 스냅으로 오선이 순수 검정이 된다.
+        // 감마는 oversample 이 만든 희석을 되돌리는 보정이라 1× 에서는 자동으로 꺼진다.
+        PageCache.oversampleFactor =
+            preferences.getFloat(PageCache.PREF_OVERSAMPLE, PageCache.DEFAULT_OVERSAMPLE_FACTOR)
+        val gammaDefault = InkGamma.defaultFor(screenHeight, PageCache.oversampleFactor)
         InkGamma.gamma = preferences.getFloat(InkGamma.PREF_KEY, gammaDefault)
-        Log.i("PdfViewerActivity", "잉크 감마: ${InkGamma.gamma} (해상도 ${screenHeight}p 기준 기본값 $gammaDefault)")
+        Log.i("PdfViewerActivity",
+            "렌더 선명도: oversample=${PageCache.oversampleFactor}×, 감마=${InkGamma.gamma} " +
+                    "(${screenHeight}p 기준 감마 기본값 $gammaDefault)")
 
         currentFileIndex = intent.getIntExtra(EXTRA_CURRENT_INDEX, 0)
         filePathList = intent.getStringArrayListExtra(EXTRA_FILE_PATH_LIST) ?: emptyList()
@@ -745,14 +750,16 @@ class PdfViewerActivity : AppCompatActivity() {
         val leftAreaWidth = halfWidth - halfPadPx
         val rightAreaWidth = halfWidth - halfPadPx
 
-        val leftX = (leftAreaWidth - leftBitmap.width) / 2f
-        val leftY = (finalHeight - leftBitmap.height) / 2f
+        // ⚠️ 정수 좌표 필수. 소수점 좌표로 blit 하면 Canvas 가 재샘플링해서 오선이 뭉개진다.
+        // oversample 1× 로 어렵게 얻은 device-pixel 스냅이 여기서 도로 날아간다.
+        val leftX = ((leftAreaWidth - leftBitmap.width) / 2).toFloat()
+        val leftY = ((finalHeight - leftBitmap.height) / 2).toFloat()
         finalCanvas.drawBitmap(leftBitmap, leftX, leftY, null)
 
         if (rightBitmap != null) {
             val rightAreaStartX = halfWidth + halfPadPx
-            val rightX = rightAreaStartX + (rightAreaWidth - rightBitmap.width) / 2f
-            val rightY = (finalHeight - rightBitmap.height) / 2f
+            val rightX = (rightAreaStartX + (rightAreaWidth - rightBitmap.width) / 2).toFloat()
+            val rightY = ((finalHeight - rightBitmap.height) / 2).toFloat()
             finalCanvas.drawBitmap(rightBitmap, rightX, rightY, null)
         }
 
@@ -975,7 +982,7 @@ class PdfViewerActivity : AppCompatActivity() {
             screenWidth.toFloat() / effectiveWidth,
             screenHeight.toFloat() / visibleHeight
         )
-        return fit * PageCache.OVERSAMPLE_FACTOR
+        return fit * PageCache.oversampleFactor
     }
     
     private fun setImageViewMatrix(bitmap: Bitmap) {
@@ -1003,13 +1010,17 @@ class PdfViewerActivity : AppCompatActivity() {
         val scaleY = viewHeight.toFloat() / bitmapHeight.toFloat()
         
         // Use the smaller scale to ensure the whole image fits
-        val scale = minOf(scaleX, scaleY)
-        
+        // 1.0 에 극히 가까우면 정확히 1.0 으로 스냅한다. 0.999… 스케일은 비트맵 전체를
+        // 재샘플링시켜 device-pixel 에 스냅된 오선을 뭉갠다 (oversample 1× 정책의 전제).
+        val rawScale = minOf(scaleX, scaleY)
+        val scale = if (kotlin.math.abs(rawScale - 1f) < 0.005f) 1f else rawScale
+
         // Calculate translation to center the image
         val scaledWidth = bitmapWidth * scale
         val scaledHeight = bitmapHeight * scale
-        val dx = (viewWidth - scaledWidth) / 2f
-        val dy = (viewHeight - scaledHeight) / 2f
+        // 정수 좌표로 반올림 — 소수점 translate 도 재샘플링을 유발한다.
+        val dx = ((viewWidth - scaledWidth) / 2f).toInt().toFloat()
+        val dy = ((viewHeight - scaledHeight) / 2f).toInt().toFloat()
         
         // Calculate final displayed aspect ratio
         val finalAspectRatio = scaledWidth / scaledHeight
@@ -1865,7 +1876,7 @@ class PdfViewerActivity : AppCompatActivity() {
         val options = arrayOf(
             "두 페이지 모드 전환",
             "위/아래 클리핑 설정",
-            "오선 진하기 (감마)"
+            "선 선명도 (배율 · 감마)"
         )
 
         AlertDialog.Builder(this)
@@ -1885,28 +1896,47 @@ class PdfViewerActivity : AppCompatActivity() {
     }
 
     /**
-     * 오선 진하기(잉크 감마) 설정 다이얼로그.
+     * 선 선명도 설정 다이얼로그 — oversample 배율 + 잉크 감마.
      *
-     * oversample → 다운스케일 과정에서 1픽셀 미만 stroke 의 잉크가 희석돼 오선이 회색으로
-     * 보이는 문제를 톤 커브로 보정한다. 근거와 측정치는 [InkGamma] 문서 참고.
+     * 두 값은 한 쌍이다. oversample 이 1× 면 PDFium 이 1px 미만 stroke 를 device pixel 에
+     * 스냅해 오선이 순수 검정이 되고 감마 보정이 필요 없다. oversample 을 올리면 그 스냅이
+     * 희석돼 회색이 되고, 감마로 사후 보정해야 한다. 측정치는 [PageCache] / [InkGamma] 문서 참고.
+     *
      * 파일별이 아니라 **전역 설정**(디스플레이 특성에 따르는 값)이라 SharedPreferences 에 저장한다.
      */
     private fun showInkGammaDialog() {
         val originalGamma = InkGamma.gamma
+        val originalOversample = PageCache.oversampleFactor
 
         val dialogView = android.widget.LinearLayout(this).apply {
             orientation = android.widget.LinearLayout.VERTICAL
             setPadding(50, 30, 50, 30)
         }
 
+        // --- oversample (렌더 배율) ---
+        val osLabel = android.widget.TextView(this).apply {
+            text = "렌더 배율(oversample): %.1f×".format(originalOversample)
+            textSize = 16f
+            setPadding(0, 0, 0, 10)
+        }
+        dialogView.addView(osLabel)
+
+        val osSteps = 6                       // 1.0 ~ 4.0, 0.5 단위
+        val osSeekBar = android.widget.SeekBar(this).apply {
+            max = osSteps
+            progress = (((originalOversample - 1f) / 0.5f).toInt()).coerceIn(0, osSteps)
+            setPadding(0, 0, 0, 20)
+        }
+        dialogView.addView(osSeekBar)
+
+        // --- 잉크 감마 ---
         val label = android.widget.TextView(this).apply {
-            text = "오선 진하기: %.2f".format(originalGamma)
+            text = "오선 진하기(감마): %.2f".format(originalGamma)
             textSize = 16f
             setPadding(0, 0, 0, 10)
         }
         dialogView.addView(label)
 
-        // 1.00 ~ 3.00 을 0.05 단위로
         val steps = ((InkGamma.MAX - InkGamma.MIN) / 0.05f).toInt()
         val seekBar = android.widget.SeekBar(this).apply {
             max = steps
@@ -1915,10 +1945,10 @@ class PdfViewerActivity : AppCompatActivity() {
         }
         dialogView.addView(seekBar)
 
-        val resDefault = InkGamma.defaultFor(screenHeight)
         val hint = android.widget.TextView(this).apply {
-            text = "1.00 = 보정 없음. 값을 올리면 오선·슬러가 진해집니다.\n" +
-                    "현재 해상도(${screenWidth}x${screenHeight}) 기준 기본값 %.2f. 실시간 미리보기가 적용됩니다.".format(resDefault)
+            text = "권장: 배율 1.0× + 감마 1.00 (오선이 device pixel 에 스냅돼 가장 또렷)\n" +
+                    "배율을 올리면 곡선은 부드러워지지만 얇은 선이 희석되어 감마 보정이 필요합니다.\n" +
+                    "현재 화면 ${screenWidth}x${screenHeight}. 실시간 미리보기가 적용됩니다."
             textSize = 12f
             setTextColor(android.graphics.Color.GRAY)
             setPadding(0, 10, 0, 0)
@@ -1928,46 +1958,61 @@ class PdfViewerActivity : AppCompatActivity() {
         var previewHandler: android.os.Handler? = null
         var previewRunnable: Runnable? = null
 
-        val applyPreview = { g: Float ->
+        val progressToGamma = { p: Int -> InkGamma.MIN + p * 0.05f }
+        val progressToOversample = { p: Int -> 1f + p * 0.5f }
+
+        val applyPreview = { os: Float, g: Float ->
+            PageCache.oversampleFactor = os
             InkGamma.gamma = g
-            // 캐시된 비트맵에는 이전 감마가 구워져 있으므로 비우고 다시 렌더한다.
+            // 캐시된 비트맵에는 이전 설정이 구워져 있으므로 비우고 다시 렌더한다.
             pageCache?.clear()
             forceDirectRendering = true
             showPage(pageIndex)
         }
 
-        val progressToGamma = { p: Int -> InkGamma.MIN + p * 0.05f }
+        val schedulePreview = {
+            previewRunnable?.let { previewHandler?.removeCallbacks(it) }
+            val os = progressToOversample(osSeekBar.progress)
+            val g = progressToGamma(seekBar.progress)
+            previewRunnable = Runnable { applyPreview(os, g) }
+            previewHandler = android.os.Handler(android.os.Looper.getMainLooper())
+            previewHandler?.postDelayed(previewRunnable!!, 250)
+        }
+
+        val setBoth = { os: Float, g: Float ->
+            osSeekBar.progress = (((os - 1f) / 0.5f).toInt()).coerceIn(0, osSteps)
+            seekBar.progress = (((g - InkGamma.MIN) / 0.05f).toInt()).coerceIn(0, steps)
+            applyPreview(os, g)
+        }
 
         val quickButtons = android.widget.LinearLayout(this).apply {
             orientation = android.widget.LinearLayout.HORIZONTAL
             gravity = android.view.Gravity.CENTER
             setPadding(0, 20, 0, 10)
         }
-        listOf(
-            "보정 없음" to InkGamma.MIN,
-            "기본 %.2f".format(resDefault) to resDefault,
-            "%.2f".format((resDefault + 0.5f).coerceAtMost(InkGamma.MAX)) to (resDefault + 0.5f).coerceAtMost(InkGamma.MAX)
-        ).forEach { (btnLabel, btnGamma) ->
-            quickButtons.addView(android.widget.Button(this).apply {
-                text = btnLabel
-                setOnClickListener {
-                    seekBar.progress = (((btnGamma - InkGamma.MIN) / 0.05f).toInt()).coerceIn(0, steps)
-                    applyPreview(btnGamma)
-                }
-            })
-        }
+        quickButtons.addView(android.widget.Button(this).apply {
+            text = "권장 1×"
+            setOnClickListener { setBoth(1.0f, InkGamma.MIN) }
+        })
+        quickButtons.addView(android.widget.Button(this).apply {
+            text = "이전 4×+γ2"
+            setOnClickListener { setBoth(4.0f, 2.0f) }
+        })
         dialogView.addView(quickButtons)
+
+        osSeekBar.setOnSeekBarChangeListener(object : android.widget.SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(sb: android.widget.SeekBar?, progress: Int, fromUser: Boolean) {
+                osLabel.text = "렌더 배율(oversample): %.1f×".format(progressToOversample(progress))
+                if (fromUser) schedulePreview()
+            }
+            override fun onStartTrackingTouch(sb: android.widget.SeekBar?) {}
+            override fun onStopTrackingTouch(sb: android.widget.SeekBar?) {}
+        })
 
         seekBar.setOnSeekBarChangeListener(object : android.widget.SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(sb: android.widget.SeekBar?, progress: Int, fromUser: Boolean) {
-                val g = progressToGamma(progress)
-                label.text = "오선 진하기: %.2f".format(g)
-                if (fromUser) {
-                    previewRunnable?.let { previewHandler?.removeCallbacks(it) }
-                    previewRunnable = Runnable { applyPreview(g) }
-                    previewHandler = android.os.Handler(android.os.Looper.getMainLooper())
-                    previewHandler?.postDelayed(previewRunnable!!, 250)
-                }
+                label.text = "오선 진하기(감마): %.2f".format(progressToGamma(progress))
+                if (fromUser) schedulePreview()
             }
             override fun onStartTrackingTouch(sb: android.widget.SeekBar?) {}
             override fun onStopTrackingTouch(sb: android.widget.SeekBar?) {}
@@ -1976,25 +2021,31 @@ class PdfViewerActivity : AppCompatActivity() {
         val restore = {
             previewRunnable?.let { previewHandler?.removeCallbacks(it) }
             InkGamma.gamma = originalGamma
+            PageCache.oversampleFactor = originalOversample
             pageCache?.clear()
             forceDirectRendering = true
             showPage(pageIndex)
         }
 
         AlertDialog.Builder(this)
-            .setTitle("오선 진하기 (감마)")
+            .setTitle("선 선명도 (배율 · 감마)")
             .setView(dialogView)
             .setPositiveButton("적용") { _, _ ->
                 previewRunnable?.let { previewHandler?.removeCallbacks(it) }
+                val os = progressToOversample(osSeekBar.progress)
                 val g = progressToGamma(seekBar.progress)
+                PageCache.oversampleFactor = os
                 InkGamma.gamma = g
-                preferences.edit().putFloat(InkGamma.PREF_KEY, g).apply()
-                Log.i("PdfViewerActivity", "잉크 감마 저장: $g")
+                preferences.edit()
+                    .putFloat(PageCache.PREF_OVERSAMPLE, os)
+                    .putFloat(InkGamma.PREF_KEY, g)
+                    .apply()
+                Log.i("PdfViewerActivity", "선 선명도 저장: oversample=${os}×, 감마=$g")
 
                 pageCache?.clear()
                 forceDirectRendering = true
                 showPage(pageIndex)
-                Toast.makeText(this, "오선 진하기 %.2f 적용".format(g), Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, "배율 %.1f× / 감마 %.2f 적용".format(os, g), Toast.LENGTH_SHORT).show()
 
                 showPdfDisplayOptions()
             }

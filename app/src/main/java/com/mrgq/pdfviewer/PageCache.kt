@@ -23,11 +23,42 @@ class PageCache(
         private const val TAG = "PageCache"
         private const val PRERENDER_DISTANCE = 2 // 현재 페이지 앞뒤로 몇 페이지까지 프리렌더링
         // PDF vector를 화면 최종 픽셀의 N배로 래스터화한 뒤 즉시 화면 크기로 다운스케일.
-        // 캐시/표시 비트맵은 항상 화면 크기 (작음); oversample 비트맵은 transient.
-        // 2.5 → 4.0 (P2, 2026-05-30): 오선 sub-pixel 위치가 0.5 근처일 때 dark coverage 개선.
-        // Oversample 비트맵을 ImageView 에 넘기던 P2-A 안은 Canvas MAX_BITMAP_SIZE (~100MB)
-        // 초과로 크래시 → 렌더 직후 createScaledBitmap 으로 다운스케일하는 P2-B 안으로 전환.
-        const val OVERSAMPLE_FACTOR = 4.0f
+        //
+        // ## 2026-08-15: 기본값 4.0 → 1.0 (supersampling 제거)
+        //
+        // oversample 의 원래 취지는 "2.5K/4K 화면에서 해상도를 최대한 활용하자"였으나,
+        // devlog #040 에서 이 기기의 앱 UI 가 1080p 로 고정돼 있음이 확인됐다. 출력이
+        // 표시 해상도로 고정된 상황에서 supersampling 은 이득이 없을 뿐 아니라 **해롭다**:
+        //
+        // PDFium 은 1픽셀 미만 stroke 를 device pixel 에 스냅한다(데스크톱 뷰어가 오선을
+        // 또렷하게 그리는 것과 같은 동작). oversample 을 걸면 그 스냅된 1px 이 표시 기준
+        // 1/N px 로 쪼그라들어 다운스케일 시 회색으로 희석된다.
+        //
+        // 배율 스윕 측정 (A4 악보, 764×1080, 오선 50개 / `data/oversample_sweep.py`):
+        //
+        // | oversample | darkness 평균 | 최소  | 표준편차 |
+        // |------------|--------------|-------|---------|
+        // | **1.0×**   | **1.000**    | 1.000 | **0.000** |
+        // | 2.5× (v0.1.11) | 0.635    | 0.407 | 0.119   |
+        // | 4.0× (v0.1.12) | 0.674    | 0.504 | 0.102   |
+        //
+        // 1× 에서는 50개 오선이 전부 순수 검정이고 편차가 0 이다. P2 가 dropout 을 잡겠다고
+        // 2.5→4 로 올린 것은 방향이 반대였다 (1 로 내렸으면 완전히 해결됐다).
+        //
+        // ⚠️ 1× 의 선명함은 비트맵이 **정수 좌표에 1:1 로 놓일 때만** 유지된다.
+        //    소수점 좌표로 blit/scale 하면 재샘플링돼 도로 뭉개진다
+        //    (combineTwoPagesUnified / setImageViewMatrix 의 좌표 반올림 참고).
+        //
+        // 이전 이력: P2-A 에서 oversample 비트맵을 ImageView 에 직접 넘겼다가 Canvas
+        // MAX_BITMAP_SIZE(~100MB) 초과로 크래시 → 렌더 직후 다운스케일하는 P2-B 로 전환.
+        const val DEFAULT_OVERSAMPLE_FACTOR = 1.0f
+
+        const val PREF_OVERSAMPLE = "oversample_factor"
+
+        /** 런타임 조정 가능 (설정 다이얼로그). 렌더 스레드에서 읽으므로 @Volatile. */
+        @Volatile
+        @JvmStatic
+        var oversampleFactor: Float = DEFAULT_OVERSAMPLE_FACTOR
 
         // Transient oversample 비트맵의 픽셀 상한. 1080p 최악 케이스(가로 PDF 전체화면
         // 1920×1080 × 4² ≈ 33MP, ~133MB)는 그대로 허용하는 값이라 1080p 동작은 불변.
@@ -38,10 +69,12 @@ class PageCache(
 
         /** 표시 크기 기준으로 MAX_OVERSAMPLE_PIXELS 를 넘지 않는 oversample 배율을 반환. */
         fun effectiveOversampleFactor(displayW: Int, displayH: Int): Float {
+            val requested = oversampleFactor
+            if (requested <= 1.001f) return 1f
             val displayPixels = displayW.toLong() * displayH
             if (displayPixels <= 0L) return 1f
             val maxFactor = kotlin.math.sqrt(MAX_OVERSAMPLE_PIXELS.toDouble() / displayPixels).toFloat()
-            return OVERSAMPLE_FACTOR.coerceAtMost(maxFactor).coerceAtLeast(1f)
+            return requested.coerceAtMost(maxFactor).coerceAtLeast(1f)
         }
     }
     
@@ -262,7 +295,8 @@ class PageCache(
     /**
      * PDF 페이지를 화면 크기 비트맵으로 래스터화한다.
      *
-     * 1단계: oversample 해상도 (fitScale × OVERSAMPLE_FACTOR) 로 transient 비트맵에 렌더.
+     * 1단계: oversample 해상도 (fitScale × oversampleFactor) 로 transient 비트맵에 렌더.
+     *        기본 1× 이면 이 단계가 곧 표시 크기 렌더이고 2단계는 no-op 이다.
      *        Matrix 로 크롭을 vector 단계에 흡수 → fractional scaling 으로 인한 오선 두께
      *        불균일 없음.
      * 2단계: createScaledBitmap (bilinear) 으로 표시 크기 (fitScale ×) 로 다운스케일.
