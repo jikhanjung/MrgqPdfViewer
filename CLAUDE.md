@@ -12,7 +12,7 @@ Android TV OS용 PDF 악보 리더 앱으로, 무선 파일 업로드와 리모�
 **현재 버전**: v0.1.13 (2026-08-15)  
 **빌드 상태**: 🟢 빌드 가능 (GitHub Actions CI 로 커밋마다 검증)  
 **테스트 상태**: 🟢 **렌더 품질 실기기 확인 완료** (2026-08-15, Google TV Streamer + 23.8" 4K 모니터: 1920×1080 네이티브 렌더 결과 매우 좋음, 사용상 문제 없음) · 🟡 나머지 스모크 미실시(리모컨 롱프레스·웹서버·합주 회귀), 합주 Phase 0 동기 넘김 실기기 미검증
-**최근 업데이트**: 오선 잉크 감마 보정 도입(실기기 튜닝 필요), PDF 렌더러 비교로 P5 제외, 4K 계단현상 조사 종결(기기 하드 제약 확정), GitHub Actions CI 빌드, 합주 Phase 0 동기 페이지 넘김(기본 OFF·**접근법 재검토 중**)
+**최근 업데이트**: **oversample 제거(4×→1×)로 오선 선명도 해결**(실기기 확인 완료), PDF 렌더러 비교로 P5 제외, 4K 계단현상 조사 종결(기기 하드 제약 확정), GitHub Actions CI 빌드, 합주 Phase 0 동기 페이지 넘김(기본 OFF·**접근법 재검토 중**)
 
 ## 주요 기능
 - **전문적인 스플래시 스크린**: 브랜딩 강화된 2.5초 애니메이션 시퀀스로 앱 시작
@@ -152,7 +152,15 @@ adb install app/build/outputs/apk/debug/app-debug.apk
 ### ✅ 완료된 기능
 
 #### 🎼 v0.1.13 주요 업데이트 (2026-08-15) — 잉크 감마 · 4K 조사 · CI
-- [x] **오선 잉크 감마 보정** (2026-08-15): PDFium(= PdfRenderer 내부 엔진)이 1px 미만 stroke 를 최소 1px 로 스냅하므로, oversample 배율을 올릴수록 오선의 상대 두께가 얇아져 다운스케일 시 회색이 된다(1× darkness 0.957 vs 4×→다운 0.652). 표시 크기 비트맵에 256엔트리 LUT 감마를 적용해 균일성을 유지한 채 대비 회복(감마 2.0 → 0.844, 두께 편차 0.85→0.88). `InkGamma.kt` 신규 + 렌더 경로 3곳 적용 + PDF 표시 옵션에 "오선 진하기" 슬라이더(전역 설정, 실시간 미리보기). **기본값 2.0** (2026-08-15 실기기 육안 튜닝 확정) — 얇은 사선(크레센도 헤어핀)이 덜 끊기고 검은 덩어리 뭉개짐 없음. 상세: `devlog/20260815_041_ink_gamma_and_renderer_comparison.md`
+- [x] **oversample 제거 (4× → 1×) — 오선 선명도 최종 해결** (2026-08-15, ✅ **실기기 확인 완료**): "어도비 리더는 1080p 에서도 선이 또렷한데 우리 앱은 아니다"는 관찰에서 배율 스윕을 측정한 결과 **oversample 자체가 원인**이었다. PDFium 은 1px 미만 stroke 를 device pixel 에 스냅하는데(데스크톱 뷰어가 얇은 선을 또렷하게 그리는 동작), oversample 을 걸면 그 1px 이 표시 기준 1/N px 로 희석된다. 즉 **배율을 올릴수록 얇은 선은 흐려진다.**
+  - 스윕(오선 50개): **1× darkness 1.000 / 편차 0.000** vs 2.5×(v0.1.11) 0.635 / 4×(v0.1.12) 0.674 / 4×+감마2.0 0.878. 두께 편차도 1× 가 최저
+  - 전제 정정: oversample 은 "2.5K/4K 해상도를 최대한 활용"하려던 것이었으나 앱 UI 가 1080p 고정임이 확인되어(#040) 전제 소멸. P01 이 oversample 도입을 2단계 scaling 제거와 묶어 넣는 바람에 독립 기여가 검증되지 않았고, P2 는 그 위에서 배율만 올렸다(방향이 반대)
+  - ⚠️ **정수 좌표가 전제**: 소수점 blit/scale 은 재샘플링돼 device-pixel 스냅을 무효화한다. `combineTwoPagesUnified` 배치 좌표와 `setImageViewMatrix` translate 를 정수로, 배율 1.0 근접 시 정확히 1.0 으로 스냅
+  - `PageCache.oversampleFactor` 런타임 조정 가능. 설정: PDF 표시 옵션 → **"선 선명도 (배율 · 감마)"**
+  - 부수 효과: 렌더 픽셀 13.2MP → 0.83MP (~16배), transient 비트맵 ~133MB 소멸
+  - **실기기 판정(2026-08-15)**: Google TV Streamer + 23.8" 4K 모니터에서 1920×1080 네이티브 렌더 결과 **매우 좋음, 사용상 문제 없음**. 이로써 P04(리눅스 4K 전용기)의 "4K 화질" 추진 동인 소멸
+  - 상세: `devlog/20260815_042_oversample_removal.md`
+- [~] **오선 잉크 감마 보정** (2026-08-15, ⚠️ **oversample 1× 에서는 자동 OFF — 참고용 이력**): PDFium(= PdfRenderer 내부 엔진)이 1px 미만 stroke 를 최소 1px 로 스냅하므로, oversample 배율을 올릴수록 오선의 상대 두께가 얇아져 다운스케일 시 회색이 된다(1× darkness 0.957 vs 4×→다운 0.652). 표시 크기 비트맵에 256엔트리 LUT 감마를 적용해 균일성을 유지한 채 대비 회복(감마 2.0 → 0.844, 두께 편차 0.85→0.88). `InkGamma.kt` 신규 + 렌더 경로 3곳 적용 + PDF 표시 옵션에 "오선 진하기" 슬라이더(전역 설정, 실시간 미리보기). **기본값 2.0** (2026-08-15 실기기 육안 튜닝 확정) — 얇은 사선(크레센도 헤어핀)이 덜 끊기고 검은 덩어리 뭉개짐 없음. 상세: `devlog/20260815_041_ink_gamma_and_renderer_comparison.md`
 - [x] **PDF 렌더러 비교 → P5 제외 확정** (2026-08-15): Android `PdfRenderer` 가 내부적으로 PDFium 이므로 실질적 대안은 MuPDF 뿐. 앱에 붙이기 전 데스크톱에서 동일 파이프라인으로 판정한 결과 **MuPDF 가 오히려 더 흐림**(0.652 → 0.562, 픽셀 RMS 차이 3%). 네이티브 라이브러리 + AGPL v3 비용까지 감안해 로드맵에서 제외. 측정 스크립트: `data/renderer_compare.py`, `data/staffline_profile.py`
 - [x] **4K 디스플레이 조사 — 기기 한계로 종결** (2026-08-15 판정, 선행 커밋 `822db08` 2026-07-26): Google TV Streamer + 4K 모니터에서 슬러 등 곡선의 계단현상 보고 → 실기기 `DISPLAY INFO` 로그로 판정한 결과 **`app=1920x1080, physicalMode=3840x2160`**. 원인은 렌더 품질이 아니라 **시스템 다운스케일**이며, `ro.surface_flinger.max_graphics_width/height=1920x1080` 빌드 프로퍼티가 근원. `wm size` 오버라이드·`wm size reset` 모두 무효(SurfaceFlinger 가 즉시 되돌림). **SurfaceView `setFixedSize(4K)` 경로도 성립 불가** — 제한이 개별 레이어가 아닌 논리 디스플레이 레벨이라 최종 합성에서 원위치. 이 기기 설계는 "UI/그래픽=1080p, 4K=비디오 레이어 전용". 남은 선택지는 1080p 내 화질 극대화(P5) 또는 UI 4K 렌더 지원 기기로 교체. 상세: `devlog/20260815_040_4k_display_investigation.md`
   - 커밋 `822db08` 의 코드는 유지: `getRealMetrics`+`DISPLAY INFO` 로그는 판정 도구로 유효, `PageCache.effectiveOversampleFactor()`(transient 비트맵 34MP 상한)는 1080p 동작 불변이며 향후 4K 기기 대비 안전장치.
@@ -295,7 +303,7 @@ adb install app/build/outputs/apk/debug/app-debug.apk
 - [x] 설정 화면 모든 기능 (포트 설정, 파일 관리, 설정 초기화)
 - [x] PDF 파일 전체 삭제 (앱 내)
 - [x] PDF 렌더링 기본 기능
-- [x] 고해상도 PDF 렌더링 (단일 단계 Matrix 렌더 + 4× oversample, v0.1.12+)
+- [x] 고해상도 PDF 렌더링 (단일 단계 Matrix 렌더 + **네이티브 1× 렌더**, v0.1.13+. v0.1.11~12 의 2.5×/4× oversample 은 #042 에서 제거)
 - [x] 두 페이지 모드 (가로/세로 비율 자동 판단)
 - [x] 파일별 설정 저장/불러오기
 - [x] 웹서버 파일 업로드 (진행률 표시)
@@ -341,7 +349,7 @@ adb install app/build/outputs/apk/debug/app-debug.apk
    - 파일별 개별 설정 저장
 
 3. **고해상도 PDF 렌더링**
-   - 단일 단계 Matrix 렌더 + 4× oversample (v0.1.12+, P01 단계에서는 2.5×)
+   - 단일 단계 Matrix 렌더 + **네이티브 1×** (v0.1.13+). oversample 은 P01 2.5× → P2 4× 로 올랐다가 #042 에서 1× 로 환원 — 얇은 선을 희석시키는 원인이었음
    - 크롭(위/아래 클리핑) 을 vector 변환 단계에 흡수 → fractional scaling 없는 깔끔한 오선
    - 오선 sub-pixel 위치가 0.5 근처일 때 dark coverage 0.83 → 0.94 로 상승 (P2)
 
