@@ -301,15 +301,11 @@ class PageCache(
      * 좌표 계산은 [PageGeometry], 래스터화는 [PageRenderer] 가 담당한다 — 캐시 미스 경로
      * (PdfViewerActivity)와 **같은 함수**를 지나므로 경로별로 다른 결과가 나올 수 없다.
      *
-     * 1단계: oversample 해상도 (fitScale × oversampleFactor) 로 transient 비트맵에 렌더.
-     *        기본 1× 이면 이 단계가 곧 표시 크기 렌더이고 2단계는 no-op 이다.
-     *        Matrix 로 크롭을 vector 단계에 흡수 → fractional scaling 으로 인한 오선 두께
-     *        불균일 없음.
-     * 2단계: createScaledBitmap (bilinear) 으로 표시 크기 (fitScale ×) 로 다운스케일.
-     *        이 과정의 필터링이 anti-alias 역할 (오선 dark coverage 균일화).
-     * 3단계: oversample 비트맵 recycle, 화면 크기 비트맵만 캐시/반환.
-     *
-     * Canvas MAX_BITMAP_SIZE (~100MB) 한계 회피 + 캐시 메모리 절감.
+     * **크롭(위/아래 클리핑)은 렌더 배율에 먼저 반영된다.** 위·아래 5% 를 자르면
+     * `보이는 높이(= pdfHeight × 0.9) × renderScale = 화면 높이` 가 되는 배율로 렌더하고,
+     * 잘려나갈 위쪽은 `Matrix.postTranslate` 로 캔버스 밖으로 민다. 즉 **한 번만 래스터화**되며
+     * 잘라낸 결과를 나중에 확대하는 단계가 없다 — 그 2차 스케일링이 오선 두께를 들쭉날쭉하게
+     * 만들던 원인이었다 (P01, v0.1.11).
      */
     private fun renderPageToTargetBitmap(page: PdfRenderer.Page): Bitmap {
         val settings = displaySettingsProvider?.invoke() ?: Triple(0f, 0f, 0f)
