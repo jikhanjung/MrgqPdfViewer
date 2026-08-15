@@ -70,7 +70,7 @@ MrgqPdfViewer 개발 로그 모음. 구현 기록은 `YYYYMMDD_NNN_` 형식(NNN 
 ## 🖥️ v0.1.13 — 4K 조사 · 잉크 감마 (2026-07~08)
 - [`040`](20260815_040_4k_display_investigation.md) — 4K 계단현상 조사 → **기기 한계로 종결** (`ro.surface_flinger.max_graphics_*` = 1920×1080 하드코딩, SurfaceView 경로도 불가)
 - [`041`](20260815_041_ink_gamma_and_renderer_comparison.md) — PDFium vs MuPDF 비교(**교체 무익, P5 제외**) → 다운스케일 잉크 희석 발견 → **감마 보정 도입**
-- [`P04`](20260815_P04_rpi5_appliance_review.md) — RPi 5 기반 4K 네이티브 악보 전용기 **기술 검토** (성능 충분·앱 재작성이 비용·P02 정합성)
+- [`P04`](20260815_P04_rpi5_appliance_review.md) — 리눅스 악보 전용기 **기술 검토**. #042 로 4K 동인은 소멸 → **Pi 4 로 "전용기기 구성이 즉각 반응하는가" 검증**으로 전환 (동인: P02 Python 정합성)
 - [`042`](20260815_042_oversample_removal.md) — 배율 스윕 → **oversample 자체가 원인**. 4×→1× 로 되돌려 오선 darkness 1.000 달성 (P01/P2 전제 정정)
 
 ## 📚 메타
