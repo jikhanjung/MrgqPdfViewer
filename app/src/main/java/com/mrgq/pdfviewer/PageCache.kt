@@ -71,8 +71,11 @@ class PageCache(
         fun effectiveOversampleFactor(displayW: Int, displayH: Int): Float {
             val requested = oversampleFactor
             if (requested <= 1.001f) return 1f
+            // 각 변을 따로 본다. 곱만 검사하면 음수 × 음수가 양수라 방어를 통과한다
+            // (RenderTuningTest 가 잡아낸 실제 결함 — displayW/H 는 호출부에서 coerceAtLeast(1)
+            // 되므로 라이브 경로에서는 나타나지 않지만, 가드가 의도한 일을 못 하고 있었다).
+            if (displayW <= 0 || displayH <= 0) return 1f
             val displayPixels = displayW.toLong() * displayH
-            if (displayPixels <= 0L) return 1f
             val maxFactor = kotlin.math.sqrt(MAX_OVERSAMPLE_PIXELS.toDouble() / displayPixels).toFloat()
             return requested.coerceAtMost(maxFactor).coerceAtLeast(1f)
         }
