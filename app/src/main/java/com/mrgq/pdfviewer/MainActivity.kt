@@ -24,7 +24,7 @@ class MainActivity : AppCompatActivity() {
     
     private lateinit var binding: ActivityMainBinding
     private lateinit var pdfAdapter: PdfFileAdapter
-    private var currentSortBy = "name" // "name" or "time"
+    private var currentSortBy = PdfFileSorter.BY_NAME
     private var isFileManagementMode = false // 파일 관리 모드 상태
     
     
@@ -403,11 +403,12 @@ class MainActivity : AppCompatActivity() {
             }
         }
         
-        // Sort based on current selection
-        when (currentSortBy) {
-            "name" -> pdfFiles.sortBy { it.name }
-            "time" -> pdfFiles.sortByDescending { it.lastModified }
-        }
+        // 정렬은 PdfFileSorter 가 담당한다. 목록 순서는 표시 문제가 아니라 **정합성 문제**다 —
+        // PdfViewerActivity 에 인덱스로 파일을 넘기므로 순서가 흔들리면 다른 파일이 열린다(#030~#032).
+        // 자연 정렬(악보2 < 악보10) + 동률 없는 전순서로 그 흔들림을 없앤다.
+        val sorted = PdfFileSorter.sort(pdfFiles, currentSortBy)
+        pdfFiles.clear()
+        pdfFiles.addAll(sorted)
         
         Log.d("MainActivity", "=== LOADED ${pdfFiles.size} PDF FILES FROM APP DIRECTORY ===")
         pdfFiles.forEachIndexed { index, file ->
@@ -724,13 +725,13 @@ class MainActivity : AppCompatActivity() {
     
     private fun setupSortButtons() {
         binding.sortByNameBtn.setOnClickListener {
-            currentSortBy = "name"
+            currentSortBy = PdfFileSorter.BY_NAME
             updateSortButtonStates()
             loadPdfFiles()
         }
         
         binding.sortByTimeBtn.setOnClickListener {
-            currentSortBy = "time"
+            currentSortBy = PdfFileSorter.BY_TIME
             updateSortButtonStates()
             loadPdfFiles()
         }
