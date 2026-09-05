@@ -22,6 +22,7 @@ on:
       - 'app/build.gradle.kts'
       - 'app/proguard-rules.pro'
       - '.github/workflows/instrumentation.yml'
+      - '.github/scripts/**'
   workflow_dispatch:
 
 concurrency:
@@ -93,40 +94,12 @@ jobs:
           force-avd-creation: false
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
           disable-animations: true
-          # 러너가 이 스크립트를 sh(dash) 로 돌린다. bashism 을 쓰면 안 된다
-          # (`set -o pipefail` 은 dash 에 없어서 즉시 exit 2 로 죽는다).
+          # ⚠️ 러너는 이 script 를 **한 줄씩 별도의 sh 로** 실행한다.
+          # 여러 줄 구문(if/fi, 여러 줄 대입)도, 앞 줄의 `set -eu` 도 다음 줄로 이어지지
+          # 않는다. 그래서 각 줄은 그 자체로 완결된 명령이어야 하고, 로직은 파일로 뺀다.
           script: |
-            set -eu
-
-            echo "── 계측 테스트 (Room 저장 왕복) ──"
             ./gradlew connectedDebugAndroidTest
-
-            echo "── release APK 스모크 ──"
-            # 여기가 핵심: minify 된 APK 가 실제로 뜨는지. debug 로는 절대 안 걸리는 표면이다.
-            adb uninstall com.mrgq.pdfviewer || true
-            adb install -r app/build/outputs/apk/release/*.apk
-            adb logcat -c
-            adb shell am start -W -n com.mrgq.pdfviewer/.SplashActivity
-            sleep 8
-
-            # 프로세스 생존 확인. API 21 의 toolbox 에는 pidof 가 없고 ps 에 -A 도 없다.
-            # API 26+ 의 toybox 는 그 반대라 둘 다 시도한 결과를 합쳐서 본다.
-            PS_OUT="$(adb shell ps -A 2>/dev/null || true)
-            $(adb shell ps 2>/dev/null || true)"
-            if ! printf '%s' "$PS_OUT" | grep -q com.mrgq.pdfviewer; then
-              echo "::error::release APK 가 실행 직후 죽었습니다 (API ${{ matrix.api-level }})"
-              adb logcat -d -b crash 2>/dev/null | tail -60 || adb logcat -d | tail -60
-              exit 1
-            fi
-
-            # 크래시 버퍼에 우리 패키지가 찍혔으면 살아 있어도 실패로 본다
-            CRASH="$(adb logcat -d -b crash 2>/dev/null || true)"
-            if printf '%s' "$CRASH" | grep -q com.mrgq.pdfviewer; then
-              echo "::error::release APK 에서 크래시가 기록됐습니다 (API ${{ matrix.api-level }})"
-              printf '%s' "$CRASH" | tail -60
-              exit 1
-            fi
-            echo "release APK 정상 기동 ✓ (API ${{ matrix.api-level }})"
+            bash .github/scripts/release_smoke.sh ${{ matrix.api-level }}
 
       - name: Upload test report (on failure)
         if: failure()
