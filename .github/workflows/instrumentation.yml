@@ -68,6 +68,19 @@ jobs:
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
 
+      # release 서명은 signing.properties 가 없으면 ~/.android/debug.keystore 로 폴백하는데,
+      # 그 파일은 debug 서명 설정에서만 AGP 가 자동 생성한다. 러너에는 없으므로 직접 만든다.
+      # (build.yml 에는 있고 여기에는 없어서 이 워크플로는 도입 이후 한 번도 통과하지 못했다 —
+      #  세 매트릭스 전부 assembleRelease 단계에서 죽었다.)
+      - name: Ensure debug keystore
+        run: |
+          mkdir -p ~/.android
+          [ -f ~/.android/debug.keystore ] || keytool -genkeypair -v \
+            -keystore ~/.android/debug.keystore -storepass android \
+            -alias androiddebugkey -keypass android \
+            -dname "CN=Android Debug,O=Android,C=US" \
+            -keyalg RSA -keysize 2048 -validity 10000
+
       - name: Build APKs
         run: ./gradlew assembleDebug assembleDebugAndroidTest assembleRelease
 
