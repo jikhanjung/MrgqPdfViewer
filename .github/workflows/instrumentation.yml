@@ -93,8 +93,10 @@ jobs:
           force-avd-creation: false
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
           disable-animations: true
+          # 러너가 이 스크립트를 sh(dash) 로 돌린다. bashism 을 쓰면 안 된다
+          # (`set -o pipefail` 은 dash 에 없어서 즉시 exit 2 로 죽는다).
           script: |
-            set -euo pipefail
+            set -eu
 
             echo "── 계측 테스트 (Room 저장 왕복) ──"
             ./gradlew connectedDebugAndroidTest
@@ -107,16 +109,21 @@ jobs:
             adb shell am start -W -n com.mrgq.pdfviewer/.SplashActivity
             sleep 8
 
-            if ! adb shell pidof com.mrgq.pdfviewer > /dev/null; then
+            # 프로세스 생존 확인. API 21 의 toolbox 에는 pidof 가 없고 ps 에 -A 도 없다.
+            # API 26+ 의 toybox 는 그 반대라 둘 다 시도한 결과를 합쳐서 본다.
+            PS_OUT="$(adb shell ps -A 2>/dev/null || true)
+            $(adb shell ps 2>/dev/null || true)"
+            if ! printf '%s' "$PS_OUT" | grep -q com.mrgq.pdfviewer; then
               echo "::error::release APK 가 실행 직후 죽었습니다 (API ${{ matrix.api-level }})"
-              adb logcat -d -b crash | tail -60
+              adb logcat -d -b crash 2>/dev/null | tail -60 || adb logcat -d | tail -60
               exit 1
             fi
 
             # 크래시 버퍼에 우리 패키지가 찍혔으면 살아 있어도 실패로 본다
-            if adb logcat -d -b crash | grep -q "com.mrgq.pdfviewer"; then
+            CRASH="$(adb logcat -d -b crash 2>/dev/null || true)"
+            if printf '%s' "$CRASH" | grep -q com.mrgq.pdfviewer; then
               echo "::error::release APK 에서 크래시가 기록됐습니다 (API ${{ matrix.api-level }})"
-              adb logcat -d -b crash | tail -60
+              printf '%s' "$CRASH" | tail -60
               exit 1
             fi
             echo "release APK 정상 기동 ✓ (API ${{ matrix.api-level }})"
