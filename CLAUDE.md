@@ -9,11 +9,11 @@ Android TV OS용 PDF 악보 리더 앱으로, 무선 파일 업로드와 리모�
 > SurfaceFlinger 가 4K 로 업스케일한다. 4K 관련 작업을 시작하기 전에
 > [`devlog/20260815_040_4k_display_investigation.md`](devlog/20260815_040_4k_display_investigation.md) 를 먼저 읽을 것.
 
-**현재 버전**: v0.1.13 (2026-08-15)  
+**현재 버전**: v0.1.14 (2026-09-06)  
 **빌드 상태**: 🟢 빌드 가능 (GitHub Actions CI 로 커밋마다 검증)  
 **CI 게이트**: 🟢 단위 테스트 57개 + Android Lint + 에뮬레이터 계측·release APK 스모크(API 21/30/34). 계측은 main 푸시와 수동 실행에서만 (회당 5~6분)  
 **테스트 상태**: 🟢 **전반 스모크 테스트 완료** (2026-08-15, Google TV Streamer + 23.8" 4K 모니터): 렌더 품질(1920×1080 네이티브, **매우 좋음**)·리모컨 키 매핑(OK 롱프레스 포함)·두 페이지/클리핑·웹서버 업로드·합주 토글 OFF 회귀 모두 정상. 🟡 남은 것은 **2기기가 필요한 합주 Phase 0 동기 넘김 실측**뿐
-**최근 업데이트**: **계측 CI 복구 — API 21/30/34 전 매트릭스 초록불**(2026-09-06, [`043`](devlog/20260906_043_instrumentation_ci_repair.md)). minSdk 21 첫 런타임 검증 + minify 된 release APK 첫 실행. ⚠️ v0.1.13 태그 이후 main 에 미릴리스 커밋 누적(`CHANGELOG.md` `[Unreleased]` 참조). 그 이전: **oversample 제거(4×→1×)로 오선 선명도 해결**(실기기 확인 완료), PDF 렌더러 비교로 P5 제외, 4K 계단현상 조사 종결(기기 하드 제약 확정), GitHub Actions CI 빌드, 합주 Phase 0 동기 페이지 넘김(기본 OFF·**접근법 재검토 중**)
+**최근 업데이트**: **v0.1.14 릴리스 — 테스트·CI 게이트 정비 + API 21~22 크래시 수정**. **계측 CI 복구로 API 21/30/34 전 매트릭스 초록불**(2026-09-06, [`043`](devlog/20260906_043_instrumentation_ci_repair.md)). minSdk 21 첫 런타임 검증 + minify 된 release APK 첫 실행. 그 이전: **oversample 제거(4×→1×)로 오선 선명도 해결**(실기기 확인 완료), PDF 렌더러 비교로 P5 제외, 4K 계단현상 조사 종결(기기 하드 제약 확정), GitHub Actions CI 빌드, 합주 Phase 0 동기 페이지 넘김(기본 OFF·**접근법 재검토 중**)
 
 ## 주요 기능
 - **전문적인 스플래시 스크린**: 브랜딩 강화된 2.5초 애니메이션 시퀀스로 앱 시작
