@@ -76,6 +76,9 @@ abstract class MusicDatabase : RoomDatabase() {
         }
         
         // Migration from version 3 to 4 (fix foreign key constraint issue)
+        // ⚠️ 테이블을 복사 없이 DROP 후 재생성한다 — v1~v3 에서 올라오면 파일별 표시 설정이
+        // 전부 초기화된다. 이미 배포된 마이그레이션이라 그대로 두고, 이 동작은
+        // MusicDatabaseMigrationTest 가 고정한다.
         private val MIGRATION_3_4 = object : Migration(3, 4) {
             override fun migrate(database: SupportSQLiteDatabase) {
                 // Drop and recreate the user_preferences table with proper foreign key
@@ -95,7 +98,10 @@ abstract class MusicDatabase : RoomDatabase() {
                 """)
             }
         }
-        
+
+        /** 앱과 마이그레이션 테스트가 같은 목록을 쓴다 — 등록 누락을 테스트가 잡도록. */
+        internal val ALL_MIGRATIONS = arrayOf(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
+
         fun getDatabase(context: Context): MusicDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
@@ -103,7 +109,7 @@ abstract class MusicDatabase : RoomDatabase() {
                     MusicDatabase::class.java,
                     "music_database"
                 )
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
+                .addMigrations(*ALL_MIGRATIONS)
                 .build()
                 INSTANCE = instance
                 instance

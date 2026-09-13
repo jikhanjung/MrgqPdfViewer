@@ -99,6 +99,11 @@ android {
         viewBinding = true
         buildConfig = true
     }
+
+    // MigrationTestHelper 는 테스트 APK 의 assets 에서 스키마 JSON 을 읽는다
+    sourceSets {
+        getByName("androidTest").assets.srcDir("$projectDir/schemas")
+    }
 }
 
 // Room 스키마를 app/schemas 에 JSON 으로 내보낸다 (이 프로젝트는 ksp 가 아니라 kapt 를 쓴다).
@@ -149,4 +154,7 @@ dependencies {
     androidTestImplementation("androidx.test.espresso:espresso-core:3.5.1")
     // 계측 테스트에서 suspend DAO 를 runBlocking 으로 부른다
     androidTestImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.7.3")
+    // 마이그레이션 테스트 (MigrationTestHelper) + 과거 버전 DB 를 SQL 로 직접 만들기
+    androidTestImplementation("androidx.room:room-testing:2.6.1")
+    androidTestImplementation("androidx.sqlite:sqlite-framework:2.4.0")
 }

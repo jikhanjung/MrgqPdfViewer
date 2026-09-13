@@ -6,6 +6,15 @@
 
 ## [Unreleased]
 
+### 🧪 테스트
+- **Room 마이그레이션 테스트** (`MusicDatabaseMigrationTest`, 계측 5개) — v1/v2/v3 → v4 를
+  스키마 JSON 과 대조하고, v2→v3 중앙 여백 픽셀→퍼센티지 변환을 값으로 검증한다. 앱과 테스트가
+  같은 마이그레이션 목록(`MusicDatabase.ALL_MIGRATIONS`)을 써서 등록 누락도 잡는다.
+  - `app/schemas` 에는 export 를 켠 v4 의 JSON 만 있어서, 옛 DB 는 git 히스토리의 엔티티로
+    복원한 SQL 로 만든다.
+  - 발견: `MIGRATION_3_4` 가 `user_preferences` 를 DROP 후 재생성해 **v1~v3 의 파일별 표시 설정이
+    초기화된다**. 이미 배포된 동작이라 유지하고 테스트로 고정했다.
+
 ---
 
 ## [0.1.14] - 2026-09-06
