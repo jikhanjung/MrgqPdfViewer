@@ -36,6 +36,8 @@ import com.mrgq.pdfviewer.repository.MusicRepository
 import com.mrgq.pdfviewer.utils.PdfAnalyzer
 import com.mrgq.pdfviewer.database.entity.ScoreMeasure
 import com.mrgq.pdfviewer.score.ScoreOverlayGeometry
+import com.mrgq.pdfviewer.metronome.MetronomeClock
+import com.mrgq.pdfviewer.metronome.MetronomeEngine
 import androidx.lifecycle.lifecycleScope
 import android.os.Handler
 import android.os.Looper
@@ -47,6 +49,10 @@ class PdfViewerActivity : AppCompatActivity() {
         const val EXTRA_CURRENT_INDEX = "current_index"
         const val EXTRA_FILE_PATH_LIST = "file_path_list"
         const val EXTRA_FILE_NAME_LIST = "file_name_list"
+
+        // 메트로놈 클릭음 설정 (전역). 템포·박자는 파일별로 DB 에 저장한다
+        private const val PREF_METRONOME_SOUND = "metronome_sound_enabled"
+        private const val PREF_METRONOME_VOLUME = "metronome_volume"
     }
     
     private lateinit var binding: ActivityPdfViewerBinding
@@ -104,6 +110,17 @@ class PdfViewerActivity : AppCompatActivity() {
     private var scoreMeasuresFileId: String? = null
     private var scoreLoadingFileId: String? = null
     private fun isScoreOverlayEnabled(): Boolean = preferences.getBoolean("score_overlay_enabled", false)
+
+    // 메트로놈 (PDF 표시 옵션에서 켬). 실행 중에는 매 프레임 재생 위치로 박 표시를 갱신한다
+    private val metronome = MetronomeEngine()
+    private var metronomeFileId: String? = null
+    private val metronomeTicker = object : Runnable {
+        override fun run() {
+            if (!metronome.isRunning) return
+            binding.metronomeBeat.update(metronome.currentBeat(), metronome.bpm, metronome.beatsPerBar)
+            binding.metronomeBeat.postOnAnimation(this)
+        }
+    }
     
     // Current display settings
     private var currentTopClipping: Float = 0f
@@ -443,6 +460,7 @@ class PdfViewerActivity : AppCompatActivity() {
             val pdfFile = musicRepository.syncPdfFile(file)
             if (pdfFile != null) {
                 currentPdfFileId = pdfFile.id
+                runOnUiThread { onPdfFileChangedForMetronome(pdfFile.id) }
                 Log.d("PdfViewerActivity", "PDF file record ready: ${pdfFile.id}")
             } else {
                 Log.e("PdfViewerActivity", "Failed to analyze PDF file: $pdfFilePath")
@@ -1824,6 +1842,158 @@ class PdfViewerActivity : AppCompatActivity() {
      * PDF 표시 옵션 다이얼로그 표시 (OK 버튼 길게 누르기)
      */
     /**
+     * 메트로놈 설정과 시작/정지.
+     *
+     * 템포·박자는 **이 파일에** 저장하고(user_preferences, v7) 클릭음 켜기·음량은 전역 설정이다.
+     * 실행 중에 바꾸면 다음 박부터 적용된다. 설정은 대화상자를 닫을 때 저장한다.
+     */
+    private fun showMetronomeDialog() {
+        val fileId = currentPdfFileId
+        lifecycleScope.launch {
+            val saved = if (fileId != null) {
+                withContext(Dispatchers.IO) { musicRepository.getUserPreference(fileId) }
+            } else {
+                null
+            }
+            val bpm = if (metronome.isRunning) metronome.bpm else saved?.metronomeBpm ?: MetronomeClock.DEFAULT_BPM
+            val beats = if (metronome.isRunning) metronome.beatsPerBar else saved?.metronomeBeatsPerBar ?: MetronomeClock.DEFAULT_BEATS
+            buildMetronomeDialog(fileId, bpm, beats)
+        }
+    }
+
+    private fun buildMetronomeDialog(fileId: String?, initialBpm: Int, initialBeats: Int) {
+        var bpm = initialBpm.coerceIn(MetronomeClock.MIN_BPM, MetronomeClock.MAX_BPM)
+        var beats = initialBeats.coerceIn(MetronomeClock.MIN_BEATS, MetronomeClock.MAX_BEATS)
+
+        fun android.widget.SeekBar.onProgress(block: (Int) -> Unit) {
+            setOnSeekBarChangeListener(object : android.widget.SeekBar.OnSeekBarChangeListener {
+                override fun onProgressChanged(seekBar: android.widget.SeekBar?, progress: Int, fromUser: Boolean) = block(progress)
+                override fun onStartTrackingTouch(seekBar: android.widget.SeekBar?) {}
+                override fun onStopTrackingTouch(seekBar: android.widget.SeekBar?) {}
+            })
+        }
+        fun label() = android.widget.TextView(this).apply {
+            textSize = 16f
+            setPadding(0, 10, 0, 10)
+        }
+
+        val content = android.widget.LinearLayout(this).apply {
+            orientation = android.widget.LinearLayout.VERTICAL
+            setPadding(50, 30, 50, 30)
+        }
+        val bpmLabel = label()
+        val bpmSeek = android.widget.SeekBar(this).apply {
+            max = MetronomeClock.MAX_BPM - MetronomeClock.MIN_BPM
+            keyProgressIncrement = 1
+            progress = bpm - MetronomeClock.MIN_BPM
+        }
+        val beatsLabel = label()
+        val beatsSeek = android.widget.SeekBar(this).apply {
+            max = MetronomeClock.MAX_BEATS - MetronomeClock.MIN_BEATS
+            keyProgressIncrement = 1
+            progress = beats - MetronomeClock.MIN_BEATS
+        }
+        val soundCheck = android.widget.CheckBox(this).apply {
+            text = "클릭음"
+            isChecked = preferences.getBoolean(PREF_METRONOME_SOUND, true)
+        }
+        val volumeLabel = label().apply { text = "음량" }
+        val volumeSeek = android.widget.SeekBar(this).apply {
+            max = 100
+            progress = (preferences.getFloat(PREF_METRONOME_VOLUME, 0.6f) * 100).toInt()
+        }
+
+        fun render() {
+            bpmLabel.text = "템포: $bpm BPM"
+            beatsLabel.text = "박자: 마디당 ${beats}박 (첫 박 강조)"
+        }
+        // 실행 중이면 바로 들린다 (다음 박부터)
+        fun applyToEngine() {
+            metronome.bpm = bpm
+            metronome.beatsPerBar = beats
+            metronome.soundEnabled = soundCheck.isChecked
+            metronome.volume = volumeSeek.progress / 100f
+        }
+
+        bpmSeek.onProgress { bpm = MetronomeClock.MIN_BPM + it; render(); applyToEngine() }
+        beatsSeek.onProgress { beats = MetronomeClock.MIN_BEATS + it; render(); applyToEngine() }
+        volumeSeek.onProgress { applyToEngine() }
+        soundCheck.setOnCheckedChangeListener { _, _ -> applyToEngine() }
+
+        // 리모컨으로 슬라이더를 한 칸씩 옮기기엔 범위가 넓어 큰 단위 버튼을 둔다
+        val steps = android.widget.LinearLayout(this).apply {
+            orientation = android.widget.LinearLayout.HORIZONTAL
+            gravity = android.view.Gravity.CENTER
+        }
+        for (delta in listOf(-10, -1, 1, 10)) {
+            steps.addView(android.widget.Button(this).apply {
+                text = if (delta > 0) "+$delta" else "$delta"
+                setOnClickListener {
+                    bpmSeek.progress = (bpm + delta).coerceIn(MetronomeClock.MIN_BPM, MetronomeClock.MAX_BPM) - MetronomeClock.MIN_BPM
+                }
+            })
+        }
+
+        val hint = android.widget.TextView(this).apply {
+            text = "템포·박자는 이 파일에 저장됩니다. 실행 중에 바꾸면 다음 박부터 적용됩니다."
+            textSize = 12f
+            setTextColor(android.graphics.Color.GRAY)
+            setPadding(0, 20, 0, 0)
+        }
+
+        render()
+        listOf(bpmLabel, bpmSeek, steps, beatsLabel, beatsSeek, soundCheck, volumeLabel, volumeSeek, hint)
+            .forEach { content.addView(it) }
+
+        AlertDialog.Builder(this)
+            .setTitle("메트로놈")
+            .setView(android.widget.ScrollView(this).apply { addView(content) })
+            .setPositiveButton(if (metronome.isRunning) "정지" else "시작") { _, _ ->
+                if (metronome.isRunning) {
+                    stopMetronome()
+                } else {
+                    applyToEngine()
+                    startMetronome()
+                }
+            }
+            .setNegativeButton("닫기", null)
+            .setOnDismissListener {
+                preferences.edit()
+                    .putBoolean(PREF_METRONOME_SOUND, soundCheck.isChecked)
+                    .putFloat(PREF_METRONOME_VOLUME, volumeSeek.progress / 100f)
+                    .apply()
+                if (fileId != null) {
+                    lifecycleScope.launch(Dispatchers.IO) { musicRepository.setMetronomeForFile(fileId, bpm, beats) }
+                }
+            }
+            .show()
+    }
+
+    private fun startMetronome() {
+        val withSound = metronome.start()
+        metronomeFileId = currentPdfFileId
+        binding.metronomeBeat.visibility = View.VISIBLE
+        binding.metronomeBeat.removeCallbacks(metronomeTicker)
+        binding.metronomeBeat.postOnAnimation(metronomeTicker)
+        if (!withSound) {
+            Toast.makeText(this, "소리 장치를 열지 못해 박 표시만 합니다", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    private fun stopMetronome() {
+        metronome.stop()
+        binding.metronomeBeat.removeCallbacks(metronomeTicker)
+        binding.metronomeBeat.visibility = View.GONE
+        metronomeFileId = null
+    }
+
+    /** 다른 곡으로 넘어가면 멈춘다 — 템포가 파일별이라 이전 곡 템포로 계속 도는 건 틀린 동작이다. */
+    private fun onPdfFileChangedForMetronome(fileId: String) {
+        val runningFor = metronomeFileId
+        if (metronome.isRunning && runningFor != null && runningFor != fileId) stopMetronome()
+    }
+
+    /**
      * 마디 박스 오버레이 켜기/끄기 — 악보 분석 결과를 눈으로 확인하는 용도 (전역 설정).
      * 켜면 현재 파일을 처음 한 번 분석해 DB 에 캐시한다 (ScoreLayoutStore).
      */
@@ -1892,7 +2062,8 @@ class PdfViewerActivity : AppCompatActivity() {
             "두 페이지 모드 전환",
             "위/아래 클리핑 설정",
             "선 선명도 (배율 · 감마)",
-            "마디 박스 표시 (악보 분석): ${if (isScoreOverlayEnabled()) "켜짐" else "꺼짐"}"
+            "마디 박스 표시 (악보 분석): ${if (isScoreOverlayEnabled()) "켜짐" else "꺼짐"}",
+            "메트로놈${if (metronome.isRunning) " (실행 중)" else ""}"
         )
 
         AlertDialog.Builder(this)
@@ -1906,6 +2077,7 @@ class PdfViewerActivity : AppCompatActivity() {
                     1 -> showClippingDialog()
                     2 -> showInkGammaDialog()
                     3 -> toggleScoreOverlay()
+                    4 -> showMetronomeDialog()
                 }
             }
             .setNegativeButton("닫기") { dialog, _ -> dialog.dismiss() }
@@ -2734,6 +2906,9 @@ class PdfViewerActivity : AppCompatActivity() {
         // Clear collaboration callbacks when PdfViewerActivity goes to background
         // This allows MainActivity to properly register its callbacks when it resumes
         Log.d("PdfViewerActivity", "onPause - 협업 콜백 정리")
+
+        // 연주 화면을 벗어나면 메트로놈을 멈춘다 (홈·다른 앱으로 가도 계속 울리지 않게)
+        stopMetronome()
     }
     
     override fun onDestroy() {

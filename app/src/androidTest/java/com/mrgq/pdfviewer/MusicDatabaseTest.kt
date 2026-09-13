@@ -136,6 +136,24 @@ class MusicDatabaseTest {
     }
 
     @Test
+    fun 메트로놈_설정은_다른_표시설정을_지우지_않고_저장된다() = runBlocking {
+        db.pdfFileDao().insertPdfFile(sampleFile())
+        val prefDao = db.userPreferenceDao()
+        prefDao.insertUserPreference(
+            UserPreference(pdfFileId = "file-1", displayMode = DisplayMode.DOUBLE, topClippingPercent = 0.05f)
+        )
+        assertNull("미설정은 null", prefDao.getUserPreference("file-1")!!.metronomeBpm)
+
+        prefDao.updateMetronome("file-1", bpm = 96, beatsPerBar = 3)
+
+        val loaded = prefDao.getUserPreference("file-1")!!
+        assertEquals(96, loaded.metronomeBpm)
+        assertEquals(3, loaded.metronomeBeatsPerBar)
+        assertEquals(DisplayMode.DOUBLE, loaded.displayMode)
+        assertEquals(0.05f, loaded.topClippingPercent, 1e-6f)
+    }
+
+    @Test
     fun 없는_파일의_설정은_null_이다() = runBlocking {
         assertNull(db.userPreferenceDao().getUserPreference("존재하지-않음"))
     }

@@ -21,6 +21,8 @@ data class UserPreference(
     val topClippingPercent: Float = 0f,  // 위쪽 클리핑 비율 (0.0 ~ 1.0)
     val bottomClippingPercent: Float = 0f, // 아래쪽 클리핑 비율 (0.0 ~ 1.0)
     val centerPadding: Float = 0f,       // 가운데 여백 비율 (0.0 ~ 0.15)
+    val metronomeBpm: Int? = null,       // 메트로놈 템포 (v7). null = 미설정 → 기본값. 나중에 MusicXML 템포로 채울 자리
+    val metronomeBeatsPerBar: Int? = null, // 메트로놈 마디당 박 수 (v7). 첫 박 강조
     val updatedAt: Long = System.currentTimeMillis()
 )
 

@@ -35,6 +35,16 @@
         android:layout_height="match_parent"
         android:visibility="gone" />
 
+    <!-- 메트로놈 박 표시 (실행 중에만) -->
+    <com.mrgq.pdfviewer.metronome.MetronomeBeatView
+        android:id="@+id/metronomeBeat"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_margin="16dp"
+        android:visibility="gone"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintStart_toStartOf="parent" />
+
     <TextView
         android:id="@+id/pageInfo"
         android:layout_width="wrap_content"

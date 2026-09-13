@@ -116,6 +116,29 @@ class MusicDatabaseMigrationTest {
     }
 
     @Test
+    fun v6_에서_v7_은_메트로놈_컬럼을_더하고_표시설정을_보존한다() {
+        helper.createDatabase(TEST_DB, 6).apply {
+            execSQL(INSERT_FILE)
+            execSQL(INSERT_V3_PREF)
+            close()
+        }
+
+        val db = helper.runMigrationsAndValidate(TEST_DB, 7, true, *MusicDatabase.ALL_MIGRATIONS)
+
+        db.query(
+            "SELECT metronomeBpm, metronomeBeatsPerBar, displayMode, topClippingPercent " +
+                "FROM user_preferences WHERE pdfFileId = 'file-1'"
+        ).use { c ->
+            assertEquals("v6→v7 에서 파일별 표시 설정이 사라졌다", 1, c.count)
+            c.moveToFirst()
+            assertTrue("미설정 = null → 기본 템포", c.isNull(0))
+            assertTrue(c.isNull(1))
+            assertEquals("DOUBLE", c.getString(2))
+            assertEquals(0.05, c.getDouble(3), 1e-9)
+        }
+    }
+
+    @Test
     fun v2_to_v3_중앙여백_픽셀이_비율로_변환된다() {
         val db = createDbAt(2, V2_USER_PREFERENCES) {
             it.execSQL(INSERT_FILE)
@@ -231,7 +254,7 @@ class MusicDatabaseMigrationTest {
 
     private companion object {
         const val TEST_DB = "migration-test"
-        const val LATEST_VERSION = 6
+        const val LATEST_VERSION = 7
 
         // pdf_files 는 v1 부터 바뀐 적이 없다
         const val PDF_FILES = "CREATE TABLE IF NOT EXISTS `pdf_files` (`id` TEXT NOT NULL, " +

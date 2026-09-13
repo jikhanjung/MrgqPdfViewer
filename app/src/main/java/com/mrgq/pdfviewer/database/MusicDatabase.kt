@@ -17,7 +17,7 @@ import com.mrgq.pdfviewer.database.entity.UserPreference
 
 @Database(
     entities = [PdfFile::class, UserPreference::class, ScoreMeasure::class],
-    version = 6,
+    version = 7,
     exportSchema = true   // app/schemas 로 내보낸다 — 마이그레이션 테스트·드리프트 감지의 전제
 )
 @TypeConverters(Converters::class)
@@ -129,8 +129,17 @@ abstract class MusicDatabase : RoomDatabase() {
             }
         }
 
+        // Migration from version 6 to 7 (메트로놈: 파일별 템포·박자)
+        // nullable 컬럼만 더한다. null = 미설정 → 메트로놈이 기본값(120 BPM, 4박)을 쓴다.
+        private val MIGRATION_6_7 = object : Migration(6, 7) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL("ALTER TABLE user_preferences ADD COLUMN metronomeBpm INTEGER")
+                database.execSQL("ALTER TABLE user_preferences ADD COLUMN metronomeBeatsPerBar INTEGER")
+            }
+        }
+
         /** 앱과 마이그레이션 테스트가 같은 목록을 쓴다 — 등록 누락을 테스트가 잡도록. */
-        internal val ALL_MIGRATIONS = arrayOf(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
+        internal val ALL_MIGRATIONS = arrayOf(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7)
 
         fun getDatabase(context: Context): MusicDatabase {
             return INSTANCE ?: synchronized(this) {

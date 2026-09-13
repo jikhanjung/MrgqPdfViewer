@@ -11,7 +11,7 @@ Android TV OS용 PDF 악보 리더 앱으로, 무선 파일 업로드와 리모�
 
 **현재 버전**: v0.1.14 (2026-09-06)  
 **빌드 상태**: 🟢 빌드 가능 (GitHub Actions CI 로 커밋마다 검증)  
-**CI 게이트**: 🟢 단위 테스트 85개 + Android Lint + 에뮬레이터 계측 40개·release APK 스모크(API 21/30/34). 계측은 main 푸시와 수동 실행에서만 (회당 5~6분)  
+**CI 게이트**: 🟢 단위 테스트 95개 + Android Lint + 에뮬레이터 계측 42개·release APK 스모크(API 21/30/34 — ⚠️ 문서 정보 검사는 세 매트릭스 모두 건너뜀, #047 §5). 계측은 main 푸시와 수동 실행에서만 (회당 5~6분)  
 **테스트 상태**: 🟢 **전반 스모크 테스트 완료** (2026-08-15, Google TV Streamer + 23.8" 4K 모니터): 렌더 품질(1920×1080 네이티브, **매우 좋음**)·리모컨 키 매핑(OK 롱프레스 포함)·두 페이지/클리핑·웹서버 업로드·합주 토글 OFF 회귀 모두 정상. 🟡 남은 것은 **2기기가 필요한 합주 Phase 0 동기 넘김 실측**뿐
 **최근 업데이트**: **v0.1.14 릴리스 — 테스트·CI 게이트 정비 + API 21~22 크래시 수정**. **계측 CI 복구로 API 21/30/34 전 매트릭스 초록불**(2026-09-06, [`043`](devlog/20260906_043_instrumentation_ci_repair.md)). minSdk 21 첫 런타임 검증 + minify 된 release APK 첫 실행. 그 이전: **oversample 제거(4×→1×)로 오선 선명도 해결**(실기기 확인 완료), PDF 렌더러 비교로 P5 제외, 4K 계단현상 조사 종결(기기 하드 제약 확정), GitHub Actions CI 빌드, 합주 Phase 0 동기 페이지 넘김(기본 OFF·**접근법 재검토 중**)
 
@@ -19,7 +19,8 @@ Android TV OS용 PDF 악보 리더 앱으로, 무선 파일 업로드와 리모�
 - **전문적인 스플래시 스크린**: 브랜딩 강화된 2.5초 애니메이션 시퀀스로 앱 시작
 - **카드 기반 파일 목록**: 페이지 수, 파일 크기, 수정 날짜가 포함된 현대적 파일 표시
 - **상세 파일 정보**: PDF 페이지 수 + 문서 정보(제목·작성자, PdfBox) 표시. DB 에 캐시하고 바뀐 파일만 다시 분석 (`PdfFileSync`, devlog #045)
-- **악보 구조 분석 (마디 박스)**: 벡터 악보 PDF 에서 시스템·마디를 찾아 DB 에 캐시하고 뷰어에 번호 붙은 박스로 표시 (PDF 표시 옵션에서 켬, 두 페이지 모드·클리핑 추종). 지원: Sibelius→PDF 형식. `score/` 패키지, devlog #046. 다음: MusicXML 정렬·메트로놈
+- **악보 구조 분석 (마디 박스)**: 벡터 악보 PDF 에서 시스템·마디를 찾아 DB 에 캐시하고 뷰어에 번호 붙은 박스로 표시 (PDF 표시 옵션에서 켬, 두 페이지 모드·클리핑 추종). 지원: Sibelius→PDF 형식. `score/` 패키지, devlog #046. 다음: MusicXML 정렬
+- **메트로놈**: PDF 표시 옵션에서 템포·박자·클릭음 설정 후 시작. AudioTrack 에 샘플 단위로 클릭을 이어 써 박이 흔들리지 않고, 화면 왼쪽 위 박 표시는 실제 재생 위치를 따른다. 템포·박자는 파일별 저장(v7). 로컬 전용(합주 연동 없음). `metronome/` 패키지, devlog #047
 - **페이지 전환 애니메이션**: 350ms 슬라이드 애니메이션으로 실제 악보 페이지 넘기기 구현
 - **효과음 시스템**: SoundPool 기반 페이지 넘기기 사운드 및 슬라이더 볼륨 조절
 - **TV 스타일 설정**: 이모지 아이콘 카테고리 메뉴, 리모컨 최적화 탐색, 직관적 UI
@@ -43,7 +44,7 @@ Android TV OS용 PDF 악보 리더 앱으로, 무선 파일 업로드와 리모�
 - **아키텍처**: PdfViewerActivity + PageCache 중심 (v0.1.8 의 Manager 분리 시도는 미통합 상태로 남아 있다가 v0.1.11 에서 제거됨)
 - **PDF 렌더링**: PdfRenderer (Android 5.0+ 내장)
 - **PDF 문서 정보**: PdfBox-Android 2.0.27.0 (Title/Author 읽기 전용. BouncyCastle PQC 리소스는 패키징 제외)
-- **데이터베이스**: Room 2.6.1 (SQLite 기반, 현재 v6 스키마 — `score_measures` 포함. ⚠️ `pdf_files` 갱신에 `insertPdfFile`(REPLACE) 금지 — CASCADE 로 표시 설정 삭제)
+- **데이터베이스**: Room 2.6.1 (SQLite 기반, 현재 v7 스키마 — `score_measures`, 파일별 메트로놈 포함. ⚠️ `pdf_files` 갱신에 `insertPdfFile`(REPLACE) 금지 — CASCADE 로 표시 설정 삭제)
 - **웹 서버**: NanoHTTPD 2.3.1
 - **보안**: WSS (WebSocket Secure) with TLS 1.2/1.3 (v0.1.8+)
 - **입력 처리**: 리모컨용 KeyEvent 처리
