@@ -88,7 +88,7 @@
         android:id="@+id/copyrightText"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="© 2025 MRGQ"
+        android:text="© 2025-2026 MRGQ"
         android:textColor="#80FFFFFF"
         android:textSize="12sp"
         app:layout_constraintBottom_toBottomOf="parent"
