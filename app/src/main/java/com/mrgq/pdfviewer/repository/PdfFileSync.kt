@@ -54,7 +54,8 @@ object PdfFileSync {
             dao.insertPdfFile(analyzed)
             return analyzed
         }
-        // 파일에서 얻을 수 없는 값(사용자가 입력할 악보 정보)은 보존한다
+        // 파일에서 얻을 수 없는 값(사용자가 입력할 악보 정보)은 보존한다.
+        // scoreAnalyzedAt 은 일부러 보존하지 않는다 — 파일이 바뀌었으니 마디도 다시 분석해야 한다 (ScoreLayoutStore)
         val refreshed = analyzed.copy(
             id = existing.id,
             composer = existing.composer,

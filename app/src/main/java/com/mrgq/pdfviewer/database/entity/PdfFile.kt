@@ -24,6 +24,7 @@ data class PdfFile(
     val genre: String? = null,           // 장르
     val difficulty: Int? = null,         // 난이도 (1-5)
     val docInfoReadAt: Long? = null,     // 문서 정보를 읽은 시각 (v5). null = 아직 안 읽음 (v4 이전 레코드)
+    val scoreAnalyzedAt: Long? = null,   // 악보 구조(마디)를 분석한 시각 (v6). null = 아직 안 함. 마디는 score_measures
 
     val createdAt: Long = System.currentTimeMillis(),  // PdfAnalyzer 는 분석 당시 file.lastModified() 를 넣는다 — 파일 교체 감지에 쓴다 (PdfFileSync)
     val updatedAt: Long = System.currentTimeMillis()

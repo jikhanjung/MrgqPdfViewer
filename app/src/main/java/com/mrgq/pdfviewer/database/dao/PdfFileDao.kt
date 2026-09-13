@@ -27,6 +27,9 @@ interface PdfFileDao {
     
     @Update
     suspend fun updatePdfFile(pdfFile: PdfFile)
+
+    @Query("UPDATE pdf_files SET scoreAnalyzedAt = :analyzedAt WHERE id = :id")
+    suspend fun setScoreAnalyzedAt(id: String, analyzedAt: Long?)
     
     @Delete
     suspend fun deletePdfFile(pdfFile: PdfFile)

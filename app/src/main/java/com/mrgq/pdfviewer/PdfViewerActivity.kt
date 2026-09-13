@@ -34,6 +34,9 @@ import com.mrgq.pdfviewer.database.entity.PageOrientation
 import com.mrgq.pdfviewer.database.entity.UserPreference
 import com.mrgq.pdfviewer.repository.MusicRepository
 import com.mrgq.pdfviewer.utils.PdfAnalyzer
+import com.mrgq.pdfviewer.database.entity.ScoreMeasure
+import com.mrgq.pdfviewer.score.ScoreOverlayGeometry
+import androidx.lifecycle.lifecycleScope
 import android.os.Handler
 import android.os.Looper
 
@@ -95,6 +98,12 @@ class PdfViewerActivity : AppCompatActivity() {
     private var pageTurnSoundId: Int = 0
     private var soundsLoaded = false
     private var currentPdfFileId: String? = null
+
+    // 악보 분석 확인용 마디 박스 오버레이 (PDF 표시 옵션에서 켬, 전역 설정)
+    private var scoreMeasures: List<ScoreMeasure> = emptyList()
+    private var scoreMeasuresFileId: String? = null
+    private var scoreLoadingFileId: String? = null
+    private fun isScoreOverlayEnabled(): Boolean = preferences.getBoolean("score_overlay_enabled", false)
     
     // Current display settings
     private var currentTopClipping: Float = 0f
@@ -971,6 +980,8 @@ class PdfViewerActivity : AppCompatActivity() {
         imageMatrix.postTranslate(dx, dy)
         
         binding.pdfView.imageMatrix = imageMatrix
+        // showPage 는 이 함수 다음에 pageIndex 를 갱신하므로 한 박자 뒤에 그린다
+        binding.pdfView.post { refreshScoreOverlay() }
         
         Log.d("PdfViewerActivity", "=== ASPECT RATIO CHECK ===")
         Log.d("PdfViewerActivity", "Original bitmap: ${bitmapWidth}x${bitmapHeight}, aspect ratio: $originalAspectRatio")
@@ -1812,13 +1823,76 @@ class PdfViewerActivity : AppCompatActivity() {
     /**
      * PDF 표시 옵션 다이얼로그 표시 (OK 버튼 길게 누르기)
      */
+    /**
+     * 마디 박스 오버레이 켜기/끄기 — 악보 분석 결과를 눈으로 확인하는 용도 (전역 설정).
+     * 켜면 현재 파일을 처음 한 번 분석해 DB 에 캐시한다 (ScoreLayoutStore).
+     */
+    private fun toggleScoreOverlay() {
+        val enabled = !isScoreOverlayEnabled()
+        preferences.edit().putBoolean("score_overlay_enabled", enabled).apply()
+        Toast.makeText(this, if (enabled) "마디 박스 표시 켜짐" else "마디 박스 표시 꺼짐", Toast.LENGTH_SHORT).show()
+        refreshScoreOverlay()
+    }
+
+    /** 현재 화면(페이지·두 페이지 모드·클리핑·여백)에 맞춰 마디 박스를 다시 그린다. */
+    private fun refreshScoreOverlay() {
+        val overlay = binding.scoreOverlay
+        val fileId = currentPdfFileId
+        if (!isScoreOverlayEnabled() || fileId == null || isAnimating) {
+            overlay.clear()
+            return
+        }
+        if (scoreMeasuresFileId != fileId) {
+            overlay.clear()
+            loadScoreMeasures(fileId)
+            return
+        }
+        val boxes = ScoreOverlayGeometry.boxes(
+            measures = scoreMeasures,
+            leftPageIndex = pageIndex,
+            twoPageMode = isTwoPageMode,
+            pageCount = pageCount,
+            screenWidth = screenWidth,
+            screenHeight = screenHeight,
+            topClipping = currentTopClipping,
+            bottomClipping = currentBottomClipping,
+            centerPadding = currentCenterPadding,
+        )
+        overlay.show(boxes, binding.pdfView.imageMatrix)
+    }
+
+    private fun loadScoreMeasures(fileId: String) {
+        if (scoreLoadingFileId == fileId) return
+        scoreLoadingFileId = fileId
+        val file = File(pdfFilePath)
+        lifecycleScope.launch {
+            val measures = withContext(Dispatchers.IO) { musicRepository.getOrAnalyzeScoreMeasures(fileId, file) }
+            scoreLoadingFileId = null
+            // null = 파일 전환 중이라 레코드와 경로가 어긋났다. 전환이 끝나면 showPage 가 다시 부른다
+            if (measures == null || currentPdfFileId != fileId) return@launch
+            scoreMeasures = measures
+            scoreMeasuresFileId = fileId
+            if (measures.isEmpty()) {
+                Toast.makeText(
+                    this@PdfViewerActivity,
+                    "마디를 찾지 못했습니다 (지원: Sibelius 에서 PDF 로 인쇄한 벡터 악보)",
+                    Toast.LENGTH_LONG
+                ).show()
+            } else {
+                Toast.makeText(this@PdfViewerActivity, "마디 ${measures.size}개", Toast.LENGTH_SHORT).show()
+            }
+            refreshScoreOverlay()
+        }
+    }
+
     private fun showPdfDisplayOptions() {
         Log.d("PdfViewerActivity", "PDF 표시 옵션 다이얼로그 표시")
         
         val options = arrayOf(
             "두 페이지 모드 전환",
             "위/아래 클리핑 설정",
-            "선 선명도 (배율 · 감마)"
+            "선 선명도 (배율 · 감마)",
+            "마디 박스 표시 (악보 분석): ${if (isScoreOverlayEnabled()) "켜짐" else "꺼짐"}"
         )
 
         AlertDialog.Builder(this)
@@ -1831,6 +1905,7 @@ class PdfViewerActivity : AppCompatActivity() {
                     }
                     1 -> showClippingDialog()
                     2 -> showInkGammaDialog()
+                    3 -> toggleScoreOverlay()
                 }
             }
             .setNegativeButton("닫기") { dialog, _ -> dialog.dismiss() }
@@ -3057,6 +3132,12 @@ class PdfViewerActivity : AppCompatActivity() {
         }
         
         imageView.imageMatrix = matrix
+        // 넘김 애니메이션 동안(pdfViewNext 준비)은 박스를 숨기고, 끝나서 pdfView 에 행렬이 잡히면 다시 그린다
+        if (imageView === binding.pdfView) {
+            binding.pdfView.post { refreshScoreOverlay() }
+        } else {
+            binding.scoreOverlay.clear()
+        }
     }
     
     /**

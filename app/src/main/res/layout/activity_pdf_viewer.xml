@@ -28,6 +28,13 @@
         android:contentDescription="@string/app_name"
         android:visibility="gone" />
 
+    <!-- 악보 분석 확인용 마디 박스 (PDF 표시 옵션에서 켬). pdfView 와 같은 위치·크기여야 한다 -->
+    <com.mrgq.pdfviewer.score.ScoreOverlayView
+        android:id="@+id/scoreOverlay"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:visibility="gone" />
+
     <TextView
         android:id="@+id/pageInfo"
         android:layout_width="wrap_content"

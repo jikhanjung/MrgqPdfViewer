@@ -4,6 +4,8 @@ import android.content.Context
 import com.mrgq.pdfviewer.database.MusicDatabase
 import com.mrgq.pdfviewer.database.entity.DisplayMode
 import com.mrgq.pdfviewer.database.entity.PdfFile
+import com.mrgq.pdfviewer.database.entity.ScoreMeasure
+import com.mrgq.pdfviewer.score.ScoreLayoutStore
 import com.mrgq.pdfviewer.database.entity.UserPreference
 import kotlinx.coroutines.flow.Flow
 
@@ -26,6 +28,10 @@ class MusicRepository(context: Context) {
     
     /** 파일과 레코드를 맞춘다 (처음 보거나 바뀐 파일만 분석). 기존 레코드 갱신에 insert 를 쓰지 말 것 — PdfFileSync 참고. */
     suspend fun syncPdfFile(file: java.io.File): PdfFile? = PdfFileSync.sync(pdfFileDao, file)
+
+    /** 악보 마디 레이아웃 (파일마다 처음 한 번 분석해 캐시). 레코드와 파일이 어긋나면 null — ScoreLayoutStore 참고. */
+    suspend fun getOrAnalyzeScoreMeasures(pdfFileId: String, file: java.io.File): List<ScoreMeasure>? =
+        ScoreLayoutStore.getOrAnalyze(database, pdfFileId, file)
 
     suspend fun insertPdfFile(pdfFile: PdfFile) = pdfFileDao.insertPdfFile(pdfFile)
     

@@ -80,6 +80,9 @@ MrgqPdfViewer 개발 로그 모음. 구현 기록은 `YYYYMMDD_NNN_` 형식(NNN 
 ## 📄 PDF 문서 정보 (2026-09)
 - [`045`](20260913_045_pdf_document_info.md) — PdfBox-Android 로 제목·작성자를 읽어 DB(v5)에 캐시하고 목록 카드에 표시. **insert(REPLACE) 갱신이 표시 설정을 지우는 함정**을 테스트로 고정, APK 8.8MB → 4.6MB(BouncyCastle PQC 제외)
 
+## 🎼 악보 구조 분석 (2026-09)
+- [`046`](20260913_046_score_layout_in_app.md) — `segment_score.py` 를 Kotlin(PdfBox)으로 옮겨 **파이썬 골든(26 시스템/81 마디)과 일치**, DB v6 캐시, 뷰어 **마디 박스 오버레이**(두 페이지 모드 화면 정합 확인). 변이 검사로 기둥 제외 규칙은 골든이 못 잡음을 발견. MusicXML·메트로놈 다음 단계 메모
+
 ## 📚 메타
 - [`039`](20260619_039_project_timeline.md) — 커밋 히스토리 기반 전체 개발 연대기
 

@@ -9,13 +9,15 @@ import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 import com.mrgq.pdfviewer.database.converter.Converters
 import com.mrgq.pdfviewer.database.dao.PdfFileDao
+import com.mrgq.pdfviewer.database.dao.ScoreMeasureDao
 import com.mrgq.pdfviewer.database.dao.UserPreferenceDao
 import com.mrgq.pdfviewer.database.entity.PdfFile
+import com.mrgq.pdfviewer.database.entity.ScoreMeasure
 import com.mrgq.pdfviewer.database.entity.UserPreference
 
 @Database(
-    entities = [PdfFile::class, UserPreference::class],
-    version = 5,
+    entities = [PdfFile::class, UserPreference::class, ScoreMeasure::class],
+    version = 6,
     exportSchema = true   // app/schemas 로 내보낸다 — 마이그레이션 테스트·드리프트 감지의 전제
 )
 @TypeConverters(Converters::class)
@@ -23,6 +25,7 @@ abstract class MusicDatabase : RoomDatabase() {
     
     abstract fun pdfFileDao(): PdfFileDao
     abstract fun userPreferenceDao(): UserPreferenceDao
+    abstract fun scoreMeasureDao(): ScoreMeasureDao
     
     companion object {
         @Volatile
@@ -110,8 +113,24 @@ abstract class MusicDatabase : RoomDatabase() {
             }
         }
 
+        // Migration from version 5 to 6 (악보 분석: score_measures 테이블 + pdf_files.scoreAnalyzedAt)
+        // 새 테이블과 nullable 컬럼만 더하므로 기존 데이터는 그대로다. 마디는 뷰어에서 처음 필요할 때 분석한다.
+        private val MIGRATION_5_6 = object : Migration(5, 6) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL("ALTER TABLE pdf_files ADD COLUMN scoreAnalyzedAt INTEGER")
+                database.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `score_measures` (`pdfFileId` TEXT NOT NULL, " +
+                        "`measureNumber` INTEGER NOT NULL, `pageIndex` INTEGER NOT NULL, `systemIndex` INTEGER NOT NULL, " +
+                        "`leftPt` REAL NOT NULL, `topPt` REAL NOT NULL, `rightPt` REAL NOT NULL, `bottomPt` REAL NOT NULL, " +
+                        "`pageWidthPt` REAL NOT NULL, `pageHeightPt` REAL NOT NULL, " +
+                        "PRIMARY KEY(`pdfFileId`, `measureNumber`), FOREIGN KEY(`pdfFileId`) REFERENCES `pdf_files`(`id`) " +
+                        "ON UPDATE NO ACTION ON DELETE CASCADE )"
+                )
+            }
+        }
+
         /** 앱과 마이그레이션 테스트가 같은 목록을 쓴다 — 등록 누락을 테스트가 잡도록. */
-        internal val ALL_MIGRATIONS = arrayOf(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
+        internal val ALL_MIGRATIONS = arrayOf(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
 
         fun getDatabase(context: Context): MusicDatabase {
             return INSTANCE ?: synchronized(this) {

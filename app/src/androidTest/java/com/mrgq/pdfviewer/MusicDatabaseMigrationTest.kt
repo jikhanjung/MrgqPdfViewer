@@ -92,6 +92,30 @@ class MusicDatabaseMigrationTest {
     }
 
     @Test
+    fun v5_에서_v6_는_마디_테이블을_더하고_기존_데이터를_보존한다() {
+        helper.createDatabase(TEST_DB, 5).apply {
+            execSQL(INSERT_FILE)
+            execSQL(INSERT_V3_PREF)
+            close()
+        }
+
+        val db = helper.runMigrationsAndValidate(TEST_DB, 6, true, *MusicDatabase.ALL_MIGRATIONS)
+
+        db.query("SELECT scoreAnalyzedAt FROM pdf_files WHERE id = 'file-1'").use { c ->
+            assertEquals(1, c.count)
+            c.moveToFirst()
+            assertTrue("분석 전 = null → 뷰어에서 처음 필요할 때 분석", c.isNull(0))
+        }
+        db.query("SELECT COUNT(*) FROM score_measures").use { c ->
+            c.moveToFirst()
+            assertEquals(0, c.getInt(0))
+        }
+        db.query("SELECT displayMode FROM user_preferences WHERE pdfFileId = 'file-1'").use { c ->
+            assertEquals("v5→v6 에서 파일별 표시 설정이 사라졌다", 1, c.count)
+        }
+    }
+
+    @Test
     fun v2_to_v3_중앙여백_픽셀이_비율로_변환된다() {
         val db = createDbAt(2, V2_USER_PREFERENCES) {
             it.execSQL(INSERT_FILE)
@@ -207,7 +231,7 @@ class MusicDatabaseMigrationTest {
 
     private companion object {
         const val TEST_DB = "migration-test"
-        const val LATEST_VERSION = 5
+        const val LATEST_VERSION = 6
 
         // pdf_files 는 v1 부터 바뀐 적이 없다
         const val PDF_FILES = "CREATE TABLE IF NOT EXISTS `pdf_files` (`id` TEXT NOT NULL, " +
