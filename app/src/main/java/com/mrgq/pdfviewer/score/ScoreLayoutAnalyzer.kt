@@ -5,10 +5,10 @@ import com.tom_roush.pdfbox.pdmodel.PDDocument
 import java.io.File
 
 /**
- * PDF 한 개의 악보 구조를 분석한다: PdfBox 로 경로를 모으고([PdfPathCollector])
- * 페이지마다 [StaffSystemDetector] 로 시스템·마디를 찾는다.
+ * PDF 한 개의 악보 구조를 분석한다: 페이지마다 콘텐츠 스트림을 [PathContentInterpreter] 로 읽어 경로 박스를
+ * 모으고, [StaffSystemDetector] 로 시스템·마디를 찾는다.
  *
- * PdfBox 는 사용 전 `PDFBoxResourceLoader.init` 이 필요하다 (PdfViewerApplication).
+ * PdfBox 는 문서 열기와 스트림 압축 해제에만 쓴다. 사용 전 `PDFBoxResourceLoader.init` 이 필요하다 (PdfViewerApplication).
  */
 object ScoreLayoutAnalyzer {
 
@@ -28,9 +28,10 @@ object ScoreLayoutAnalyzer {
                     Log.w(TAG, "${file.name} p${index + 1}: 회전(${page.rotation}°) 페이지는 분석하지 않음")
                     emptyList()
                 } else {
-                    val collector = PdfPathCollector(page)
-                    collector.processPage(page)
-                    StaffSystemDetector.detect(collector.boxes, crop.height)
+                    val boxes = ArrayList<PathBox>()
+                    PathContentInterpreter(crop.lowerLeftX, crop.lowerLeftY) { boxes += it }
+                        .run(PdfBoxContent.pageContent(page), PdfBoxXObjects(page.resources))
+                    StaffSystemDetector.detect(boxes, crop.height)
                 }
                 PageLayout(index, crop.width, crop.height, systems)
             }

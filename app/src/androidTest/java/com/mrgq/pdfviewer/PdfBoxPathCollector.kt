@@ -1,7 +1,8 @@
-package com.mrgq.pdfviewer.score
+package com.mrgq.pdfviewer
 
 import android.graphics.Path
 import android.graphics.PointF
+import com.mrgq.pdfviewer.score.PathBox
 import com.tom_roush.pdfbox.contentstream.PDFGraphicsStreamEngine
 import com.tom_roush.pdfbox.cos.COSName
 import com.tom_roush.pdfbox.pdmodel.PDPage
@@ -10,15 +11,12 @@ import kotlin.math.max
 import kotlin.math.min
 
 /**
- * 페이지 콘텐츠 스트림을 실행하며, 칠하거나 끝낸 경로마다 바운딩 박스를 모은다.
+ * **기준 구현** — v046 에서 실제로 쓰던 PdfBox 엔진 기반 경로 수집기 그대로다 (골든 데이터와 일치가 확인된 코드).
  *
- * PdfBox 가 CTM(q/Q/cm)을 적용한 좌표로 콜백하므로, 파이썬 버전(`segment_score.py`)이 직접 하던
- * 행렬 스택 추적이 필요 없다. 파이썬과 같게:
- *  - 곡선은 끝점만 박스에 넣는다
- *  - 칠(f·S·B…)뿐 아니라 `n`(클립 뒤 경로 끝내기)도 박스로 남긴다
- * 파이썬과 다르게 `re` 사각형과 Form XObject 안의 경로도 본다 (파이썬 파서는 둘 다 건너뛰었다).
+ * 앱은 할당 폭주(900MB) 때문에 [com.mrgq.pdfviewer.score.PathContentInterpreter] 로 바꿨고(#049),
+ * 이 클래스는 두 구현이 같은 박스를 내는지 대조하는 데만 쓴다 (PathInterpreterEquivalenceTest).
  */
-internal class PdfPathCollector(page: PDPage) : PDFGraphicsStreamEngine(page) {
+class PdfBoxPathCollector(page: PDPage) : PDFGraphicsStreamEngine(page) {
 
     val boxes = ArrayList<PathBox>()
 
@@ -84,7 +82,6 @@ internal class PdfPathCollector(page: PDPage) : PDFGraphicsStreamEngine(page) {
 
     override fun fillAndStrokePath(windingRule: Path.FillType) = finishPath()
 
-    // W 뒤에는 n(endPath)이 오고 거기서 박스를 남긴다
     override fun clip(windingRule: Path.FillType) {}
 
     override fun drawImage(pdImage: PDImage) {}

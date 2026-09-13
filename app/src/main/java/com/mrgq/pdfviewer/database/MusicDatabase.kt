@@ -17,7 +17,7 @@ import com.mrgq.pdfviewer.database.entity.UserPreference
 
 @Database(
     entities = [PdfFile::class, UserPreference::class, ScoreMeasure::class],
-    version = 7,
+    version = 8,
     exportSchema = true   // app/schemas 로 내보낸다 — 마이그레이션 테스트·드리프트 감지의 전제
 )
 @TypeConverters(Converters::class)
@@ -138,8 +138,20 @@ abstract class MusicDatabase : RoomDatabase() {
             }
         }
 
+        // Migration from version 7 to 8 (스키마 변경 없음 — 문서 정보 다시 읽기)
+        // v7 까지는 BOM 없는 UTF-8 로 쓰인 작성자·제목이 깨진 채 저장됐다 (실기기 몰다우.pdf "ì€—ìŸ‹ìŽ—", #049).
+        // docInfoReadAt 을 비우면 다음 목록 로드에서 PdfFileSync 가 고친 리더로 한 번씩 다시 읽는다 (update 라 표시 설정 보존).
+        // 시각 비교 대신 마이그레이션을 쓴 이유: 기기 시계에 기대지 않고 정확히 한 번만 일어난다.
+        private val MIGRATION_7_8 = object : Migration(7, 8) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL("UPDATE pdf_files SET docInfoReadAt = NULL")
+            }
+        }
+
         /** 앱과 마이그레이션 테스트가 같은 목록을 쓴다 — 등록 누락을 테스트가 잡도록. */
-        internal val ALL_MIGRATIONS = arrayOf(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7)
+        internal val ALL_MIGRATIONS = arrayOf(
+            MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8
+        )
 
         fun getDatabase(context: Context): MusicDatabase {
             return INSTANCE ?: synchronized(this) {

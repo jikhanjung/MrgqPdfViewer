@@ -139,6 +139,35 @@ class MusicDatabaseMigrationTest {
     }
 
     @Test
+    fun v7_에서_v8_은_문서정보를_다시_읽게_하고_나머지는_보존한다() {
+        helper.createDatabase(TEST_DB, 7).apply {
+            execSQL(INSERT_FILE)
+            execSQL("UPDATE pdf_files SET author = 'ì€—ìŸ‹ìŽ—', docInfoReadAt = 1234, scoreAnalyzedAt = 5678 WHERE id = 'file-1'")
+            // v7 의 user_preferences 는 메트로놈 컬럼까지 10개라 v3 용 INSERT 를 쓸 수 없다
+            execSQL(
+                "INSERT INTO user_preferences (pdfFileId, displayMode, lastPageNumber, bookmarkedPages, " +
+                    "topClippingPercent, bottomClippingPercent, centerPadding, updatedAt, metronomeBpm) " +
+                    "VALUES ('file-1', 'DOUBLE', 7, '', 0.05, 0.03, 0.1, 1000, 96)"
+            )
+            close()
+        }
+
+        val db = helper.runMigrationsAndValidate(TEST_DB, 8, true, *MusicDatabase.ALL_MIGRATIONS)
+
+        db.query("SELECT docInfoReadAt, scoreAnalyzedAt FROM pdf_files WHERE id = 'file-1'").use { c ->
+            c.moveToFirst()
+            assertTrue("깨진 작성자를 다시 읽도록 비워야 한다", c.isNull(0))
+            assertEquals("마디 분석 표시는 건드리지 않는다", 5678L, c.getLong(1))
+        }
+        db.query("SELECT displayMode, metronomeBpm FROM user_preferences WHERE pdfFileId = 'file-1'").use { c ->
+            assertEquals(1, c.count)
+            c.moveToFirst()
+            assertEquals("DOUBLE", c.getString(0))
+            assertEquals(96, c.getInt(1))
+        }
+    }
+
+    @Test
     fun v2_to_v3_중앙여백_픽셀이_비율로_변환된다() {
         val db = createDbAt(2, V2_USER_PREFERENCES) {
             it.execSQL(INSERT_FILE)
@@ -254,7 +283,7 @@ class MusicDatabaseMigrationTest {
 
     private companion object {
         const val TEST_DB = "migration-test"
-        const val LATEST_VERSION = 7
+        const val LATEST_VERSION = 8
 
         // pdf_files 는 v1 부터 바뀐 적이 없다
         const val PDF_FILES = "CREATE TABLE IF NOT EXISTS `pdf_files` (`id` TEXT NOT NULL, " +

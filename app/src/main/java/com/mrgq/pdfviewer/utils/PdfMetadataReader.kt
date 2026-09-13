@@ -1,6 +1,9 @@
 package com.mrgq.pdfviewer.utils
 
 import android.util.Log
+import com.tom_roush.pdfbox.cos.COSDictionary
+import com.tom_roush.pdfbox.cos.COSName
+import com.tom_roush.pdfbox.cos.COSString
 import com.tom_roush.pdfbox.pdmodel.PDDocument
 import com.tom_roush.pdfbox.pdmodel.encryption.InvalidPasswordException
 import java.io.File
@@ -26,8 +29,8 @@ object PdfMetadataReader {
         PDDocument.load(file).use { doc ->
             val info = doc.documentInformation
             DocumentInfo(
-                title = PdfDocumentInfo.normalize(info.title),
-                author = PdfDocumentInfo.normalize(info.author),
+                title = PdfDocumentInfo.normalize(textValue(info.cosObject, COSName.TITLE, info.title)),
+                author = PdfDocumentInfo.normalize(textValue(info.cosObject, COSName.AUTHOR, info.author)),
             )
         }
     } catch (e: InvalidPasswordException) {
@@ -36,5 +39,14 @@ object PdfMetadataReader {
     } catch (e: Exception) {
         Log.w(TAG, "문서 정보 읽기 실패: ${file.name}", e)
         null
+    }
+
+    /**
+     * 원본 바이트가 BOM 없는 UTF-8 이면 UTF-8 로, 아니면 PdfBox 가 해석한 값 그대로.
+     * (규격 위반이지만 Microsoft Print to PDF 가 한글을 이렇게 쓴다 — [PdfDocumentInfo.decodeMisencodedUtf8])
+     */
+    private fun textValue(dict: COSDictionary, key: COSName, decoded: String?): String? {
+        val raw = (dict.getDictionaryObject(key) as? COSString)?.bytes ?: return decoded
+        return PdfDocumentInfo.decodeMisencodedUtf8(raw) ?: decoded
     }
 }

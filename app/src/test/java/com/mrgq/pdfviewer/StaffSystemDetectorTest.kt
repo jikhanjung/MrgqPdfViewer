@@ -71,6 +71,17 @@ class StaffSystemDetectorTest {
     }
 
     @Test
+    fun 끝세로줄은_가짜_마디를_만들지_않는다() {
+        // 가는 선(495) + 굵은 선(497~500, 폭 3pt 라 마디선 후보가 아님). 오선 끝은 500.
+        // 예전 규칙(4pt 초과면 오선 끝 추가)은 495~500 을 마디로 잡았다 — 실기기 몰다우.pdf 의 가짜 마디 "64"
+        val bottoms = systemStaves(420f)
+        val thick = bottoms.map { PathBox(497f, it, 500f, it + 20f, curved = false) }
+        val s = StaffSystemDetector.detect(systemWithBars(420f, listOf(200f, 350f, 495f)) + thick, pageHeight).single()
+        assertEquals(listOf(50f, 200f, 350f, 495f), s.barlines)
+        assertEquals(3, s.measureCount)
+    }
+
+    @Test
     fun 음표_머리가_붙은_세로선은_기둥이다() {
         val bottoms = systemStaves(420f)
         val stems = bottoms.flatMap { b -> listOf(bar(280f, b), head(280f, b)) }

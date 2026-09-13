@@ -92,6 +92,16 @@ class PdfMetadataReaderTest {
     }
 
     @Test
+    fun BOM_없는_UTF8_작성자를_복구한다() {
+        // Microsoft Print to PDF 가 쓴 그대로: 리터럴 문자열에 UTF-8 바이트 (8진 이스케이프로 ASCII 안에 담는다)
+        val utf8 = "전예완".toByteArray(Charsets.UTF_8).joinToString("") { String.format(Locale.ROOT, "\\%03o", it.toInt() and 0xFF) }
+        val file = rawPdf("utf8-author.pdf", "<< /Title (Die Moldau) /Author ($utf8) >>")
+        val info = PdfMetadataReader.read(file)
+        assertEquals("전예완", info?.author)
+        assertEquals("Die Moldau", info?.title)
+    }
+
+    @Test
     fun PDF가_아니면_null() {
         val file = File(dir, "not-a-pdf.pdf").apply { writeText("<html>업로드 실수</html>") }
         assertNull(PdfMetadataReader.read(file))

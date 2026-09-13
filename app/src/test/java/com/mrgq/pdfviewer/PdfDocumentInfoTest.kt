@@ -74,4 +74,26 @@ class PdfDocumentInfoTest {
         assertTrue("웹 업로드로 덮어씀", PdfDocumentInfo.needsRescan(5000, analyzedMtime = 1000, fileMtime = 9000))
         assertTrue("원본 mtime 을 보존하는 복사", PdfDocumentInfo.needsRescan(5000, analyzedMtime = 1000, fileMtime = 500))
     }
+
+    private fun bytes(vararg values: Int) = ByteArray(values.size) { values[it].toByte() }
+
+    @Test
+    fun BOM_없는_UTF8_은_UTF8_로_읽는다() {
+        // 실기기 몰다우.pdf 의 /Author 원본 바이트
+        assertEquals("전예완", PdfDocumentInfo.decodeMisencodedUtf8(bytes(0xEC, 0xA0, 0x84, 0xEC, 0x98, 0x88, 0xEC, 0x99, 0x84)))
+    }
+
+    @Test
+    fun UTF8_BOM_이_있으면_떼고_읽는다() {
+        assertEquals("전예완", PdfDocumentInfo.decodeMisencodedUtf8(bytes(0xEF, 0xBB, 0xBF, 0xEC, 0xA0, 0x84, 0xEC, 0x98, 0x88, 0xEC, 0x99, 0x84)))
+    }
+
+    @Test
+    fun 규격대로인_문자열은_건드리지_않는다() {
+        assertNull("ASCII", PdfDocumentInfo.decodeMisencodedUtf8("Die Moldau".toByteArray()))
+        assertNull("UTF-16BE BOM", PdfDocumentInfo.decodeMisencodedUtf8(bytes(0xFE, 0xFF, 0xC8, 0x04)))
+        assertNull("PDFDocEncoding 라틴 문자 Café", PdfDocumentInfo.decodeMisencodedUtf8(bytes(0x43, 0x61, 0x66, 0xE9)))
+        assertNull("잘린 UTF-8", PdfDocumentInfo.decodeMisencodedUtf8(bytes(0xEC, 0xA0)))
+        assertNull("빈 값", PdfDocumentInfo.decodeMisencodedUtf8(ByteArray(0)))
+    }
 }

@@ -64,7 +64,6 @@ object StaffSystemDetector {
     private const val NOTEHEAD_TOL = 4.5f
     private const val BAR_CLUSTER_TOL = 3f
     private const val MIN_MEASURE_WIDTH = 15f
-    private const val RIGHT_EDGE_TOL = 4f
     private const val LEFT_EDGE_TOL = 4f
 
     private data class StaffLine(val cy: Float, val x0: Float, val x1: Float)
@@ -169,8 +168,10 @@ object StaffSystemDetector {
             }
             bars = merged
         }
-        // 끝 마디선이 안 잡혔으면 오선 오른쪽 끝을 경계로 쓴다
-        if (bars.isNotEmpty() && abs(bars.last() - xRight) > RIGHT_EDGE_TOL) bars += round1(xRight)
+        // 끝 마디선이 안 잡혔으면 오선 오른쪽 끝을 경계로 쓴다 — 단, 남은 폭이 마디 하나가 될 만큼일 때만.
+        // 끝세로줄(가는 선 + 굵은 선)의 굵은 선은 폭이 2pt 를 넘어 마디선 후보가 아니라서, 가는 선과 오선 끝
+        // 사이 약 5pt 가 가짜 마디로 잡혔다 (실기기 몰다우.pdf 마지막 마디 "64", #049). 파이썬 원본은 4pt 기준이었다.
+        if (bars.isNotEmpty() && xRight - bars.last() >= MIN_MEASURE_WIDTH) bars += round1(xRight)
 
         val bounds = listOf(round1(xLeft)) + bars.filter { it > xLeft + LEFT_EDGE_TOL }
 
