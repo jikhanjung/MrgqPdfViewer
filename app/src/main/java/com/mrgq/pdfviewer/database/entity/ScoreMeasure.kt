@@ -33,4 +33,7 @@ data class ScoreMeasure(
     val bottomPt: Float,
     val pageWidthPt: Float,   // 페이지 CropBox 크기 — 오버레이 좌표 변환에 쓴다
     val pageHeightPt: Float,
+    // 이 마디에 적용되는 박자표 (v9). 악보에서 못 읽었거나 첫 박자표 이전이면 null — 메트로놈 마디 연동이 쓴다
+    val timeSigNumerator: Int? = null,
+    val timeSigDenominator: Int? = null,
 )

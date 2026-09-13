@@ -130,6 +130,21 @@ class ScoreLayoutAnalyzerTest {
     }
 
     @Test
+    fun 박자표_6_8_을_읽어_모든_마디에_적용한다() {
+        val marks = layout.pages.flatMap { page -> page.timeSignatures.map { page.pageIndex to it } }
+        assertEquals("박자표는 1쪽 첫 시스템에 하나", 1, marks.size)
+        val (pageIndex, mark) = marks.single()
+        assertEquals(0, pageIndex)
+        assertEquals(0, mark.systemIndex)
+        assertEquals(6, mark.numerator)
+        assertEquals(8, mark.denominator)
+        assertTrue("박자표는 첫 마디선(212pt) 왼쪽: ${mark.x}", mark.x < 212f)
+
+        val measures = layout.toMeasures("moldau")
+        assertTrue("81 마디 전부 6/8", measures.all { it.timeSigNumerator == 6 && it.timeSigDenominator == 8 })
+    }
+
+    @Test
     fun 오버레이가_쓰는_페이지_크기가_PdfRenderer_와_같다() {
         ParcelFileDescriptor.open(pdf, ParcelFileDescriptor.MODE_READ_ONLY).use { fd ->
             PdfRenderer(fd).use { renderer ->

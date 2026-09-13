@@ -168,6 +168,30 @@ class MusicDatabaseMigrationTest {
     }
 
     @Test
+    fun v8_에서_v9_는_박자_컬럼을_더하고_마디를_다시_분석하게_한다() {
+        helper.createDatabase(TEST_DB, 8).apply {
+            execSQL(INSERT_FILE)
+            execSQL("UPDATE pdf_files SET scoreAnalyzedAt = 5678 WHERE id = 'file-1'")
+            execSQL("INSERT INTO score_measures VALUES ('file-1', 1, 0, 0, 75.1, 132.8, 212.1, 410.9, 595.3, 841.9)")
+            close()
+        }
+
+        val db = helper.runMigrationsAndValidate(TEST_DB, 9, true, *MusicDatabase.ALL_MIGRATIONS)
+
+        db.query("SELECT scoreAnalyzedAt FROM pdf_files WHERE id = 'file-1'").use { c ->
+            c.moveToFirst()
+            assertTrue("박자를 채우려면 다시 분석해야 한다", c.isNull(0))
+        }
+        db.query("SELECT timeSigNumerator, timeSigDenominator, rightPt FROM score_measures WHERE pdfFileId = 'file-1'").use { c ->
+            assertEquals("기존 마디 행은 다시 분석될 때 교체된다 — 마이그레이션은 지우지 않는다", 1, c.count)
+            c.moveToFirst()
+            assertTrue(c.isNull(0))
+            assertTrue(c.isNull(1))
+            assertEquals(212.1, c.getDouble(2), 1e-3)
+        }
+    }
+
+    @Test
     fun v2_to_v3_중앙여백_픽셀이_비율로_변환된다() {
         val db = createDbAt(2, V2_USER_PREFERENCES) {
             it.execSQL(INSERT_FILE)
@@ -283,7 +307,7 @@ class MusicDatabaseMigrationTest {
 
     private companion object {
         const val TEST_DB = "migration-test"
-        const val LATEST_VERSION = 8
+        const val LATEST_VERSION = 9
 
         // pdf_files 는 v1 부터 바뀐 적이 없다
         const val PDF_FILES = "CREATE TABLE IF NOT EXISTS `pdf_files` (`id` TEXT NOT NULL, " +

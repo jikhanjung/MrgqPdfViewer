@@ -2,6 +2,7 @@ package com.mrgq.pdfviewer
 
 import com.mrgq.pdfviewer.score.PathBox
 import com.mrgq.pdfviewer.score.PathContentInterpreter
+import com.mrgq.pdfviewer.score.TextRun
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -166,5 +167,69 @@ class PathContentInterpreterTest {
         var asked: String? = null
         boxes("/Fm#201 Do", resolver = { name -> asked = name; null })
         assertEquals("Fm 1", asked)
+    }
+
+    // --- 텍스트 (박자표 읽기용) ---
+
+    /** 글꼴 코드를 ISO-8859-1 로 해독하는 가짜 리소스 */
+    private val latinFonts = object : PathContentInterpreter.XObjectResolver {
+        override fun form(name: String): PathContentInterpreter.FormXObject? = null
+        override fun decodeText(fontName: String, bytes: ByteArray) = String(bytes, Charsets.ISO_8859_1)
+    }
+
+    private fun texts(content: String, resolver: PathContentInterpreter.XObjectResolver? = latinFonts): List<TextRun> {
+        val out = ArrayList<TextRun>()
+        PathContentInterpreter(textSink = { out += it }) { }.run(content.toByteArray(Charsets.ISO_8859_1), resolver)
+        return out
+    }
+
+    @Test
+    fun 텍스트_행렬의_위치와_글꼴_크기() {
+        assertEquals(listOf(TextRun("6", 100f, 200f, 12f)), texts("BT /F1 12 Tf 1 0 0 1 100 200 Tm (6) Tj ET"))
+    }
+
+    @Test
+    fun Td_는_누적하고_TD_는_행간을_정한다() {
+        val result = texts("BT /F1 10 Tf 10 20 Td (a) Tj 5 -3 TD (b) Tj T* (c) Tj ET")
+        assertEquals(listOf(TextRun("a", 10f, 20f, 10f), TextRun("b", 15f, 17f, 10f), TextRun("c", 15f, 14f, 10f)), result)
+    }
+
+    @Test
+    fun 작은따옴표는_다음_줄에서_보여준다() {
+        val result = texts("BT /F1 10 Tf 12 TL 0 100 Td (a) Tj (b) ' ET")
+        assertEquals(listOf(TextRun("a", 0f, 100f, 10f), TextRun("b", 0f, 88f, 10f)), result)
+    }
+
+    @Test
+    fun TJ_배열의_문자열을_잇는다() {
+        assertEquals(listOf("12"), texts("BT /F1 10 Tf 0 0 Td [(1) -250 (2)] TJ ET").map { it.text })
+    }
+
+    @Test
+    fun 헥사_문자열과_리터럴_이스케이프를_푼다() {
+        assertEquals(listOf("68", "1(x)"), texts("BT /F1 10 Tf <3638> Tj (\\061\\(x\\)) Tj ET").map { it.text })
+    }
+
+    @Test
+    fun 뒤집힌_CTM_에서도_위치와_크기가_맞다() {
+        // Microsoft Print to PDF 형태: 페이지를 뒤집고 텍스트 행렬도 뒤집는다
+        val result = texts("1 0 0 -1 0 842 cm BT /F1 10 Tf 1 0 0 -1 50 100 Tm (8) Tj ET")
+        assertEquals(listOf(TextRun("8", 50f, 742f, 10f)), result)
+    }
+
+    @Test
+    fun 텍스트를_모아도_경로와_피연산자는_그대로다() {
+        val boxes = ArrayList<PathBox>()
+        val runs = ArrayList<TextRun>()
+        PathContentInterpreter(textSink = { runs += it }) { boxes += it }
+            .run("BT /F1 10 Tf (1 2 m) Tj ET 1 1 m 2 2 l S".toByteArray(), latinFonts)
+        assertEquals(listOf(PathBox(1f, 1f, 2f, 2f, false)), boxes)
+        assertEquals(listOf("1 2 m"), runs.map { it.text })
+    }
+
+    @Test
+    fun 글꼴을_모르면_텍스트를_넘기지_않는다() {
+        assertTrue(texts("BT /F1 10 Tf (6) Tj ET", resolver = { null }).isEmpty())
+        assertTrue("Tf 없이 보여 주면 무시", texts("BT (6) Tj ET").isEmpty())
     }
 }

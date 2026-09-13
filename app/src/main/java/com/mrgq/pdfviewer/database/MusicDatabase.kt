@@ -17,7 +17,7 @@ import com.mrgq.pdfviewer.database.entity.UserPreference
 
 @Database(
     entities = [PdfFile::class, UserPreference::class, ScoreMeasure::class],
-    version = 8,
+    version = 9,
     exportSchema = true   // app/schemas 로 내보낸다 — 마이그레이션 테스트·드리프트 감지의 전제
 )
 @TypeConverters(Converters::class)
@@ -148,9 +148,21 @@ abstract class MusicDatabase : RoomDatabase() {
             }
         }
 
+        // Migration from version 8 to 9 (박자표: score_measures.timeSigNumerator/Denominator)
+        // 이미 분석된 파일은 박자가 비어 있으므로 scoreAnalyzedAt 을 비워 다음에 필요할 때 다시 분석하게 한다
+        // (ScoreLayoutStore 가 이전 마디를 지우고 새로 넣는다).
+        private val MIGRATION_8_9 = object : Migration(8, 9) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL("ALTER TABLE score_measures ADD COLUMN timeSigNumerator INTEGER")
+                database.execSQL("ALTER TABLE score_measures ADD COLUMN timeSigDenominator INTEGER")
+                database.execSQL("UPDATE pdf_files SET scoreAnalyzedAt = NULL")
+            }
+        }
+
         /** 앱과 마이그레이션 테스트가 같은 목록을 쓴다 — 등록 누락을 테스트가 잡도록. */
         internal val ALL_MIGRATIONS = arrayOf(
-            MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8
+            MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8,
+            MIGRATION_8_9,
         )
 
         fun getDatabase(context: Context): MusicDatabase {
