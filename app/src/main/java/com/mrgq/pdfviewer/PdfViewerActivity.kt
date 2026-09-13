@@ -40,6 +40,7 @@ import com.mrgq.pdfviewer.metronome.MetronomeClock
 import com.mrgq.pdfviewer.metronome.MetronomeEngine
 import com.mrgq.pdfviewer.metronome.Beat
 import com.mrgq.pdfviewer.metronome.ScoreFollower
+import com.mrgq.pdfviewer.metronome.TimeSignature
 import com.mrgq.pdfviewer.score.ScoreOverlayView
 import android.os.SystemClock
 import androidx.lifecycle.lifecycleScope
@@ -127,7 +128,8 @@ class PdfViewerActivity : AppCompatActivity() {
             val beat = metronome.currentBeat()
             if (followState == FollowState.PLAYING) updateFollow(beat)
             if (!metronome.isRunning) return // 악보 끝에서 멈췄다
-            binding.metronomeBeat.update(beat, metronome.bpm, metronome.beatsPerBar)
+            // 박자는 들리는 박의 것 — 바꾼 박자·악보의 박자 바뀜이 소리와 같은 박에서 보인다
+            binding.metronomeBeat.update(beat, metronome.bpm, beat?.timeSignature ?: metronome.timeSignature)
             binding.metronomeBeat.postOnAnimation(this)
         }
     }
@@ -1903,14 +1905,49 @@ class PdfViewerActivity : AppCompatActivity() {
                 null
             }
             val bpm = if (metronome.isRunning) metronome.bpm else saved?.metronomeBpm ?: MetronomeClock.DEFAULT_BPM
-            val beats = if (metronome.isRunning) metronome.beatsPerBar else saved?.metronomeBeatsPerBar ?: MetronomeClock.DEFAULT_BEATS
-            buildMetronomeDialog(fileId, bpm, beats)
+            // 박자: 실행 중이면 지금 박자, 이 파일에서 고른 적이 있으면 그것, 아니면 악보 박자표로 채운다 (#051).
+            // 분모 없이 박 수만 저장된 행(v0.2.0)도 "고른 적 없음"으로 본다 — 그때는 분모를 고를 수 없었다
+            val meter = when {
+                metronome.isRunning -> metronome.timeSignature
+                saved?.metronomeBeatUnit != null -> TimeSignature.of(saved.metronomeBeatsPerBar, saved.metronomeBeatUnit)
+                else -> scoreTimeSignature(fileId) ?: TimeSignature.of(saved?.metronomeBeatsPerBar, null)
+            }
+            if (currentPdfFileId != fileId) return@launch
+            buildMetronomeDialog(fileId, bpm, meter)
         }
     }
 
-    private fun buildMetronomeDialog(fileId: String?, initialBpm: Int, initialBeats: Int) {
+    /**
+     * 악보에서 읽은 첫 박자표. 분석 전인 파일은 여기서 분석한다 — 시작하면 어차피 필요하고 결과는 캐시된다.
+     * 박자표를 못 읽었거나 악보 분석이 안 되는 파일이면 null.
+     */
+    private suspend fun scoreTimeSignature(fileId: String?): TimeSignature? {
+        if (fileId == null) return null
+        val measures = if (scoreMeasuresFileId == fileId) {
+            scoreMeasures
+        } else {
+            val file = File(pdfFilePath)
+            val analyzed = withContext(Dispatchers.IO) {
+                if (musicRepository.getPdfFileById(fileId)?.scoreAnalyzedAt == null) {
+                    withContext(Dispatchers.Main) {
+                        Toast.makeText(this@PdfViewerActivity, "악보 박자표 읽는 중…", Toast.LENGTH_SHORT).show()
+                    }
+                }
+                musicRepository.getOrAnalyzeScoreMeasures(fileId, file)
+            }
+            if (analyzed != null && currentPdfFileId == fileId) {
+                scoreMeasures = analyzed
+                scoreMeasuresFileId = fileId
+            }
+            analyzed
+        }
+        val first = ScoreFollower.startableMeasures(measures.orEmpty()).firstOrNull() ?: return null
+        return TimeSignature.of(first.timeSigNumerator, first.timeSigDenominator)
+    }
+
+    private fun buildMetronomeDialog(fileId: String?, initialBpm: Int, initialMeter: TimeSignature) {
         var bpm = initialBpm.coerceIn(MetronomeClock.MIN_BPM, MetronomeClock.MAX_BPM)
-        var beats = initialBeats.coerceIn(MetronomeClock.MIN_BEATS, MetronomeClock.MAX_BEATS)
+        var meter = initialMeter.coerced()
 
         fun android.widget.SeekBar.onProgress(block: (Int) -> Unit) {
             setOnSeekBarChangeListener(object : android.widget.SeekBar.OnSeekBarChangeListener {
@@ -1934,12 +1971,24 @@ class PdfViewerActivity : AppCompatActivity() {
             keyProgressIncrement = 1
             progress = bpm - MetronomeClock.MIN_BPM
         }
-        val beatsLabel = label()
-        val beatsSeek = android.widget.SeekBar(this).apply {
+        // 박자: 흔한 박자는 버튼 하나로, 그 밖의 박자는 분자 슬라이더 + 분모 버튼으로 직접 (#051)
+        fun buttonRow() = android.widget.LinearLayout(this).apply {
+            orientation = android.widget.LinearLayout.HORIZONTAL
+            gravity = android.view.Gravity.CENTER
+        }
+        val meterLabel = label()
+        val presetButtons = TimeSignature.COMMON.associateWith { android.widget.Button(this).apply { isAllCaps = false } }
+        val presetRows = TimeSignature.COMMON.chunked(5).map { row ->
+            buttonRow().apply { row.forEach { addView(presetButtons.getValue(it)) } }
+        }
+        val numeratorLabel = label()
+        val numeratorSeek = android.widget.SeekBar(this).apply {
             max = MetronomeClock.MAX_BEATS - MetronomeClock.MIN_BEATS
             keyProgressIncrement = 1
-            progress = beats - MetronomeClock.MIN_BEATS
+            progress = meter.numerator - MetronomeClock.MIN_BEATS
         }
+        val denominatorButtons = TimeSignature.DENOMINATORS.associateWith { android.widget.Button(this).apply { isAllCaps = false } }
+        val denominatorRow = buttonRow().apply { denominatorButtons.values.forEach { addView(it) } }
         val soundCheck = android.widget.CheckBox(this).apply {
             text = "클릭음"
             isChecked = preferences.getBoolean(PREF_METRONOME_SOUND, true)
@@ -1951,19 +2000,39 @@ class PdfViewerActivity : AppCompatActivity() {
         }
 
         fun render() {
-            bpmLabel.text = "템포: $bpm BPM"
-            beatsLabel.text = "박자: 마디당 ${beats}박 (첫 박 강조)"
+            bpmLabel.text = "템포: ${meter.beatNoteName} = $bpm BPM"
+            val accents = if (meter.isCompound) {
+                "1박 강 · ${(3 until meter.numerator step 3).joinToString("·") { "${it + 1}" }}박 중간"
+            } else {
+                "첫 박 강조"
+            }
+            meterLabel.text = "박자: $meter — ${meter.beatNoteName} ${meter.numerator}박, $accents"
+            numeratorLabel.text = "직접 고르기 — 마디당 박 수(위 숫자) ${meter.numerator}, 박 단위(아래 숫자):"
+            presetButtons.forEach { (ts, button) -> button.text = if (ts == meter) "✓ $ts" else "$ts" }
+            denominatorButtons.forEach { (d, button) -> button.text = if (d == meter.denominator) "✓ /$d" else "/$d" }
         }
         // 실행 중이면 바로 들린다 (다음 박부터)
         fun applyToEngine() {
             metronome.bpm = bpm
-            metronome.beatsPerBar = beats
+            metronome.timeSignature = meter
             metronome.soundEnabled = soundCheck.isChecked
             metronome.volume = volumeSeek.progress / 100f
         }
+        fun selectMeter(selected: TimeSignature) {
+            meter = selected.coerced()
+            numeratorSeek.progress = meter.numerator - MetronomeClock.MIN_BEATS // 리스너가 같은 값을 다시 넣는다
+            render()
+            applyToEngine()
+        }
 
         bpmSeek.onProgress { bpm = MetronomeClock.MIN_BPM + it; render(); applyToEngine() }
-        beatsSeek.onProgress { beats = MetronomeClock.MIN_BEATS + it; render(); applyToEngine() }
+        numeratorSeek.onProgress {
+            meter = TimeSignature(MetronomeClock.MIN_BEATS + it, meter.denominator)
+            render()
+            applyToEngine()
+        }
+        presetButtons.forEach { (ts, button) -> button.setOnClickListener { selectMeter(ts) } }
+        denominatorButtons.forEach { (d, button) -> button.setOnClickListener { selectMeter(TimeSignature(meter.numerator, d)) } }
         volumeSeek.onProgress { applyToEngine() }
         soundCheck.setOnCheckedChangeListener { _, _ -> applyToEngine() }
 
@@ -1982,16 +2051,18 @@ class PdfViewerActivity : AppCompatActivity() {
         }
 
         val hint = android.widget.TextView(this).apply {
-            text = "템포·박자는 이 파일에 저장됩니다. 실행 중에 바꾸면 다음 박부터 적용됩니다.\n" +
-                "악보에서 박자표를 읽을 수 있으면, 시작을 누른 뒤 악보에서 시작 마디를 고르고 한 마디 예비박 후 " +
-                "현재 마디를 표시하며 페이지를 넘깁니다. 이때 박자는 악보를 따르고, 박은 박자표 아래 숫자의 음표입니다(6/8 이면 8분음표)."
+            text = "템포·박자는 이 파일에 저장됩니다. 실행 중에 바꾸면 다음 박부터 적용됩니다. " +
+                "박은 박자표 아래 숫자의 음표이고 BPM 도 그 음표 기준입니다(6/8 이면 8분음표).\n" +
+                "악보에서 박자표를 읽을 수 있으면 처음엔 그 박자로 채워집니다. 시작을 누른 뒤 악보에서 시작 마디를 고르면 " +
+                "한 마디 예비박 후 현재 마디를 표시하며 페이지를 넘기고, 이때 마디 길이와 강박은 악보 박자표를 따릅니다."
             textSize = 12f
             setTextColor(android.graphics.Color.GRAY)
             setPadding(0, 20, 0, 0)
         }
 
         render()
-        listOf(bpmLabel, bpmSeek, steps, beatsLabel, beatsSeek, soundCheck, volumeLabel, volumeSeek, hint)
+        (listOf(bpmLabel, bpmSeek, steps, meterLabel) + presetRows +
+            listOf(numeratorLabel, numeratorSeek, denominatorRow, soundCheck, volumeLabel, volumeSeek, hint))
             .forEach { content.addView(it) }
 
         AlertDialog.Builder(this)
@@ -2012,7 +2083,11 @@ class PdfViewerActivity : AppCompatActivity() {
                     .putFloat(PREF_METRONOME_VOLUME, volumeSeek.progress / 100f)
                     .apply()
                 if (fileId != null) {
-                    lifecycleScope.launch(Dispatchers.IO) { musicRepository.setMetronomeForFile(fileId, bpm, beats) }
+                    val tempo = bpm
+                    val chosen = meter
+                    lifecycleScope.launch(Dispatchers.IO) {
+                        musicRepository.setMetronomeForFile(fileId, tempo, chosen.numerator, chosen.denominator)
+                    }
                 }
             }
             .show()
@@ -2129,8 +2204,8 @@ class PdfViewerActivity : AppCompatActivity() {
         follower = scoreFollower
         followMeasure = start
         followInCountIn = true
-        metronome.beatsPerBar = scoreFollower.countInBeats
-        metronome.barPosition = { index -> scoreFollower.beatInBarAt(index) }
+        metronome.timeSignature = scoreFollower.startTimeSignature
+        metronome.barPosition = { index -> scoreFollower.barPositionAt(index) }
         followState = FollowState.PLAYING
         turnRequestedTo = -1
         startMetronome()
@@ -2144,7 +2219,7 @@ class PdfViewerActivity : AppCompatActivity() {
         when (val position = scoreFollower.positionAt(beat.index)) {
             is ScoreFollower.Position.CountIn -> Unit
             is ScoreFollower.Position.InMeasure -> {
-                metronome.beatsPerBar = position.beatsInMeasure
+                metronome.timeSignature = position.timeSignature
                 if (followInCountIn || followMeasure?.measureNumber != position.measure.measureNumber) {
                     followInCountIn = false
                     followMeasure = position.measure

@@ -106,10 +106,10 @@ class MusicRepository(context: Context) {
         android.util.Log.d("MusicRepository", "저장 후 설정: $updatedPref")
     }
     
-    /** 이 파일의 메트로놈 템포·박자를 저장한다. 설정 행이 없으면 먼저 만든다. */
-    suspend fun setMetronomeForFile(pdfFileId: String, bpm: Int, beatsPerBar: Int) {
+    /** 이 파일의 메트로놈 템포·박자(분자/분모)를 저장한다. 설정 행이 없으면 먼저 만든다. */
+    suspend fun setMetronomeForFile(pdfFileId: String, bpm: Int, beatsPerBar: Int, beatUnit: Int) {
         getOrCreateUserPreference(pdfFileId)
-        userPreferenceDao.updateMetronome(pdfFileId, bpm, beatsPerBar)
+        userPreferenceDao.updateMetronome(pdfFileId, bpm, beatsPerBar, beatUnit)
     }
 
     suspend fun setLastPageForFile(pdfFileId: String, pageNumber: Int) {

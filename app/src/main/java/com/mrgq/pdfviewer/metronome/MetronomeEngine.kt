@@ -20,12 +20,12 @@ import android.util.Log
 class MetronomeEngine(private val sampleRate: Int = 44100) {
 
     @Volatile var bpm = MetronomeClock.DEFAULT_BPM
-    @Volatile var beatsPerBar = MetronomeClock.DEFAULT_BEATS
+    @Volatile var timeSignature = TimeSignature.DEFAULT
     @Volatile var volume = 0.6f
     @Volatile var soundEnabled = true
 
-    /** 악보 연동 중이면 박 번호 → 마디 안 위치 (강박을 악보 박자표대로). null 이면 [beatsPerBar] 로 센다. */
-    @Volatile var barPosition: ((Long) -> Int)? = null
+    /** 악보 연동 중이면 박 번호 → 마디 안 위치와 박자 (강박을 악보 박자표대로). null 이면 [timeSignature] 로 센다. */
+    @Volatile var barPosition: ((Long) -> BarPosition)? = null
 
     @Volatile var isRunning = false
         private set
@@ -107,12 +107,13 @@ class MetronomeEngine(private val sampleRate: Int = 44100) {
     }
 
     private fun audioLoop(audio: AudioTrack) {
-        val accentClick = ClickSynth.render(sampleRate, accent = true)
-        val normalClick = ClickSynth.render(sampleRate, accent = false)
+        val accentClick = ClickSynth.render(sampleRate, Accent.STRONG)
+        val mediumClick = ClickSynth.render(sampleRate, Accent.MEDIUM)
+        val normalClick = ClickSynth.render(sampleRate, Accent.WEAK)
         val buffer = ShortArray(CHUNK_FRAMES)
         val clock = MetronomeClock(sampleRate, startFrame = (sampleRate * LEAD_IN_SEC).toLong())
 
-        var next = record(clock.next(bpm, beatsPerBar, barPosition))
+        var next = record(clock.next(bpm, timeSignature, barPosition))
         var written = 0L
         var click: ShortArray? = null
         var clickPos = 0
@@ -121,9 +122,13 @@ class MetronomeEngine(private val sampleRate: Int = 44100) {
             val gain = if (soundEnabled) volume.coerceIn(0f, 1f) else 0f
             for (i in 0 until CHUNK_FRAMES) {
                 if (written + i >= next.frame) {
-                    click = if (next.isAccent) accentClick else normalClick
+                    click = when (next.accent) {
+                        Accent.STRONG -> accentClick
+                        Accent.MEDIUM -> mediumClick
+                        Accent.WEAK -> normalClick
+                    }
                     clickPos = 0
-                    next = record(clock.next(bpm, beatsPerBar, barPosition))
+                    next = record(clock.next(bpm, timeSignature, barPosition))
                 }
                 var sample = 0
                 val current = click
@@ -150,7 +155,7 @@ class MetronomeEngine(private val sampleRate: Int = 44100) {
     private fun silentLoop() {
         val clock = MetronomeClock(sampleRate, startFrame = (sampleRate * LEAD_IN_SEC).toLong())
         while (isRunning) {
-            val beat = record(clock.next(bpm, beatsPerBar, barPosition))
+            val beat = record(clock.next(bpm, timeSignature, barPosition))
             val dueNanos = startNanos + beat.frame * 1_000_000_000L / sampleRate
             val waitMs = (dueNanos - System.nanoTime()) / 1_000_000L
             if (waitMs > 0) {

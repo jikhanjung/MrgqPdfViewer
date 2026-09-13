@@ -1,8 +1,10 @@
 package com.mrgq.pdfviewer
 
 import com.mrgq.pdfviewer.database.entity.ScoreMeasure
+import com.mrgq.pdfviewer.metronome.BarPosition
 import com.mrgq.pdfviewer.metronome.ScoreFollower
 import com.mrgq.pdfviewer.metronome.ScoreFollower.Position
+import com.mrgq.pdfviewer.metronome.TimeSignature
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -19,8 +21,9 @@ class ScoreFollowerTest {
     fun 시작_마디_박자로_예비박_한_마디를_센다() {
         val follower = ScoreFollower(listOf(measure(1, 6), measure(2, 6), measure(3, 6)), startMeasureNumber = 1)
         assertEquals(6, follower.countInBeats)
+        assertEquals(TimeSignature(6, 8), follower.startTimeSignature)
         for (beat in 0L until 6) {
-            assertEquals(Position.CountIn(beat.toInt(), 6), follower.positionAt(beat))
+            assertEquals(Position.CountIn(beat.toInt(), TimeSignature(6, 8)), follower.positionAt(beat))
         }
         val first = follower.positionAt(6) as Position.InMeasure
         assertEquals(1, first.measure.measureNumber)
@@ -54,6 +57,7 @@ class ScoreFollowerTest {
     fun 박자표가_빈_마디는_앞_마디_박자를_잇는다() {
         val follower = ScoreFollower(listOf(measure(1, 6), measure(2, null), measure(3, null)), startMeasureNumber = 2)
         assertEquals("시작 마디(2)는 박자표가 없지만 1 의 6/8 을 잇는다", 6, follower.countInBeats)
+        assertEquals("분모도 잇는다", TimeSignature(6, 8), follower.startTimeSignature)
         assertEquals(3, measureOf(follower.positionAt(12)))
     }
 
@@ -69,7 +73,17 @@ class ScoreFollowerTest {
     @Test
     fun 강박_위치는_예비박과_마디_안_박() {
         val follower = ScoreFollower(listOf(measure(1, 3, 4), measure(2, 2, 4)), startMeasureNumber = 1)
-        assertEquals(listOf(0, 1, 2, 0, 1, 2, 0, 1), (0L until 8).map { follower.beatInBarAt(it) })
+        assertEquals(listOf(0, 1, 2, 0, 1, 2, 0, 1), (0L until 8).map { follower.barPositionAt(it).indexInBar })
+    }
+
+    @Test
+    fun 마디_위치는_그_마디의_박자를_함께_준다() {
+        // 3/4 한 마디 뒤 6/8 — 6/8 마디의 4박이 중간 세기가 되려면 분모까지 넘어가야 한다
+        val follower = ScoreFollower(listOf(measure(1, 3, 4), measure(2, 6, 8), measure(3, null)), startMeasureNumber = 1)
+        assertEquals(BarPosition(0, TimeSignature(3, 4)), follower.barPositionAt(0))       // 예비박
+        assertEquals(BarPosition(2, TimeSignature(3, 4)), follower.barPositionAt(5))       // 1마디 3박
+        assertEquals(BarPosition(3, TimeSignature(6, 8)), follower.barPositionAt(9))       // 2마디 4박
+        assertEquals(TimeSignature(6, 8), (follower.positionAt(12) as Position.InMeasure).timeSignature) // 3마디: 이어받음
     }
 
     @Test

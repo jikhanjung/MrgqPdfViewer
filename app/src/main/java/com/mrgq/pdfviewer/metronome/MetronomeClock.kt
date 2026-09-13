@@ -5,17 +5,23 @@ package com.mrgq.pdfviewer.metronome
  *
  * @param frame 오디오 스트림 시작부터의 샘플(프레임) 위치 — 이 위치에서 클릭이 시작된다
  * @param indexInBar 마디 안에서 몇 번째 박인가 (0 = 첫 박, 강조)
+ * @param timeSignature 이 박이 속한 마디의 박자 — 클릭 세기([accent])를 정한다
  * @param index 시작부터 몇 번째 박인가 (0부터) — 악보 연동이 이 번호로 마디를 센다
  */
 data class Beat(
     val frame: Long,
     val indexInBar: Int,
-    val beatsPerBar: Int,
+    val timeSignature: TimeSignature,
     val bpm: Int,
     val index: Long = 0,
 ) {
+    val beatsPerBar: Int get() = timeSignature.numerator
+    val accent: Accent get() = timeSignature.accentAt(indexInBar)
     val isAccent: Boolean get() = indexInBar == 0
 }
+
+/** 악보 연동에서 박 번호가 가리키는 마디 안 위치와 그 마디의 박자. */
+data class BarPosition(val indexInBar: Int, val timeSignature: TimeSignature)
 
 /**
  * 박 위치를 **샘플 단위로** 계산한다. 타이머(Handler·delay)가 아니라 오디오 스트림의 프레임 수로
@@ -34,24 +40,29 @@ class MetronomeClock(private val sampleRate: Int, startFrame: Long = 0) {
     private var nextBeatIndex = 0L
 
     /**
-     * 다음 박을 돌려주고 그다음 박으로 전진한다. [bpm]·[beatsPerBar] 는 범위로 잘린다.
+     * 다음 박을 돌려주고 그다음 박으로 전진한다. [bpm]·[timeSignature] 는 범위로 잘린다.
      *
-     * @param barPosition 박 번호 → 마디 안 위치. 주면 [beatsPerBar] 로 세는 대신 이것을 쓴다 — 악보 연동에서
-     *   박자표가 바뀌는 마디의 강박을 악보대로 맞춘다 ([ScoreFollower.beatInBarAt]).
+     * @param barPosition 박 번호 → 마디 안 위치와 그 마디 박자. 주면 [timeSignature] 로 세는 대신 이것을 쓴다 —
+     *   악보 연동에서 박자표가 바뀌는 마디의 강박을 악보대로 맞춘다 ([ScoreFollower.barPositionAt]).
      */
-    fun next(bpm: Int, beatsPerBar: Int, barPosition: ((Long) -> Int)? = null): Beat {
+    fun next(bpm: Int, timeSignature: TimeSignature, barPosition: ((Long) -> BarPosition)? = null): Beat {
         val tempo = bpm.coerceIn(MIN_BPM, MAX_BPM)
-        val beats = beatsPerBar.coerceIn(MIN_BEATS, MAX_BEATS)
         val index = nextBeatIndex++
 
-        val inBar = if (barPosition != null) {
-            barPosition(index).coerceAtLeast(0)
+        val meter: TimeSignature
+        val inBar: Int
+        if (barPosition != null) {
+            val position = barPosition(index)
+            meter = position.timeSignature.coerced()
+            inBar = position.indexInBar.coerceIn(0, meter.numerator - 1)
         } else {
-            if (nextIndexInBar >= beats) nextIndexInBar = 0
-            nextIndexInBar.also { nextIndexInBar = (it + 1) % beats }
+            meter = timeSignature.coerced()
+            if (nextIndexInBar >= meter.numerator) nextIndexInBar = 0
+            inBar = nextIndexInBar
+            nextIndexInBar = (inBar + 1) % meter.numerator
         }
 
-        val beat = Beat(Math.round(nextFrame), inBar, beats, tempo, index)
+        val beat = Beat(Math.round(nextFrame), inBar, meter, tempo, index)
         nextFrame += sampleRate * 60.0 / tempo
         return beat
     }

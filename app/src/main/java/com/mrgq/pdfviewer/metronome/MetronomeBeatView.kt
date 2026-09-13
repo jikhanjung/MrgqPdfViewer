@@ -10,8 +10,9 @@ import android.util.AttributeSet
 import android.view.View
 
 /**
- * 메트로놈 박 표시 — 화면 모서리의 작은 알약 모양: "♩ 120" + 마디당 박 수만큼의 점.
- * 지금 박의 점이 켜진다 (첫 박은 주황, 나머지는 초록). 악보를 가리지 않게 작고 반투명하다.
+ * 메트로놈 박 표시 — 화면 모서리의 작은 알약 모양: "6/8 · ♪ 120" + 마디당 박 수만큼의 점.
+ * 지금 박의 점이 켜진다 (첫 박은 주황, 겹박자 묶음의 첫 박은 노랑, 나머지는 초록). 겹박자는 3박 묶음 사이를 벌린다.
+ * 악보를 가리지 않게 작고 반투명하다.
  */
 class MetronomeBeatView @JvmOverloads constructor(
     context: Context,
@@ -19,12 +20,13 @@ class MetronomeBeatView @JvmOverloads constructor(
 ) : View(context, attrs) {
 
     private var bpm = MetronomeClock.DEFAULT_BPM
-    private var beatsPerBar = MetronomeClock.DEFAULT_BEATS
+    private var timeSignature = TimeSignature.DEFAULT
     private var currentIndex = -1
 
     private val density = resources.displayMetrics.density
     private val dotRadius = 7f * density
     private val dotGap = 8f * density
+    private val groupGap = 8f * density
     private val padding = 12f * density
     private val heightPx = 40f * density
 
@@ -50,22 +52,35 @@ class MetronomeBeatView @JvmOverloads constructor(
     }
 
     /** 바뀐 것이 있을 때만 다시 그린다 (매 프레임 불린다). */
-    fun update(beat: Beat?, bpm: Int, beatsPerBar: Int) {
+    fun update(beat: Beat?, bpm: Int, timeSignature: TimeSignature) {
         val index = beat?.indexInBar ?: -1
-        if (index == currentIndex && bpm == this.bpm && beatsPerBar == this.beatsPerBar) return
-        val sizeChanged = beatsPerBar != this.beatsPerBar || bpm.toString().length != this.bpm.toString().length
+        if (index == currentIndex && bpm == this.bpm && timeSignature == this.timeSignature) return
+        val sizeChanged = timeSignature != this.timeSignature || bpm.toString().length != this.bpm.toString().length
         currentIndex = index
         this.bpm = bpm
-        this.beatsPerBar = beatsPerBar
+        this.timeSignature = timeSignature
         if (sizeChanged) requestLayout()
         invalidate()
     }
 
-    private fun label() = "♩ $bpm"
+    /** 박 단위 음표 기호. 2분음표 기호(U+1D15E)는 TV 기본 글꼴에 없을 수 있어 숫자만 쓴다. */
+    private fun label(): String {
+        val note = when (timeSignature.denominator) {
+            4 -> "♩ "
+            8 -> "♪ "
+            16 -> "♬ "
+            else -> ""
+        }
+        return "$timeSignature · $note$bpm"
+    }
+
+    private fun groupStartsAt(i: Int) = i > 0 && timeSignature.isCompound && i % 3 == 0
 
     override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+        val beats = timeSignature.numerator
+        val groups = (0 until beats).count(::groupStartsAt)
         val width = padding + textPaint.measureText(label()) + padding +
-            beatsPerBar * (dotRadius * 2) + (beatsPerBar - 1) * dotGap + padding
+            beats * (dotRadius * 2) + (beats - 1) * dotGap + groups * groupGap + padding
         setMeasuredDimension(width.toInt(), heightPx.toInt())
     }
 
@@ -80,9 +95,14 @@ class MetronomeBeatView @JvmOverloads constructor(
 
         var cx = padding + textPaint.measureText(text) + padding + dotRadius
         val cy = height / 2f
-        for (i in 0 until beatsPerBar) {
+        for (i in 0 until timeSignature.numerator) {
+            if (groupStartsAt(i)) cx += groupGap
             if (i == currentIndex) {
-                activeDot.color = if (i == 0) ACCENT_COLOR else BEAT_COLOR
+                activeDot.color = when (timeSignature.accentAt(i)) {
+                    Accent.STRONG -> ACCENT_COLOR
+                    Accent.MEDIUM -> MEDIUM_COLOR
+                    Accent.WEAK -> BEAT_COLOR
+                }
                 canvas.drawCircle(cx, cy, dotRadius, activeDot)
             } else {
                 canvas.drawCircle(cx, cy, dotRadius - idleDot.strokeWidth / 2f, idleDot)
@@ -94,6 +114,7 @@ class MetronomeBeatView @JvmOverloads constructor(
     private companion object {
         const val VIEW_ALPHA = 0.6f
         val ACCENT_COLOR = 0xFFFF9800.toInt()
+        val MEDIUM_COLOR = 0xFFFFD54F.toInt()
         val BEAT_COLOR = 0xFF4CAF50.toInt()
     }
 }

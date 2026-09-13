@@ -192,6 +192,33 @@ class MusicDatabaseMigrationTest {
     }
 
     @Test
+    fun v9_에서_v10_은_박_단위_컬럼을_더하고_메트로놈_설정을_보존한다() {
+        helper.createDatabase(TEST_DB, 9).apply {
+            execSQL(INSERT_FILE)
+            execSQL(
+                "INSERT INTO user_preferences (pdfFileId, displayMode, lastPageNumber, bookmarkedPages, " +
+                    "topClippingPercent, bottomClippingPercent, centerPadding, updatedAt, metronomeBpm, metronomeBeatsPerBar) " +
+                    "VALUES ('file-1', 'DOUBLE', 7, '', 0.05, 0.03, 0.1, 1000, 180, 6)"
+            )
+            close()
+        }
+
+        val db = helper.runMigrationsAndValidate(TEST_DB, 10, true, *MusicDatabase.ALL_MIGRATIONS)
+
+        db.query(
+            "SELECT metronomeBpm, metronomeBeatsPerBar, metronomeBeatUnit, displayMode " +
+                "FROM user_preferences WHERE pdfFileId = 'file-1'"
+        ).use { c ->
+            assertEquals("v9→v10 에서 파일별 설정이 사라졌다", 1, c.count)
+            c.moveToFirst()
+            assertEquals(180, c.getInt(0))
+            assertEquals(6, c.getInt(1))
+            assertTrue("박 단위 미설정 = null → 대화상자가 악보 박자표로 채운다", c.isNull(2))
+            assertEquals("DOUBLE", c.getString(3))
+        }
+    }
+
+    @Test
     fun v2_to_v3_중앙여백_픽셀이_비율로_변환된다() {
         val db = createDbAt(2, V2_USER_PREFERENCES) {
             it.execSQL(INSERT_FILE)
@@ -307,7 +334,7 @@ class MusicDatabaseMigrationTest {
 
     private companion object {
         const val TEST_DB = "migration-test"
-        const val LATEST_VERSION = 9
+        const val LATEST_VERSION = 10
 
         // pdf_files 는 v1 부터 바뀐 적이 없다
         const val PDF_FILES = "CREATE TABLE IF NOT EXISTS `pdf_files` (`id` TEXT NOT NULL, " +
