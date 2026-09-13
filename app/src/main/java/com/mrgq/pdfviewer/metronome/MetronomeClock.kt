@@ -5,12 +5,14 @@ package com.mrgq.pdfviewer.metronome
  *
  * @param frame 오디오 스트림 시작부터의 샘플(프레임) 위치 — 이 위치에서 클릭이 시작된다
  * @param indexInBar 마디 안에서 몇 번째 박인가 (0 = 첫 박, 강조)
+ * @param index 시작부터 몇 번째 박인가 (0부터) — 악보 연동이 이 번호로 마디를 센다
  */
 data class Beat(
     val frame: Long,
     val indexInBar: Int,
     val beatsPerBar: Int,
     val bpm: Int,
+    val index: Long = 0,
 ) {
     val isAccent: Boolean get() = indexInBar == 0
 }
@@ -28,17 +30,29 @@ data class Beat(
 class MetronomeClock(private val sampleRate: Int, startFrame: Long = 0) {
 
     private var nextFrame = startFrame.toDouble()
-    private var nextIndex = 0
+    private var nextIndexInBar = 0
+    private var nextBeatIndex = 0L
 
-    /** 다음 박을 돌려주고 그다음 박으로 전진한다. [bpm]·[beatsPerBar] 는 범위로 잘린다. */
-    fun next(bpm: Int, beatsPerBar: Int): Beat {
+    /**
+     * 다음 박을 돌려주고 그다음 박으로 전진한다. [bpm]·[beatsPerBar] 는 범위로 잘린다.
+     *
+     * @param barPosition 박 번호 → 마디 안 위치. 주면 [beatsPerBar] 로 세는 대신 이것을 쓴다 — 악보 연동에서
+     *   박자표가 바뀌는 마디의 강박을 악보대로 맞춘다 ([ScoreFollower.beatInBarAt]).
+     */
+    fun next(bpm: Int, beatsPerBar: Int, barPosition: ((Long) -> Int)? = null): Beat {
         val tempo = bpm.coerceIn(MIN_BPM, MAX_BPM)
         val beats = beatsPerBar.coerceIn(MIN_BEATS, MAX_BEATS)
-        if (nextIndex >= beats) nextIndex = 0
+        val index = nextBeatIndex++
 
-        val beat = Beat(Math.round(nextFrame), nextIndex, beats, tempo)
+        val inBar = if (barPosition != null) {
+            barPosition(index).coerceAtLeast(0)
+        } else {
+            if (nextIndexInBar >= beats) nextIndexInBar = 0
+            nextIndexInBar.also { nextIndexInBar = (it + 1) % beats }
+        }
+
+        val beat = Beat(Math.round(nextFrame), inBar, beats, tempo, index)
         nextFrame += sampleRate * 60.0 / tempo
-        nextIndex = (nextIndex + 1) % beats
         return beat
     }
 

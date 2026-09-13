@@ -45,6 +45,8 @@ class MetronomeBeatView @JvmOverloads constructor(
     init {
         isFocusable = false
         isClickable = false
+        // 박이 많은 박자(6/8 등)에서는 알약이 길어져 악보 왼쪽 위(제목 등)를 가린다 — 반투명으로 비치게 (사용자 결정)
+        alpha = VIEW_ALPHA
     }
 
     /** 바뀐 것이 있을 때만 다시 그린다 (매 프레임 불린다). */
@@ -90,6 +92,7 @@ class MetronomeBeatView @JvmOverloads constructor(
     }
 
     private companion object {
+        const val VIEW_ALPHA = 0.6f
         val ACCENT_COLOR = 0xFFFF9800.toInt()
         val BEAT_COLOR = 0xFF4CAF50.toInt()
     }

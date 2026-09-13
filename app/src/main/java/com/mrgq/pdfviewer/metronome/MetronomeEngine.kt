@@ -24,6 +24,9 @@ class MetronomeEngine(private val sampleRate: Int = 44100) {
     @Volatile var volume = 0.6f
     @Volatile var soundEnabled = true
 
+    /** 악보 연동 중이면 박 번호 → 마디 안 위치 (강박을 악보 박자표대로). null 이면 [beatsPerBar] 로 센다. */
+    @Volatile var barPosition: ((Long) -> Int)? = null
+
     @Volatile var isRunning = false
         private set
 
@@ -109,7 +112,7 @@ class MetronomeEngine(private val sampleRate: Int = 44100) {
         val buffer = ShortArray(CHUNK_FRAMES)
         val clock = MetronomeClock(sampleRate, startFrame = (sampleRate * LEAD_IN_SEC).toLong())
 
-        var next = record(clock.next(bpm, beatsPerBar))
+        var next = record(clock.next(bpm, beatsPerBar, barPosition))
         var written = 0L
         var click: ShortArray? = null
         var clickPos = 0
@@ -120,7 +123,7 @@ class MetronomeEngine(private val sampleRate: Int = 44100) {
                 if (written + i >= next.frame) {
                     click = if (next.isAccent) accentClick else normalClick
                     clickPos = 0
-                    next = record(clock.next(bpm, beatsPerBar))
+                    next = record(clock.next(bpm, beatsPerBar, barPosition))
                 }
                 var sample = 0
                 val current = click
@@ -147,7 +150,7 @@ class MetronomeEngine(private val sampleRate: Int = 44100) {
     private fun silentLoop() {
         val clock = MetronomeClock(sampleRate, startFrame = (sampleRate * LEAD_IN_SEC).toLong())
         while (isRunning) {
-            val beat = record(clock.next(bpm, beatsPerBar))
+            val beat = record(clock.next(bpm, beatsPerBar, barPosition))
             val dueNanos = startNanos + beat.frame * 1_000_000_000L / sampleRate
             val waitMs = (dueNanos - System.nanoTime()) / 1_000_000L
             if (waitMs > 0) {

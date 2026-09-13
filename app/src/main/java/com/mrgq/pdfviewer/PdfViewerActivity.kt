@@ -38,6 +38,10 @@ import com.mrgq.pdfviewer.database.entity.ScoreMeasure
 import com.mrgq.pdfviewer.score.ScoreOverlayGeometry
 import com.mrgq.pdfviewer.metronome.MetronomeClock
 import com.mrgq.pdfviewer.metronome.MetronomeEngine
+import com.mrgq.pdfviewer.metronome.Beat
+import com.mrgq.pdfviewer.metronome.ScoreFollower
+import com.mrgq.pdfviewer.score.ScoreOverlayView
+import android.os.SystemClock
 import androidx.lifecycle.lifecycleScope
 import android.os.Handler
 import android.os.Looper
@@ -53,6 +57,9 @@ class PdfViewerActivity : AppCompatActivity() {
         // 메트로놈 클릭음 설정 (전역). 템포·박자는 파일별로 DB 에 저장한다
         private const val PREF_METRONOME_SOUND = "metronome_sound_enabled"
         private const val PREF_METRONOME_VOLUME = "metronome_volume"
+
+        /** 악보 연동 자동 넘김: 페이지 마지막 마디가 끝나기 몇 박 전에 넘길지 */
+        private const val TURN_LEAD_BEATS = 2
     }
     
     private lateinit var binding: ActivityPdfViewerBinding
@@ -117,10 +124,26 @@ class PdfViewerActivity : AppCompatActivity() {
     private val metronomeTicker = object : Runnable {
         override fun run() {
             if (!metronome.isRunning) return
-            binding.metronomeBeat.update(metronome.currentBeat(), metronome.bpm, metronome.beatsPerBar)
+            val beat = metronome.currentBeat()
+            if (followState == FollowState.PLAYING) updateFollow(beat)
+            if (!metronome.isRunning) return // 악보 끝에서 멈췄다
+            binding.metronomeBeat.update(beat, metronome.bpm, metronome.beatsPerBar)
             binding.metronomeBeat.postOnAnimation(this)
         }
     }
+
+    // 메트로놈 악보 연동 (#050): 시작 마디 고르기 → 예비박 한 마디 → 현재 마디 표시 + 자동 넘김
+    private enum class FollowState { OFF, SELECTING, PLAYING }
+    private var followState = FollowState.OFF
+    /** 시작할 수 있는 마디 (박자를 아는 마디부터) */
+    private var followMeasures: List<ScoreMeasure> = emptyList()
+    private var followFileId: String? = null
+    private var cursorIndex = 0
+    private var follower: ScoreFollower? = null
+    private var followMeasure: ScoreMeasure? = null
+    private var followInCountIn = false
+    private var turnRequestedTo = -1
+    private var turnRequestedAtMs = 0L
     
     // Current display settings
     private var currentTopClipping: Float = 0f
@@ -1273,6 +1296,25 @@ class PdfViewerActivity : AppCompatActivity() {
     }
     
     override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
+        // 메트로놈 악보 연동: 시작 마디 고르는 중에는 리모컨이 커서를 움직인다
+        if (followState == FollowState.SELECTING) {
+            when (keyCode) {
+                KeyEvent.KEYCODE_DPAD_LEFT -> { moveCursor(-1); return true }
+                KeyEvent.KEYCODE_DPAD_RIGHT -> { moveCursor(1); return true }
+                KeyEvent.KEYCODE_DPAD_UP -> { moveCursorLine(-1); return true }
+                KeyEvent.KEYCODE_DPAD_DOWN -> { moveCursorLine(1); return true }
+                // 떼는 순간 시작한다 (onKeyUp). 길게 누르기 메뉴는 띄우지 않는다
+                KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER -> return true
+                KeyEvent.KEYCODE_BACK, KeyEvent.KEYCODE_ESCAPE -> { cancelMeasureSelection(); return true }
+            }
+        } else if (followState == FollowState.PLAYING &&
+            (keyCode == KeyEvent.KEYCODE_BACK || keyCode == KeyEvent.KEYCODE_ESCAPE)
+        ) {
+            // 연주 중 뒤로: 뷰어를 나가지 않고 메트로놈만 멈춘다
+            stopMetronome()
+            Toast.makeText(this, "메트로놈 정지", Toast.LENGTH_SHORT).show()
+            return true
+        }
         when (keyCode) {
             KeyEvent.KEYCODE_DPAD_LEFT -> {
                 // Check if input is blocked due to synchronization
@@ -1368,6 +1410,12 @@ class PdfViewerActivity : AppCompatActivity() {
     }
     
     override fun onKeyUp(keyCode: Int, event: KeyEvent?): Boolean {
+        if (followState == FollowState.SELECTING &&
+            (keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER)
+        ) {
+            startFollowing()
+            return true
+        }
         when (keyCode) {
             KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER -> {
                 // Cancel long press and handle short press
@@ -1934,7 +1982,9 @@ class PdfViewerActivity : AppCompatActivity() {
         }
 
         val hint = android.widget.TextView(this).apply {
-            text = "템포·박자는 이 파일에 저장됩니다. 실행 중에 바꾸면 다음 박부터 적용됩니다."
+            text = "템포·박자는 이 파일에 저장됩니다. 실행 중에 바꾸면 다음 박부터 적용됩니다.\n" +
+                "악보에서 박자표를 읽을 수 있으면, 시작을 누른 뒤 악보에서 시작 마디를 고르고 한 마디 예비박 후 " +
+                "현재 마디를 표시하며 페이지를 넘깁니다. 이때 박자는 악보를 따르고, 박은 박자표 아래 숫자의 음표입니다(6/8 이면 8분음표)."
             textSize = 12f
             setTextColor(android.graphics.Color.GRAY)
             setPadding(0, 20, 0, 0)
@@ -1947,12 +1997,12 @@ class PdfViewerActivity : AppCompatActivity() {
         AlertDialog.Builder(this)
             .setTitle("메트로놈")
             .setView(android.widget.ScrollView(this).apply { addView(content) })
-            .setPositiveButton(if (metronome.isRunning) "정지" else "시작") { _, _ ->
-                if (metronome.isRunning) {
+            .setPositiveButton(if (metronome.isRunning || followState != FollowState.OFF) "정지" else "시작") { _, _ ->
+                if (metronome.isRunning || followState != FollowState.OFF) {
                     stopMetronome()
                 } else {
                     applyToEngine()
-                    startMetronome()
+                    startMetronomeFromDialog()
                 }
             }
             .setNegativeButton("닫기", null)
@@ -1981,15 +2031,154 @@ class PdfViewerActivity : AppCompatActivity() {
 
     private fun stopMetronome() {
         metronome.stop()
+        metronome.barPosition = null
         binding.metronomeBeat.removeCallbacks(metronomeTicker)
         binding.metronomeBeat.visibility = View.GONE
         metronomeFileId = null
+        if (followState != FollowState.OFF) {
+            followState = FollowState.OFF
+            follower = null
+            followMeasure = null
+            followMeasures = emptyList()
+            refreshScoreOverlay()
+        }
     }
 
     /** 다른 곡으로 넘어가면 멈춘다 — 템포가 파일별이라 이전 곡 템포로 계속 도는 건 틀린 동작이다. */
     private fun onPdfFileChangedForMetronome(fileId: String) {
         val runningFor = metronomeFileId
         if (metronome.isRunning && runningFor != null && runningFor != fileId) stopMetronome()
+        if (followState == FollowState.SELECTING && followFileId != fileId) cancelMeasureSelection()
+    }
+
+    /**
+     * 대화상자의 "시작". 악보에서 박자표를 읽을 수 있으면 먼저 시작 마디를 고르게 하고,
+     * 아니면(박자표를 못 읽음, 악보 분석 안 됨) 연동 없이 일반 메트로놈으로 시작한다 — 사용자 결정 (#050).
+     */
+    private fun startMetronomeFromDialog() {
+        val fileId = currentPdfFileId
+        if (fileId == null) {
+            startMetronome()
+            return
+        }
+        val cached = if (scoreMeasuresFileId == fileId) scoreMeasures else null
+        if (cached == null) Toast.makeText(this, "악보 분석 중…", Toast.LENGTH_SHORT).show()
+        val file = File(pdfFilePath)
+        lifecycleScope.launch {
+            val measures = cached ?: withContext(Dispatchers.IO) { musicRepository.getOrAnalyzeScoreMeasures(fileId, file) }
+            if (currentPdfFileId != fileId) return@launch
+            if (cached == null && measures != null) {
+                scoreMeasures = measures
+                scoreMeasuresFileId = fileId
+            }
+            val startable = ScoreFollower.startableMeasures(measures.orEmpty())
+            if (startable.isEmpty()) {
+                if (!measures.isNullOrEmpty()) {
+                    Toast.makeText(this@PdfViewerActivity, "악보에서 박자표를 읽지 못해 악보 연동 없이 시작합니다", Toast.LENGTH_LONG).show()
+                }
+                startMetronome()
+            } else {
+                enterMeasureSelection(fileId, startable)
+            }
+        }
+    }
+
+    private fun enterMeasureSelection(fileId: String, startable: List<ScoreMeasure>) {
+        followMeasures = startable
+        followFileId = fileId
+        cursorIndex = startable.indexOfFirst { isMeasureVisible(it) }.takeIf { it >= 0 }
+            ?: startable.indexOfFirst { it.pageIndex >= pageIndex }.takeIf { it >= 0 }
+            ?: 0
+        followState = FollowState.SELECTING
+        turnRequestedTo = -1
+        ensureMeasureVisible(startable[cursorIndex])
+        refreshScoreOverlay()
+        Toast.makeText(this, "시작할 마디를 고르세요 — ←→ 마디, ↑↓ 줄, OK 시작, 뒤로 취소", Toast.LENGTH_LONG).show()
+    }
+
+    private fun cancelMeasureSelection() {
+        followState = FollowState.OFF
+        followMeasures = emptyList()
+        refreshScoreOverlay()
+    }
+
+    private fun moveCursor(delta: Int) {
+        if (followMeasures.isEmpty()) return
+        cursorIndex = (cursorIndex + delta).coerceIn(0, followMeasures.lastIndex)
+        ensureMeasureVisible(followMeasures[cursorIndex])
+        refreshScoreOverlay()
+    }
+
+    /** 위/아래 — 이전/다음 줄(시스템)의 첫 마디 */
+    private fun moveCursorLine(direction: Int) {
+        val current = followMeasures.getOrNull(cursorIndex) ?: return
+        fun line(m: ScoreMeasure) = m.pageIndex * 1000 + m.systemIndex
+        val currentLine = line(current)
+        val target = if (direction > 0) {
+            followMeasures.indexOfFirst { line(it) > currentLine }
+        } else {
+            val previousLine = followMeasures.map(::line).filter { it < currentLine }.maxOrNull()
+            if (previousLine == null) 0 else followMeasures.indexOfFirst { line(it) == previousLine }
+        }
+        if (target >= 0) moveCursor(target - cursorIndex)
+    }
+
+    private fun startFollowing() {
+        val start = followMeasures.getOrNull(cursorIndex) ?: return cancelMeasureSelection()
+        val scoreFollower = ScoreFollower(followMeasures, start.measureNumber)
+        follower = scoreFollower
+        followMeasure = start
+        followInCountIn = true
+        metronome.beatsPerBar = scoreFollower.countInBeats
+        metronome.barPosition = { index -> scoreFollower.beatInBarAt(index) }
+        followState = FollowState.PLAYING
+        turnRequestedTo = -1
+        startMetronome()
+        refreshScoreOverlay()
+    }
+
+    /** 메트로놈 틱마다: 들리는 박을 악보 위치로 옮겨 현재 마디를 표시하고 필요하면 넘긴다. */
+    private fun updateFollow(beat: Beat?) {
+        val scoreFollower = follower ?: return
+        if (beat == null) return
+        when (val position = scoreFollower.positionAt(beat.index)) {
+            is ScoreFollower.Position.CountIn -> Unit
+            is ScoreFollower.Position.InMeasure -> {
+                metronome.beatsPerBar = position.beatsInMeasure
+                if (followInCountIn || followMeasure?.measureNumber != position.measure.measureNumber) {
+                    followInCountIn = false
+                    followMeasure = position.measure
+                    refreshScoreOverlay()
+                }
+                // 다음 마디가 다른 페이지에 있으면 이 마디가 끝나기 TURN_LEAD_BEATS 박 전에 미리 편다 —
+                // 사람이 넘기듯 다음 페이지를 미리 보게 (사용자 요청: 1~2박 전). 짧은 마디는 마디 안에서만 당긴다
+                val lead = minOf(TURN_LEAD_BEATS, position.beatsInMeasure - 1)
+                val turnEarly = position.beatInMeasure >= position.beatsInMeasure - lead
+                ensureMeasureVisible(if (turnEarly) position.next ?: position.measure else position.measure)
+            }
+            ScoreFollower.Position.Finished -> {
+                stopMetronome()
+                Toast.makeText(this, "악보 끝까지 따라왔습니다", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    private fun isMeasureVisible(measure: ScoreMeasure): Boolean =
+        measure.pageIndex == pageIndex || (isTwoPageMode && measure.pageIndex == pageIndex + 1)
+
+    /**
+     * [measure] 가 화면에 없으면 그 페이지로 넘긴다. 두 페이지 모드는 지금 펼침의 짝(홀짝)을 유지한다.
+     * 넘김 애니메이션 중이면 다음 틱에 다시 시도하고, 같은 요청은 1.5초 안에 반복하지 않는다(캐시 미스로 렌더가 늦을 때).
+     */
+    private fun ensureMeasureVisible(measure: ScoreMeasure) {
+        if (isMeasureVisible(measure) || isAnimating || pageCount == 0) return
+        val target = (if (isTwoPageMode) measure.pageIndex - Math.floorMod(measure.pageIndex - pageIndex, 2) else measure.pageIndex)
+            .coerceIn(0, pageCount - 1)
+        val now = SystemClock.uptimeMillis()
+        if (target == turnRequestedTo && now - turnRequestedAtMs < 1500) return
+        turnRequestedTo = target
+        turnRequestedAtMs = now
+        showPageWithAnimation(target, if (target > pageIndex) 1 else -1)
     }
 
     /**
@@ -2007,17 +2196,23 @@ class PdfViewerActivity : AppCompatActivity() {
     private fun refreshScoreOverlay() {
         val overlay = binding.scoreOverlay
         val fileId = currentPdfFileId
-        if (!isScoreOverlayEnabled() || fileId == null || isAnimating) {
+        val focus = when (followState) {
+            FollowState.SELECTING -> followMeasures.getOrNull(cursorIndex)
+            FollowState.PLAYING -> followMeasure
+            FollowState.OFF -> null
+        }
+        val showAll = isScoreOverlayEnabled()
+        if (fileId == null || isAnimating || (!showAll && focus == null)) {
             overlay.clear()
             return
         }
-        if (scoreMeasuresFileId != fileId) {
+        if (showAll && scoreMeasuresFileId != fileId) {
             overlay.clear()
             loadScoreMeasures(fileId)
             return
         }
-        val boxes = ScoreOverlayGeometry.boxes(
-            measures = scoreMeasures,
+        fun mapped(measures: List<ScoreMeasure>) = ScoreOverlayGeometry.boxes(
+            measures = measures,
             leftPageIndex = pageIndex,
             twoPageMode = isTwoPageMode,
             pageCount = pageCount,
@@ -2027,7 +2222,17 @@ class PdfViewerActivity : AppCompatActivity() {
             bottomClipping = currentBottomClipping,
             centerPadding = currentCenterPadding,
         )
-        overlay.show(boxes, binding.pdfView.imageMatrix)
+        val style = if (followState == FollowState.SELECTING || followInCountIn) {
+            ScoreOverlayView.FocusStyle.CURSOR
+        } else {
+            ScoreOverlayView.FocusStyle.CURRENT
+        }
+        overlay.show(
+            boxes = if (showAll) mapped(scoreMeasures) else emptyList(),
+            imageMatrix = binding.pdfView.imageMatrix,
+            focus = focus?.let { mapped(listOf(it)).firstOrNull() },
+            focusStyle = style,
+        )
     }
 
     private fun loadScoreMeasures(fileId: String) {

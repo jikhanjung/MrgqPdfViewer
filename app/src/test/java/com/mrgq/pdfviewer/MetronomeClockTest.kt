@@ -74,6 +74,21 @@ class MetronomeClockTest {
     }
 
     @Test
+    fun 박_번호는_0부터_이어진다() {
+        val clock = MetronomeClock(rate)
+        assertEquals(listOf(0L, 1L, 2L, 3L, 4L), (0 until 5).map { clock.next(120, 3).index })
+    }
+
+    @Test
+    fun 마디_위치를_주면_박자_대신_그것으로_강박을_정한다() {
+        // 악보 연동: 박자표가 바뀌는 곳의 강박을 악보대로 — 여기선 박자 4 를 넘겨도 3박마다 강박
+        val clock = MetronomeClock(rate)
+        val beats = (0 until 7).map { clock.next(120, 4) { index -> (index % 3).toInt() } }
+        assertEquals(listOf(0, 1, 2, 0, 1, 2, 0), beats.map { it.indexInBar })
+        assertEquals(22050L * 6, beats.last().frame)
+    }
+
+    @Test
     fun 클릭음은_35ms_이고_잘리지_않는다() {
         val accent = ClickSynth.render(rate, accent = true)
         assertEquals(rate * ClickSynth.DURATION_MS / 1000, accent.size)
