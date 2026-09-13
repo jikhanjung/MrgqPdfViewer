@@ -77,6 +77,9 @@ MrgqPdfViewer 개발 로그 모음. 구현 기록은 `YYYYMMDD_NNN_` 형식(NNN 
 - [`043`](20260906_043_instrumentation_ci_repair.md) — 계측 CI 복구. 도입 이후 3주간 한 번도 초록불이 아니었던 워크플로를 고쳐 **API 21/30/34 전 매트릭스 통과**. 실패 네 겹 중 셋이 CI 스크립트 자체 문제였다
 - [`044`](20260913_044_room_migration_test.md) — Room 마이그레이션 테스트(v1~v3→v4). 과거 스키마 JSON 이 없어 git 히스토리로 복원. **`MIGRATION_3_4` 가 설정을 지워 왔음** 발견 → 현재 동작으로 고정
 
+## 📄 PDF 문서 정보 (2026-09)
+- [`045`](20260913_045_pdf_document_info.md) — PdfBox-Android 로 제목·작성자를 읽어 DB(v5)에 캐시하고 목록 카드에 표시. **insert(REPLACE) 갱신이 표시 설정을 지우는 함정**을 테스트로 고정, APK 8.8MB → 4.6MB(BouncyCastle PQC 제외)
+
 ## 📚 메타
 - [`039`](20260619_039_project_timeline.md) — 커밋 히스토리 기반 전체 개발 연대기
 

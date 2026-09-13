@@ -13,6 +13,7 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import com.mrgq.pdfviewer.adapter.PdfFileAdapter
 import com.mrgq.pdfviewer.databinding.ActivityMainBinding
 import com.mrgq.pdfviewer.model.PdfFile
+import com.mrgq.pdfviewer.repository.MusicRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -26,6 +27,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var pdfAdapter: PdfFileAdapter
     private var currentSortBy = PdfFileSorter.BY_NAME
     private var isFileManagementMode = false // 파일 관리 모드 상태
+    private val musicRepository by lazy { MusicRepository(applicationContext) }
     
     
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -383,7 +385,7 @@ class MainActivity : AppCompatActivity() {
         startActivity(intent)
     }
     
-    private fun getCurrentPdfFiles(): List<PdfFile> {
+    private suspend fun getCurrentPdfFiles(): List<PdfFile> {
         val pdfFiles = mutableListOf<PdfFile>()
         
         // Load from app's external files directory (uploaded via web server)
@@ -392,13 +394,21 @@ class MainActivity : AppCompatActivity() {
             appPdfDir.listFiles { file ->
                 file.isFile && file.extension.equals("pdf", ignoreCase = true)
             }?.forEach { file ->
-                val pageCount = getPdfPageCount(file)
+                // 페이지 수·문서 정보는 DB 에 캐시된다. 처음 보거나 바뀐 파일만 분석한다 (PdfFileSync).
+                val record = try {
+                    musicRepository.syncPdfFile(file)
+                } catch (e: Exception) {
+                    Log.e("MainActivity", "Error syncing PDF record for ${file.name}", e)
+                    null
+                }
                 pdfFiles.add(PdfFile(
                     name = file.name,
                     path = file.absolutePath,
                     lastModified = file.lastModified(),
                     size = file.length(),
-                    pageCount = pageCount
+                    pageCount = record?.totalPages ?: 0,
+                    title = record?.title,
+                    author = record?.author
                 ))
             }
         }
@@ -417,25 +427,6 @@ class MainActivity : AppCompatActivity() {
         Log.d("MainActivity", "=== END FILE LIST ===")
         
         return pdfFiles
-    }
-    
-    /**
-     * Get page count from PDF file using PdfRenderer
-     */
-    private fun getPdfPageCount(file: File): Int {
-        return try {
-            val fileDescriptor = ParcelFileDescriptor.open(file, ParcelFileDescriptor.MODE_READ_ONLY)
-            val pdfRenderer = PdfRenderer(fileDescriptor)
-            val pageCount = pdfRenderer.pageCount
-            
-            pdfRenderer.close()
-            fileDescriptor.close()
-            
-            pageCount
-        } catch (e: Exception) {
-            Log.e("MainActivity", "Error getting page count for ${file.name}", e)
-            0
-        }
     }
     
     override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {

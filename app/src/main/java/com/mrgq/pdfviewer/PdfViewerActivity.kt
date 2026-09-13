@@ -429,21 +429,12 @@ class PdfViewerActivity : AppCompatActivity() {
             val file = File(pdfFilePath)
             if (!file.exists()) return
             
-            // Check if file already exists in database
-            val existingPdfFile = musicRepository.getPdfFileByPath(pdfFilePath)
-            
-            if (existingPdfFile != null) {
-                currentPdfFileId = existingPdfFile.id
-                Log.d("PdfViewerActivity", "Found existing PDF file in database: ${existingPdfFile.id}")
-                return
-            }
-            
-            // Analyze and insert new PDF file
-            val pdfFile = PdfAnalyzer.analyzePdfFile(file)
+            // 레코드가 없거나 파일이 바뀌었으면 분석해 저장한다(문서 정보 포함).
+            // 기존 레코드는 update 로 갱신된다 — insert(REPLACE) 는 표시 설정을 지운다 (PdfFileSync)
+            val pdfFile = musicRepository.syncPdfFile(file)
             if (pdfFile != null) {
-                musicRepository.insertPdfFile(pdfFile)
                 currentPdfFileId = pdfFile.id
-                Log.d("PdfViewerActivity", "Inserted new PDF file into database: ${pdfFile.id}")
+                Log.d("PdfViewerActivity", "PDF file record ready: ${pdfFile.id}")
             } else {
                 Log.e("PdfViewerActivity", "Failed to analyze PDF file: $pdfFilePath")
             }

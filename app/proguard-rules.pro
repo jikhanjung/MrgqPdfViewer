@@ -39,3 +39,9 @@
 -keepclassmembers class * {
     @com.google.gson.annotations.SerializedName <fields>;
 }
+
+# PdfBox-Android — 문서 정보(제목·작성자) 읽기에 쓴다 (PdfMetadataReader).
+# JPXFilter 가 선택 의존성인 JPEG2000 디코더(com.gemalto.jp2)를 참조하는데 포함하지 않았다.
+# 이미지를 디코딩하지 않으므로 경고만 끈다. 암호화 핸들러 리플렉션용 keep 은 라이브러리
+# 자체 consumer 규칙에 있고, release 스모크가 샘플 PDF 로 실제 동작을 확인한다.
+-dontwarn com.gemalto.jp2.**

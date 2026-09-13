@@ -15,7 +15,7 @@ import com.mrgq.pdfviewer.database.entity.UserPreference
 
 @Database(
     entities = [PdfFile::class, UserPreference::class],
-    version = 4,
+    version = 5,
     exportSchema = true   // app/schemas 로 내보낸다 — 마이그레이션 테스트·드리프트 감지의 전제
 )
 @TypeConverters(Converters::class)
@@ -99,8 +99,19 @@ abstract class MusicDatabase : RoomDatabase() {
             }
         }
 
+        // Migration from version 4 to 5 (PDF 문서 정보: author, docInfoReadAt)
+        // title 은 v1 부터 있던 컬럼을 채우기만 한다. 새 컬럼은 둘 다 nullable 이라 기존 행은 null 이고,
+        // docInfoReadAt 이 null 인 행은 다음 목록 로드에서 PdfFileSync 가 문서 정보를 읽어 채운다.
+        // 테이블을 재생성하지 않으므로 user_preferences 는 그대로 남는다.
+        private val MIGRATION_4_5 = object : Migration(4, 5) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL("ALTER TABLE pdf_files ADD COLUMN author TEXT")
+                database.execSQL("ALTER TABLE pdf_files ADD COLUMN docInfoReadAt INTEGER")
+            }
+        }
+
         /** 앱과 마이그레이션 테스트가 같은 목록을 쓴다 — 등록 누락을 테스트가 잡도록. */
-        internal val ALL_MIGRATIONS = arrayOf(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
+        internal val ALL_MIGRATIONS = arrayOf(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
 
         fun getDatabase(context: Context): MusicDatabase {
             return INSTANCE ?: synchronized(this) {

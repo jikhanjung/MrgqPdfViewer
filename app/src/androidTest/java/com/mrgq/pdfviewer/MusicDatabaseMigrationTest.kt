@@ -15,17 +15,19 @@ import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 
 /**
- * Room 마이그레이션 테스트 (v1/v2/v3 → v4).
+ * Room 마이그레이션 테스트 (v1~v4 → 최신).
  *
  * 과거에 마이그레이션 오류로 DisplayMode 저장이 깨진 적이 있다(v0.1.8). 그런데 app/schemas 에는
- * export 를 켠 뒤의 **4.json 만** 있어서 `helper.createDatabase(name, 1)` 로 옛 DB 를 만들 수
- * 없다. 그래서 옛 DB 는 당시 Room 이 만들었을 SQL 로 직접 만들고, 결과만 4.json 과 대조한다.
+ * export 를 켠 v4 이후의 JSON 만 있어서 `helper.createDatabase(name, 1)` 로 옛 DB 를 만들 수
+ * 없다. 그래서 v1~v3 DB 는 당시 Room 이 만들었을 SQL 로 직접 만들고, 결과만 최신 JSON 과
+ * 대조한다. v4 부터는 `helper.createDatabase` 를 쓴다.
  *
  * 옛 스키마의 출처 (git):
  *  - v1: `96c23d9` 의 엔티티 (UserPreference 에 클리핑·여백 없음)
@@ -61,6 +63,32 @@ class MusicDatabaseMigrationTest {
     @Test
     fun v3_에서_최신까지_스키마가_일치한다() = assertMigratesToLatest(3, V3_USER_PREFERENCES) {
         it.execSQL(INSERT_V3_PREF)
+    }
+
+    @Test
+    fun v4_에서_v5_는_설정을_보존하고_문서정보_컬럼을_더한다() {
+        helper.createDatabase(TEST_DB, 4).apply {
+            execSQL(INSERT_FILE)
+            execSQL(INSERT_V3_PREF) // v4 의 user_preferences 는 v3 와 같다
+            close()
+        }
+
+        val db = helper.runMigrationsAndValidate(TEST_DB, 5, true, *MusicDatabase.ALL_MIGRATIONS)
+
+        db.query("SELECT author, docInfoReadAt, totalPages FROM pdf_files WHERE id = 'file-1'").use { c ->
+            assertEquals(1, c.count)
+            c.moveToFirst()
+            assertTrue("새 컬럼은 null 로 시작", c.isNull(0))
+            assertTrue("docInfoReadAt null = 다음 목록 로드에서 문서 정보를 읽는다", c.isNull(1))
+            assertEquals(13, c.getInt(2))
+        }
+        // 3→4 와 달리 테이블을 재생성하지 않으므로 설정이 남아야 한다
+        db.query("SELECT displayMode, centerPadding FROM user_preferences WHERE pdfFileId = 'file-1'").use { c ->
+            assertEquals("v4→v5 에서 파일별 표시 설정이 사라졌다", 1, c.count)
+            c.moveToFirst()
+            assertEquals("DOUBLE", c.getString(0))
+            assertEquals(0.1, c.getDouble(1), 1e-9)
+        }
     }
 
     @Test
@@ -138,7 +166,7 @@ class MusicDatabaseMigrationTest {
             seedPreference(it)
         }.close()
 
-        // 테이블 구조·외래키가 4.json 과 다르면 여기서 IllegalStateException
+        // 테이블 구조·외래키가 최신 스키마 JSON 과 다르면 여기서 IllegalStateException
         val db = helper.runMigrationsAndValidate(TEST_DB, LATEST_VERSION, true, *MusicDatabase.ALL_MIGRATIONS)
 
         db.query("SELECT filename, orientation FROM pdf_files WHERE id = 'file-1'").use { c ->
@@ -179,7 +207,7 @@ class MusicDatabaseMigrationTest {
 
     private companion object {
         const val TEST_DB = "migration-test"
-        const val LATEST_VERSION = 4
+        const val LATEST_VERSION = 5
 
         // pdf_files 는 v1 부터 바뀐 적이 없다
         const val PDF_FILES = "CREATE TABLE IF NOT EXISTS `pdf_files` (`id` TEXT NOT NULL, " +

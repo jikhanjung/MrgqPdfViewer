@@ -104,6 +104,15 @@ android {
     sourceSets {
         getByName("androidTest").assets.srcDir("$projectDir/schemas")
     }
+
+    packaging {
+        resources {
+            // PdfBox-Android 가 끌고 오는 BouncyCastle 의 양자내성암호(SIKE·Picnic) 데이터 파일.
+            // dex 가 아니라 Java 리소스라 R8 이 걷어내지 못하고 release APK 에 7.8MB 로 들어갔다.
+            // PDF 암호화(RC4·AES)와 무관하다.
+            excludes += "org/bouncycastle/pqc/**"
+        }
+    }
 }
 
 // Room 스키마를 app/schemas 에 JSON 으로 내보낸다 (이 프로젝트는 ksp 가 아니라 kapt 를 쓴다).
@@ -147,6 +156,10 @@ dependencies {
     implementation("androidx.room:room-runtime:2.6.1")
     implementation("androidx.room:room-ktx:2.6.1")
     kapt("androidx.room:room-compiler:2.6.1")
+
+    // PDF 문서 정보(제목·작성자) 읽기 — PdfRenderer 는 렌더링만 한다.
+    // 암호화 PDF 처리용 BouncyCastle 이 전이 의존성으로 따라온다.
+    implementation("com.tom-roush:pdfbox-android:2.0.27.0")
     
     testImplementation("junit:junit:4.13.2")
     androidTestImplementation("androidx.test.ext:junit:1.1.5")

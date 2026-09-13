@@ -6,6 +6,22 @@
 
 ## [Unreleased]
 
+### ✨ PDF 문서 정보 (제목·작성자)
+- **파일 목록 카드에 PDF 의 제목·작성자 표시** — PDF 문서 정보(Info)를 PdfBox-Android 로 읽는다
+  (`PdfRenderer` 는 렌더링만 해서 읽을 수 없다). 제목이 파일명과 같거나 둘 다 없으면 줄을 숨긴다.
+- **Room 스키마 v5** — `pdf_files` 에 `author`, `docInfoReadAt` 추가 (`MIGRATION_4_5`, 설정 보존).
+  Author 는 작곡가가 아니라 문서 작성자일 수 있어 `composer` 와 분리했다.
+- **목록의 페이지 수·문서 정보를 DB 에 캐시** (`PdfFileSync`) — 처음 보거나 바뀐(mtime) 파일만 분석한다.
+  업데이트 후 첫 목록 로드에서 모든 파일을 한 번씩 읽는다.
+  - 기존 레코드 갱신은 update 로만 — `insertPdfFile`(REPLACE) 는 ON DELETE CASCADE 로
+    **파일별 표시 설정을 지운다**. 테스트로 고정.
+  - 목록 로드가 겹쳐 같은 파일을 두 번 분석하던 것을 Mutex 로 직렬화
+- release APK 2.6MB → 4.6MB. BouncyCastle 의 양자내성암호 데이터 파일(7.8MB, R8 이 못 걷어내는
+  Java 리소스)을 패키징에서 제외했다.
+- release 스모크가 샘플 악보를 넣고 minify 된 APK 의 문서 정보 읽기를 확인한다
+  (Android 11+ 는 셸 권한 제한으로 건너뜀).
+- 상세: `devlog/20260913_045_pdf_document_info.md`
+
 ### 🧪 테스트
 - **Room 마이그레이션 테스트** (`MusicDatabaseMigrationTest`, 계측 5개) — v1/v2/v3 → v4 를
   스키마 JSON 과 대조하고, v2→v3 중앙 여백 픽셀→퍼센티지 변환을 값으로 검증한다. 앱과 테스트가

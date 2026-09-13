@@ -24,6 +24,9 @@ class MusicRepository(context: Context) {
     
     fun searchPdfFiles(query: String): Flow<List<PdfFile>> = pdfFileDao.searchPdfFiles(query)
     
+    /** 파일과 레코드를 맞춘다 (처음 보거나 바뀐 파일만 분석). 기존 레코드 갱신에 insert 를 쓰지 말 것 — PdfFileSync 참고. */
+    suspend fun syncPdfFile(file: java.io.File): PdfFile? = PdfFileSync.sync(pdfFileDao, file)
+
     suspend fun insertPdfFile(pdfFile: PdfFile) = pdfFileDao.insertPdfFile(pdfFile)
     
     suspend fun updatePdfFile(pdfFile: PdfFile) = pdfFileDao.updatePdfFile(pdfFile)

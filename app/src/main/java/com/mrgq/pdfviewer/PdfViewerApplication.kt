@@ -2,6 +2,7 @@ package com.mrgq.pdfviewer
 
 import android.app.Application
 import android.util.Log
+import com.tom_roush.pdfbox.android.PDFBoxResourceLoader
 
 /**
  * Application 클래스 - 앱 전체 생명주기 관리
@@ -16,6 +17,9 @@ class PdfViewerApplication : Application() {
     override fun onCreate() {
         super.onCreate()
         Log.d(TAG, "Application 시작")
+
+        // PdfBox 는 첫 호출 전에 리소스 로더 초기화가 필요하다 (PdfMetadataReader)
+        PDFBoxResourceLoader.init(applicationContext)
         
         // Global collaboration manager 초기화
         GlobalCollaborationManager.getInstance().initialize(this)

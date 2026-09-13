@@ -10,6 +10,7 @@ import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
 import com.mrgq.pdfviewer.R
 import com.mrgq.pdfviewer.model.PdfFile
+import com.mrgq.pdfviewer.utils.PdfDocumentInfo
 import java.text.SimpleDateFormat
 import java.util.*
 import kotlin.math.ln
@@ -55,6 +56,7 @@ class PdfFileAdapter(
         
         private val fileNameText: TextView = itemView.findViewById(R.id.fileNameText)
         private val fileInfoText: TextView = itemView.findViewById(R.id.fileInfoText)
+        private val docInfoText: TextView = itemView.findViewById(R.id.docInfoText)
         private val deleteButton: Button = itemView.findViewById(R.id.deleteButton)
         private var currentItem: PdfFile? = null
         private var currentPosition: Int = -1
@@ -86,6 +88,11 @@ class PdfFileAdapter(
             currentItem = pdfFile
             currentPosition = position
             fileNameText.text = pdfFile.name
+
+            // PDF 문서 정보 (제목 · 작성자). 없거나 제목이 파일명과 같으면 줄을 숨긴다
+            val subtitle = PdfDocumentInfo.subtitle(pdfFile.name, pdfFile.title, pdfFile.author)
+            docInfoText.text = subtitle ?: ""
+            docInfoText.visibility = if (subtitle != null) View.VISIBLE else View.GONE
             
             // Format file info
             val dateFormat = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault())

@@ -13,18 +13,37 @@
     android:focusable="true"
     android:clickable="true">
 
-    <!-- File Name -->
-    <TextView
-        android:id="@+id/fileNameText"
+    <LinearLayout
         android:layout_width="0dp"
         android:layout_height="wrap_content"
         android:layout_weight="1"
-        android:textColor="@android:color/white"
-        android:textSize="16sp"
-        android:textStyle="bold"
-        android:maxLines="1"
-        android:ellipsize="end"
-        android:layout_marginEnd="12dp" />
+        android:orientation="vertical"
+        android:layout_marginEnd="12dp">
+
+        <!-- File Name -->
+        <TextView
+            android:id="@+id/fileNameText"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:textColor="@android:color/white"
+            android:textSize="16sp"
+            android:textStyle="bold"
+            android:maxLines="1"
+            android:ellipsize="end" />
+
+        <!-- PDF 문서 정보 (제목 · 작성자). 없으면 숨김 -->
+        <TextView
+            android:id="@+id/docInfoText"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
+            android:textColor="#B0FFFFFF"
+            android:textSize="13sp"
+            android:maxLines="1"
+            android:ellipsize="end"
+            android:visibility="gone" />
+
+    </LinearLayout>
 
     <!-- File Info -->
     <TextView

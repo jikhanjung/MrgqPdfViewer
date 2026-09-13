@@ -38,6 +38,21 @@ dump_diagnostics() {
 
 adb uninstall "$PKG" || true
 adb install -r app/build/outputs/apk/release/*.apk
+
+# 샘플 악보를 넣고 기동한다 — 파일 목록 로드가 minify 된 PdfBox 로 문서 정보를 읽는지 본다.
+# PdfBox 는 암호화 핸들러를 리플렉션으로 만든다. R8 이 깨뜨리기 쉬운 표면이다.
+#
+# ⚠️ Android 11+ 에서는 셸이 다른 앱의 Android/data 에 쓸 수 없어 넣기가 실패한다
+# (로컬 API 30 에서 "Permission denied" 확인). 그래서 실패는 경고로만 두고 검사를 건너뛴다.
+# R8 결과물은 API 레벨과 무관하게 같으므로, 넣을 수 있는 매트릭스(API 21)에서 한 번 보면 된다.
+PDF_DIR="/sdcard/Android/data/$PKG/files/PDFs"
+sample_pushed=0
+if adb shell mkdir -p "$PDF_DIR" && adb push data/Moldau0607.pdf "$PDF_DIR/" >/dev/null; then
+  sample_pushed=1
+else
+  echo "::warning::샘플 PDF 를 넣지 못해 문서 정보 검사는 건너뜁니다 (API $API_LEVEL — Android 11+ 셸 권한 제한이면 정상)"
+fi
+
 adb logcat -c
 adb shell am start -W -n "$PKG/.SplashActivity"
 
@@ -67,6 +82,20 @@ if printf '%s' "$crash" | grep -q "$PKG"; then
   echo "::error::release APK 에서 크래시가 기록됐습니다 (API $API_LEVEL)"
   printf '%s\n' "$crash" | tail -80
   exit 1
+fi
+
+if [ "$sample_pushed" = 1 ]; then
+  # 파이프로 grep -q 에 넘기지 않는다: 일치 즉시 grep 이 끝나면 logcat 이 SIGPIPE 를 받을 수 있고,
+  # pipefail 때문에 찾았는데도 실패로 판정된다. 로컬 API 29 에서 파이프 버전은 로그에 문자열이
+  # 있는데도 실패했고 이 방식으로 바꾼 뒤 통과했다 (단독 재현은 안 돼 원인은 가장 유력한 추정).
+  app_log="$(adb logcat -d 2>/dev/null || true)"
+  if grep -q "title=Die Moldau" <<<"$app_log"; then
+    echo "문서 정보 읽기 ✓ (API $API_LEVEL)"
+  else
+    echo "::error::release APK 가 샘플 PDF 의 문서 정보를 읽지 못했습니다 (API $API_LEVEL)"
+    dump_diagnostics
+    exit 1
+  fi
 fi
 
 echo "release APK 정상 기동 ✓ (API $API_LEVEL)"
