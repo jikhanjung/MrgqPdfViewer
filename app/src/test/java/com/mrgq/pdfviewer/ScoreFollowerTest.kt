@@ -87,6 +87,23 @@ class ScoreFollowerTest {
     }
 
     @Test
+    fun 점음표_박이면_겹박자_마디는_두_박_홑박자_마디는_그대로() {
+        val follower = ScoreFollower(
+            listOf(measure(1, 6), measure(2, 6), measure(3, 3, 4)),
+            startMeasureNumber = 1,
+            dottedBeat = true,
+        )
+        assertEquals("예비박도 점4분음표 두 박", 2, follower.countInBeats)
+        assertEquals(1, measureOf(follower.positionAt(2)))
+        assertEquals(2, measureOf(follower.positionAt(4)))
+        val third = follower.positionAt(6) as Position.InMeasure
+        assertEquals(3, third.measure.measureNumber)
+        assertEquals("3/4 마디는 4분음표 3박", 3, third.beatsInMeasure)
+        assertEquals(Position.Finished, follower.positionAt(9))
+        assertEquals(BarPosition(1, TimeSignature(6, 8), dotted = true), follower.barPositionAt(5))
+    }
+
+    @Test
     fun 박자를_아는_마디부터만_시작할_수_있다() {
         assertTrue("박자표를 하나도 못 읽으면 연동 안 함", ScoreFollower.startableMeasures(listOf(measure(1, null), measure(2, null))).isEmpty())
         val startable = ScoreFollower.startableMeasures(listOf(measure(2, null), measure(1, null), measure(3, 3, 4), measure(4, null)))

@@ -12,6 +12,9 @@ enum class Accent { STRONG, MEDIUM, WEAK }
  * 강세: 첫 박은 강하게. 겹박자(분자 6·9·12)는 3박씩 묶어 각 묶음의 첫 박을 중간 세기로 — 6/8 은 1박 강 · 4박 중간
  * (사용자 결정, #051). 홑박자(2/4, 3/4, 4/4 …)는 첫 박만 강조한다.
  *
+ * **점음표 박** (`dotted`, #052): 겹박자를 3박 묶음 하나를 한 박으로 센다 — 6/8 은 점4분음표 2박(강 · 중), BPM 도 점4분음표 기준.
+ * 빠른 겹박자는 이렇게 센다. 홑박자에는 영향이 없다.
+ *
  * Android 에 의존하지 않는다 — JVM 단위 테스트 대상.
  */
 data class TimeSignature(val numerator: Int, val denominator: Int) {
@@ -19,14 +22,19 @@ data class TimeSignature(val numerator: Int, val denominator: Int) {
     /** 겹박자 — 분자가 6 이상의 3의 배수면 3박씩 묶는다 (6/8, 9/8, 12/8, 6/4 …). */
     val isCompound: Boolean get() = numerator >= 6 && numerator % 3 == 0
 
-    fun accentAt(indexInBar: Int): Accent = when {
+    /** 마디당 박(클릭) 수. 점음표 박이면 3박 묶음 수. */
+    fun beatsPerBar(dotted: Boolean = false): Int = if (dotted && isCompound) numerator / 3 else numerator
+
+    /** 점음표 박이면 첫 박 강 · 나머지 중간 — 분모 음표로 셀 때의 묶음 첫 박과 같은 소리다. */
+    fun accentAt(indexInBar: Int, dotted: Boolean = false): Accent = when {
         indexInBar == 0 -> Accent.STRONG
-        isCompound && indexInBar % 3 == 0 -> Accent.MEDIUM
+        isCompound && (dotted || indexInBar % 3 == 0) -> Accent.MEDIUM
         else -> Accent.WEAK
     }
 
-    /** 박 단위 음표 이름 — "8분음표" */
-    val beatNoteName: String get() = "${denominator}분음표"
+    /** 박 단위 음표 이름 — "8분음표", 점음표 박이면 "점4분음표" */
+    fun beatNoteName(dotted: Boolean = false): String =
+        if (dotted && isCompound) "점${denominator / 2}분음표" else "${denominator}분음표"
 
     /**
      * 메트로놈이 다루는 범위로 자른다. 분자는 [MetronomeClock.MIN_BEATS]..[MetronomeClock.MAX_BEATS],

@@ -44,13 +44,14 @@ interface UserPreferenceDao {
     /** 메트로놈 값만 바꾼다 — 행 전체를 다시 쓰지 않으므로 다른 표시 설정을 건드리지 않는다. */
     @Query(
         "UPDATE user_preferences SET metronomeBpm = :bpm, metronomeBeatsPerBar = :beatsPerBar, " +
-            "metronomeBeatUnit = :beatUnit, updatedAt = :updatedAt WHERE pdfFileId = :pdfFileId"
+            "metronomeBeatUnit = :beatUnit, metronomeDottedBeat = :dottedBeat, updatedAt = :updatedAt WHERE pdfFileId = :pdfFileId"
     )
     suspend fun updateMetronome(
         pdfFileId: String,
         bpm: Int?,
         beatsPerBar: Int?,
         beatUnit: Int?,
+        dottedBeat: Boolean?,
         updatedAt: Long = System.currentTimeMillis(),
     )
 

@@ -219,6 +219,34 @@ class MusicDatabaseMigrationTest {
     }
 
     @Test
+    fun v10_에서_v11_은_점음표_박_컬럼을_더하고_박자_설정을_보존한다() {
+        helper.createDatabase(TEST_DB, 10).apply {
+            execSQL(INSERT_FILE)
+            execSQL(
+                "INSERT INTO user_preferences (pdfFileId, displayMode, lastPageNumber, bookmarkedPages, " +
+                    "topClippingPercent, bottomClippingPercent, centerPadding, updatedAt, metronomeBpm, " +
+                    "metronomeBeatsPerBar, metronomeBeatUnit) " +
+                    "VALUES ('file-1', 'DOUBLE', 7, '', 0.05, 0.03, 0.1, 1000, 216, 6, 8)"
+            )
+            close()
+        }
+
+        val db = helper.runMigrationsAndValidate(TEST_DB, 11, true, *MusicDatabase.ALL_MIGRATIONS)
+
+        db.query(
+            "SELECT metronomeBpm, metronomeBeatsPerBar, metronomeBeatUnit, metronomeDottedBeat " +
+                "FROM user_preferences WHERE pdfFileId = 'file-1'"
+        ).use { c ->
+            assertEquals("v10→v11 에서 파일별 설정이 사라졌다", 1, c.count)
+            c.moveToFirst()
+            assertEquals(216, c.getInt(0))
+            assertEquals(6, c.getInt(1))
+            assertEquals(8, c.getInt(2))
+            assertTrue("미설정 = null → 분모 음표로 센다 (이전 동작)", c.isNull(3))
+        }
+    }
+
+    @Test
     fun v2_to_v3_중앙여백_픽셀이_비율로_변환된다() {
         val db = createDbAt(2, V2_USER_PREFERENCES) {
             it.execSQL(INSERT_FILE)
@@ -334,7 +362,7 @@ class MusicDatabaseMigrationTest {
 
     private companion object {
         const val TEST_DB = "migration-test"
-        const val LATEST_VERSION = 10
+        const val LATEST_VERSION = 11
 
         // pdf_files 는 v1 부터 바뀐 적이 없다
         const val PDF_FILES = "CREATE TABLE IF NOT EXISTS `pdf_files` (`id` TEXT NOT NULL, " +

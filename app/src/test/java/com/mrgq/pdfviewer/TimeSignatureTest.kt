@@ -66,6 +66,28 @@ class TimeSignatureTest {
     @Test
     fun 표시는_분자_분모() {
         assertEquals("6/8", TimeSignature(6, 8).toString())
-        assertEquals("8분음표", TimeSignature(6, 8).beatNoteName)
+        assertEquals("8분음표", TimeSignature(6, 8).beatNoteName())
+    }
+
+    @Test
+    fun 점음표_박이면_묶음_수만큼_센다() {
+        assertEquals(2, TimeSignature(6, 8).beatsPerBar(dotted = true))
+        assertEquals(3, TimeSignature(9, 8).beatsPerBar(dotted = true))
+        assertEquals(4, TimeSignature(12, 8).beatsPerBar(dotted = true))
+        assertEquals(6, TimeSignature(6, 8).beatsPerBar(dotted = false))
+        assertEquals("홑박자는 점음표 박이 없다", 3, TimeSignature(3, 4).beatsPerBar(dotted = true))
+        assertEquals("점4분음표", TimeSignature(6, 8).beatNoteName(dotted = true))
+        assertEquals("점8분음표", TimeSignature(6, 16).beatNoteName(dotted = true))
+        assertEquals("4분음표", TimeSignature(3, 4).beatNoteName(dotted = true))
+    }
+
+    @Test
+    fun 점음표_박은_첫_박_강_나머지_중간() {
+        val sixEight = TimeSignature(6, 8)
+        assertEquals(listOf(S, M), (0 until 2).map { sixEight.accentAt(it, dotted = true) })
+        val twelveEight = TimeSignature(12, 8)
+        assertEquals(listOf(S, M, M, M), (0 until 4).map { twelveEight.accentAt(it, dotted = true) })
+        val threeFour = TimeSignature(3, 4)
+        assertEquals(listOf(S, W, W), (0 until 3).map { threeFour.accentAt(it, dotted = true) })
     }
 }

@@ -24,6 +24,7 @@ data class UserPreference(
     val metronomeBpm: Int? = null,       // 메트로놈 템포 (v7). null = 미설정 → 기본값. 나중에 MusicXML 템포로 채울 자리
     val metronomeBeatsPerBar: Int? = null, // 메트로놈 마디당 박 수 = 박자표 분자 (v7). 첫 박 강조
     val metronomeBeatUnit: Int? = null,  // 메트로놈 박 단위 = 박자표 분모 (v10). null = 고른 적 없음 → 악보 박자표로 채운다
+    val metronomeDottedBeat: Boolean? = null, // 겹박자를 점음표 박으로 센다 (v11). null = 분모 음표로 (기본)
     val updatedAt: Long = System.currentTimeMillis()
 )
 

@@ -36,6 +36,7 @@ import com.mrgq.pdfviewer.repository.MusicRepository
 import com.mrgq.pdfviewer.utils.PdfAnalyzer
 import com.mrgq.pdfviewer.database.entity.ScoreMeasure
 import com.mrgq.pdfviewer.score.ScoreOverlayGeometry
+import com.mrgq.pdfviewer.metronome.Accent
 import com.mrgq.pdfviewer.metronome.MetronomeClock
 import com.mrgq.pdfviewer.metronome.MetronomeEngine
 import com.mrgq.pdfviewer.metronome.Beat
@@ -61,6 +62,10 @@ class PdfViewerActivity : AppCompatActivity() {
 
         /** 악보 연동 자동 넘김: 페이지 마지막 마디가 끝나기 몇 박 전에 넘길지 */
         private const val TURN_LEAD_BEATS = 2
+        /** 겹박자를 분모 음표로 세는데 이보다 빠르면 점음표로 세기를 권한다 (#052) — 8분음표 180 = 점4분음표 60 */
+        private const val COMPOUND_FAST_BPM = 180
+        /** 일시정지 중 포커스가 돌아온 뒤 선택 메뉴를 띄우기까지 — 메뉴 → 설정 대화상자 전환 사이의 틈을 넘긴다 */
+        private const val PAUSED_MENU_DELAY_MS = 300L
     }
     
     private lateinit var binding: ActivityPdfViewerBinding
@@ -129,14 +134,32 @@ class PdfViewerActivity : AppCompatActivity() {
             if (followState == FollowState.PLAYING) updateFollow(beat)
             if (!metronome.isRunning) return // 악보 끝에서 멈췄다
             // 박자는 들리는 박의 것 — 바꾼 박자·악보의 박자 바뀜이 소리와 같은 박에서 보인다
-            binding.metronomeBeat.update(beat, metronome.bpm, beat?.timeSignature ?: metronome.timeSignature)
+            binding.metronomeBeat.update(
+                beat,
+                metronome.bpm,
+                beat?.timeSignature ?: metronome.timeSignature,
+                beat?.dotted ?: metronome.dottedBeat,
+            )
             binding.metronomeBeat.postOnAnimation(this)
         }
     }
 
     // 메트로놈 악보 연동 (#050): 시작 마디 고르기 → 예비박 한 마디 → 현재 마디 표시 + 자동 넘김
-    private enum class FollowState { OFF, SELECTING, PLAYING }
+    // PAUSED (#053): 연주 중 메뉴(↑ 메트로놈 메뉴, OK 길게 PDF 표시 옵션)를 띄우면 멈추고, 메뉴를 모두 닫으면 다음 동작을 고른다
+    private enum class FollowState { OFF, SELECTING, PLAYING, PAUSED }
     private var followState = FollowState.OFF
+    /** 마지막으로 멈춘 곳 (파일 ID, 마디 번호) — 다음에 마디를 고를 때 커서를 거기 둔다 */
+    private var lastFollowPosition: Pair<String, Int>? = null
+    private var metronomeMenuShowing = false
+    /** 메트로놈 설정 대화상자를 준비하는 중 (설정 읽기·악보 분석) — 그 사이 포커스가 돌아와도 선택 메뉴를 띄우지 않는다 */
+    private var metronomeDialogPending = false
+    private val pausedMenuCheck = Runnable {
+        if (hasWindowFocus() && followState == FollowState.PAUSED && !metronomeMenuShowing &&
+            !metronomeDialogPending && !isFinishing
+        ) {
+            showMetronomeMenu()
+        }
+    }
     /** 시작할 수 있는 마디 (박자를 아는 마디부터) */
     private var followMeasures: List<ScoreMeasure> = emptyList()
     private var followFileId: String? = null
@@ -170,6 +193,8 @@ class PdfViewerActivity : AppCompatActivity() {
     private fun syncTurnLeadMs(): Long = preferences.getLong("sync_turn_lead_ms", 2000L)
     private val longPressRunnable = Runnable {
         if (isLongPressing) {
+            // 악보 연동 중이면 메뉴를 보는 동안 멈춘다 — 메뉴를 모두 닫으면 이어서 · 마디 골라 다시 · 정지를 고른다 (#053)
+            pauseFollowing()
             showPdfDisplayOptions()
         }
     }
@@ -1309,12 +1334,17 @@ class PdfViewerActivity : AppCompatActivity() {
                 KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER -> return true
                 KeyEvent.KEYCODE_BACK, KeyEvent.KEYCODE_ESCAPE -> { cancelMeasureSelection(); return true }
             }
-        } else if (followState == FollowState.PLAYING &&
+        } else if ((followState == FollowState.PLAYING || followState == FollowState.PAUSED) &&
             (keyCode == KeyEvent.KEYCODE_BACK || keyCode == KeyEvent.KEYCODE_ESCAPE)
         ) {
             // 연주 중 뒤로: 뷰어를 나가지 않고 메트로놈만 멈춘다
             stopMetronome()
             Toast.makeText(this, "메트로놈 정지", Toast.LENGTH_SHORT).show()
+            return true
+        }
+        // ↑: 메트로놈 메뉴 (#053) — 자주 쓰므로 PDF 표시 옵션과 따로. 악보 연동 중이면 일시정지하고 연다
+        if (keyCode == KeyEvent.KEYCODE_DPAD_UP) {
+            if (event?.repeatCount == 0) showMetronomeMenu()
             return true
         }
         when (keyCode) {
@@ -1898,23 +1928,38 @@ class PdfViewerActivity : AppCompatActivity() {
      */
     private fun showMetronomeDialog() {
         val fileId = currentPdfFileId
+        metronomeDialogPending = true
         lifecycleScope.launch {
-            val saved = if (fileId != null) {
-                withContext(Dispatchers.IO) { musicRepository.getUserPreference(fileId) }
-            } else {
-                null
-            }
-            val bpm = if (metronome.isRunning) metronome.bpm else saved?.metronomeBpm ?: MetronomeClock.DEFAULT_BPM
-            // 박자: 실행 중이면 지금 박자, 이 파일에서 고른 적이 있으면 그것, 아니면 악보 박자표로 채운다 (#051).
-            // 분모 없이 박 수만 저장된 행(v0.2.0)도 "고른 적 없음"으로 본다 — 그때는 분모를 고를 수 없었다
-            val meter = when {
-                metronome.isRunning -> metronome.timeSignature
-                saved?.metronomeBeatUnit != null -> TimeSignature.of(saved.metronomeBeatsPerBar, saved.metronomeBeatUnit)
-                else -> scoreTimeSignature(fileId) ?: TimeSignature.of(saved?.metronomeBeatsPerBar, null)
+            val (bpm, meter, dotted) = try {
+                metronomeSettingsFor(fileId)
+            } finally {
+                metronomeDialogPending = false
             }
             if (currentPdfFileId != fileId) return@launch
-            buildMetronomeDialog(fileId, bpm, meter)
+            buildMetronomeDialog(fileId, bpm, meter, dotted)
         }
+    }
+
+    /**
+     * 이 파일의 메트로놈 설정 (템포, 박자, 점음표 박). 실행·일시정지 중이면 엔진의 지금 값을 쓴다.
+     * 박자는 이 파일에서 고른 적이 있으면 그것, 아니면 악보 박자표로 채운다 (#051).
+     * 분모 없이 박 수만 저장된 행(v0.2.0)도 "고른 적 없음"으로 본다 — 그때는 분모를 고를 수 없었다.
+     */
+    private suspend fun metronomeSettingsFor(fileId: String?): Triple<Int, TimeSignature, Boolean> {
+        if (metronome.isRunning || followState == FollowState.PAUSED) {
+            return Triple(metronome.bpm, metronome.timeSignature, metronome.dottedBeat)
+        }
+        val saved = if (fileId != null) {
+            withContext(Dispatchers.IO) { musicRepository.getUserPreference(fileId) }
+        } else {
+            null
+        }
+        val bpm = saved?.metronomeBpm ?: MetronomeClock.DEFAULT_BPM
+        val meter = when {
+            saved?.metronomeBeatUnit != null -> TimeSignature.of(saved.metronomeBeatsPerBar, saved.metronomeBeatUnit)
+            else -> scoreTimeSignature(fileId) ?: TimeSignature.of(saved?.metronomeBeatsPerBar, null)
+        }
+        return Triple(bpm, meter, saved?.metronomeDottedBeat ?: false)
     }
 
     /**
@@ -1945,9 +1990,10 @@ class PdfViewerActivity : AppCompatActivity() {
         return TimeSignature.of(first.timeSigNumerator, first.timeSigDenominator)
     }
 
-    private fun buildMetronomeDialog(fileId: String?, initialBpm: Int, initialMeter: TimeSignature) {
+    private fun buildMetronomeDialog(fileId: String?, initialBpm: Int, initialMeter: TimeSignature, initialDotted: Boolean) {
         var bpm = initialBpm.coerceIn(MetronomeClock.MIN_BPM, MetronomeClock.MAX_BPM)
         var meter = initialMeter.coerced()
+        var dotted = initialDotted
 
         fun android.widget.SeekBar.onProgress(block: (Int) -> Unit) {
             setOnSeekBarChangeListener(object : android.widget.SeekBar.OnSeekBarChangeListener {
@@ -1989,6 +2035,20 @@ class PdfViewerActivity : AppCompatActivity() {
         }
         val denominatorButtons = TimeSignature.DENOMINATORS.associateWith { android.widget.Button(this).apply { isAllCaps = false } }
         val denominatorRow = buttonRow().apply { denominatorButtons.values.forEach { addView(it) } }
+        // 박 단위: 겹박자에서만 — 분모 음표(6/8 = 8분음표 6박)로 셀지 점음표(점4분음표 2박)로 셀지 (#052).
+        // 곡 빠르기에 따라 달라서 자동으로 바꾸지 않고 파일마다 고른다. 바꿔도 빠르기는 그대로 (BPM 을 3배로 환산)
+        val beatUnitLabel = label()
+        val eighthButton = android.widget.Button(this).apply { isAllCaps = false }
+        val dottedButton = android.widget.Button(this).apply { isAllCaps = false }
+        val beatUnitRow = buttonRow().apply {
+            addView(eighthButton)
+            addView(dottedButton)
+        }
+        val beatUnitHint = android.widget.TextView(this).apply {
+            textSize = 13f
+            setTextColor(0xFFFFD54F.toInt())
+            setPadding(0, 4, 0, 4)
+        }
         val soundCheck = android.widget.CheckBox(this).apply {
             text = "클릭음"
             isChecked = preferences.getBoolean(PREF_METRONOME_SOUND, true)
@@ -2000,23 +2060,48 @@ class PdfViewerActivity : AppCompatActivity() {
         }
 
         fun render() {
-            bpmLabel.text = "템포: ${meter.beatNoteName} = $bpm BPM"
-            val accents = if (meter.isCompound) {
-                "1박 강 · ${(3 until meter.numerator step 3).joinToString("·") { "${it + 1}" }}박 중간"
-            } else {
+            val beatNote = meter.beatNoteName(dotted)
+            val beats = meter.beatsPerBar(dotted)
+            bpmLabel.text = "템포: $beatNote = $bpm BPM"
+            val medium = (1 until beats).filter { meter.accentAt(it, dotted) == Accent.MEDIUM }
+            val accents = if (medium.isEmpty()) {
                 "첫 박 강조"
+            } else {
+                "1박 강 · ${medium.joinToString("·") { "${it + 1}" }}박 중간"
             }
-            meterLabel.text = "박자: $meter — ${meter.beatNoteName} ${meter.numerator}박, $accents"
+            meterLabel.text = "박자: $meter — $beatNote ${beats}박, $accents"
             numeratorLabel.text = "직접 고르기 — 마디당 박 수(위 숫자) ${meter.numerator}, 박 단위(아래 숫자):"
             presetButtons.forEach { (ts, button) -> button.text = if (ts == meter) "✓ $ts" else "$ts" }
             denominatorButtons.forEach { (d, button) -> button.text = if (d == meter.denominator) "✓ /$d" else "/$d" }
+
+            val compound = meter.isCompound
+            beatUnitLabel.visibility = if (compound) View.VISIBLE else View.GONE
+            beatUnitRow.visibility = if (compound) View.VISIBLE else View.GONE
+            beatUnitLabel.text = "세는 단위 — 바꿔도 빠르기는 그대로입니다"
+            eighthButton.text = (if (!dotted) "✓ " else "") + "${meter.beatNoteName(false)} ${meter.beatsPerBar(false)}박"
+            dottedButton.text = (if (dotted) "✓ " else "") + "${meter.beatNoteName(true)} ${meter.beatsPerBar(true)}박"
+            val fast = compound && !dotted && bpm > COMPOUND_FAST_BPM
+            beatUnitHint.visibility = if (fast) View.VISIBLE else View.GONE
+            beatUnitHint.text = "빠른 곡이면 ${meter.beatNoteName(true)}로 세는 편이 편할 수 있습니다 " +
+                "(${meter.beatNoteName(true)} = ${Math.round(bpm / 3.0)})"
         }
         // 실행 중이면 바로 들린다 (다음 박부터)
         fun applyToEngine() {
             metronome.bpm = bpm
             metronome.timeSignature = meter
+            metronome.dottedBeat = dotted
             metronome.soundEnabled = soundCheck.isChecked
             metronome.volume = volumeSeek.progress / 100f
+        }
+        fun selectDotted(value: Boolean) {
+            if (value == dotted) return
+            // 같은 빠르기로 환산 — 점음표 박 하나 = 분모 음표 세 박. 범위를 넘으면(점4분 81 이상 → 8분 240 초과) 잘린다
+            bpm = (if (value) Math.round(bpm / 3.0).toInt() else bpm * 3)
+                .coerceIn(MetronomeClock.MIN_BPM, MetronomeClock.MAX_BPM)
+            dotted = value
+            bpmSeek.progress = bpm - MetronomeClock.MIN_BPM
+            render()
+            applyToEngine()
         }
         fun selectMeter(selected: TimeSignature) {
             meter = selected.coerced()
@@ -2033,6 +2118,8 @@ class PdfViewerActivity : AppCompatActivity() {
         }
         presetButtons.forEach { (ts, button) -> button.setOnClickListener { selectMeter(ts) } }
         denominatorButtons.forEach { (d, button) -> button.setOnClickListener { selectMeter(TimeSignature(meter.numerator, d)) } }
+        eighthButton.setOnClickListener { selectDotted(false) }
+        dottedButton.setOnClickListener { selectDotted(true) }
         volumeSeek.onProgress { applyToEngine() }
         soundCheck.setOnCheckedChangeListener { _, _ -> applyToEngine() }
 
@@ -2052,9 +2139,11 @@ class PdfViewerActivity : AppCompatActivity() {
 
         val hint = android.widget.TextView(this).apply {
             text = "템포·박자는 이 파일에 저장됩니다. 실행 중에 바꾸면 다음 박부터 적용됩니다. " +
-                "박은 박자표 아래 숫자의 음표이고 BPM 도 그 음표 기준입니다(6/8 이면 8분음표).\n" +
+                "박은 박자표 아래 숫자의 음표이고 BPM 도 그 음표 기준입니다(6/8 이면 8분음표). " +
+                "6/8 같은 겹박자는 점음표로 셀 수도 있습니다(6/8 이면 점4분음표 2박).\n" +
                 "악보에서 박자표를 읽을 수 있으면 처음엔 그 박자로 채워집니다. 시작을 누른 뒤 악보에서 시작 마디를 고르면 " +
-                "한 마디 예비박 후 현재 마디를 표시하며 페이지를 넘기고, 이때 마디 길이와 강박은 악보 박자표를 따릅니다."
+                "한 마디 예비박 후 현재 마디를 표시하며 페이지를 넘기고, 이때 마디 길이와 강박은 악보 박자표를 따릅니다. " +
+                "악보 화면에서 ↑ 키로 메트로놈 메뉴를 열 수 있고, 연주 중이면 일시정지한 뒤 이어서 · 마디 골라 다시 · 정지를 고릅니다."
             textSize = 12f
             setTextColor(android.graphics.Color.GRAY)
             setPadding(0, 20, 0, 0)
@@ -2062,6 +2151,7 @@ class PdfViewerActivity : AppCompatActivity() {
 
         render()
         (listOf(bpmLabel, bpmSeek, steps, meterLabel) + presetRows +
+            listOf(beatUnitLabel, beatUnitRow, beatUnitHint) +
             listOf(numeratorLabel, numeratorSeek, denominatorRow, soundCheck, volumeLabel, volumeSeek, hint))
             .forEach { content.addView(it) }
 
@@ -2085,8 +2175,9 @@ class PdfViewerActivity : AppCompatActivity() {
                 if (fileId != null) {
                     val tempo = bpm
                     val chosen = meter
+                    val countDotted = dotted
                     lifecycleScope.launch(Dispatchers.IO) {
-                        musicRepository.setMetronomeForFile(fileId, tempo, chosen.numerator, chosen.denominator)
+                        musicRepository.setMetronomeForFile(fileId, tempo, chosen.numerator, chosen.denominator, countDotted)
                     }
                 }
             }
@@ -2111,6 +2202,11 @@ class PdfViewerActivity : AppCompatActivity() {
         binding.metronomeBeat.visibility = View.GONE
         metronomeFileId = null
         if (followState != FollowState.OFF) {
+            val fileId = followFileId
+            val at = followMeasure
+            if (fileId != null && at != null && followState != FollowState.SELECTING) {
+                lastFollowPosition = fileId to at.measureNumber
+            }
             followState = FollowState.OFF
             follower = null
             followMeasure = null
@@ -2124,6 +2220,7 @@ class PdfViewerActivity : AppCompatActivity() {
         val runningFor = metronomeFileId
         if (metronome.isRunning && runningFor != null && runningFor != fileId) stopMetronome()
         if (followState == FollowState.SELECTING && followFileId != fileId) cancelMeasureSelection()
+        if (followState == FollowState.PAUSED && followFileId != fileId) stopMetronome()
     }
 
     /**
@@ -2161,20 +2258,120 @@ class PdfViewerActivity : AppCompatActivity() {
     private fun enterMeasureSelection(fileId: String, startable: List<ScoreMeasure>) {
         followMeasures = startable
         followFileId = fileId
-        cursorIndex = startable.indexOfFirst { isMeasureVisible(it) }.takeIf { it >= 0 }
+        // 마지막으로 멈춘 마디가 화면에 있으면 거기서 (일시정지 후 다시 고르기, 정지 후 다시 시작 — #053)
+        val last = lastFollowPosition?.takeIf { it.first == fileId }?.second
+        cursorIndex = startable.indexOfFirst { it.measureNumber == last && isMeasureVisible(it) }.takeIf { it >= 0 }
+            ?: startable.indexOfFirst { isMeasureVisible(it) }.takeIf { it >= 0 }
             ?: startable.indexOfFirst { it.pageIndex >= pageIndex }.takeIf { it >= 0 }
             ?: 0
         followState = FollowState.SELECTING
         turnRequestedTo = -1
         ensureMeasureVisible(startable[cursorIndex])
         refreshScoreOverlay()
-        Toast.makeText(this, "시작할 마디를 고르세요 — ←→ 마디, ↑↓ 줄, OK 시작, 뒤로 취소", Toast.LENGTH_LONG).show()
+        Toast.makeText(this, "시작할 마디를 고르세요 — ←→ 마디, ↑↓ 줄, OK 시작, 뒤로 취소 (연주 중 ↑ 메뉴)", Toast.LENGTH_LONG).show()
     }
 
     private fun cancelMeasureSelection() {
         followState = FollowState.OFF
         followMeasures = emptyList()
         refreshScoreOverlay()
+    }
+
+    /** 악보 연동 일시정지 (#053) — 메뉴를 띄울 때. 연주 중이 아니면 아무것도 하지 않는다. 멈춘 마디를 표시해 둔다. */
+    private fun pauseFollowing() {
+        if (followState != FollowState.PLAYING) return
+        val at = followMeasure
+        metronome.stop()
+        metronome.barPosition = null
+        binding.metronomeBeat.removeCallbacks(metronomeTicker)
+        binding.metronomeBeat.visibility = View.GONE
+        follower = null
+        followInCountIn = false
+        cursorIndex = followMeasures.indexOfFirst { it.measureNumber == at?.measureNumber }.coerceAtLeast(0)
+        followMeasure = followMeasures.getOrNull(cursorIndex)
+        followState = FollowState.PAUSED
+        refreshScoreOverlay()
+    }
+
+    /** 이어서 — 멈춘 마디의 처음부터, 시작할 때처럼 한 마디 예비박 뒤 */
+    private fun resumeFollowing() {
+        if (followState == FollowState.PAUSED) startFollowing()
+    }
+
+    /** 마디 골라 다시 시작 — 멈춘 마디에 커서를 두고 시작 마디 선택으로 */
+    private fun reselectFromPause() {
+        val fileId = followFileId
+        val measures = followMeasures
+        if (followState != FollowState.PAUSED || fileId == null || measures.isEmpty()) return stopMetronome()
+        followMeasure?.let { lastFollowPosition = fileId to it.measureNumber }
+        follower = null
+        followMeasure = null
+        followState = FollowState.OFF
+        enterMeasureSelection(fileId, measures)
+    }
+
+    /**
+     * 메트로놈 메뉴 (↑ 키, #053). 자주 쓰는 동작만 모았다 — 세부 설정은 "메트로놈 설정…".
+     * 악보 연동 중이면 먼저 일시정지하고 이어서 · 마디 골라 다시 · 정지 중에서 고른다 (사용자 결정). 일시정지 중에
+     * 고르지 않고 닫으면(뒤로) 멈춘 채로 끝낸다 — 일시정지로 남겨 두면 포커스가 돌아올 때 메뉴가 다시 뜬다.
+     */
+    private fun showMetronomeMenu() {
+        if (metronomeMenuShowing) return
+        pauseFollowing()
+        val items = mutableListOf<Pair<String, () -> Unit>>()
+        val paused = followState == FollowState.PAUSED
+        when {
+            paused -> {
+                items += "이어서 — ${followMeasure?.measureNumber}번 마디부터 (예비박 한 마디 뒤)" to { resumeFollowing() }
+                items += "마디 골라 다시 시작" to { reselectFromPause() }
+                items += "정지" to { stopMetronome() }
+            }
+            metronome.isRunning -> items += "정지" to { stopMetronome() }
+            else -> items += "시작 — 악보에서 마디 고르기" to { startMetronomeWithSavedSettings() }
+        }
+        items += "메트로놈 설정…" to { showMetronomeDialog() }
+
+        var chosen = false
+        metronomeMenuShowing = true
+        AlertDialog.Builder(this)
+            .setTitle(if (paused) "메트로놈 — 일시정지" else "메트로놈")
+            .setItems(items.map { it.first }.toTypedArray()) { _, which ->
+                chosen = true
+                items[which].second()
+            }
+            .setOnDismissListener {
+                metronomeMenuShowing = false
+                if (!chosen && followState == FollowState.PAUSED) {
+                    stopMetronome()
+                    Toast.makeText(this, "메트로놈 정지", Toast.LENGTH_SHORT).show()
+                }
+            }
+            .show()
+    }
+
+    /** ↑ 메뉴의 "시작" — 설정 대화상자를 거치지 않으므로 이 파일의 설정(없으면 악보 박자표)을 엔진에 넣고 시작한다. */
+    private fun startMetronomeWithSavedSettings() {
+        val fileId = currentPdfFileId
+        lifecycleScope.launch {
+            val (bpm, meter, dotted) = metronomeSettingsFor(fileId)
+            if (currentPdfFileId != fileId) return@launch
+            metronome.bpm = bpm
+            metronome.timeSignature = meter
+            metronome.dottedBeat = dotted
+            metronome.soundEnabled = preferences.getBoolean(PREF_METRONOME_SOUND, true)
+            metronome.volume = preferences.getFloat(PREF_METRONOME_VOLUME, 0.6f)
+            startMetronomeFromDialog()
+        }
+    }
+
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        // 일시정지 중에 메뉴·설정 대화상자를 모두 닫으면(악보 화면이 포커스를 되찾으면) 다음 동작을 고르게 한다 (#053).
+        // 메뉴에서 다른 대화상자로 넘어가는 사이 잠깐 포커스가 돌아올 수 있어 조금 기다렸다가 다시 확인한다
+        if (hasFocus && followState == FollowState.PAUSED) {
+            binding.root.removeCallbacks(pausedMenuCheck)
+            binding.root.postDelayed(pausedMenuCheck, PAUSED_MENU_DELAY_MS)
+        }
     }
 
     private fun moveCursor(delta: Int) {
@@ -2200,7 +2397,7 @@ class PdfViewerActivity : AppCompatActivity() {
 
     private fun startFollowing() {
         val start = followMeasures.getOrNull(cursorIndex) ?: return cancelMeasureSelection()
-        val scoreFollower = ScoreFollower(followMeasures, start.measureNumber)
+        val scoreFollower = ScoreFollower(followMeasures, start.measureNumber, metronome.dottedBeat)
         follower = scoreFollower
         followMeasure = start
         followInCountIn = true
@@ -2273,7 +2470,7 @@ class PdfViewerActivity : AppCompatActivity() {
         val fileId = currentPdfFileId
         val focus = when (followState) {
             FollowState.SELECTING -> followMeasures.getOrNull(cursorIndex)
-            FollowState.PLAYING -> followMeasure
+            FollowState.PLAYING, FollowState.PAUSED -> followMeasure
             FollowState.OFF -> null
         }
         val showAll = isScoreOverlayEnabled()
@@ -2297,7 +2494,8 @@ class PdfViewerActivity : AppCompatActivity() {
             bottomClipping = currentBottomClipping,
             centerPadding = currentCenterPadding,
         )
-        val style = if (followState == FollowState.SELECTING || followInCountIn) {
+        // 커서 모양: 고르는 중 · 예비박 · 일시정지(여기서 이어진다). 연주 중인 마디만 노란 표시
+        val style = if (followState != FollowState.PLAYING || followInCountIn) {
             ScoreOverlayView.FocusStyle.CURSOR
         } else {
             ScoreOverlayView.FocusStyle.CURRENT
@@ -2341,7 +2539,11 @@ class PdfViewerActivity : AppCompatActivity() {
             "두 페이지 모드 전환",
             "위/아래 클리핑 설정",
             "마디 박스 표시 (악보 분석): ${if (isScoreOverlayEnabled()) "켜짐" else "꺼짐"}",
-            "메트로놈${if (metronome.isRunning) " (실행 중)" else ""}"
+            "메트로놈${when {
+                followState == FollowState.PAUSED -> " (일시정지)"
+                metronome.isRunning -> " (실행 중)"
+                else -> ""
+            }}"
         )
 
         AlertDialog.Builder(this)

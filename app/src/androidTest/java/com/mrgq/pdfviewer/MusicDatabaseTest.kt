@@ -144,12 +144,13 @@ class MusicDatabaseTest {
         )
         assertNull("미설정은 null", prefDao.getUserPreference("file-1")!!.metronomeBpm)
 
-        prefDao.updateMetronome("file-1", bpm = 96, beatsPerBar = 6, beatUnit = 8)
+        prefDao.updateMetronome("file-1", bpm = 72, beatsPerBar = 6, beatUnit = 8, dottedBeat = true)
 
         val loaded = prefDao.getUserPreference("file-1")!!
-        assertEquals(96, loaded.metronomeBpm)
+        assertEquals(72, loaded.metronomeBpm)
         assertEquals(6, loaded.metronomeBeatsPerBar)
         assertEquals(8, loaded.metronomeBeatUnit)
+        assertEquals(true, loaded.metronomeDottedBeat)
         assertEquals(DisplayMode.DOUBLE, loaded.displayMode)
         assertEquals(0.05f, loaded.topClippingPercent, 1e-6f)
     }

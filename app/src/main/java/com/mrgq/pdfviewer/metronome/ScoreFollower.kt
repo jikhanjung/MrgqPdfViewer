@@ -5,13 +5,18 @@ import com.mrgq.pdfviewer.database.entity.ScoreMeasure
 /**
  * 메트로놈 박 번호를 악보 위치로 옮긴다 (#050).
  *
- * 박 0 부터 **시작 마디의 박자로 예비박 한 마디**를 세고, 그다음부터 각 마디의 박자표 분자만큼 박을 센다.
+ * 박 0 부터 **시작 마디의 박자로 예비박 한 마디**를 세고, 그다음부터 각 마디의 박 수만큼 박을 센다.
  * 박자표가 비어 있는 마디는 앞 마디의 박자를 이어 쓴다. 반복 기호는 따르지 않는다 (악보에 적힌 순서대로).
  *
- * 박은 박자표 분모 음표 하나다 — 6/8 이면 한 마디에 8분음표 6박. 불변 객체라 오디오 스레드에서 읽어도 된다.
- * Android 에 의존하지 않는다 — JVM 단위 테스트 대상.
+ * 박은 박자표 분모 음표 하나다 — 6/8 이면 한 마디에 8분음표 6박. [dottedBeat] 면 겹박자 마디는 점음표 박으로 센다
+ * (6/8 = 2박, #052). 홑박자 마디는 그대로 분모 음표 박이다 — 박자가 섞인 곡에서 박 길이는 일정하다고 본다.
+ * 불변 객체라 오디오 스레드에서 읽어도 된다. Android 에 의존하지 않는다 — JVM 단위 테스트 대상.
  */
-class ScoreFollower(measures: List<ScoreMeasure>, startMeasureNumber: Int) {
+class ScoreFollower(
+    measures: List<ScoreMeasure>,
+    startMeasureNumber: Int,
+    private val dottedBeat: Boolean = false,
+) {
 
     sealed interface Position {
         /** 예비박 [beatInBar] 번째 (0부터) */
@@ -21,11 +26,10 @@ class ScoreFollower(measures: List<ScoreMeasure>, startMeasureNumber: Int) {
         data class InMeasure(
             val measure: ScoreMeasure,
             val beatInMeasure: Int,
+            val beatsInMeasure: Int,
             val timeSignature: TimeSignature,
             val next: ScoreMeasure?,
-        ) : Position {
-            val beatsInMeasure: Int get() = timeSignature.numerator
-        }
+        ) : Position
 
         /** 마지막 마디가 끝났다 */
         object Finished : Position
@@ -39,8 +43,8 @@ class ScoreFollower(measures: List<ScoreMeasure>, startMeasureNumber: Int) {
     /** 시작 마디의 박자 — 예비박도 이 박자로 센다 */
     val startTimeSignature: TimeSignature
 
-    /** 예비박 수 = 시작 마디 박자 */
-    val countInBeats: Int get() = startTimeSignature.numerator
+    /** 예비박 수 = 시작 마디 박 수 */
+    val countInBeats: Int get() = startTimeSignature.beatsPerBar(dottedBeat)
 
     init {
         val ordered = measures.sortedBy { it.measureNumber }
@@ -60,7 +64,7 @@ class ScoreFollower(measures: List<ScoreMeasure>, startMeasureNumber: Int) {
         var beat = countInBeats.toLong()
         for (i in playing.indices) {
             firstBeat[i] = beat
-            beat += meters[i].numerator
+            beat += meters[i].beatsPerBar(dottedBeat)
         }
         totalBeats = beat
     }
@@ -77,16 +81,17 @@ class ScoreFollower(measures: List<ScoreMeasure>, startMeasureNumber: Int) {
         return Position.InMeasure(
             measure = playing[lo],
             beatInMeasure = (beatIndex - firstBeat[lo]).toInt(),
+            beatsInMeasure = meters[lo].beatsPerBar(dottedBeat),
             timeSignature = meters[lo],
             next = playing.getOrNull(lo + 1),
         )
     }
 
-    /** 강박 위치와 그 마디 박자 — [MetronomeEngine.barPosition] 으로 넘긴다. */
+    /** 강박 위치와 그 마디 박자·박 단위 — [MetronomeEngine.barPosition] 으로 넘긴다. */
     fun barPositionAt(beatIndex: Long): BarPosition = when (val p = positionAt(beatIndex)) {
-        is Position.CountIn -> BarPosition(p.beatInBar, p.timeSignature)
-        is Position.InMeasure -> BarPosition(p.beatInMeasure, p.timeSignature)
-        Position.Finished -> BarPosition(0, meters.last())
+        is Position.CountIn -> BarPosition(p.beatInBar, p.timeSignature, dottedBeat)
+        is Position.InMeasure -> BarPosition(p.beatInMeasure, p.timeSignature, dottedBeat)
+        Position.Finished -> BarPosition(0, meters.last(), dottedBeat)
     }
 
     companion object {

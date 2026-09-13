@@ -7,6 +7,7 @@ package com.mrgq.pdfviewer.metronome
  * @param indexInBar 마디 안에서 몇 번째 박인가 (0 = 첫 박, 강조)
  * @param timeSignature 이 박이 속한 마디의 박자 — 클릭 세기([accent])를 정한다
  * @param index 시작부터 몇 번째 박인가 (0부터) — 악보 연동이 이 번호로 마디를 센다
+ * @param dotted 겹박자를 점음표 박으로 세는 중인가 ([TimeSignature.beatsPerBar])
  */
 data class Beat(
     val frame: Long,
@@ -14,14 +15,15 @@ data class Beat(
     val timeSignature: TimeSignature,
     val bpm: Int,
     val index: Long = 0,
+    val dotted: Boolean = false,
 ) {
-    val beatsPerBar: Int get() = timeSignature.numerator
-    val accent: Accent get() = timeSignature.accentAt(indexInBar)
+    val beatsPerBar: Int get() = timeSignature.beatsPerBar(dotted)
+    val accent: Accent get() = timeSignature.accentAt(indexInBar, dotted)
     val isAccent: Boolean get() = indexInBar == 0
 }
 
-/** 악보 연동에서 박 번호가 가리키는 마디 안 위치와 그 마디의 박자. */
-data class BarPosition(val indexInBar: Int, val timeSignature: TimeSignature)
+/** 악보 연동에서 박 번호가 가리키는 마디 안 위치와 그 마디의 박자·박 단위. */
+data class BarPosition(val indexInBar: Int, val timeSignature: TimeSignature, val dotted: Boolean = false)
 
 /**
  * 박 위치를 **샘플 단위로** 계산한다. 타이머(Handler·delay)가 아니라 오디오 스트림의 프레임 수로
@@ -42,33 +44,44 @@ class MetronomeClock(private val sampleRate: Int, startFrame: Long = 0) {
     /**
      * 다음 박을 돌려주고 그다음 박으로 전진한다. [bpm]·[timeSignature] 는 범위로 잘린다.
      *
-     * @param barPosition 박 번호 → 마디 안 위치와 그 마디 박자. 주면 [timeSignature] 로 세는 대신 이것을 쓴다 —
+     * @param dotted 겹박자를 점음표 박으로 센다 — [bpm] 도 점음표 기준
+     * @param barPosition 박 번호 → 마디 안 위치와 그 마디 박자·박 단위. 주면 [timeSignature]·[dotted] 로 세는 대신 이것을 쓴다 —
      *   악보 연동에서 박자표가 바뀌는 마디의 강박을 악보대로 맞춘다 ([ScoreFollower.barPositionAt]).
      */
-    fun next(bpm: Int, timeSignature: TimeSignature, barPosition: ((Long) -> BarPosition)? = null): Beat {
+    fun next(
+        bpm: Int,
+        timeSignature: TimeSignature,
+        dotted: Boolean = false,
+        barPosition: ((Long) -> BarPosition)? = null,
+    ): Beat {
         val tempo = bpm.coerceIn(MIN_BPM, MAX_BPM)
         val index = nextBeatIndex++
 
         val meter: TimeSignature
+        val beatDotted: Boolean
         val inBar: Int
         if (barPosition != null) {
             val position = barPosition(index)
             meter = position.timeSignature.coerced()
-            inBar = position.indexInBar.coerceIn(0, meter.numerator - 1)
+            beatDotted = position.dotted
+            inBar = position.indexInBar.coerceIn(0, meter.beatsPerBar(beatDotted) - 1)
         } else {
             meter = timeSignature.coerced()
-            if (nextIndexInBar >= meter.numerator) nextIndexInBar = 0
+            beatDotted = dotted
+            val beats = meter.beatsPerBar(beatDotted)
+            if (nextIndexInBar >= beats) nextIndexInBar = 0
             inBar = nextIndexInBar
-            nextIndexInBar = (inBar + 1) % meter.numerator
+            nextIndexInBar = (inBar + 1) % beats
         }
 
-        val beat = Beat(Math.round(nextFrame), inBar, meter, tempo, index)
+        val beat = Beat(Math.round(nextFrame), inBar, meter, tempo, index, beatDotted)
         nextFrame += sampleRate * 60.0 / tempo
         return beat
     }
 
     companion object {
-        const val MIN_BPM = 30
+        /** 느린 겹박자를 점음표로 셀 때(8분음표 60 = 점4분음표 20)도 빠르기가 유지되게 20 부터 (#052) */
+        const val MIN_BPM = 20
         const val MAX_BPM = 240
         const val DEFAULT_BPM = 120
         const val MIN_BEATS = 1

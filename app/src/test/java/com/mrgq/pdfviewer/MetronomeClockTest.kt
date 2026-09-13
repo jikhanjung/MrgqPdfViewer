@@ -47,6 +47,26 @@ class MetronomeClockTest {
     }
 
     @Test
+    fun 점음표_박이면_6_8_을_두_박으로_센다() {
+        // 점4분음표 72 = 박당 36750 프레임 = 8분음표 216 의 세 박
+        val clock = MetronomeClock(rate)
+        val beats = (0 until 4).map { clock.next(72, ts(6, 8), dotted = true) }
+        assertEquals(listOf(0, 1, 0, 1), beats.map { it.indexInBar })
+        assertEquals(listOf(Accent.STRONG, Accent.MEDIUM, Accent.STRONG, Accent.MEDIUM), beats.map { it.accent })
+        assertEquals(listOf(0L, 36750L, 73500L, 110250L), beats.map { it.frame })
+        assertEquals(2, beats[0].beatsPerBar)
+        assertTrue(beats[0].dotted)
+    }
+
+    @Test
+    fun 느린_겹박자를_점음표로_바꿔도_빠르기가_유지된다() {
+        // 8분음표 60 → 점4분음표 20. 하한에 걸려 빨라지면 안 된다
+        val clock = MetronomeClock(rate)
+        val beat = clock.next(20, ts(6, 8), dotted = true)
+        assertEquals(20, beat.bpm)
+    }
+
+    @Test
     fun 나누어떨어지지_않는_템포도_누적_오차가_없다() {
         // 97 BPM = 박당 27278.35… 프레임. 정수로 잘라 누적하면 1000박 뒤 350프레임(8ms) 밀린다
         val clock = MetronomeClock(rate)
