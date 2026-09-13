@@ -1,6 +1,6 @@
 # 🎵 MrgqPdfViewer
 
-**v0.1.14** - Android TV용 PDF 악보 리더 앱 (테스트·CI 게이트 정비, API 21~22 크래시 수정)
+**v0.2.0** - Android TV용 PDF 악보 리더 앱 (악보 분석·마디 박스, 메트로놈 악보 연동, PDF 문서 정보)
 
 ## 📖 소개
 
