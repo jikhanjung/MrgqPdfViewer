@@ -13,7 +13,8 @@ set -euo pipefail
 API_LEVEL="${1:-?}"
 PKG=com.mrgq.pdfviewer
 
-# 프로세스 목록. API 21 의 toolbox 에는 pidof 가 없고 ps 에 -A 도 없다.
+# 프로세스 목록. (minSdk 21 시절) API 21 의 toolbox 에는 pidof 가 없고 ps 에 -A 도 없다.
+# minSdk 30 이후로는 ps -A 만으로 충분하지만, 둘 다 시도해도 해가 없어 그대로 둔다.
 # API 26+ 의 toybox 는 그 반대라, 둘 다 시도한 결과를 합쳐서 본다.
 ps_all() {
   adb shell ps -A 2>/dev/null || true

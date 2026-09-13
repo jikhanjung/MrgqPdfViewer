@@ -12,14 +12,15 @@ android {
 
     defaultConfig {
         applicationId = "com.mrgq.pdfviewer"
-        minSdk = 21
+        // 지원 하한 Android 11. 실사용 기기(Google TV Streamer, Z18TV Pro)는 둘 다 Android 14 다.
+        // 원래 21 이었으나 검증 부담만 있고 쓰는 기기가 없어 2026-09-13 에 올렸다 (devlog #048, #049)
+        minSdk = 30
         targetSdk = 30  // Android TV OS 11
         versionCode = 14
         versionName = "0.1.14"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
-
     signingConfigs {
         create("release") {
             // Load signing properties

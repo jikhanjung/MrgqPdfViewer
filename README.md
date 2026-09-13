@@ -77,7 +77,7 @@ Android TV OS에서 PDF 악보를 편리하게 보기 위한 전용 앱입니다
 
 ## 🛠️ 기술 스택
 
-- **Android TV OS 11** 지원 (API 21-30)
+- **Android TV OS 11 이상** 지원 (minSdk 30. 실사용 기기는 Android 14)
 - **Kotlin** 개발
 - **PdfRenderer** 내장 PDF 렌더링
 - **WebSocket** 실시간 협업 통신
@@ -99,7 +99,7 @@ Android TV OS에서 PDF 악보를 편리하게 보기 위한 전용 앱입니다
 ## 🔧 개발 환경
 
 - Android Studio
-- Android 5.0+ (API 21+)
+- Android 11+ (API 30+)
 - Android TV 지원 기기
 
 ## 📚 개발 문서

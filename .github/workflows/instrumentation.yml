@@ -2,9 +2,9 @@
 #
 # 가이드(guides/desktop/ci.md §1 OS 매트릭스, §5 packaged-artifact smoke)의 Android 대응물:
 #
-#  1. **API 레벨 매트릭스** — 데스크탑의 OS 매트릭스에 해당한다. minSdk 21 을 선언만 하고
-#     한 번도 검증한 적이 없었고, 실제로 그 구간에서 합주 기능이 죽는 버그가 있었다
-#     (java.util.Base64 는 API 26+). Lint 가 정적으로 잡아주긴 하지만 런타임 확인은 별개다.
+#  1. **API 레벨 매트릭스** — 데스크탑의 OS 매트릭스에 해당한다. 지원 하한(minSdk)과 실사용 기기를 돈다.
+#     minSdk 는 원래 21 이었는데 선언만 하고 검증한 적이 없었고, 실제로 그 구간에서 합주 기능이 죽는
+#     버그가 있었다(java.util.Base64 는 API 26+). 2026-09-13 에 실사용 기기 기준 30 으로 올렸다 (#048).
 #  2. **release APK 스모크** — "소스는 되는데 최적화 빌드에서 깨지는" 표면.
 #     이 앱은 isMinifyEnabled = true 인데 **릴리스 APK 가 한 번도 실행된 적이 없다**
 #     (Android Studio 는 debug 를 설치하고, v0.1.13 은 빌드·서명·배포만 됐다).
@@ -37,15 +37,11 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # minSdk — 선언만 하고 검증한 적 없던 하한
-          - api-level: 21
-            target: default
-            arch: x86
-          # targetSdk
+          # minSdk = targetSdk (Android 11)
           - api-level: 30
             target: google_apis
             arch: x86
-          # 실제 사용 기기 (Google TV Streamer = Android 14)
+          # 실제 사용 기기 (Google TV Streamer · Z18TV Pro = Android 14)
           - api-level: 34
             target: google_apis
             arch: x86_64

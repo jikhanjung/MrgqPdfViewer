@@ -99,6 +99,7 @@ class SimpleWebSocketConnection(
         // java.util.Base64 는 API 26+ 다. minSdk 21 에서 이 경로(WebSocket 핸드셰이크)를
         // 타면 NoSuchMethodError 로 죽는다 — 즉 Android 8 미만에서는 합주 기능 자체가
         // 동작할 수 없었다. android.util.Base64(API 1) 로 교체. NO_WRAP 이 표준 Base64 와 동일.
+        // (minSdk 30 이 된 지금은 java.util.Base64 도 쓸 수 있지만, 동작이 같아 바꾸지 않는다)
         return android.util.Base64.encodeToString(hash, android.util.Base64.NO_WRAP)
     }
     
