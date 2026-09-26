@@ -185,6 +185,13 @@ class CollaborationServerManager(
         Log.d(TAG, "Broadcasted file change: $fileName, page: $pageNumber" + if (fileServerUrl != null) " (with file server: $fileServerUrl)" else "")
     }
     
+    /** 합주 메트로놈 상태 (#055) — 전체 상태를 보낸다 */
+    fun broadcastMetronomeRun(run: com.mrgq.pdfviewer.ensemble.EnsembleRun) {
+        val message = CollaborationProtocol.buildMetronomeRun(run)
+        broadcastToClients(message.toString())
+        Log.d(TAG, "Broadcasted metronome run: ${run.runId} ${run.state} bpm=${run.timeline.bpm} file=${run.file}")
+    }
+
     fun broadcastBackToList() {
         val message = CollaborationProtocol.buildBackToList()
         
@@ -250,6 +257,8 @@ class CollaborationServerManager(
     }
     
     internal fun handleClientMessage(clientId: String, message: String) {
+        // 시계 동기(#055): 받은 순간을 파싱보다 먼저 잡는다
+        val receivedNs = System.nanoTime()
         try {
             val json = gson.fromJson(message, JsonObject::class.java)
             val action = json.get("action")?.asString
@@ -257,6 +266,11 @@ class CollaborationServerManager(
             Log.d(TAG, "Received message from $clientId: $action")
             
             when (action) {
+                CollaborationProtocol.ACTION_CLOCK_PING -> {
+                    // 읽기 스레드에서 바로 답한다 — 지연이 한쪽으로만 붙지 않게
+                    val t0 = CollaborationProtocol.parseClockPing(json) ?: return
+                    connectedClients[clientId]?.send(CollaborationProtocol.buildClockPong(t0, receivedNs).toString())
+                }
                 "heartbeat" -> {
                     // Respond to heartbeat
                     val response = JsonObject().apply {

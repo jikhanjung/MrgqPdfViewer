@@ -1,6 +1,9 @@
 package com.mrgq.pdfviewer
 
 import com.google.gson.JsonObject
+import com.mrgq.pdfviewer.ensemble.BeatTimeline
+import com.mrgq.pdfviewer.ensemble.EnsembleRun
+import com.mrgq.pdfviewer.metronome.TimeSignature
 
 /**
  * 합주 메시지의 **와이어 포맷 단일 출처**.
@@ -30,10 +33,28 @@ object CollaborationProtocol {
     const val KEY_TURN_AT = "turn_at"
     const val KEY_FILE_SERVER_URL = "file_server_url"
 
+    // 합주 메트로놈 (#055)
+    const val KEY_T0 = "t0"
+    const val KEY_SERVER_NS = "server_ns"
+    const val KEY_RUN_ID = "run_id"
+    const val KEY_STATE = "state"
+    const val KEY_ANCHOR_BEAT = "anchor_beat"
+    const val KEY_ANCHOR_NS = "anchor_ns"
+    const val KEY_BAR_BEAT = "bar_beat"
+    const val KEY_BPM = "bpm"
+    const val KEY_NUMERATOR = "num"
+    const val KEY_DENOMINATOR = "den"
+    const val KEY_DOTTED = "dotted"
+    const val KEY_START_MEASURE = "start_measure"
+    const val KEY_FOCUS_MEASURE = "focus_measure"
+
     // ── 액션 ────────────────────────────────────────────────────────────────
     const val ACTION_PAGE_CHANGE = "page_change"
     const val ACTION_FILE_CHANGE = "file_change"
     const val ACTION_BACK_TO_LIST = "back_to_list"
+    const val ACTION_CLOCK_PING = "clock_ping"
+    const val ACTION_CLOCK_PONG = "clock_pong"
+    const val ACTION_METRONOME_RUN = "metronome_run"
 
     // ── 빌드 (지휘자) ───────────────────────────────────────────────────────
 
@@ -73,6 +94,74 @@ object CollaborationProtocol {
             addProperty(KEY_TIMESTAMP, timestamp)
         }
 
+    // ── 합주 메트로놈 (#055) ────────────────────────────────────────────────
+    // 시각은 모두 각 기기의 System.nanoTime() (단조 시계). 기기끼리 직접 비교하지 않고 clock_ping/pong 으로 잰 offset 으로 옮긴다.
+
+    /** 연주자 → 지휘자. [t0] = 보낸 순간의 연주자 시계 */
+    fun buildClockPing(t0: Long): JsonObject = JsonObject().apply {
+        addProperty(KEY_ACTION, ACTION_CLOCK_PING)
+        addProperty(KEY_T0, t0)
+    }
+
+    /** 지휘자 → 연주자. [serverNs] = 핑을 받은 순간의 지휘자 시계 */
+    fun buildClockPong(t0: Long, serverNs: Long): JsonObject = JsonObject().apply {
+        addProperty(KEY_ACTION, ACTION_CLOCK_PONG)
+        addProperty(KEY_T0, t0)
+        addProperty(KEY_SERVER_NS, serverNs)
+    }
+
+    data class ClockPong(val t0: Long, val serverNs: Long)
+
+    fun parseClockPing(json: JsonObject): Long? = json.optLong(KEY_T0)
+
+    fun parseClockPong(json: JsonObject): ClockPong? {
+        val t0 = json.optLong(KEY_T0) ?: return null
+        val serverNs = json.optLong(KEY_SERVER_NS) ?: return null
+        return ClockPong(t0, serverNs)
+    }
+
+    fun buildMetronomeRun(run: EnsembleRun): JsonObject = JsonObject().apply {
+        addProperty(KEY_ACTION, ACTION_METRONOME_RUN)
+        addProperty(KEY_RUN_ID, run.runId)
+        addProperty(KEY_FILE, run.file)
+        addProperty(KEY_STATE, run.state.wire)
+        addProperty(KEY_ANCHOR_BEAT, run.timeline.anchorBeat)
+        addProperty(KEY_ANCHOR_NS, run.timeline.anchorNs)
+        addProperty(KEY_BAR_BEAT, run.timeline.barBeat)
+        addProperty(KEY_BPM, run.timeline.bpm)
+        addProperty(KEY_NUMERATOR, run.timeSignature.numerator)
+        addProperty(KEY_DENOMINATOR, run.timeSignature.denominator)
+        addProperty(KEY_DOTTED, run.dotted)
+        run.startMeasure?.let { addProperty(KEY_START_MEASURE, it) }
+        run.focusMeasure?.let { addProperty(KEY_FOCUS_MEASURE, it) }
+    }
+
+    /**
+     * 시간표를 세울 수 없는 메시지(필수 필드 없음, bpm ≤ 0, 모르는 상태)는 null — 반쯤 맞는 시간표로
+     * 틀린 박을 치느니 따라가지 않는 편이 낫다. 박자 · 점음표는 없으면 4/4 · false.
+     */
+    fun parseMetronomeRun(json: JsonObject): EnsembleRun? {
+        val runId = json.optStringOrNull(KEY_RUN_ID) ?: return null
+        val state = EnsembleRun.State.fromWire(json.optStringOrNull(KEY_STATE)) ?: return null
+        val anchorBeat = json.optLong(KEY_ANCHOR_BEAT) ?: return null
+        val anchorNs = json.optLong(KEY_ANCHOR_NS) ?: return null
+        val bpm = json.optInt(KEY_BPM, 0).takeIf { it > 0 } ?: return null
+        val barBeat = json.optLong(KEY_BAR_BEAT) ?: anchorBeat
+        return EnsembleRun(
+            runId = runId,
+            file = json.optStringOrNull(KEY_FILE) ?: "",
+            state = state,
+            timeline = BeatTimeline(anchorBeat, anchorNs, bpm, barBeat),
+            timeSignature = TimeSignature.of(
+                json.optInt(KEY_NUMERATOR, TimeSignature.DEFAULT.numerator),
+                json.optInt(KEY_DENOMINATOR, TimeSignature.DEFAULT.denominator),
+            ),
+            dotted = json.optBoolean(KEY_DOTTED),
+            startMeasure = json.optLong(KEY_START_MEASURE)?.toInt(),
+            focusMeasure = json.optLong(KEY_FOCUS_MEASURE)?.toInt(),
+        )
+    }
+
     // ── 파싱 (연주자) ───────────────────────────────────────────────────────
 
     data class PageChange(val page: Int, val file: String, val turnAt: Long?)
@@ -103,6 +192,9 @@ object CollaborationProtocol {
 
     private fun JsonObject.optLong(key: String): Long? =
         if (present(key)) runCatching { get(key).asLong }.getOrNull() else null
+
+    private fun JsonObject.optBoolean(key: String): Boolean =
+        present(key) && runCatching { get(key).asBoolean }.getOrDefault(false)
 
     // 주의: 오버로드 두 개(String / String?)는 JVM 시그니처가 같아 충돌한다. 하나만 둔다.
     private fun JsonObject.optStringOrNull(key: String): String? =

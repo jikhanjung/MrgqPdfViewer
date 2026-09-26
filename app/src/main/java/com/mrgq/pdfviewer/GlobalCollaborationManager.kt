@@ -39,6 +39,8 @@ class GlobalCollaborationManager private constructor() {
     private var onPageChangeReceived: ((Int, String, Long?) -> Unit)? = null
     private var onFileChangeReceived: ((String, Int) -> Unit)? = null // Updated to include page
     private var onBackToListReceived: (() -> Unit)? = null
+    private var onMetronomeRunReceived: ((com.mrgq.pdfviewer.ensemble.EnsembleRun) -> Unit)? = null
+    private var onClockSynced: (() -> Unit)? = null
     private var onConductorDiscovered: ((ConductorDiscovery.ConductorInfo) -> Unit)? = null
     private var onDiscoveryTimeout: (() -> Unit)? = null
     private var onAutoConnectionResult: ((Boolean, String) -> Unit)? = null
@@ -268,7 +270,9 @@ class GlobalCollaborationManager private constructor() {
                 onBackToListReceived = {
                     Log.d(TAG, "Back to list received")
                     onBackToListReceived?.invoke()
-                }
+                },
+                onMetronomeRunReceived = { run -> onMetronomeRunReceived?.invoke(run) },
+                onClockSynced = { onClockSynced?.invoke() },
             )
             
             // Initialize conductor discovery for performer mode
@@ -305,6 +309,17 @@ class GlobalCollaborationManager private constructor() {
         collaborationServerManager?.broadcastFileChange(fileName, pageNumber, fileServerUrl)
     }
     
+    /** 합주 메트로놈 상태를 연주자들에게 (#055) */
+    fun broadcastMetronomeRun(run: com.mrgq.pdfviewer.ensemble.EnsembleRun) {
+        collaborationServerManager?.broadcastMetronomeRun(run)
+    }
+
+    /** 연주자: 지휘자 시계 − 내 시계 (ns). 아직 모르면 null (#055) */
+    fun getClockOffsetNs(): Long? = collaborationClientManager?.clockSync?.offsetNs
+
+    /** 연주자: 지금 쓰는 시계 동기 표본의 왕복 시간 (ns) — 로그용 */
+    fun getClockRttNs(): Long? = collaborationClientManager?.clockSync?.bestRttNs
+
     fun broadcastBackToList() {
         collaborationServerManager?.broadcastBackToList()
     }
@@ -377,6 +392,14 @@ class GlobalCollaborationManager private constructor() {
         onFileChangeReceived = callback
     }
     
+    fun setOnMetronomeRunReceived(callback: ((com.mrgq.pdfviewer.ensemble.EnsembleRun) -> Unit)?) {
+        onMetronomeRunReceived = callback
+    }
+
+    fun setOnClockSynced(callback: (() -> Unit)?) {
+        onClockSynced = callback
+    }
+
     fun setOnBackToListReceived(callback: () -> Unit) {
         onBackToListReceived = callback
     }
@@ -460,6 +483,8 @@ class GlobalCollaborationManager private constructor() {
         onPageChangeReceived = null
         onFileChangeReceived = null
         onBackToListReceived = null
+        onMetronomeRunReceived = null
+        onClockSynced = null
         onConductorDiscovered = null
         onDiscoveryTimeout = null
         onAutoConnectionResult = null

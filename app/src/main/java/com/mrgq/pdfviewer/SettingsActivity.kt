@@ -288,6 +288,17 @@ class SettingsActivity : AppCompatActivity() {
                 type = SettingsType.INFO
             ),
             SettingsItem(
+                id = "ensemble_sound_toggle",
+                icon = "🥁",
+                title = "합주 메트로놈 소리 (연주자)",
+                subtitle = if (preferences.getBoolean(PdfViewerActivity.PREF_ENSEMBLE_SOUND, false)) {
+                    "켜짐 — 연주자 기기도 지휘자 메트로놈에 맞춰 소리를 냅니다"
+                } else {
+                    "꺼짐 — 연주자 기기는 박 표시 · 현재 마디 · 넘김만 따라갑니다"
+                },
+                type = SettingsType.TOGGLE
+            ),
+            SettingsItem(
                 id = "sync_turn_toggle",
                 icon = "🎯",
                 title = "동기 페이지 넘김",
@@ -450,6 +461,7 @@ class SettingsActivity : AppCompatActivity() {
             "reset_display_modes" -> showResetDisplayModeDialog()
             "input_block_time" -> showInputBlockTimeDialog()
             "sync_turn_toggle" -> toggleSyncPageTurn()
+            "ensemble_sound_toggle" -> toggleEnsembleSound()
             "sync_turn_lead" -> showSyncTurnLeadDialog()
             "message_queue_stats" -> showMessageQueueDisabledDialog()
             "check_update" -> updateController.checkForUpdate()
@@ -941,6 +953,13 @@ class SettingsActivity : AppCompatActivity() {
      * 동기 페이지 넘김 ON/OFF (Phase 0). OFF = 기존처럼 신호 즉시 넘김.
      * ON = 지휘자가 누르면 예약 시간 후 모든 기기가 동시에 넘김.
      */
+    private fun toggleEnsembleSound() {
+        val enabled = !preferences.getBoolean(PdfViewerActivity.PREF_ENSEMBLE_SOUND, false)
+        preferences.edit().putBoolean(PdfViewerActivity.PREF_ENSEMBLE_SOUND, enabled).apply()
+        Toast.makeText(this, if (enabled) "연주자 기기도 메트로놈 소리를 냅니다" else "연주자 기기는 메트로놈 소리를 내지 않습니다", Toast.LENGTH_SHORT).show()
+        showCollaborationPanel()
+    }
+
     private fun toggleSyncPageTurn() {
         val newEnabled = !preferences.getBoolean("sync_page_turn_enabled", false)
         preferences.edit().putBoolean("sync_page_turn_enabled", newEnabled).apply()

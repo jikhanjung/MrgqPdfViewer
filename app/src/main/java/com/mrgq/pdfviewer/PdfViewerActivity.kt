@@ -43,6 +43,9 @@ import com.mrgq.pdfviewer.metronome.Beat
 import com.mrgq.pdfviewer.metronome.ScoreFollower
 import com.mrgq.pdfviewer.metronome.TimeSignature
 import com.mrgq.pdfviewer.score.ScoreOverlayView
+import com.mrgq.pdfviewer.ensemble.BeatTimeline
+import com.mrgq.pdfviewer.ensemble.EnsembleRun
+import com.mrgq.pdfviewer.ensemble.EnsembleSchedule
 import android.os.SystemClock
 import androidx.lifecycle.lifecycleScope
 import android.os.Handler
@@ -66,6 +69,14 @@ class PdfViewerActivity : AppCompatActivity() {
         private const val COMPOUND_FAST_BPM = 180
         /** 일시정지 중 포커스가 돌아온 뒤 선택 메뉴를 띄우기까지 — 메뉴 → 설정 대화상자 전환 사이의 틈을 넘긴다 */
         private const val PAUSED_MENU_DELAY_MS = 300L
+
+        /** 합주 메트로놈 (#055): 연주자 기기도 소리를 낼지 (기본 끔 — 소리 기준은 지휘자 기기 하나, 사용자 결정) */
+        const val PREF_ENSEMBLE_SOUND = "ensemble_metronome_sound"
+        /** 지휘자가 시작을 누른 뒤 첫 박까지 — 연주자에게 알리고 악보를 준비할 시간. 연주자가 없으면 짧게 */
+        private const val ENSEMBLE_START_LEAD_NS = 1_500_000_000L
+        private const val ENSEMBLE_SOLO_LEAD_NS = 500_000_000L
+        /** 연주 중 상태를 다시 보내는 간격 — 유실 · 늦게 연 연주자 대비 */
+        private const val ENSEMBLE_REBROADCAST_MS = 5_000L
     }
     
     private lateinit var binding: ActivityPdfViewerBinding
@@ -136,7 +147,7 @@ class PdfViewerActivity : AppCompatActivity() {
             // 박자는 들리는 박의 것 — 바꾼 박자·악보의 박자 바뀜이 소리와 같은 박에서 보인다
             binding.metronomeBeat.update(
                 beat,
-                metronome.bpm,
+                beat?.bpm ?: metronome.bpm,
                 beat?.timeSignature ?: metronome.timeSignature,
                 beat?.dotted ?: metronome.dottedBeat,
             )
@@ -155,7 +166,7 @@ class PdfViewerActivity : AppCompatActivity() {
     private var metronomeDialogPending = false
     private val pausedMenuCheck = Runnable {
         if (hasWindowFocus() && followState == FollowState.PAUSED && !metronomeMenuShowing &&
-            !metronomeDialogPending && !isFinishing
+            !metronomeDialogPending && !isFinishing && ensembleRole != EnsembleRole.FOLLOWING
         ) {
             showMetronomeMenu()
         }
@@ -168,6 +179,28 @@ class PdfViewerActivity : AppCompatActivity() {
     private var followMeasure: ScoreMeasure? = null
     private var followInCountIn = false
     private var turnRequestedTo = -1
+
+    // 합주 메트로놈 (#055): 지휘자는 시간표를 방송하고, 연주자는 같은 시간표를 자기 시계로 읽어 따라간다
+    private enum class EnsembleRole { NONE, CONDUCTING, FOLLOWING }
+    private var ensembleRole = EnsembleRole.NONE
+    private var ensembleSchedule: EnsembleSchedule? = null
+    /** 지휘자: 지금 연주자들에게 알리고 있는 상태 (일시정지 중에도 남는다) */
+    private var conductorRun: EnsembleRun? = null
+    private var conductorRunCounter = 0
+    /** 연주자: 지휘자에게서 받은 최신 상태 — 빠져 있어도 계속 받는다 (다시 합류용) */
+    private var performerRun: EnsembleRun? = null
+    /** 연주자가 스스로 빠진 연주 — 지휘자가 새로 시작하면 다시 따라간다 */
+    private var performerDetachedRunId: String? = null
+    /** 악보 준비(비동기) 중인 연주 — 반복 수신으로 두 번 시작하지 않게 */
+    private var performerJoiningRunId: String? = null
+    private var clockWaitNoticeShown = false
+    private val ensembleRebroadcast = object : Runnable {
+        override fun run() {
+            val run = conductorRun ?: return
+            globalCollaborationManager.broadcastMetronomeRun(run)
+            binding.root.postDelayed(this, ENSEMBLE_REBROADCAST_MS)
+        }
+    }
     private var turnRequestedAtMs = 0L
     
     // Current display settings
@@ -1337,9 +1370,13 @@ class PdfViewerActivity : AppCompatActivity() {
         } else if ((followState == FollowState.PLAYING || followState == FollowState.PAUSED) &&
             (keyCode == KeyEvent.KEYCODE_BACK || keyCode == KeyEvent.KEYCODE_ESCAPE)
         ) {
-            // 연주 중 뒤로: 뷰어를 나가지 않고 메트로놈만 멈춘다
-            stopMetronome()
-            Toast.makeText(this, "메트로놈 정지", Toast.LENGTH_SHORT).show()
+            // 연주 중 뒤로: 뷰어를 나가지 않고 메트로놈만 멈춘다. 합주 연주자면 이 기기만 빠진다 (#055)
+            if (ensembleRole == EnsembleRole.FOLLOWING) {
+                detachFromEnsemble()
+            } else {
+                stopMetronome()
+                Toast.makeText(this, "메트로놈 정지", Toast.LENGTH_SHORT).show()
+            }
             return true
         }
         // ↑: 메트로놈 메뉴 (#053) — 자주 쓰므로 PDF 표시 옵션과 따로. 악보 연동 중이면 일시정지하고 연다
@@ -1567,6 +1604,8 @@ class PdfViewerActivity : AppCompatActivity() {
                 
                 // Send current file and page to newly connected client
                 Log.d("PdfViewerActivity", "🎵 지휘자 모드: 현재 상태를 새 연주자에게 전송 중...")
+                // 합주 메트로놈이 도는 중이면 그 상태도 (#055) — 연주자는 시계를 맞춘 뒤 지금 박으로 합류한다
+                conductorRun?.let { globalCollaborationManager.broadcastMetronomeRun(it) }
                 // Add file to server so performers can download if needed
                 globalCollaborationManager.addFileToServer(pdfFileName, pdfFilePath)
                 
@@ -1587,6 +1626,14 @@ class PdfViewerActivity : AppCompatActivity() {
         globalCollaborationManager.setOnPageChangeReceived { page, file, turnAt ->
             runOnUiThread {
                 if (file != pdfFileName) return@runOnUiThread
+                // 합주 메트로놈을 따라가는 중에는 마디로 스스로 넘긴다 — 지휘자와 표시 모드가 달라도 맞게 (#055).
+                // 지휘자가 일시정지한 동안에는 지휘자의 넘김을 따른다
+                if (ensembleRole == EnsembleRole.FOLLOWING &&
+                    (metronome.isRunning || performerRun?.state == EnsembleRun.State.SELECTING)
+                ) {
+                    Log.d("PdfViewerActivity", "🎼 합주 메트로놈 연동 중 — 지휘자 page_change($page) 무시")
+                    return@runOnUiThread
+                }
                 // Phase 0: turn_at 이 있으면 그 절대 시각(벽시계)에 맞춰 예약, 없거나 이미 지났으면 즉시
                 val delay = if (turnAt != null) turnAt - System.currentTimeMillis() else 0L
                 pendingSyncTurn?.let { syncTurnHandler.removeCallbacks(it) }
@@ -1621,6 +1668,15 @@ class PdfViewerActivity : AppCompatActivity() {
                 Log.d("PdfViewerActivity", "🎼 연주자 모드: 뒤로가기 신호 수신, 파일 목록으로 돌아가기")
                 finish()
             }
+        }
+
+        // 합주 메트로놈 (#055)
+        globalCollaborationManager.setOnMetronomeRunReceived { run ->
+            runOnUiThread { if (!isDestroyed) onEnsembleRunReceived(run) }
+        }
+        globalCollaborationManager.setOnClockSynced {
+            // 시계를 맞추느라 기다리던 연주가 있으면 이제 따라간다
+            runOnUiThread { if (!isDestroyed) performerRun?.let { onEnsembleRunReceived(it, retry = true) } }
         }
     }
     
@@ -1927,6 +1983,8 @@ class PdfViewerActivity : AppCompatActivity() {
      * 실행 중에 바꾸면 다음 박부터 적용된다. 설정은 대화상자를 닫을 때 저장한다.
      */
     private fun showMetronomeDialog() {
+        // 연주자는 소리만 고른다 — 템포 · 박자 · 시작은 모두 지휘자를 따른다 (사용자 결정, #055)
+        if (collaborationMode == CollaborationMode.PERFORMER) return showPerformerMetronomeSettings()
         val fileId = currentPdfFileId
         metronomeDialogPending = true
         lifecycleScope.launch {
@@ -2092,6 +2150,8 @@ class PdfViewerActivity : AppCompatActivity() {
             metronome.dottedBeat = dotted
             metronome.soundEnabled = soundCheck.isChecked
             metronome.volume = volumeSeek.progress / 100f
+            // 합주 지휘자가 연주 중에 바꾸면 다음 박부터 새 시간표를 알린다 (#055)
+            retimeConductorRun()
         }
         fun selectDotted(value: Boolean) {
             if (value == dotted) return
@@ -2185,7 +2245,8 @@ class PdfViewerActivity : AppCompatActivity() {
     }
 
     private fun startMetronome() {
-        val withSound = metronome.start()
+        // 합주 지휘자면 시간표를 만들어 연주자들에게 알리고 자신도 그 시간표로 돈다 (#055)
+        val withSound = if (isConductingEnsemble()) startConductorRun() else metronome.start()
         metronomeFileId = currentPdfFileId
         binding.metronomeBeat.visibility = View.VISIBLE
         binding.metronomeBeat.removeCallbacks(metronomeTicker)
@@ -2196,6 +2257,7 @@ class PdfViewerActivity : AppCompatActivity() {
     }
 
     private fun stopMetronome() {
+        endEnsembleRun()
         metronome.stop()
         metronome.barPosition = null
         binding.metronomeBeat.removeCallbacks(metronomeTicker)
@@ -2215,12 +2277,345 @@ class PdfViewerActivity : AppCompatActivity() {
         }
     }
 
+    // ── 합주 메트로놈 (#055) ────────────────────────────────────────────────
+
+    /** 합주 지휘자인가 — 연결된 연주자가 없어도 시간표로 돈다 (연주 중에 들어온 연주자도 합류할 수 있게) */
+    private fun isConductingEnsemble(): Boolean =
+        collaborationMode == CollaborationMode.CONDUCTOR && globalCollaborationManager.isServerRunning()
+
+    /** 지휘자: 새 시간표로 시작하고 알린다. 첫 박(예비박 1)은 지금 + lead. @return 소리와 함께 시작했으면 true */
+    private fun startConductorRun(): Boolean {
+        val lead = if (globalCollaborationManager.getConnectedClientCount() > 0) ENSEMBLE_START_LEAD_NS else ENSEMBLE_SOLO_LEAD_NS
+        val bpm = metronome.bpm.coerceIn(MetronomeClock.MIN_BPM, MetronomeClock.MAX_BPM)
+        val timeline = BeatTimeline(anchorBeat = 0, anchorNs = System.nanoTime() + lead, bpm = bpm)
+        val meter = metronome.timeSignature.coerced()
+        val schedule = EnsembleSchedule(timeline, meter, metronome.dottedBeat) { 0L }
+        schedule.barPosition = metronome.barPosition
+        ensembleSchedule = schedule
+        ensembleRole = EnsembleRole.CONDUCTING
+        conductorRun = EnsembleRun(
+            runId = "r${System.currentTimeMillis()}-${++conductorRunCounter}",
+            file = pdfFileName,
+            state = EnsembleRun.State.PLAYING,
+            timeline = timeline,
+            timeSignature = meter,
+            dotted = metronome.dottedBeat,
+            startMeasure = if (followState == FollowState.PLAYING) followMeasure?.measureNumber else null,
+        )
+        binding.root.removeCallbacks(ensembleRebroadcast)
+        ensembleRebroadcast.run()
+        Log.d("PdfViewerActivity", "🎵 합주 메트로놈 시작: ${conductorRun?.runId} bpm=$bpm $meter 시작마디=${conductorRun?.startMeasure}")
+        return metronome.startScheduled(schedule, withSound = true)
+    }
+
+    /** 지휘자: 연주 중(일반 메트로놈) 템포 · 박자를 바꾸면 다음 박부터 새 시간표. 앞 박들의 시각은 그대로다 */
+    private fun retimeConductorRun() {
+        val run = conductorRun ?: return
+        val schedule = ensembleSchedule ?: return
+        if (run.state != EnsembleRun.State.PLAYING || ensembleRole != EnsembleRole.CONDUCTING) return
+        val bpm = metronome.bpm.coerceIn(MetronomeClock.MIN_BPM, MetronomeClock.MAX_BPM)
+        val meter = metronome.timeSignature.coerced()
+        val dotted = metronome.dottedBeat
+        // 악보 연동 중에는 박자를 악보가 정한다 — 템포만 본다
+        val meterChanged = !run.isFollowingScore && (meter != run.timeSignature || dotted != run.dotted)
+        if (bpm == run.timeline.bpm && !meterChanged) return
+        val from = maxOf(0L, schedule.beatAtLocal(System.nanoTime()) + 1)
+        val timeline = run.timeline.retimed(bpm, from, if (meterChanged) from else run.timeline.barBeat)
+        val newMeter = if (meterChanged) meter else run.timeSignature
+        val newDotted = if (meterChanged) dotted else run.dotted
+        schedule.update(timeline, newMeter, newDotted)
+        conductorRun = run.copy(timeline = timeline, timeSignature = newMeter, dotted = newDotted)
+        conductorRun?.let { globalCollaborationManager.broadcastMetronomeRun(it) }
+    }
+
+    /**
+     * 실측용 (#055 §2): 현재 마디가 바뀌어 화면에 반영한 순간을 **지휘자 시계로** 남긴다. 두 기기 로그에서 같은 마디의
+     * `shownAt` 차이 = 앱이 만든 표시 오차 (모니터 지연 제외). `late` = 박 시각보다 얼마나 늦게 반영했나.
+     */
+    private fun logEnsembleMeasure(beat: Beat, measureNumber: Int) {
+        val schedule = ensembleSchedule ?: return
+        val offset = when (ensembleRole) {
+            EnsembleRole.CONDUCTING -> 0L
+            EnsembleRole.FOLLOWING -> globalCollaborationManager.getClockOffsetNs() ?: return
+            EnsembleRole.NONE -> return
+        }
+        val shownAt = System.nanoTime() + offset
+        val late = (shownAt - schedule.timeline.timeOf(beat.index)) / 1_000_000.0
+        Log.d("EnsembleSync", "role=$ensembleRole measure=$measureNumber beat=${beat.index} shownAt=$shownAt late=${"%.1f".format(late)}ms")
+    }
+
+    /** 합주 역할을 끝낸다. 지휘자면 연주자들에게 정지를 알린다 (stopMetronome 에서) */
+    private fun endEnsembleRun() {
+        if (ensembleRole == EnsembleRole.CONDUCTING) {
+            binding.root.removeCallbacks(ensembleRebroadcast)
+            conductorRun?.let { globalCollaborationManager.broadcastMetronomeRun(it.copy(state = EnsembleRun.State.STOPPED)) }
+            conductorRun = null
+        }
+        ensembleRole = EnsembleRole.NONE
+        ensembleSchedule = null
+    }
+
+    /** 연주자: 지휘자 상태를 받았다. [retry] = 같은 상태를 다시 적용해 본다 (시계 동기 완료 · 파일 열림 · 화면 복귀) */
+    private fun onEnsembleRunReceived(run: EnsembleRun, retry: Boolean = false) {
+        if (collaborationMode != CollaborationMode.PERFORMER) return
+        val previous = performerRun
+        performerRun = run
+        // 새 연주가 시작되면 빠져 있던 연주자도 다시 따라간다 (지휘자의 시작은 모두에게 — 사용자 결정)
+        if (performerDetachedRunId != null && performerDetachedRunId != run.runId) performerDetachedRunId = null
+
+        if (run.file != pdfFileName) {
+            if (ensembleRole == EnsembleRole.FOLLOWING) stopMetronome()
+            return
+        }
+        when (run.state) {
+            EnsembleRun.State.STOPPED -> {
+                performerDetachedRunId = null
+                if (ensembleRole == EnsembleRole.FOLLOWING) {
+                    stopMetronome()
+                    Toast.makeText(this, "지휘자가 메트로놈을 멈췄습니다", Toast.LENGTH_SHORT).show()
+                }
+            }
+            EnsembleRun.State.PAUSED, EnsembleRun.State.SELECTING -> showEnsembleFocus(run)
+            EnsembleRun.State.PLAYING -> {
+                if (run.runId == performerDetachedRunId) return
+                val following = ensembleRole == EnsembleRole.FOLLOWING && previous?.runId == run.runId && metronome.isRunning
+                if (following) {
+                    // 같은 연주 — 템포가 바뀌었으면 시간표만 갈아 끼운다
+                    if (previous != run) ensembleSchedule?.update(run.timeline, run.timeSignature, run.dotted)
+                    return
+                }
+                if (!retry && performerJoiningRunId == run.runId) return
+                if (!lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.RESUMED)) return
+                joinEnsembleRun(run)
+            }
+        }
+    }
+
+    /** 연주자: 지휘자 연주에 합류한다 — 이미 시작했으면 지금 박에서부터 */
+    private fun joinEnsembleRun(run: EnsembleRun) {
+        if (globalCollaborationManager.getClockOffsetNs() == null) {
+            // 시계 동기는 연결 직후 1초 안에 끝난다 — 끝나면 onClockSynced 가 다시 부른다
+            if (!clockWaitNoticeShown) {
+                clockWaitNoticeShown = true
+                Toast.makeText(this, "지휘자와 시계를 맞추는 중…", Toast.LENGTH_SHORT).show()
+            }
+            return
+        }
+        performerJoiningRunId = run.runId
+        // 이 기기에서 하던 메트로놈 · 마디 고르기는 접는다 — 지휘자가 우선
+        if (followState == FollowState.SELECTING) cancelMeasureSelection()
+        if (metronome.isRunning || followState != FollowState.OFF) stopMetronome()
+
+        val fileId = currentPdfFileId
+        lifecycleScope.launch {
+            val measures = if (!run.isFollowingScore || fileId == null) null else scoreMeasuresFor(fileId)
+            val latest = performerRun
+            if (performerJoiningRunId != run.runId) return@launch
+            performerJoiningRunId = null
+            if (latest == null || latest.runId != run.runId || latest.state != EnsembleRun.State.PLAYING ||
+                latest.file != pdfFileName || latest.runId == performerDetachedRunId || isDestroyed
+            ) return@launch
+            startFollowingEnsemble(latest, fileId, measures)
+        }
+    }
+
+    private fun startFollowingEnsemble(run: EnsembleRun, fileId: String?, measures: List<ScoreMeasure>?) {
+        val schedule = EnsembleSchedule(run.timeline, run.timeSignature, run.dotted) {
+            globalCollaborationManager.getClockOffsetNs() ?: 0L
+        }
+        val startable = ScoreFollower.startableMeasures(measures.orEmpty())
+        val startIndex = startable.indexOfFirst { it.measureNumber == run.startMeasure }
+        if (run.startMeasure != null && startIndex >= 0) {
+            val scoreFollower = ScoreFollower(startable, run.startMeasure, run.dotted)
+            followMeasures = startable
+            followFileId = fileId
+            cursorIndex = startIndex
+            follower = scoreFollower
+            followMeasure = startable[startIndex]
+            followInCountIn = true
+            turnRequestedTo = -1
+            schedule.barPosition = { index -> scoreFollower.barPositionAt(index) }
+            followState = FollowState.PLAYING
+        } else if (run.startMeasure != null) {
+            Toast.makeText(this, "이 기기 악보에서 ${run.startMeasure}번 마디를 찾지 못해 박만 따라갑니다", Toast.LENGTH_LONG).show()
+        }
+        // 표시용 — 저장하지 않는다 (지휘자 설정이다)
+        metronome.bpm = run.timeline.bpm
+        metronome.timeSignature = run.timeSignature
+        metronome.dottedBeat = run.dotted
+        metronome.soundEnabled = true
+        metronome.volume = preferences.getFloat(PREF_METRONOME_VOLUME, 0.6f)
+        ensembleSchedule = schedule
+        ensembleRole = EnsembleRole.FOLLOWING
+        metronome.startScheduled(schedule, withSound = preferences.getBoolean(PREF_ENSEMBLE_SOUND, false))
+        metronomeFileId = currentPdfFileId
+        binding.metronomeBeat.visibility = View.VISIBLE
+        binding.metronomeBeat.removeCallbacks(metronomeTicker)
+        binding.metronomeBeat.postOnAnimation(metronomeTicker)
+        refreshScoreOverlay()
+        val now = System.nanoTime()
+        Log.d(
+            "EnsembleSync",
+            "join run=${run.runId} beatNow=${schedule.beatAtLocal(now)} offset=${globalCollaborationManager.getClockOffsetNs()}ns " +
+                "rtt=${globalCollaborationManager.getClockRttNs()}ns startMeasure=${run.startMeasure}"
+        )
+    }
+
+    /**
+     * 연주자: 지휘자가 일시정지했거나 마디를 고르는 중 — 멈추고 그 마디(멈춘 마디 · 지휘자의 커서)를 파란 상자로 보이며
+     * 그 페이지로 간다. 커서는 보기만 한다 (고르는 건 지휘자). 따라가던 적이 없으면 악보부터 준비한다.
+     */
+    private fun showEnsembleFocus(run: EnsembleRun) {
+        val measureNumber = run.focusMeasure
+        val fileId = currentPdfFileId
+        if (measureNumber == null || fileId == null || run.runId == performerDetachedRunId) return
+        if (!lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.RESUMED)) return
+        if (metronome.isRunning) {
+            metronome.stop()
+            metronome.barPosition = null
+            binding.metronomeBeat.removeCallbacks(metronomeTicker)
+            binding.metronomeBeat.visibility = View.GONE
+        }
+        if (followState == FollowState.SELECTING) cancelMeasureSelection()
+        follower = null
+        followInCountIn = false
+        ensembleSchedule = null
+
+        if (followFileId == fileId && followMeasures.isNotEmpty()) {
+            applyEnsembleFocus(fileId, followMeasures, measureNumber)
+            return
+        }
+        lifecycleScope.launch {
+            val measures = scoreMeasuresFor(fileId) ?: return@launch
+            val latest = performerRun ?: return@launch
+            if (currentPdfFileId != fileId || latest.file != pdfFileName || latest.runId == performerDetachedRunId) return@launch
+            if (latest.state != EnsembleRun.State.PAUSED && latest.state != EnsembleRun.State.SELECTING) return@launch
+            applyEnsembleFocus(fileId, ScoreFollower.startableMeasures(measures), latest.focusMeasure ?: return@launch)
+        }
+    }
+
+    private fun applyEnsembleFocus(fileId: String, startable: List<ScoreMeasure>, measureNumber: Int) {
+        val index = startable.indexOfFirst { it.measureNumber == measureNumber }
+        if (index < 0) return
+        followMeasures = startable
+        followFileId = fileId
+        cursorIndex = index
+        followMeasure = startable[index]
+        ensembleRole = EnsembleRole.FOLLOWING
+        followState = FollowState.PAUSED
+        ensureMeasureVisible(startable[index])
+        refreshScoreOverlay()
+    }
+
+    /** 이 파일의 악보 분석 결과 (캐시 → DB → 분석) */
+    private suspend fun scoreMeasuresFor(fileId: String): List<ScoreMeasure>? {
+        if (scoreMeasuresFileId == fileId) return scoreMeasures
+        val file = File(pdfFilePath)
+        val measures = withContext(Dispatchers.IO) { musicRepository.getOrAnalyzeScoreMeasures(fileId, file) }
+        if (measures != null && currentPdfFileId == fileId) {
+            scoreMeasures = measures
+            scoreMeasuresFileId = fileId
+        }
+        return measures
+    }
+
+    /** 지휘자: 시작 마디를 고르는 중 — 커서 위치를 연주자들에게 (#055). 일시정지 후 다시 고를 때도, 처음 고를 때도 */
+    private fun broadcastConductorCursor() {
+        if (!isConductingEnsemble() || followState != FollowState.SELECTING) return
+        val measure = followMeasures.getOrNull(cursorIndex) ?: return
+        val base = conductorRun ?: EnsembleRun(
+            runId = "r${System.currentTimeMillis()}-${++conductorRunCounter}",
+            file = pdfFileName,
+            state = EnsembleRun.State.SELECTING,
+            // 고르는 동안에는 시간표를 쓰지 않는다 — 형식만 채운다
+            timeline = BeatTimeline(0, 0, metronome.bpm.coerceIn(MetronomeClock.MIN_BPM, MetronomeClock.MAX_BPM)),
+            timeSignature = metronome.timeSignature.coerced(),
+            dotted = metronome.dottedBeat,
+            startMeasure = null,
+        )
+        val firstBroadcast = conductorRun == null
+        conductorRun = base.copy(state = EnsembleRun.State.SELECTING, file = pdfFileName, focusMeasure = measure.measureNumber)
+        ensembleRole = EnsembleRole.CONDUCTING
+        ensembleSchedule = null
+        if (firstBroadcast) {
+            binding.root.removeCallbacks(ensembleRebroadcast)
+            ensembleRebroadcast.run()
+        } else {
+            conductorRun?.let { globalCollaborationManager.broadcastMetronomeRun(it) }
+        }
+    }
+
+    /** 연주자: 이 기기만 빠진다 (↑ · 뒤로 · OK 길게) — 지휘자에게는 영향이 없다 */
+    private fun detachFromEnsemble() {
+        performerDetachedRunId = performerRun?.runId
+        stopMetronome()
+        Toast.makeText(this, "이 기기만 메트로놈 연동에서 빠졌습니다 — ↑ 로 다시 합류", Toast.LENGTH_SHORT).show()
+    }
+
+    private fun canRejoinEnsemble(): Boolean {
+        val run = performerRun ?: return false
+        return collaborationMode == CollaborationMode.PERFORMER && run.state == EnsembleRun.State.PLAYING && run.file == pdfFileName
+    }
+
+    /**
+     * 연주자의 ↑ 메뉴 (#055) — 연주자는 지휘자를 따라가기만 한다. 따라가는 중이면 "이 기기만 빠지기",
+     * 빠져 있고 지휘자가 연주 중이면 "다시 합류". 설정은 소리 켜기/끄기뿐 (사용자 결정). 닫으면 그대로.
+     */
+    private fun showPerformerEnsembleMenu() {
+        val items = mutableListOf<Pair<String, () -> Unit>>()
+        when {
+            ensembleRole == EnsembleRole.FOLLOWING -> items += "이 기기만 빠지기" to { detachFromEnsemble() }
+            canRejoinEnsemble() -> items += "지휘자 연주에 다시 합류 — 지금 연주 중인 마디로" to {
+                performerDetachedRunId = null
+                performerRun?.let { joinEnsembleRun(it) }
+            }
+        }
+        items += "메트로놈 설정… (소리)" to { showPerformerMetronomeSettings() }
+        val title = when {
+            ensembleRole == EnsembleRole.FOLLOWING -> "메트로놈 — 지휘자를 따라가는 중"
+            canRejoinEnsemble() -> "메트로놈 — 이 기기는 빠져 있음"
+            else -> "메트로놈 — 지휘자가 시작하면 따라갑니다"
+        }
+        metronomeMenuShowing = true
+        AlertDialog.Builder(this)
+            .setTitle(title)
+            .setItems(items.map { it.first }.toTypedArray()) { _, which -> items[which].second() }
+            .setOnDismissListener { metronomeMenuShowing = false }
+            .show()
+    }
+
+    /** 연주자의 메트로놈 설정 — 이 기기가 소리를 낼지만 고른다. 템포 · 박자는 지휘자 것 */
+    private fun showPerformerMetronomeSettings() {
+        val soundOn = preferences.getBoolean(PREF_ENSEMBLE_SOUND, false)
+        val choices = arrayOf("소리 끔 — 박 표시 · 현재 마디 · 넘김만 따라갑니다", "소리 켬 — 지휘자 메트로놈에 맞춰 이 기기도 소리를 냅니다")
+        AlertDialog.Builder(this)
+            .setTitle("메트로놈 설정 (연주자)")
+            .setSingleChoiceItems(choices, if (soundOn) 1 else 0) { dialog, which ->
+                setPerformerSound(which == 1)
+                dialog.dismiss()
+            }
+            .setNegativeButton("닫기", null)
+            .show()
+    }
+
+    /** 연주자 소리 설정을 바꾸고, 따라가는 중이면 바로 적용한다 — 같은 시간표로 다시 시작해도 박은 그대로다 */
+    private fun setPerformerSound(on: Boolean) {
+        preferences.edit().putBoolean(PREF_ENSEMBLE_SOUND, on).apply()
+        val schedule = ensembleSchedule
+        if (ensembleRole == EnsembleRole.FOLLOWING && metronome.isRunning && schedule != null) {
+            metronome.startScheduled(schedule, withSound = on)
+        }
+        Toast.makeText(this, if (on) "이 기기도 메트로놈 소리를 냅니다" else "이 기기는 메트로놈 소리를 내지 않습니다", Toast.LENGTH_SHORT).show()
+    }
+
     /** 다른 곡으로 넘어가면 멈춘다 — 템포가 파일별이라 이전 곡 템포로 계속 도는 건 틀린 동작이다. */
     private fun onPdfFileChangedForMetronome(fileId: String) {
         val runningFor = metronomeFileId
         if (metronome.isRunning && runningFor != null && runningFor != fileId) stopMetronome()
         if (followState == FollowState.SELECTING && followFileId != fileId) cancelMeasureSelection()
         if (followState == FollowState.PAUSED && followFileId != fileId) stopMetronome()
+        // 연주자: 지휘자가 이 파일로 연주 중이면 바로 합류 (#055)
+        performerRun?.let { if (it.file == pdfFileName) onEnsembleRunReceived(it, retry = true) }
     }
 
     /**
@@ -2268,10 +2663,13 @@ class PdfViewerActivity : AppCompatActivity() {
         turnRequestedTo = -1
         ensureMeasureVisible(startable[cursorIndex])
         refreshScoreOverlay()
+        broadcastConductorCursor()
         Toast.makeText(this, "시작할 마디를 고르세요 — ←→ 마디, ↑↓ 줄, OK 시작, 뒤로 취소 (연주 중 ↑ 메뉴)", Toast.LENGTH_LONG).show()
     }
 
     private fun cancelMeasureSelection() {
+        // 지휘자가 일시정지 → 마디 골라 다시 → 취소면 연주자들도 정지 (#055)
+        if (ensembleRole == EnsembleRole.CONDUCTING) endEnsembleRun()
         followState = FollowState.OFF
         followMeasures = emptyList()
         refreshScoreOverlay()
@@ -2280,6 +2678,8 @@ class PdfViewerActivity : AppCompatActivity() {
     /** 악보 연동 일시정지 (#053) — 메뉴를 띄울 때. 연주 중이 아니면 아무것도 하지 않는다. 멈춘 마디를 표시해 둔다. */
     private fun pauseFollowing() {
         if (followState != FollowState.PLAYING) return
+        // 합주 연주자는 메뉴를 열어도 계속 따라간다 — 멈추고 고르는 건 지휘자 (#055)
+        if (ensembleRole == EnsembleRole.FOLLOWING) return
         val at = followMeasure
         metronome.stop()
         metronome.barPosition = null
@@ -2290,6 +2690,11 @@ class PdfViewerActivity : AppCompatActivity() {
         cursorIndex = followMeasures.indexOfFirst { it.measureNumber == at?.measureNumber }.coerceAtLeast(0)
         followMeasure = followMeasures.getOrNull(cursorIndex)
         followState = FollowState.PAUSED
+        if (ensembleRole == EnsembleRole.CONDUCTING) {
+            ensembleSchedule = null
+            conductorRun = conductorRun?.copy(state = EnsembleRun.State.PAUSED, focusMeasure = followMeasure?.measureNumber)
+            conductorRun?.let { globalCollaborationManager.broadcastMetronomeRun(it) }
+        }
         refreshScoreOverlay()
     }
 
@@ -2317,6 +2722,7 @@ class PdfViewerActivity : AppCompatActivity() {
      */
     private fun showMetronomeMenu() {
         if (metronomeMenuShowing) return
+        if (collaborationMode == CollaborationMode.PERFORMER) return showPerformerEnsembleMenu()
         pauseFollowing()
         val items = mutableListOf<Pair<String, () -> Unit>>()
         val paused = followState == FollowState.PAUSED
@@ -2368,7 +2774,7 @@ class PdfViewerActivity : AppCompatActivity() {
         super.onWindowFocusChanged(hasFocus)
         // 일시정지 중에 메뉴·설정 대화상자를 모두 닫으면(악보 화면이 포커스를 되찾으면) 다음 동작을 고르게 한다 (#053).
         // 메뉴에서 다른 대화상자로 넘어가는 사이 잠깐 포커스가 돌아올 수 있어 조금 기다렸다가 다시 확인한다
-        if (hasFocus && followState == FollowState.PAUSED) {
+        if (hasFocus && followState == FollowState.PAUSED && ensembleRole != EnsembleRole.FOLLOWING) {
             binding.root.removeCallbacks(pausedMenuCheck)
             binding.root.postDelayed(pausedMenuCheck, PAUSED_MENU_DELAY_MS)
         }
@@ -2379,6 +2785,7 @@ class PdfViewerActivity : AppCompatActivity() {
         cursorIndex = (cursorIndex + delta).coerceIn(0, followMeasures.lastIndex)
         ensureMeasureVisible(followMeasures[cursorIndex])
         refreshScoreOverlay()
+        broadcastConductorCursor()
     }
 
     /** 위/아래 — 이전/다음 줄(시스템)의 첫 마디 */
@@ -2421,6 +2828,7 @@ class PdfViewerActivity : AppCompatActivity() {
                     followInCountIn = false
                     followMeasure = position.measure
                     refreshScoreOverlay()
+                    logEnsembleMeasure(beat, position.measure.measureNumber)
                 }
                 // 다음 마디가 다른 페이지에 있으면 이 마디가 끝나기 TURN_LEAD_BEATS 박 전에 미리 편다 —
                 // 사람이 넘기듯 다음 페이지를 미리 보게 (사용자 요청: 1~2박 전). 짧은 마디는 마디 안에서만 당긴다
@@ -2429,6 +2837,8 @@ class PdfViewerActivity : AppCompatActivity() {
                 ensureMeasureVisible(if (turnEarly) position.next ?: position.measure else position.measure)
             }
             ScoreFollower.Position.Finished -> {
+                // 연주자는 끝난 연주를 다시 받아도 또 따라가지 않게 (#055)
+                if (ensembleRole == EnsembleRole.FOLLOWING) performerDetachedRunId = performerRun?.runId
                 stopMetronome()
                 Toast.makeText(this, "악보 끝까지 따라왔습니다", Toast.LENGTH_SHORT).show()
             }
@@ -3230,6 +3640,12 @@ class PdfViewerActivity : AppCompatActivity() {
         // 연주 화면을 벗어나면 메트로놈을 멈춘다 (홈·다른 앱으로 가도 계속 울리지 않게)
         stopMetronome()
     }
+
+    override fun onResume() {
+        super.onResume()
+        // 합주 연주자: 돌아오면 지휘자 연주에 다시 합류 (#055)
+        performerRun?.let { onEnsembleRunReceived(it, retry = true) }
+    }
     
     override fun onDestroy() {
         super.onDestroy()
@@ -3240,6 +3656,7 @@ class PdfViewerActivity : AppCompatActivity() {
         // Phase 0: 예약된 동기 페이지 넘김 취소
         pendingSyncTurn?.let { syncTurnHandler.removeCallbacks(it) }
         pendingSyncTurn = null
+        binding.root.removeCallbacks(ensembleRebroadcast)
 
         // Clean up collaboration resources
         // Note: 전역 매니저가 관리하므로 여기서 서버를 중지하지 않음

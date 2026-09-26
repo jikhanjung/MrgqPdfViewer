@@ -197,6 +197,8 @@ class SimpleWebSocketConnection(
         serverManager.handleClientMessage(clientId, message)
     }
     
+    // 브로드캐스트 스레드와 이 연결의 읽기 스레드(clock_pong 등 응답)가 동시에 쓰면 프레임이 섞인다 (#055)
+    @Synchronized
     fun sendMessage(message: String): Boolean {
         return try {
             if (!isConnected || socket.isClosed) {

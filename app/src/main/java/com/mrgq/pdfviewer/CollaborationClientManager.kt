@@ -5,6 +5,8 @@ import android.os.Looper
 import android.util.Log
 import com.google.gson.Gson
 import com.google.gson.JsonObject
+import com.mrgq.pdfviewer.ensemble.ClockSync
+import com.mrgq.pdfviewer.ensemble.EnsembleRun
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.Response
@@ -18,8 +20,26 @@ class CollaborationClientManager(
     private val onPageChangeReceived: (Int, String, Long?) -> Unit,
     private val onFileChangeReceived: (String, Int) -> Unit,
     private val onConnectionStatusChanged: (Boolean) -> Unit,
-    private val onBackToListReceived: (() -> Unit)? = null
+    private val onBackToListReceived: (() -> Unit)? = null,
+    /** 지휘자 메트로놈 상태 (#055) */
+    private val onMetronomeRunReceived: ((EnsembleRun) -> Unit)? = null,
+    /** 시계 동기 표본을 처음 얻었을 때 — 기다리던 합주 메트로놈을 시작할 수 있다 */
+    private val onClockSynced: (() -> Unit)? = null,
 ) {
+
+    /** 지휘자 시계와의 차이 (#055) */
+    val clockSync = ClockSync()
+    private val clockHandler = Handler(Looper.getMainLooper())
+    private var clockPingsSent = 0
+    private val clockPingRunnable = object : Runnable {
+        override fun run() {
+            if (!isConnected.get()) return
+            sendMessage(CollaborationProtocol.buildClockPing(System.nanoTime()).toString())
+            clockPingsSent++
+            // 처음 몇 번은 빨리 (시작 전에 추정을 세우게), 그 뒤로는 드리프트만 따라간다
+            clockHandler.postDelayed(this, if (clockPingsSent < CLOCK_BURST) CLOCK_BURST_INTERVAL_MS else CLOCK_INTERVAL_MS)
+        }
+    }
     
     private var webSocket: WebSocket? = null
     private var okHttpClient: OkHttpClient? = null
@@ -43,6 +63,9 @@ class CollaborationClientManager(
         private const val DEFAULT_PORT = 9090
         private const val HEARTBEAT_INTERVAL = 30000L // 30 seconds
         private const val CONNECTION_TIMEOUT = 10000L // 10 seconds
+        private const val CLOCK_BURST = 8
+        private const val CLOCK_BURST_INTERVAL_MS = 100L
+        private const val CLOCK_INTERVAL_MS = 2000L
     }
     
     fun connectToConductor(ipAddress: String, port: Int = DEFAULT_PORT, deviceName: String = ""): Boolean {
@@ -90,6 +113,7 @@ class CollaborationClientManager(
             
             // Cancel heartbeat
             stopHeartbeat()
+            stopClockSync()
             
             // Close WebSocket
             webSocket?.close(1000, "Client disconnecting")
@@ -147,14 +171,40 @@ class CollaborationClientManager(
         }
     }
     
+    private fun startClockSync() {
+        clockHandler.removeCallbacks(clockPingRunnable)
+        clockSync.reset()
+        clockPingsSent = 0
+        clockHandler.post(clockPingRunnable)
+    }
+
+    private fun stopClockSync() {
+        clockHandler.removeCallbacks(clockPingRunnable)
+    }
+
     private fun handleIncomingMessage(message: String) {
+        // 시계 동기(#055): 받은 순간을 파싱보다 먼저 잡는다
+        val receivedNs = System.nanoTime()
         try {
             val json = gson.fromJson(message, JsonObject::class.java)
             val action = json.get("action")?.asString
             
-            Log.d(TAG, "Received message: $action")
+            if (action != CollaborationProtocol.ACTION_CLOCK_PONG) Log.d(TAG, "Received message: $action")
             
             when (action) {
+                CollaborationProtocol.ACTION_CLOCK_PONG -> {
+                    val pong = CollaborationProtocol.parseClockPong(json) ?: return
+                    val first = clockSync.offsetNs == null
+                    clockSync.addSample(pong.t0, pong.serverNs, receivedNs)
+                    if (first && clockSync.offsetNs != null) {
+                        Log.d(TAG, "Clock synced: offset=${clockSync.offsetNs}ns rtt=${clockSync.bestRttNs}ns")
+                        onClockSynced?.invoke()
+                    }
+                }
+                CollaborationProtocol.ACTION_METRONOME_RUN -> {
+                    val run = CollaborationProtocol.parseMetronomeRun(json)
+                    if (run == null) Log.w(TAG, "Invalid metronome_run: $message") else onMetronomeRunReceived?.invoke(run)
+                }
                 CollaborationProtocol.ACTION_PAGE_CHANGE -> {
                     // turn_at 이 없거나 null 이면 turnAt == null → 즉시 넘김 (Phase 0 하위호환).
                     val m = CollaborationProtocol.parsePageChange(json)
@@ -172,6 +222,7 @@ class CollaborationClientManager(
                         reconnectAttempts.set(0)
                         onConnectionStatusChanged(true)
                         startHeartbeat()
+                        startClockSync()
                         Log.d(TAG, "Successfully connected to conductor")
                     }
                 }
