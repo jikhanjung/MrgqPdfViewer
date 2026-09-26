@@ -247,6 +247,36 @@ class MusicDatabaseMigrationTest {
     }
 
     @Test
+    fun v11_에서_v12_는_마디를_다시_분석하게_하고_설정을_보존한다() {
+        helper.createDatabase(TEST_DB, 11).apply {
+            execSQL(INSERT_FILE)
+            execSQL("UPDATE pdf_files SET scoreAnalyzedAt = 5678 WHERE id = 'file-1'")
+            execSQL(
+                "INSERT INTO user_preferences (pdfFileId, displayMode, lastPageNumber, bookmarkedPages, " +
+                    "topClippingPercent, bottomClippingPercent, centerPadding, updatedAt, metronomeBpm, " +
+                    "metronomeBeatsPerBar, metronomeBeatUnit, metronomeDottedBeat) " +
+                    "VALUES ('file-1', 'DOUBLE', 7, '', 0.05, 0.03, 0.1, 1000, 72, 9, 8, 1)"
+            )
+            close()
+        }
+
+        val db = helper.runMigrationsAndValidate(TEST_DB, 12, true, *MusicDatabase.ALL_MIGRATIONS)
+
+        db.query("SELECT scoreAnalyzedAt FROM pdf_files WHERE id = 'file-1'").use { c ->
+            c.moveToFirst()
+            assertTrue("개선된 분석기로 다시 분석해야 한다 (이전 0마디 캐시)", c.isNull(0))
+        }
+        db.query("SELECT metronomeBpm, metronomeBeatsPerBar, metronomeDottedBeat, displayMode FROM user_preferences").use { c ->
+            assertEquals(1, c.count)
+            c.moveToFirst()
+            assertEquals(72, c.getInt(0))
+            assertEquals(9, c.getInt(1))
+            assertEquals(1, c.getInt(2))
+            assertEquals("DOUBLE", c.getString(3))
+        }
+    }
+
+    @Test
     fun v2_to_v3_중앙여백_픽셀이_비율로_변환된다() {
         val db = createDbAt(2, V2_USER_PREFERENCES) {
             it.execSQL(INSERT_FILE)

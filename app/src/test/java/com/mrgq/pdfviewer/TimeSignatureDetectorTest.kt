@@ -47,6 +47,34 @@ class TimeSignatureDetectorTest {
         assertEquals(listOf(TimeSignatureMark(0, 70f, 6, 8)), marks)
     }
 
+    /** MuseScore (#056): SMuFL 박자 숫자 글자(U+E080+n)를 한 글자씩, 기타 2대 악보처럼 보표 2개에 */
+    private fun smufl(n: Int) = (0xE080 + n).toChar().toString()
+
+    @Test
+    fun SMuFL_박자_숫자도_읽는다() {
+        val s = system(100f)
+        val runs = (0 until 5).flatMap { staff ->
+            val (top, _) = s.staffBands[staff]
+            listOf(TextRun(smufl(9), 124.6f, pageHeight - (top + 9.5f), 19f), TextRun(smufl(8), 124.6f, pageHeight - (top + 19f), 19f))
+        }
+        assertEquals(listOf(TimeSignatureMark(0, 124.6f, 9, 8)), TimeSignatureDetector.detect(runs, listOf(s), pageHeight))
+    }
+
+    @Test
+    fun 한_글자씩_찍힌_두_자리_분자를_합친다() {
+        val s = system(100f)
+        // "12" 는 원점이 7pt 떨어진 두 글자, "8" 은 그 가운데 아래
+        val runs = (0 until 5).flatMap { staff ->
+            val (top, _) = s.staffBands[staff]
+            listOf(
+                TextRun(smufl(1), 120f, pageHeight - (top + 9.5f), 19f),
+                TextRun(smufl(2), 127f, pageHeight - (top + 9.5f), 19f),
+                TextRun(smufl(8), 123.5f, pageHeight - (top + 19f), 19f),
+            )
+        }
+        assertEquals(listOf(TimeSignatureMark(0, 123.5f, 12, 8)), TimeSignatureDetector.detect(runs, listOf(s), pageHeight))
+    }
+
     @Test
     fun 보표_과반에_없으면_박자표가_아니다() {
         val s = system(100f)

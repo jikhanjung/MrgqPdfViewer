@@ -32,7 +32,7 @@ object ScoreLayoutAnalyzer {
                     val texts = ArrayList<TextRun>()
                     PathContentInterpreter(crop.lowerLeftX, crop.lowerLeftY, textSink = { texts += it }) { boxes += it }
                         .run(PdfBoxContent.pageContent(page), PdfBoxXObjects(page.resources))
-                    val systems = StaffSystemDetector.detect(boxes, crop.height)
+                    val systems = StaffSystemDetector.detect(boxes, crop.height, texts)
                     PageLayout(index, crop.width, crop.height, systems, TimeSignatureDetector.detect(texts, systems, crop.height))
                 }
             }

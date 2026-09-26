@@ -17,7 +17,7 @@ import com.mrgq.pdfviewer.database.entity.UserPreference
 
 @Database(
     entities = [PdfFile::class, UserPreference::class, ScoreMeasure::class],
-    version = 11,
+    version = 12,
     exportSchema = true   // app/schemas 로 내보낸다 — 마이그레이션 테스트·드리프트 감지의 전제
 )
 @TypeConverters(Converters::class)
@@ -176,10 +176,19 @@ abstract class MusicDatabase : RoomDatabase() {
             }
         }
 
+        // Migration from version 11 to 12 (악보 분석기 개선: MuseScore PDF — 보표 2개 시스템 · 이어 그린 마디선 · SMuFL 박자표, #056)
+        // 스키마는 그대로다. 이전 분석기가 0마디로 캐시한 파일이 영영 다시 분석되지 않으므로 scoreAnalyzedAt 을 비운다
+        // (8→9 와 같은 방식 — 다음에 필요할 때 ScoreLayoutStore 가 이전 마디를 지우고 새로 넣는다).
+        private val MIGRATION_11_12 = object : Migration(11, 12) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL("UPDATE pdf_files SET scoreAnalyzedAt = NULL")
+            }
+        }
+
         /** 앱과 마이그레이션 테스트가 같은 목록을 쓴다 — 등록 누락을 테스트가 잡도록. */
         internal val ALL_MIGRATIONS = arrayOf(
             MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8,
-            MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11,
+            MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12,
         )
 
         fun getDatabase(context: Context): MusicDatabase {

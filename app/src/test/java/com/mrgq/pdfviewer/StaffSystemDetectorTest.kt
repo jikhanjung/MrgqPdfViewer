@@ -5,6 +5,7 @@ import com.mrgq.pdfviewer.score.PathBox
 import com.mrgq.pdfviewer.score.ScoreLayout
 import com.mrgq.pdfviewer.score.StaffSystemDetector
 import com.mrgq.pdfviewer.score.SystemLayout
+import com.mrgq.pdfviewer.score.TextRun
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -117,6 +118,66 @@ class StaffSystemDetectorTest {
         assertEquals(3, systems[0].measureCount)
         assertEquals(2, systems[1].measureCount)
         assertTrue(systems[0].top < systems[1].top)
+    }
+
+    // ── MuseScore 형식 (#056): 오선을 마디마다 끊어 그림 · 마디선이 보표 사이를 이음 · 음표 머리가 글자 · 보표 2개 시스템 ──
+
+    /** 보표 2개(아래 보표 아랫선 [lowBottom], 보표 사이 25pt), 오선은 [bars] 사이마다 끊은 조각 */
+    private fun museScoreSystem(lowBottom: Float, bars: List<Float>): List<PathBox> {
+        val bottoms = listOf(lowBottom, lowBottom + 45f)
+        val edges = listOf(50f) + bars
+        val lines = bottoms.flatMap { b -> edges.zipWithNext().flatMap { (x0, x1) -> staff(b, x0, x1) } }
+        // 마디선: 위 보표 윗선 → 아래 보표 윗선 (보표 사이를 잇는다), 아래 보표 윗선 → 아랫선
+        val barPieces = (listOf(50f) + bars).flatMap { x ->
+            listOf(
+                PathBox(x - 0.4f, lowBottom + 20f, x + 0.4f, lowBottom + 65f, curved = false),
+                PathBox(x - 0.4f, lowBottom, x + 0.4f, lowBottom + 20f, curved = false),
+            )
+        }
+        return lines + barPieces
+    }
+
+    @Test
+    fun 보표_두_개_시스템의_이어_그린_마디선과_끊어_그린_오선() {
+        // 60pt 짜리 짧은 마디 — 조각 하나로는 오선 폭 기준(80pt)에 못 미친다
+        val s = StaffSystemDetector.detect(museScoreSystem(420f, listOf(110f, 250f, 400f)), pageHeight).single()
+        assertEquals(2, s.staffBands.size)
+        assertEquals(listOf(50f, 110f, 250f, 400f), s.barlines)
+        assertEquals(3, s.measureCount)
+    }
+
+    @Test
+    fun 연결선이_있으면_간격이_좁아도_시스템을_나눈다() {
+        // 두 시스템 사이 간격 30pt (< 55pt) — 간격 규칙이면 보표 4개가 한 시스템이 된다
+        val upper = museScoreSystem(500f, listOf(200f, 400f))
+        val lower = museScoreSystem(405f, listOf(300f, 400f))
+        val systems = StaffSystemDetector.detect(upper + lower, pageHeight)
+        assertEquals(listOf(2, 2), systems.map { it.staffBands.size })
+        assertEquals(listOf(2, 2), systems.map { it.measureCount })
+    }
+
+    @Test
+    fun 떨어진_가로_조각은_합치지_않는다() {
+        // 셋잇단 괄호처럼 같은 높이에 띄엄띄엄 있는 짧은 선은 오선이 아니다
+        val brackets = (0 until 5).map { k -> line(60f + k * 50f, 100f + k * 50f, 300f) }
+        assertTrue(StaffSystemDetector.detect(brackets, pageHeight).isEmpty())
+    }
+
+    @Test
+    fun 글자로_찍힌_음표_머리가_붙은_세로선은_기둥이다() {
+        val boxes = museScoreSystem(420f, listOf(250f, 400f))
+        // 두 보표를 모두 덮는 기둥 두 조각 (마디선과 같은 모양) + 위 끝에 SMuFL 음표 머리 글자 (원점 = 왼쪽, 세로 가운데)
+        val stem = listOf(
+            PathBox(180f - 0.4f, 440f, 180f + 0.4f, 485f, curved = false),
+            PathBox(180f - 0.4f, 420f, 180f + 0.4f, 440f, curved = false),
+        )
+        val heads = listOf(TextRun("\uE0A4", 176f, 485f, 19f), TextRun("\uE0A4", 176f, 440f, 19f))
+        assertEquals(
+            "음표 머리 글자가 없으면 마디선으로 보인다 — 이 테스트의 기둥이 실제로 속일 수 있는 모양인지 확인",
+            listOf(50f, 180f, 250f, 400f),
+            StaffSystemDetector.detect(boxes + stem, pageHeight).single().barlines,
+        )
+        assertEquals(listOf(50f, 250f, 400f), StaffSystemDetector.detect(boxes + stem, pageHeight, heads).single().barlines)
     }
 
     @Test

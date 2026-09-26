@@ -19,12 +19,13 @@ Android TV OS용 PDF 악보 리더 앱으로, 무선 파일 업로드와 리모�
 - **전문적인 스플래시 스크린**: 브랜딩 강화된 2.5초 애니메이션 시퀀스로 앱 시작
 - **카드 기반 파일 목록**: 페이지 수, 파일 크기, 수정 날짜가 포함된 현대적 파일 표시
 - **상세 파일 정보**: PDF 페이지 수 + 문서 정보(제목·작성자, PdfBox) 표시. DB 에 캐시하고 바뀐 파일만 다시 분석 (`PdfFileSync`, devlog #045)
-- **악보 구조 분석 (마디 박스)**: 벡터 악보 PDF 에서 시스템·마디를 찾아 DB 에 캐시하고 뷰어에 번호 붙은 박스로 표시 (PDF 표시 옵션에서 켬, 두 페이지 모드·클리핑 추종). 지원: Sibelius→PDF 형식. `score/` 패키지, devlog #046. 콘텐츠 스트림은 PdfBox 엔진이 아닌 경량 해석기(`PathContentInterpreter`)로 읽는다 — 할당 905MB → 19MB, Z18TV Pro 실기기 8쪽 556ms (#049). 박자표(예: 6/8)도 텍스트 위치로 읽는다 (#050). 다음: MusicXML 정렬
+- **악보 구조 분석 (마디 박스)**: 벡터 악보 PDF 에서 시스템·마디를 찾아 DB 에 캐시하고 뷰어에 번호 붙은 박스로 표시 (PDF 표시 옵션에서 켬, 두 페이지 모드·클리핑 추종). 지원: Sibelius→PDF 형식. `score/` 패키지, devlog #046. 콘텐츠 스트림은 PdfBox 엔진이 아닌 경량 해석기(`PathContentInterpreter`)로 읽는다 — 할당 905MB → 19MB, Z18TV Pro 실기기 8쪽 556ms (#049). 박자표(예: 6/8)도 텍스트 위치로 읽는다 (#050). **MuseScore PDF**(끊어 그린 오선 · 보표 사이를 잇는 마디선 · 보표 2개 시스템 · SMuFL 음표 머리/박자 숫자)도 읽는다 (#056, DB v12 가 분석 캐시를 비움). 다음: MusicXML 정렬
 - **메트로놈**: PDF 표시 옵션에서 템포·박자·클릭음 설정 후 시작. AudioTrack 에 샘플 단위로 클릭을 이어 써 박이 흔들리지 않고, 화면 왼쪽 위 박 표시는 실제 재생 위치를 따른다. 템포·박자는 파일별 저장(v7, 분모 v10). 로컬 전용(합주 연동 없음). `metronome/` 패키지, devlog #047
   - **박자 선택** (#051): `TimeSignature`(분자/분모) — 흔한 박자 버튼 + 분자 슬라이더·분모 버튼. 박·BPM = 분모 음표. 겹박자(분자 6·9·12)는 1박 강 · 4박 중간(`Accent.MEDIUM`). 고른 적 없는 파일은 악보 박자표로 채움(`metronomeBeatUnit` null = 미선택)
   - **점음표 박** (#052): 겹박자에서 `8분음표 6박` / `점4분음표 2박` 토글(파일별, `metronomeDottedBeat` v11). 바꿀 때 BPM 3배 환산으로 빠르기 유지. `TimeSignature.beatsPerBar(dotted)`, 악보 연동(`ScoreFollower(dottedBeat)`)도 같은 단위. 자동 전환 안 함(곡마다 경계가 달라 사용자 결정). `MIN_BPM` 20
   - **악보 연동** (#050): 박자표를 읽은 파일이면 시작 시 악보에서 커서(←→ 마디, ↑↓ 줄, OK)로 시작 마디를 고르고, 한 마디 예비박 뒤 현재 마디를 노랗게 표시하며 마지막 마디 끝나기 2박 전(`TURN_LEAD_BEATS`)에 페이지를 넘긴다. 박 = 박자표 분모 음표. 연주 중 뒤로는 메트로놈만 정지. 박자표를 못 읽으면 일반 메트로놈
   - **↑ 메트로놈 메뉴 · 일시정지** (#053): 뷰어에서 ↑ = 메트로놈 메뉴. 연주 중 ↑ 나 OK 길게(옵션 메뉴)면 `FollowState.PAUSED` → 이어서(멈춘 마디부터 예비박) / 마디 골라 다시 / 정지. 메뉴를 모두 닫은 순간은 `onWindowFocusChanged` + 300ms 재확인으로 판단, 고르지 않고 닫으면 정지
+- **합주 메트로놈 동기화** (#055): 연주자가 `clock_ping/pong` 으로 지휘자와의 시계 차이(`ClockSync`, RTT 최소 표본)를 재고, 지휘자는 `metronome_run`(상태 전체: 시간표 `BeatTimeline` · 박자 · 시작 마디 · `focus_measure`)을 상태 변화 · 연결 시 · 5초마다 방송. 연주자는 `EnsembleSchedule` 로 자기 시계에 옮겨 `MetronomeEngine.startScheduled`(AudioTimestamp 로 박을 프레임에 맞춤) — 박 표시 · 현재 마디는 시간표를 따른다. 따라가는 동안 지휘자 `page_change` 무시(마디로 스스로 넘김). 연주자는 소리만 고름(`ensemble_metronome_sound`, 기본 끔). `ensemble/` 패키지. 실측 마디 전환 차이 중앙값 2.5ms
 - **앱 안 업데이트** (#054): 설정 → 앱 정보 → 업데이트 확인. GitHub `releases/latest` → `-release.apk` 다운로드(`cacheDir/updates`) → 에셋 SHA-256 digest 검증(없으면 `SHA256SUMS.txt`) → 설치 허용 확인 → `FileProvider` + `ACTION_VIEW`. `update/` 패키지. 수동 확인만(시작 시 자동 확인 없음)
 - **페이지 전환 애니메이션**: 350ms 슬라이드 애니메이션으로 실제 악보 페이지 넘기기 구현
 - **효과음 시스템**: SoundPool 기반 페이지 넘기기 사운드 및 슬라이더 볼륨 조절
@@ -49,7 +50,7 @@ Android TV OS용 PDF 악보 리더 앱으로, 무선 파일 업로드와 리모�
 - **아키텍처**: PdfViewerActivity + PageCache 중심 (v0.1.8 의 Manager 분리 시도는 미통합 상태로 남아 있다가 v0.1.11 에서 제거됨)
 - **PDF 렌더링**: PdfRenderer (Android 5.0+ 내장)
 - **PDF 문서 정보**: PdfBox-Android 2.0.27.0 (Title/Author 읽기 전용. BouncyCastle PQC 리소스는 패키징 제외)
-- **데이터베이스**: Room 2.6.1 (SQLite 기반, 현재 v11 스키마 — `score_measures`(박자표 포함), 파일별 메트로놈(템포·박자 분자/분모·점음표 박) 포함. ⚠️ `pdf_files` 갱신에 `insertPdfFile`(REPLACE) 금지 — CASCADE 로 표시 설정 삭제)
+- **데이터베이스**: Room 2.6.1 (SQLite 기반, 현재 v12 스키마 — `score_measures`(박자표 포함), 파일별 메트로놈(템포·박자 분자/분모·점음표 박) 포함. ⚠️ `pdf_files` 갱신에 `insertPdfFile`(REPLACE) 금지 — CASCADE 로 표시 설정 삭제)
 - **웹 서버**: NanoHTTPD 2.3.1
 - **보안**: WSS (WebSocket Secure) with TLS 1.2/1.3 (v0.1.8+)
 - **입력 처리**: 리모컨용 KeyEvent 처리
