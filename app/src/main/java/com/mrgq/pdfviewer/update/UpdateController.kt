@@ -66,6 +66,29 @@ class UpdateController(
         checking.dialog.setOnCancelListener { job?.cancel() }
     }
 
+    /**
+     * 앱 시작 시 확인 (프로세스당 한 번). 조용히 확인하고 **새 버전이 있을 때만** 대화상자를 띄운다 —
+     * 최신이거나 네트워크 오류면 아무것도 보이지 않는다.
+     */
+    fun checkOnStartup() {
+        if (startupCheckDone || job?.isActive == true) return
+        startupCheckDone = true
+        job = scope.launch {
+            try {
+                withContext(Dispatchers.IO) { updatesDir(activity).deleteRecursively() }
+                val release = client.fetchLatestRelease()
+                val current = AppVersion.parse(BuildConfig.VERSION_NAME) ?: return@launch
+                if (release.version > current && release.apk != null && !activity.isFinishing && !activity.isDestroyed) {
+                    showUpdateOffer(release, fromStartup = true)
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.i(TAG, "시작 시 업데이트 확인 실패 (무시): ${e.message}")
+            }
+        }
+    }
+
     /** 액티비티 onResume — 설치 허용 설정에서 돌아왔으면 설치를 이어 간다 */
     fun onResume() {
         val apk = apkAwaitingPermission ?: return
@@ -83,7 +106,7 @@ class UpdateController(
 
     // ── 단계 ────────────────────────────────────────────────────────────────
 
-    private fun showUpdateOffer(release: ReleaseInfo) {
+    private fun showUpdateOffer(release: ReleaseInfo, fromStartup: Boolean = false) {
         val apk = release.apk
         if (apk == null) {
             showMessage("업데이트할 수 없음", "${release.tag} 릴리스에 설치할 APK(${ReleaseInfo.APK_SUFFIX})가 없습니다.")
@@ -104,6 +127,14 @@ class UpdateController(
             .setMessage(message)
             .setPositiveButton("다운로드 및 설치") { _, _ -> download(release) }
             .setNegativeButton("나중에", null)
+            .apply {
+                if (fromStartup) {
+                    setNeutralButton("시작할 때 확인 안 함") { _, _ ->
+                        setCheckOnStartup(activity, false)
+                        Toast.makeText(activity, "설정 → 앱 정보에서 다시 켤 수 있습니다", Toast.LENGTH_LONG).show()
+                    }
+                }
+            }
             .show()
     }
 
@@ -230,6 +261,18 @@ class UpdateController(
 
     companion object {
         private const val TAG = "UpdateController"
+        private const val PREFS = "pdf_viewer_prefs"
+        private const val PREF_CHECK_ON_START = "update_check_on_start"
+
+        /** 이 프로세스에서 시작 시 확인을 이미 했나 — 화면을 돌아올 때마다 묻지 않게 */
+        private var startupCheckDone = false
+
+        fun isCheckOnStartup(context: Context): Boolean =
+            context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean(PREF_CHECK_ON_START, true)
+
+        fun setCheckOnStartup(context: Context, enabled: Boolean) {
+            context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putBoolean(PREF_CHECK_ON_START, enabled).apply()
+        }
         private const val APK_MIME = "application/vnd.android.package-archive"
 
         /** 받은 APK 를 두는 곳 — `res/xml/file_paths.xml` 의 `cache-path updates/` 와 맞춘다 */

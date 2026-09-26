@@ -23,11 +23,18 @@ import java.io.File
 
 class MainActivity : AppCompatActivity() {
     
+    private companion object {
+        /** 파일 목록이 뜬 뒤 확인한다 — 시작 화면 전환과 겹치지 않게 */
+        const val STARTUP_UPDATE_CHECK_DELAY_MS = 1500L
+    }
+
     private lateinit var binding: ActivityMainBinding
     private lateinit var pdfAdapter: PdfFileAdapter
     private var currentSortBy = PdfFileSorter.BY_NAME
     private var isFileManagementMode = false // 파일 관리 모드 상태
     private val musicRepository by lazy { MusicRepository(applicationContext) }
+    // 앱 시작 시 새 버전 확인 (#054 후속). 설치 허용 설정에서 돌아오면 onResume 에서 이어 간다
+    private val updateController by lazy { com.mrgq.pdfviewer.update.UpdateController(this) }
     
     
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -53,6 +60,15 @@ class MainActivity : AppCompatActivity() {
         
         // Handle file request from SettingsActivity
         handleFileRequest()
+
+        // 새 버전 확인 — 화면이 뜬 뒤 조용히. 합주 중에는 방해하지 않는다
+        if (savedInstanceState == null && com.mrgq.pdfviewer.update.UpdateController.isCheckOnStartup(this)) {
+            binding.root.postDelayed({
+                if (!isFinishing && GlobalCollaborationManager.getInstance().getCurrentMode() == CollaborationMode.NONE) {
+                    updateController.checkOnStartup()
+                }
+            }, STARTUP_UPDATE_CHECK_DELAY_MS)
+        }
     }
     
     private fun setupRecyclerView() {
@@ -76,6 +92,7 @@ class MainActivity : AppCompatActivity() {
     
     override fun onResume() {
         super.onResume()
+        updateController.onResume()
         
         // ====================[ 핵심 수정 사항 ]====================
         // 액티비티가 다시 활성화될 때마다 협업 콜백을 재등록합니다.
@@ -456,6 +473,7 @@ class MainActivity : AppCompatActivity() {
     
     override fun onDestroy() {
         super.onDestroy()
+        updateController.dispose()
         
         // Clear collaboration callbacks to prevent memory leaks
         val globalCollaborationManager = GlobalCollaborationManager.getInstance()

@@ -404,6 +404,13 @@ class SettingsActivity : AppCompatActivity() {
                 type = SettingsType.INFO
             ),
             SettingsItem(
+                id = "update_on_start_toggle",
+                icon = "🔔",
+                title = "시작할 때 업데이트 확인",
+                subtitle = if (UpdateController.isCheckOnStartup(this)) "켜짐 — 새 버전이 있으면 알려 줍니다" else "꺼짐",
+                type = SettingsType.TOGGLE
+            ),
+            SettingsItem(
                 id = "check_update",
                 icon = "🔄",
                 title = "업데이트 확인",
@@ -465,6 +472,10 @@ class SettingsActivity : AppCompatActivity() {
             "sync_turn_lead" -> showSyncTurnLeadDialog()
             "message_queue_stats" -> showMessageQueueDisabledDialog()
             "check_update" -> updateController.checkForUpdate()
+            "update_on_start_toggle" -> {
+                UpdateController.setCheckOnStartup(this, !UpdateController.isCheckOnStartup(this))
+                showInfoPanel()
+            }
         }
     }
     
