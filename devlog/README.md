@@ -94,6 +94,9 @@ MrgqPdfViewer 개발 로그 모음. 구현 기록은 `YYYYMMDD_NNN_` 형식(NNN 
 - [`048`](20260913_048_min_sdk_30.md) — **minSdk 21 → 30**. API 21 에뮬레이터의 악보 분석 OOM(직전엔 통과하던 불안정 게이트)을 계기로, CI 매트릭스를 API 30/34 로 축소. (근거로 든 "Z18TV Pro = Android 11" 은 출고 사양이었고 실기기는 Android 14 — #049 에서 정정, minSdk 30 유지)
 - [`049`](20260913_049_score_analysis_memory.md) — 악보 분석이 PdfBox 엔진에서 **905MB 할당**(토큰화 633MB)하던 것을 경량 콘텐츠 해석기로 교체 → **19MB, 7.4초 → 0.19초**. 전 페이지 박스 대조 테스트. **Z18TV Pro 실기기 8쪽 556ms**, 실기기에서 끝세로줄 가짜 마디·BOM 없는 UTF-8 작성자 깨짐 발견해 수정(DB v8)
 
+## 🔄 업데이트 (2026-09)
+- [`054`](20260926_054_in_app_update.md) — **앱 안에서 업데이트**: 설정 → 앱 정보 → 업데이트 확인. GitHub `releases/latest` 조회 → `-release.apk` 다운로드(cacheDir) → 에셋 SHA-256 digest 검증 → "출처를 알 수 없는 앱" 허용 → `FileProvider` + `ACTION_VIEW` 로 시스템 설치 화면
+
 ## 📚 메타
 - [`039`](20260619_039_project_timeline.md) — 커밋 히스토리 기반 전체 개발 연대기
 

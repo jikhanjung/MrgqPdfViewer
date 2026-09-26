@@ -7,6 +7,8 @@
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.CHANGE_NETWORK_STATE" />
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+    <!-- 앱 안 업데이트: 받은 APK 로 시스템 설치 화면을 연다 (devlog #054) -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
     
     <!-- TV features -->
     <uses-feature
@@ -53,7 +55,18 @@
             android:name=".SettingsActivity"
             android:configChanges="keyboard|keyboardHidden|navigation"
             android:screenOrientation="landscape" />
-            
+
+        <!-- 받은 업데이트 APK 를 content:// 로 설치 화면에 넘긴다 (devlog #054) -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
+
     </application>
 
 </manifest>

@@ -25,6 +25,7 @@ import java.io.File
 import com.mrgq.pdfviewer.server.WebServerManager
 import com.mrgq.pdfviewer.repository.MusicRepository
 import com.mrgq.pdfviewer.database.entity.DisplayMode
+import com.mrgq.pdfviewer.update.UpdateController
 
 class SettingsActivity : AppCompatActivity() {
     
@@ -45,6 +46,9 @@ class SettingsActivity : AppCompatActivity() {
     // Web server log management
     private val webServerLogs = mutableListOf<String>()
     private var isWebServerLogVisible = false
+
+    // 앱 안 업데이트 (devlog #054)
+    private lateinit var updateController: UpdateController
     
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -55,6 +59,7 @@ class SettingsActivity : AppCompatActivity() {
         
         // Initialize database repository
         musicRepository = MusicRepository(this)
+        updateController = UpdateController(this)
         
         setupUI()
         checkWebServerStatus()
@@ -388,6 +393,13 @@ class SettingsActivity : AppCompatActivity() {
                 type = SettingsType.INFO
             ),
             SettingsItem(
+                id = "check_update",
+                icon = "🔄",
+                title = "업데이트 확인",
+                subtitle = "GitHub 에서 새 버전 찾기",
+                type = SettingsType.ACTION
+            ),
+            SettingsItem(
                 id = "app_info",
                 icon = "ℹ️",
                 title = "앱 정보",
@@ -440,6 +452,7 @@ class SettingsActivity : AppCompatActivity() {
             "sync_turn_toggle" -> toggleSyncPageTurn()
             "sync_turn_lead" -> showSyncTurnLeadDialog()
             "message_queue_stats" -> showMessageQueueDisabledDialog()
+            "check_update" -> updateController.checkForUpdate()
         }
     }
     
@@ -836,6 +849,7 @@ class SettingsActivity : AppCompatActivity() {
     
     override fun onResume() {
         super.onResume()
+        updateController.onResume()
         checkWebServerStatus()
         // 메인 화면으로 돌아올 때 전체 메뉴를 다시 로드하여 웹서버 상태 반영
         if (binding.detailPanelLayout.visibility == android.view.View.GONE) {
@@ -877,6 +891,7 @@ class SettingsActivity : AppCompatActivity() {
     
     override fun onDestroy() {
         super.onDestroy()
+        updateController.dispose()
         // Clean up web server when leaving settings (if not already stopped by user confirmation)
         if (isWebServerRunning) {
             Log.d("SettingsActivity", "Activity destroyed, stopping web server for proper cleanup")

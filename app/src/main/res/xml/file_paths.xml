@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 앱 안 업데이트(#054)에서 받은 APK 를 시스템 설치 화면에 넘기는 경로.
+     UpdateController.updatesDir() 와 맞춘다. -->
+<paths>
+    <cache-path name="updates" path="updates/" />
+</paths>
