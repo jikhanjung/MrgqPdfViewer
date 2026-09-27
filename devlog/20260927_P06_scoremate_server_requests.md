@@ -1,54 +1,170 @@
-# P06 — ScoreMate 서버에 요청할 것 (TV 클라이언트 C1 · C2 구현에서 나온 것)
+# P06 — ScoreMate 서버에 요청할 것 (TV 클라이언트 C1 · C2 에서 나온 것)
 
 작성일: 2026-09-27
-대상: ScoreMateServer (`backend/`) · 근거: 서버 `origin/main` 8890dae 의 코드와 devlog 059 · 060 · 061
-관련: [`P05`](20260926_P05_scoremate_client_plan.md) · [`058`](20260927_058_scoremate_device_link.md)(C1) · [`059`](20260927_059_scoremate_score_sync.md)(C2)
+대상: ScoreMateServer `backend/` — 근거 코드는 `origin/main` **8890dae** 기준
+TV 쪽 문서: [`P05`](20260926_P05_scoremate_client_plan.md)(계획) · [`058`](20260927_058_scoremate_device_link.md)(C1 기기 연결) · [`059`](20260927_059_scoremate_score_sync.md)(C2 악보 동기화)
 
-TV 쪽은 아래 항목이 없어도 동작한다(우회해 두었다). 서버에서 고치면 우회가 필요 없어지거나 사용자가 덜 헷갈린다.
+| # | 요청 | 우선 | TV 영향 |
+|---|---|---|---|
+| 1 | 앙상블 이름을 바꾸면 그 앙상블 악보의 `updated_at` 을 올린다 | 🔴 필요 | 안 고치면 TV 폴더 이름이 옛 이름에 머문다 |
+| 2 | 같은 앙상블에 제목 · 파트가 같은 악보를 올릴 때 웹에서 알린다 | 🟡 선택 | 안 고쳐도 동작 — 파일 이름에 `[#id]` 가 붙을 뿐 |
+| — | TV 가 의존하는 응답 필드 (§3) | 참고 | 바꿀 때 미리 알려 주세요 |
+
+TV 는 두 항목 없이도 동작하도록 우회해 두었다. 서버 작업은 TV 배포와 순서가 상관없다.
 
 ---
 
-## 1. 🔴 앙상블 이름을 바꾸면 그 앙상블 악보의 `updated_at` 을 올려 주세요
+## 1. 🔴 앙상블 이름 변경 → 그 앙상블 악보의 `updated_at` 올리기
 
-**문제**: TV 는 받은 악보를 `PDFs/ScoreMate/<앙상블 이름>/` 폴더에 둔다. 동기화는 악보의 `updated_at`(과 들어온 시각)이 커서 뒤인 것만 보내는데,
-앙상블 이름을 바꿔도(`EnsembleViewSet.perform_update` → `serializer.save()`) 악보의 `updated_at` 은 그대로다.
-그래서 **TV 는 그 앙상블 악보가 하나라도 바뀌기 전까지 옛 이름 폴더를 계속 쓴다.** 앙상블 삭제(`services.delete_ensemble`)는 이미
-`ensemble.scores.update(updated_at=timezone.now())` 로 올리고 있다 — 같은 처리가 이름 바꾸기에도 필요하다.
+### 배경
+TV 는 받은 악보를 `PDFs/ScoreMate/<앙상블 이름>/<제목>[ (파트)].pdf` 에 둔다(P05 §6). 폴더 이름은 동기화 응답의 `scores[i].ensemble.name` 에서 온다.
+동기화는 **기준 시각 = max(악보 `updated_at`, 내가 그 앙상블에 들어온 시각)** 이 커서 뒤인 악보만 보낸다(`scores/sync.py`).
 
-**제안** (`ensembles/views.py`):
+### 문제
+앙상블 이름을 바꿔도 악보의 `updated_at` 은 그대로다 → 이미 동기화한 TV 에는 그 앙상블 악보가 다시 오지 않는다 →
+**TV 는 그 앙상블의 악보가 하나라도 바뀌기 전까지 옛 이름 폴더를 계속 쓴다.**
+앙상블 **삭제**는 이미 이 문제를 처리한다(`ensembles/services.py` `delete_ensemble`: `ensemble.scores.update(updated_at=timezone.now())`).
+
+### 재현
+1. TV 가 앙상블 "Guitar Ensemble" 악보를 동기화한다 (커서 저장)
+2. 웹에서 앙상블 이름을 "Guitar Quartet" 로 바꾼다
+3. TV 가 저장한 커서로 `GET /api/v1/sync/scores/?cursor=…` → `scores` 가 빈 목록 (기대: 그 앙상블 악보 전부, `ensemble.name` = 새 이름)
+
+### 원인 — 이름을 바꾸는 길이 둘
+| 경로 | 코드 |
+|---|---|
+| API `PATCH /api/v1/ensembles/{id}/` | `ensembles/views.py` `EnsembleViewSet.perform_update` → `serializer.save()` |
+| 웹 `POST /ensembles/{pk}/edit/` | `web/views.py` `ensemble_edit` → `EnsembleForm(...).save()` |
+
+두 곳 다 고쳐야 한다 — 한 곳만 고치면 다른 길로 바꾼 이름은 TV 에 가지 않는다. 서비스 함수 하나로 모으는 것을 제안한다.
+
+### 제안
+`ensembles/services.py`:
+
+```python
+def touch_scores_if_renamed(ensemble, old_name):
+    """이름이 바뀌었으면 그 앙상블 악보의 동기화 기준 시각을 올린다 — TV 가 폴더 이름을 따라가게 (delete_ensemble 과 같은 방식)"""
+    if ensemble.name != old_name:
+        ensemble.scores.update(updated_at=timezone.now())
+```
+
+`ensembles/views.py`:
 
 ```python
 def perform_update(self, serializer):
     services.require_manager(serializer.instance, self.request.user, 'Only owners and leaders can edit the ensemble.')
     old_name = serializer.instance.name
     ensemble = serializer.save()
-    if ensemble.name != old_name:
-        # TV 가 폴더 이름을 따라가게 — 동기화 기준 시각을 올린다 (delete_ensemble 과 같은 방식)
-        ensemble.scores.update(updated_at=timezone.now())
+    services.touch_scores_if_renamed(ensemble, old_name)
 ```
 
-테스트: 앙상블 이름 변경 뒤 커서로 동기화하면 그 앙상블 악보가 `scores` 에 다시 오고 `ensemble.name` 이 새 이름.
+`web/views.py` `ensemble_edit`:
 
-TV 쪽 우회(C2): 폴더 이름을 앙상블 id 마다 하나로 모아, 이번에 받은 악보의 이름을 같은 앙상블의 다른 악보에도 쓴다 — 폴더가 둘로 갈라지지는 않지만,
-그 앙상블 악보가 하나도 오지 않으면 옛 이름에 머문다.
+```python
+    old_name = ensemble.name
+    form = EnsembleForm(request.POST, instance=ensemble)
+    if form.is_valid():
+        ensemble = form.save()
+        ensemble_services.touch_scores_if_renamed(ensemble, old_name)
+```
 
-## 2. 🟡 (선택) 같은 앙상블에 제목 · 파트가 같은 악보를 올리면 웹에서 알려 주세요
+> `ModelForm` 은 `is_valid()` 때 instance 를 바꾸므로 `old_name` 은 **폼을 만들기 전에** 읽어야 한다. (`save()` 뒤 비교는 늘 같다)
 
-TV 는 같은 폴더에 같은 이름(`<제목> (<파트>).pdf`)이 둘 이상이면 모두 ` [#<서버 id>]` 를 붙인다(P05 §6 규칙, 모든 TV 가 같은 결과).
-동작에는 문제가 없지만 목록에 `아리랑 [#12].pdf` 같은 이름이 보인다. 올릴 때 "같은 제목 · 파트의 악보가 이미 있습니다 — 새 판으로 올릴까요?" 를
-물어 주면 대부분 새 판(판 2)으로 올라가 이름이 겹치지 않는다. 강제(유니크 제약)까지는 필요 없다.
+설명(`description`)만 바꾼 경우에는 올리지 않는다 — TV 가 쓰지 않는 필드라 불필요한 재전송이다.
 
-## 3. ✅ 확인만 — 변경 필요 없음
+### 테스트 (제안 — `tests/test_sync.py` 의 `SyncTestBase` 를 이어 씀)
 
-- **`version.sha256 == null`(처리 중) 악보가 다음 동기화에 다시 오는가** (P05 §4 의 열린 질문): 온다. `SyncScoreSerializer` 설명대로
-  쪽수 · 해시가 채워지면 `updated_at` 이 바뀐다. TV 는 이번엔 건너뛰고 커서는 넘긴다
-- **`download_url` 이 프록시 뒤에서 `http://` 가 되는가**: 운영 설정에 `SECURE_PROXY_SSL_HEADER` 가 있어 괜찮다. TV 는 어차피 URL 의 **경로만** 쓰고
-  호스트는 설정한 서버 주소로 붙인다
-- **받기 302 → 서명 URL**: TV 는 리다이렉트를 직접 따라가며 서명 URL 에는 Authorization 을 싣지 않는다(S3 계열 거부 방지). 상대 경로 Location 도 처리
-- **TV 가 자기 토큰으로 `DELETE /api/v1/devices/{id}/`**: `get_queryset` 이 사용자 기준이라 된다 — "연결 해제" 에 쓴다
-- **refresh 회전 · 180일 유지** (`DeviceAwareTokenRefreshSerializer`): TV 는 갱신을 한 번에 하나만 하고(Mutex) 새 refresh 를 바로 저장한다
+```python
+class EnsembleRenameSyncTest(SyncTestBase):
 
-## 4. 앞으로 (C3 · C4 에서 필요해질 수 있는 것 — 지금은 요청 아님)
+    def leader_client(self):
+        client = APIClient()
+        client.force_authenticate(user=self.leader)
+        return client
 
-- TV 에서 지운(숨긴) 서버 악보는 TV 만 안다. 웹 "TV" 화면에 "이 TV 에서 숨긴 악보" 를 보이려면 TV 가 알려야 한다 — 필요해지면 따로 API 제안
-- 분석 공유(C4): `version.analyses` 가 이미 동기화 응답에 있어 TV 쪽 준비만 하면 된다
+    def test_rename_via_api_resends_that_ensembles_scores(self):
+        self.score(self.leader, 'Moldau', self.ensemble)
+        self.score(self.me, 'Mine')                      # 다른 악보는 다시 오지 않는다
+        first = self.sync()
+
+        response = self.leader_client().patch(f'/api/v1/ensembles/{self.ensemble.pk}/',
+                                              {'name': 'Guitar Quartet'}, format='json')
+        self.assertEqual(response.status_code, 200)
+
+        second = self.sync(first['cursor'])
+        self.assertEqual(self.titles(second), ['Moldau'])
+        self.assertEqual(second['scores'][0]['ensemble']['name'], 'Guitar Quartet')
+
+    def test_rename_via_web_resends_too(self):
+        self.score(self.leader, 'Moldau', self.ensemble)
+        first = self.sync()
+
+        web = Client()
+        web.force_login(self.leader)
+        web.post(reverse('web:ensemble_edit', args=[self.ensemble.pk]),
+                 {'name': 'Guitar Quartet', 'description': ''})   # EnsembleForm 필드에 맞출 것
+
+        self.assertEqual(self.titles(self.sync(first['cursor'])), ['Moldau'])
+
+    def test_description_only_does_not_resend(self):
+        self.score(self.leader, 'Moldau', self.ensemble)
+        first = self.sync()
+        self.leader_client().patch(f'/api/v1/ensembles/{self.ensemble.pk}/', {'description': 'Tue'}, format='json')
+        self.assertEqual(self.sync(first['cursor'])['scores'], [])
+```
+
+(`from django.test import Client` 추가. 확인 방법: `touch_scores_if_renamed` 호출을 빼면 앞의 두 테스트가 실패해야 한다)
+
+### 완료 기준
+- API · 웹 어느 쪽으로 이름을 바꿔도 다음 동기화에 그 앙상블 악보가 새 `ensemble.name` 으로 온다
+- 설명만 바꾸면 오지 않는다
+
+### TV 쪽 (참고)
+- 지금의 우회: 폴더 이름을 앙상블 id 마다 하나로 모으고 이번에 받은 이름을 우선한다 — 폴더가 둘로 갈라지지는 않지만, 그 앙상블 악보가 오지 않으면 옛 이름에 머문다
+- 서버가 고쳐지면 TV 는 그대로 새 폴더로 옮긴다 (파일 레코드 경로를 먼저 바꿔 파일별 설정 유지). TV 코드 변경은 필요 없다
+- 재전송 비용: 악보 수만큼 메타데이터만 온다. 파일은 sha256 이 같아 받지 않는다
+
+---
+
+## 2. 🟡 (선택) 같은 제목 · 파트 악보를 올릴 때 알리기
+
+### 배경
+TV 는 같은 폴더에 같은 이름(`<제목> (<파트>).pdf`)이 둘 이상이면 **모두** ` [#<서버 id>]` 를 붙인다 — 어느 TV 에서나 같은 결과가 나오는 규칙.
+동작 문제는 없지만 목록에 `아리랑 [#12].pdf` 같은 이름이 보인다. 대부분은 같은 곡의 수정판을 새 악보로 올린 경우일 것이다.
+
+### 제안
+웹 업로드(`web/views.py` `score_upload`, 앙상블이 정해진 경우)에서 같은 앙상블에 제목 · 파트가 같은 악보가 이미 있으면
+"같은 제목 · 파트의 악보가 있습니다 — **새 판으로 올릴까요?**"(→ `version_upload`) 를 묻는다. 막지는 않는다(유니크 제약은 필요 없다).
+비교는 TV 와 같게 대소문자 무시 · 앞뒤 공백 무시면 충분하다.
+
+---
+
+## 3. TV 가 의존하는 응답 필드 (바꿀 때 미리 알려 주세요)
+
+| API | TV 가 쓰는 것 |
+|---|---|
+| `POST /api/v1/device/code` | `device_code` · `user_code` · `verification_uri` · `verification_uri_complete` · `expires_in` · `interval` |
+| `POST /api/v1/device/token` | 400 `error` 값 5가지(`authorization_pending` · `slow_down` · `access_denied` · `expired_token` · `invalid_grant`), 429 는 slow_down 으로 본다. 200 의 `access_token` · `refresh_token` · `device_id` |
+| `POST /api/v1/auth/token/refresh/` | `{access, refresh}`. 무효 refresh 는 **400/401 → TV 는 해제로 보고 토큰을 지운다** (5xx · 네트워크 오류는 지우지 않음) |
+| 모든 인증 API | 401 → 한 번 갱신 후 재시도. 그래도 401 이면 해제로 본다 |
+| `GET /api/v1/devices/me/` · `POST …/me/heartbeat/` | `id` · `name` · `last_seen_at` |
+| `DELETE /api/v1/devices/{id}/` | 204 (TV 가 자기 토큰으로 해제). 404 도 해제된 것으로 본다 |
+| `GET /api/v1/sync/scores/?cursor=` | `cursor` · `has_more` · `ids`(**모든 쪽에 전체 목록**) · `scores[i]` 의 `id` · `title` · `composer` · `part_name` · `ensemble.{id,name}` · `version.{number, sha256, size_bytes}` · `download_url`. 400 본문에 `"cursor"` 가 있으면 커서를 버린다 |
+| `GET {download_url}` | 3xx + `Location`(절대 · 상대 모두). TV 는 리다이렉트를 직접 따라가며 **서명 URL 에는 Authorization 을 싣지 않는다**. `download_url` 은 **경로만** 쓰고 호스트는 TV 에 설정한 서버 |
+
+`ids` 가 비거나 TV 가 가진 악보의 절반 넘게 한꺼번에 사라지면 TV 는 지우기 전에 사용자에게 묻는다 — 서버 쪽 일시적 오류로 악보가 지워지지 않게.
+
+## 4. ✅ 확인만 — 변경 필요 없음
+
+- **처리 중(`version.sha256 == null`) 악보가 다음 동기화에 다시 오는가**: 온다 — 쪽수 · 해시가 채워지면 `updated_at` 이 바뀐다(`SyncScoreSerializer` 설명). TV 는 건너뛰고 커서는 넘긴다
+- **프록시 뒤 `download_url` 스킴**: 운영 설정에 `SECURE_PROXY_SSL_HEADER` 가 있다. TV 는 어차피 경로만 쓴다
+- **TV 자기 해제**: `DeviceViewSet.get_queryset` 이 사용자 기준이라 기기 토큰으로 자기 기기를 지울 수 있다
+- **refresh 회전 · 180일 유지**(`DeviceAwareTokenRefreshSerializer`): TV 는 갱신을 한 번에 하나만(Mutex) 하고 새 refresh 를 바로 저장한다
+
+## 5. 앞으로 (요청 아님 — C3 · C4 에서 필요해지면 따로)
+
+- TV 에서 지운(숨긴) 서버 악보는 TV 만 안다. 웹 "TV" 화면에 보이려면 TV 가 알리는 API 가 필요하다
+- 분석 공유(C4): 동기화 응답의 `version.analyses` 와 `GET/PUT /scores/{id}/analysis/` 로 충분해 보인다 — TV 구현 때 다시 확인
+
+## 변경 이력
+- 2026-09-27: 처음 작성 (C2 구현 중 발견). 같은 날 서버 작업용으로 보강 — 이름 변경 경로가 API · 웹 둘인 것, 제안 코드 · 테스트 · 완료 기준, TV 가 의존하는 필드 표
