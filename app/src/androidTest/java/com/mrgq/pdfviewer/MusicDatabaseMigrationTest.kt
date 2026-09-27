@@ -303,6 +303,33 @@ class MusicDatabaseMigrationTest {
     }
 
     @Test
+    fun v13_에서_v14_는_서버_악보_테이블을_더하고_설정을_보존한다() {
+        helper.createDatabase(TEST_DB, 13).apply {
+            execSQL(INSERT_FILE)
+            execSQL(
+                "INSERT INTO user_preferences (pdfFileId, displayMode, lastPageNumber, bookmarkedPages, " +
+                    "topClippingPercent, bottomClippingPercent, centerPadding, updatedAt, metronomeBpm, metronomeSections) " +
+                    "VALUES ('file-1', 'DOUBLE', 7, '', 0.05, 0.03, 0.1, 1000, 72, '[{\"m\":5}]')"
+            )
+            close()
+        }
+
+        val db = helper.runMigrationsAndValidate(TEST_DB, 14, true, *MusicDatabase.ALL_MIGRATIONS)
+
+        db.query("SELECT metronomeBpm, metronomeSections, displayMode FROM user_preferences").use { c ->
+            assertEquals("v13→v14 에서 파일별 설정이 사라졌다", 1, c.count)
+            c.moveToFirst()
+            assertEquals(72, c.getInt(0))
+            assertEquals("[{\"m\":5}]", c.getString(1))
+            assertEquals("DOUBLE", c.getString(2))
+        }
+        db.query("SELECT COUNT(*) FROM server_scores").use { c ->
+            c.moveToFirst()
+            assertEquals(0, c.getInt(0))
+        }
+    }
+
+    @Test
     fun v2_to_v3_중앙여백_픽셀이_비율로_변환된다() {
         val db = createDbAt(2, V2_USER_PREFERENCES) {
             it.execSQL(INSERT_FILE)
@@ -418,7 +445,7 @@ class MusicDatabaseMigrationTest {
 
     private companion object {
         const val TEST_DB = "migration-test"
-        const val LATEST_VERSION = 13
+        const val LATEST_VERSION = 14
 
         // pdf_files 는 v1 부터 바뀐 적이 없다
         const val PDF_FILES = "CREATE TABLE IF NOT EXISTS `pdf_files` (`id` TEXT NOT NULL, " +

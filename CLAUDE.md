@@ -28,7 +28,7 @@ Android TV OS용 PDF 악보 리더 앱으로, 무선 파일 업로드와 리모�
   - **악보 연동** (#050): 박자표를 읽은 파일이면 시작 시 악보에서 커서(←→ 마디, ↑↓ 줄, OK)로 시작 마디를 고르고, 한 마디 예비박 뒤 현재 마디를 노랗게 표시하며 마지막 마디 끝나기 2박 전(`TURN_LEAD_BEATS`)에 페이지를 넘긴다. 박 = 박자표 분모 음표. 연주 중 뒤로는 메트로놈만 정지. 박자표를 못 읽으면 일반 메트로놈
   - **↑ 메트로놈 메뉴 · 일시정지** (#053): 뷰어에서 ↑ = 메트로놈 메뉴. 연주 중 ↑ 나 OK 길게(옵션 메뉴)면 `FollowState.PAUSED` → 이어서(멈춘 마디부터 예비박) / 마디 골라 다시 / 정지. 메뉴를 모두 닫은 순간은 `onWindowFocusChanged` + 300ms 재확인으로 판단, 고르지 않고 닫으면 정지
 - **합주 메트로놈 동기화** (#055): 연주자가 `clock_ping/pong` 으로 지휘자와의 시계 차이(`ClockSync`, RTT 최소 표본)를 재고, 지휘자는 `metronome_run`(상태 전체: 시간표 `BeatTimeline` · 박자 · 시작 마디 · `focus_measure`)을 상태 변화 · 연결 시 · 5초마다 방송. 연주자는 `EnsembleSchedule` 로 자기 시계에 옮겨 `MetronomeEngine.startScheduled`(AudioTimestamp 로 박을 프레임에 맞춤) — 박 표시 · 현재 마디는 시간표를 따른다. 따라가는 동안 지휘자 `page_change` 무시(마디로 스스로 넘김). 연주자는 소리만 고름(`ensemble_metronome_sound`, 기본 끔). `ensemble/` 패키지. 실측 마디 전환 차이 중앙값 2.5ms
-- **ScoreMate 서버 연결** (P05 C1, #058): 설정 → ☁️ ScoreMate → "이 TV 연결" — QR · 코드(RFC 8628) → 휴대폰에서 연결 → 토큰(앱 전용 prefs `scoremate`, **백업 제외** `backup_rules.xml`). 갱신은 `Mutex` 로 한 번에 하나(refresh 회전), 401 → 갱신 후 한 번 재시도, 갱신 401 → 해제로 보고 토큰 삭제. 앱 시작 시 heartbeat. `scoremate/` 패키지. 악보 동기화(C2)는 아직
+- **ScoreMate 서버 연결** (P05 C1, #058): 설정 → ☁️ ScoreMate → "이 TV 연결" — QR · 코드(RFC 8628) → 휴대폰에서 연결 → 토큰(앱 전용 prefs `scoremate`, **백업 제외** `backup_rules.xml`). 갱신은 `Mutex` 로 한 번에 하나(refresh 회전), 401 → 갱신 후 한 번 재시도, 갱신 401 → 해제로 보고 토큰 삭제. 앱 시작 시 heartbeat. `scoremate/` 패키지. **악보 동기화**(C2, #059): 앱 시작 · 설정 "지금 동기화" → `PDFs/ScoreMate/<앙상블 | 내 악보>/<제목>[ (파트)].pdf`(파일 목록 ☁️), 302 직접 · SHA-256 검증 · 옮길 때 `pdf_files` 경로 먼저 update · `ids` 정리 안전장치 · TV 에서 지우면 숨김 · 모두 성공해야 커서 저장. `server_scores`(v14). 서버 요청: devlog P06
 - **앱 안 업데이트** (#054): 설정 → 앱 정보 → 업데이트 확인. GitHub `releases/latest` → `-release.apk` 다운로드(`cacheDir/updates`) → 에셋 SHA-256 digest 검증(없으면 `SHA256SUMS.txt`) → 설치 허용 확인 → `FileProvider` + `ACTION_VIEW`. `update/` 패키지. 자동 확인: 앱 시작 · 화면 복귀 때 마지막 확인 뒤 6시간이 지났으면(`UpdateController.checkIfDue`, 실패 시 10분 뒤), 새 버전이 있을 때만 알림 · 합주 중 제외 · 설정에서 끔
 - **페이지 전환 애니메이션**: 350ms 슬라이드 애니메이션으로 실제 악보 페이지 넘기기 구현
 - **효과음 시스템**: SoundPool 기반 페이지 넘기기 사운드 및 슬라이더 볼륨 조절
@@ -53,7 +53,7 @@ Android TV OS용 PDF 악보 리더 앱으로, 무선 파일 업로드와 리모�
 - **아키텍처**: PdfViewerActivity + PageCache 중심 (v0.1.8 의 Manager 분리 시도는 미통합 상태로 남아 있다가 v0.1.11 에서 제거됨)
 - **PDF 렌더링**: PdfRenderer (Android 5.0+ 내장)
 - **PDF 문서 정보**: PdfBox-Android 2.0.27.0 (Title/Author 읽기 전용. BouncyCastle PQC 리소스는 패키징 제외)
-- **데이터베이스**: Room 2.6.1 (SQLite 기반, 현재 v13 스키마 — `score_measures`(박자표 포함), 파일별 메트로놈(템포·박자 분자/분모·점음표 박·구간별 빠르기) 포함. ⚠️ `pdf_files` 갱신에 `insertPdfFile`(REPLACE) 금지 — CASCADE 로 표시 설정 삭제)
+- **데이터베이스**: Room 2.6.1 (SQLite 기반, 현재 v14 스키마 — `score_measures`(박자표 포함), `server_scores`(ScoreMate 받은 악보), 파일별 메트로놈(템포·박자 분자/분모·점음표 박·구간별 빠르기) 포함. ⚠️ `pdf_files` 갱신에 `insertPdfFile`(REPLACE) 금지 — CASCADE 로 표시 설정 삭제)
 - **웹 서버**: NanoHTTPD 2.3.1
 - **보안**: WSS (WebSocket Secure) with TLS 1.2/1.3 (v0.1.8+)
 - **입력 처리**: 리모컨용 KeyEvent 처리

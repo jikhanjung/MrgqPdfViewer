@@ -99,7 +99,9 @@ class PdfFileAdapter(
             val modifiedDate = dateFormat.format(Date(pdfFile.lastModified))
             val fileSize = formatFileSize(pdfFile.size)
             val pageInfo = if (pdfFile.pageCount > 0) "${pdfFile.pageCount}페이지" else "페이지 수 알 수 없음"
-            fileInfoText.text = "$fileSize • $pageInfo • $modifiedDate"
+            // ScoreMate 에서 받은 악보는 앞에 ☁️ 앙상블 · 파트 · 판 (P05 C2)
+            val cloud = pdfFile.cloudLabel?.let { "☁️ $it • " } ?: ""
+            fileInfoText.text = "$cloud$fileSize • $pageInfo • $modifiedDate"
             
             // 파일 관리 모드에 따라 삭제 버튼 표시/숨김
             deleteButton.visibility = if (isFileManagementMode) View.VISIBLE else View.GONE

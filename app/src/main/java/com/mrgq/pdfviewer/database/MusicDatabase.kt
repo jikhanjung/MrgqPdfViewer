@@ -10,14 +10,16 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 import com.mrgq.pdfviewer.database.converter.Converters
 import com.mrgq.pdfviewer.database.dao.PdfFileDao
 import com.mrgq.pdfviewer.database.dao.ScoreMeasureDao
+import com.mrgq.pdfviewer.database.dao.ServerScoreDao
 import com.mrgq.pdfviewer.database.dao.UserPreferenceDao
 import com.mrgq.pdfviewer.database.entity.PdfFile
 import com.mrgq.pdfviewer.database.entity.ScoreMeasure
+import com.mrgq.pdfviewer.database.entity.ServerScore
 import com.mrgq.pdfviewer.database.entity.UserPreference
 
 @Database(
-    entities = [PdfFile::class, UserPreference::class, ScoreMeasure::class],
-    version = 13,
+    entities = [PdfFile::class, UserPreference::class, ScoreMeasure::class, ServerScore::class],
+    version = 14,
     exportSchema = true   // app/schemas 로 내보낸다 — 마이그레이션 테스트·드리프트 감지의 전제
 )
 @TypeConverters(Converters::class)
@@ -26,6 +28,7 @@ abstract class MusicDatabase : RoomDatabase() {
     abstract fun pdfFileDao(): PdfFileDao
     abstract fun userPreferenceDao(): UserPreferenceDao
     abstract fun scoreMeasureDao(): ScoreMeasureDao
+    abstract fun serverScoreDao(): ServerScoreDao
     
     companion object {
         @Volatile
@@ -193,10 +196,23 @@ abstract class MusicDatabase : RoomDatabase() {
             }
         }
 
+        // Migration from version 13 to 14 (ScoreMate 악보 동기화: server_scores, P05 C2 · devlog #059)
+        // 새 테이블만 더한다 — 기존 파일 · 설정은 그대로. 서버 악보 id ↔ 받은 파일 경로
+        private val MIGRATION_13_14 = object : Migration(13, 14) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `server_scores` (`serverId` INTEGER NOT NULL, `filePath` TEXT NOT NULL, " +
+                        "`versionNumber` INTEGER NOT NULL, `sha256` TEXT NOT NULL, `title` TEXT NOT NULL, `composer` TEXT NOT NULL, " +
+                        "`partName` TEXT NOT NULL, `ensembleId` INTEGER, `ensembleName` TEXT, `hidden` INTEGER NOT NULL, " +
+                        "`syncedAt` INTEGER NOT NULL, PRIMARY KEY(`serverId`))"
+                )
+            }
+        }
+
         /** 앱과 마이그레이션 테스트가 같은 목록을 쓴다 — 등록 누락을 테스트가 잡도록. */
         internal val ALL_MIGRATIONS = arrayOf(
             MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8,
-            MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13,
+            MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14,
         )
 
         fun getDatabase(context: Context): MusicDatabase {

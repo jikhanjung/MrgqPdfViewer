@@ -28,6 +28,13 @@ interface PdfFileDao {
     @Update
     suspend fun updatePdfFile(pdfFile: PdfFile)
 
+    /** 파일이 옮겨졌다 (ScoreMate 동기화의 이름 바꾸기) — 레코드를 update 해 파일별 설정을 유지한다 */
+    @Query("UPDATE pdf_files SET filePath = :newPath, filename = :newName WHERE filePath = :oldPath")
+    suspend fun movePath(oldPath: String, newPath: String, newName: String)
+
+    @Query("DELETE FROM pdf_files WHERE filePath = :filePath")
+    suspend fun deleteByPath(filePath: String)
+
     @Query("UPDATE pdf_files SET scoreAnalyzedAt = :analyzedAt WHERE id = :id")
     suspend fun setScoreAnalyzedAt(id: String, analyzedAt: Long?)
     

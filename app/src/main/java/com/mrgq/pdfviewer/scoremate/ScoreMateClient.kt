@@ -8,6 +8,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import java.io.File
 import java.io.IOException
 import java.net.HttpURLConnection
 import java.net.URL
@@ -18,10 +19,16 @@ open class ScoreMateException(message: String, cause: Throwable? = null) : Excep
 /** 서버가 이 TV 를 더 이상 받아 주지 않는다(웹에서 해제 · refresh 만료 180일) — 저장한 토큰은 이미 지웠다. 다시 연결해야 한다 */
 class ScoreMateUnlinkedException : ScoreMateException("ScoreMate 연결이 해제되었습니다 — 설정에서 다시 연결하세요")
 
+/** 서버가 커서를 받지 않는다 — 버리고 처음부터 */
+class ScoreMateBadCursorException : ScoreMateException("동기화 커서가 맞지 않습니다")
+
 /** 연결 정보 저장소. 구현은 앱 전용 SharedPreferences ([ScoreMateStore]), 테스트는 메모리 */
 interface ScoreMateTokenStore {
     val server: String
     val tokens: Tokens?
+
+    /** 악보 동기화 커서 (P05 C2, 서버가 준 불투명 값). 연결을 끊으면 함께 지운다 */
+    var syncCursor: String?
 
     /** 갱신된 토큰은 **바로**(디스크까지) 저장해야 한다 — refresh 가 회전하므로 잃으면 다시 연결해야 한다 */
     fun saveTokens(tokens: Tokens)
@@ -29,11 +36,16 @@ interface ScoreMateTokenStore {
 }
 
 data class HttpRequest(val method: String, val url: String, val body: String? = null, val bearer: String? = null)
-data class HttpResponse(val code: Int, val body: String)
+/** [location] 은 3xx 의 `Location` 헤더 */
+data class HttpResponse(val code: Int, val body: String, val location: String? = null)
 
 /** 네트워크 한 번. 연결 실패는 [IOException] */
 fun interface HttpTransport {
     fun execute(request: HttpRequest): HttpResponse
+
+    /** 2xx 면 본문을 [target] 에 쓴다. 리다이렉트는 따라가지 않고 그대로 돌려준다 ([HttpResponse.location]) */
+    fun download(request: HttpRequest, target: File): HttpResponse =
+        throw UnsupportedOperationException("download")
 }
 
 /**
@@ -109,16 +121,63 @@ class ScoreMateClient(
         return notified
     }
 
+    // ── 악보 동기화 (P05 C2, 서버 devlog 060) ──────────────────────────────
+
+    /** 한 쪽. 400 `{"cursor": …}` 면 [ScoreMateBadCursorException] — 커서를 버리고 처음부터 */
+    suspend fun fetchSyncPage(cursor: String?): SyncPage {
+        val query = if (cursor.isNullOrEmpty()) "" else "?cursor=" + java.net.URLEncoder.encode(cursor, "UTF-8")
+        val response = authorized("GET", ScoreMateProtocol.PATH_SYNC_SCORES + query)
+        if (response.code == 400 && response.body.contains("\"cursor\"")) throw ScoreMateBadCursorException()
+        if (response.code == 429) throw ScoreMateException("동기화 요청이 너무 많습니다. 잠시 후 다시")
+        if (response.code != 200) throw ScoreMateException("동기화 목록을 받지 못했습니다 (HTTP ${response.code})")
+        return ScoreMateSync.parsePage(response.body) ?: throw ScoreMateException("동기화 응답을 해석하지 못했습니다")
+    }
+
+    /**
+     * 악보 파일을 [target] 에 받는다. `download_url` 은 302 → 서명 URL(5분, 인증 불필요)이다 — **리다이렉트는 직접**:
+     * 서명 URL 에 Authorization 이 함께 가면 S3 계열은 거부할 수 있다(P05 §3.1). 호스트는 늘 설정한 서버로 — 응답의
+     * 절대 URL(프록시 뒤라 http 일 수 있다)이 아니라 경로만 쓴다.
+     */
+    suspend fun downloadScore(downloadUrl: String, target: File) {
+        val path = ScoreMateSync.pathOf(downloadUrl)
+        val first = authorizedWith { bearer -> transportDownload(HttpRequest("GET", url(path), bearer = bearer), target) }
+        val final = if (first.code in 300..399) {
+            val location = first.location ?: throw ScoreMateException("받기 주소가 없습니다 (HTTP ${first.code})")
+            val signed = if (location.startsWith("/")) url(location) else location
+            transportDownload(HttpRequest("GET", signed), target)
+        } else {
+            first
+        }
+        if (final.code !in 200..299) {
+            target.delete()
+            throw ScoreMateException("악보를 받지 못했습니다 (HTTP ${final.code})")
+        }
+    }
+
+    private suspend fun transportDownload(request: HttpRequest, target: File): HttpResponse = withContext(Dispatchers.IO) {
+        try {
+            transport.download(request, target)
+        } catch (e: IOException) {
+            target.delete()
+            throw ScoreMateException("악보를 받는 중 연결이 끊겼습니다", e)
+        }
+    }
+
+    private fun url(path: String) = store.server.trimEnd('/') + path
+
     /**
      * 인증 요청. 401 이면 갱신하고 한 번만 다시 — 그래도 401 이면 해제된 것.
      * 네트워크 오류는 [ScoreMateException], 해제는 [ScoreMateUnlinkedException](토큰은 지웠다).
      */
-    internal suspend fun authorized(method: String, path: String, body: String? = null): HttpResponse {
+    internal suspend fun authorized(method: String, path: String, body: String? = null): HttpResponse =
+        authorizedWith { bearer -> send(method, path, body, bearer) }
+
+    private suspend fun authorizedWith(call: suspend (String) -> HttpResponse): HttpResponse {
         val tokens = store.tokens ?: throw ScoreMateUnlinkedException()
-        val first = send(method, path, body, tokens.access)
+        val first = call(tokens.access)
         if (first.code != 401) return first
         val access = refreshAfter(tokens.access)
-        val second = send(method, path, body, access)
+        val second = call(access)
         if (second.code == 401) {
             store.clearTokens()
             throw ScoreMateUnlinkedException()
@@ -177,7 +236,26 @@ class UrlConnectionTransport : HttpTransport {
             val code = conn.responseCode
             val stream = if (code >= 400) conn.errorStream else conn.inputStream
             val text = stream?.bufferedReader(Charsets.UTF_8)?.use { it.readText() } ?: ""
-            return HttpResponse(code, text)
+            return HttpResponse(code, text, conn.getHeaderField("Location"))
+        } finally {
+            conn.disconnect()
+        }
+    }
+
+    override fun download(request: HttpRequest, target: File): HttpResponse {
+        val conn = URL(request.url).openConnection() as HttpURLConnection
+        try {
+            conn.connectTimeout = 10_000
+            conn.readTimeout = 60_000
+            conn.instanceFollowRedirects = false
+            conn.setRequestProperty("User-Agent", "MrgqPdfViewer-scoremate")
+            request.bearer?.let { conn.setRequestProperty("Authorization", "Bearer $it") }
+            val code = conn.responseCode
+            if (code in 200..299) {
+                target.parentFile?.mkdirs()
+                conn.inputStream.use { input -> target.outputStream().use { input.copyTo(it) } }
+            }
+            return HttpResponse(code, "", conn.getHeaderField("Location"))
         } finally {
             conn.disconnect()
         }

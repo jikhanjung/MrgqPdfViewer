@@ -59,6 +59,12 @@ class SettingsActivity : AppCompatActivity() {
     // ScoreMate 서버 연결 (P05 C1)
     private val scoreMateStore by lazy { ScoreMateStore(this) }
     private val scoreMateClient by lazy { ScoreMateClient(scoreMateStore) }
+    private val scoreMateLocal by lazy { com.mrgq.pdfviewer.repository.ScoreMateLocal(this) }
+    private val scoreMateSync by lazy {
+        com.mrgq.pdfviewer.scoremate.ScoreMateSync(
+            scoreMateClient, scoreMateStore, scoreMateLocal, scoreMateLocal, File(getExternalFilesDir(null), "PDFs"),
+        )
+    }
     
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -401,13 +407,22 @@ class SettingsActivity : AppCompatActivity() {
                 type = SettingsType.INPUT
             )
         }
-        items += SettingsItem(
-            id = "scoremate_sync_info",
-            icon = "📥",
-            title = "악보 동기화",
-            subtitle = "준비 중 — 앙상블 악보가 이 TV 로 저절로 들어오게 됩니다",
-            type = SettingsType.INFO
-        )
+        if (linked) {
+            items += SettingsItem(
+                id = "scoremate_sync",
+                icon = "📥",
+                title = "지금 동기화",
+                subtitle = "앙상블 · 내 악보를 받습니다 (앱을 켤 때도 저절로). 받은 악보는 파일 목록에 ☁️",
+                type = SettingsType.ACTION
+            )
+            items += SettingsItem(
+                id = "scoremate_unhide",
+                icon = "♻️",
+                title = "숨긴 악보 다시 받기",
+                subtitle = "TV 에서 지운 서버 악보를 다음 동기화에 다시 받습니다",
+                type = SettingsType.ACTION
+            )
+        }
         showDetailPanel("ScoreMate", items)
     }
 
@@ -436,24 +451,68 @@ class SettingsActivity : AppCompatActivity() {
         }
     }
 
+    private fun syncScoreMateNow(allowLargeRemoval: Boolean = false) {
+        Toast.makeText(this, "ScoreMate 동기화 중…", Toast.LENGTH_SHORT).show()
+        lifecycleScope.launch {
+            val report = try {
+                scoreMateSync.sync(allowLargeRemoval)
+            } catch (e: ScoreMateException) {
+                Toast.makeText(this@SettingsActivity, e.message, Toast.LENGTH_LONG).show()
+                showScoreMatePanel()
+                return@launch
+            }
+            Toast.makeText(
+                this@SettingsActivity,
+                com.mrgq.pdfviewer.scoremate.ScoreMateSyncText.summary(report) ?: "ScoreMate: 바뀐 악보가 없습니다",
+                Toast.LENGTH_LONG
+            ).show()
+            if (report.removalBlocked > 0) {
+                AlertDialog.Builder(this@SettingsActivity)
+                    .setTitle("ScoreMate 악보 정리")
+                    .setMessage("서버에서 볼 수 없게 된 악보가 ${report.removalBlocked}개입니다. 한꺼번에 많이 사라져 확인합니다. 이 TV 에서도 지울까요?")
+                    .setPositiveButton("지우기") { _, _ -> syncScoreMateNow(allowLargeRemoval = true) }
+                    .setNegativeButton("남겨 두기", null)
+                    .show()
+            }
+        }
+    }
+
+    private fun unhideScoreMate() {
+        lifecycleScope.launch {
+            val count = scoreMateSync.unhideAll()
+            if (count == 0) {
+                Toast.makeText(this@SettingsActivity, "숨긴 악보가 없습니다", Toast.LENGTH_SHORT).show()
+            } else {
+                syncScoreMateNow()
+            }
+        }
+    }
+
     private fun confirmUnlinkScoreMate() {
         AlertDialog.Builder(this)
             .setTitle("ScoreMate 연결 해제")
-            .setMessage("이 TV 의 ScoreMate 연결을 끊습니다. 다시 쓰려면 휴대폰으로 다시 연결해야 합니다.")
-            .setPositiveButton("연결 해제") { _, _ ->
-                lifecycleScope.launch {
-                    val notified = scoreMateClient.unlink()
-                    Toast.makeText(
-                        this@SettingsActivity,
-                        if (notified) "ScoreMate 연결을 해제했습니다" else "이 TV 에서 연결을 해제했습니다 (서버에 닿지 못함 — 웹의 TV 화면에서도 해제하세요)",
-                        Toast.LENGTH_LONG
-                    ).show()
-                    setupMainMenu()
-                    showScoreMatePanel()
-                }
-            }
+            .setMessage(
+                "이 TV 의 ScoreMate 연결을 끊습니다. 다시 쓰려면 휴대폰으로 다시 연결해야 합니다.\n\n" +
+                    "받아 둔 악보는 어떻게 할까요? 남기면 보통 파일로 남습니다."
+            )
+            .setPositiveButton("해제 · 악보 남기기") { _, _ -> unlinkScoreMate(deleteFiles = false) }
+            .setNeutralButton("해제 · 악보 지우기") { _, _ -> unlinkScoreMate(deleteFiles = true) }
             .setNegativeButton("취소", null)
             .show()
+    }
+
+    private fun unlinkScoreMate(deleteFiles: Boolean) {
+        lifecycleScope.launch {
+            scoreMateSync.forgetAll(deleteFiles)
+            val notified = scoreMateClient.unlink()
+            Toast.makeText(
+                this@SettingsActivity,
+                if (notified) "ScoreMate 연결을 해제했습니다" else "이 TV 에서 연결을 해제했습니다 (서버에 닿지 못함 — 웹의 TV 화면에서도 해제하세요)",
+                Toast.LENGTH_LONG
+            ).show()
+            setupMainMenu()
+            showScoreMatePanel()
+        }
     }
 
     private fun showScoreMateServerDialog() {
@@ -622,6 +681,8 @@ class SettingsActivity : AppCompatActivity() {
             "scoremate_link" -> linkScoreMate()
             "scoremate_check" -> checkScoreMate()
             "scoremate_unlink" -> confirmUnlinkScoreMate()
+            "scoremate_sync" -> syncScoreMateNow()
+            "scoremate_unhide" -> unhideScoreMate()
             "scoremate_server" -> showScoreMateServerDialog()
             "update_on_start_toggle" -> {
                 UpdateController.setCheckOnStartup(this, !UpdateController.isCheckOnStartup(this))

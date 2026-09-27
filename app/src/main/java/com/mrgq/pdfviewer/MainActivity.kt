@@ -94,11 +94,63 @@ class MainActivity : AppCompatActivity() {
                 }
             } catch (e: com.mrgq.pdfviewer.scoremate.ScoreMateUnlinkedException) {
                 Toast.makeText(this@MainActivity, e.message, Toast.LENGTH_LONG).show()
+                return@launch
             } catch (e: com.mrgq.pdfviewer.scoremate.ScoreMateException) {
                 Log.i("MainActivity", "ScoreMate heartbeat 실패 (무시): ${e.message}")
             }
+            // 이어서 악보 동기화 (P05 C2) — 파일 목록 화면에서만, 합주 중에는 하지 않는다
+            runScoreMateSync(quiet = true)
         }
     }
+
+    /**
+     * ScoreMate 악보 동기화. 바뀐 게 있으면 목록을 다시 읽는다. 서버에서 많이 사라졌으면(안전장치) 지울지 묻는다.
+     * [quiet] 면 네트워크 오류 · 변경 없음은 알리지 않는다 (앱 시작 시)
+     */
+    private suspend fun runScoreMateSync(quiet: Boolean, allowLargeRemoval: Boolean = false) {
+        if (GlobalCollaborationManager.getInstance().getCurrentMode() != CollaborationMode.NONE) return
+        val report = try {
+            scoreMateSync().sync(allowLargeRemoval)
+        } catch (e: com.mrgq.pdfviewer.scoremate.ScoreMateException) {
+            Log.i("MainActivity", "ScoreMate 동기화 실패: ${e.message}")
+            if (!quiet || e is com.mrgq.pdfviewer.scoremate.ScoreMateUnlinkedException) {
+                Toast.makeText(this, e.message, Toast.LENGTH_LONG).show()
+            }
+            return
+        }
+        Log.i("MainActivity", "ScoreMate 동기화: $report")
+        if (report.changed) loadPdfFiles()
+        com.mrgq.pdfviewer.scoremate.ScoreMateSyncText.summary(report)?.let {
+            if (report.changed || !quiet || report.errors.isNotEmpty()) Toast.makeText(this, it, Toast.LENGTH_LONG).show()
+        }
+        if (report.removalBlocked > 0 && !isFinishing) {
+            androidx.appcompat.app.AlertDialog.Builder(this)
+                .setTitle("ScoreMate 악보 정리")
+                .setMessage(
+                    "서버에서 볼 수 없게 된 악보가 ${report.removalBlocked}개입니다 (삭제 · 앙상블 나가기 등).\n" +
+                        "한꺼번에 많이 사라져 확인합니다. 이 TV 에서도 지울까요?"
+                )
+                .setPositiveButton("지우기") { _, _ ->
+                    lifecycleScope.launch { runScoreMateSync(quiet = false, allowLargeRemoval = true) }
+                }
+                .setNegativeButton("남겨 두기", null)
+                .show()
+        }
+    }
+
+    private val scoreMateLocal by lazy { com.mrgq.pdfviewer.repository.ScoreMateLocal(this) }
+
+    private fun scoreMateSync(): com.mrgq.pdfviewer.scoremate.ScoreMateSync {
+        val store = com.mrgq.pdfviewer.scoremate.ScoreMateStore(this)
+        return com.mrgq.pdfviewer.scoremate.ScoreMateSync(
+            com.mrgq.pdfviewer.scoremate.ScoreMateClient(store), store, scoreMateLocal, scoreMateLocal,
+            File(getExternalFilesDir(null), "PDFs"),
+        )
+    }
+
+    private fun cloudLabel(score: com.mrgq.pdfviewer.scoremate.SyncedScore): String =
+        listOfNotNull(score.ensembleName ?: "내 악보", score.partName.takeIf { it.isNotBlank() }, "판 ${score.versionNumber}")
+            .joinToString(" · ")
 
     private val autoUpdateCheck = Runnable {
         if (!isFinishing && hasWindowFocus() && GlobalCollaborationManager.getInstance().getCurrentMode() == CollaborationMode.NONE) {
@@ -443,10 +495,14 @@ class MainActivity : AppCompatActivity() {
         
         // Load from app's external files directory (uploaded via web server)
         val appPdfDir = File(getExternalFilesDir(null), "PDFs")
+        // ScoreMate 에서 받은 악보 (PDFs/ScoreMate/<앙상블>/) — 경로 → 표시 이름 (P05 C2)
+        val synced = try {
+            scoreMateLocal.all().filter { !it.hidden }.associateBy { it.filePath }
+        } catch (e: Exception) {
+            emptyMap()
+        }
         if (appPdfDir.exists() && appPdfDir.isDirectory) {
-            appPdfDir.listFiles { file ->
-                file.isFile && file.extension.equals("pdf", ignoreCase = true)
-            }?.forEach { file ->
+            PdfLibrary.listPdfFiles(appPdfDir).forEach { file ->
                 // 페이지 수·문서 정보는 DB 에 캐시된다. 처음 보거나 바뀐 파일만 분석한다 (PdfFileSync).
                 val record = try {
                     musicRepository.syncPdfFile(file)
@@ -461,7 +517,9 @@ class MainActivity : AppCompatActivity() {
                     size = file.length(),
                     pageCount = record?.totalPages ?: 0,
                     title = record?.title,
-                    author = record?.author
+                    author = record?.author,
+                    cloudLabel = synced[file.path]?.let { cloudLabel(it) }
+                        ?: PdfLibrary.scoreMateGroupOf(appPdfDir, file)
                 ))
             }
         }
@@ -819,6 +877,10 @@ class MainActivity : AppCompatActivity() {
             try {
                 val file = File(pdfFile.path)
                 val deleted = file.delete()
+                // ScoreMate 에서 받은 악보면 숨긴다 — 다음 동기화에 다시 받지 않게 (설정 → ScoreMate → 숨긴 악보 다시 받기)
+                if (deleted && pdfFile.cloudLabel != null) {
+                    scoreMateSync().markHidden(file.path)
+                }
                 
                 withContext(Dispatchers.Main) {
                     if (deleted) {
