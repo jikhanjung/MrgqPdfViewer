@@ -5,6 +5,7 @@ import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.os.SystemClock
 import android.provider.Settings
 import android.util.Log
 import android.view.ViewGroup
@@ -67,24 +68,29 @@ class UpdateController(
     }
 
     /**
-     * 앱 시작 시 확인 (프로세스당 한 번). 조용히 확인하고 **새 버전이 있을 때만** 대화상자를 띄운다 —
+     * 자동 확인 — 앱 시작과 화면으로 돌아올 때(onResume). 조용히 확인하고 **새 버전이 있을 때만** 대화상자를 띄운다 —
      * 최신이거나 네트워크 오류면 아무것도 보이지 않는다.
+     *
+     * TV 는 앱을 며칠씩 켜 두므로(홈에 다녀와도 프로세스가 그대로) 프로세스당 한 번이 아니라 **[AUTO_CHECK_INTERVAL_MS] 마다** 확인한다.
+     * 실패하면 [AUTO_RETRY_MS] 뒤에 다시 (#057 뒤 v0.2.5 에서 발견: 릴리스 7분 전에 켠 앱이 알림을 못 받았다).
      */
-    fun checkOnStartup() {
-        if (startupCheckDone || job?.isActive == true) return
-        startupCheckDone = true
+    fun checkIfDue() {
+        val now = SystemClock.elapsedRealtime()
+        if (!isAutoCheckDue(nextAutoCheckAtMs, now) || job?.isActive == true) return
+        nextAutoCheckAtMs = now + AUTO_RETRY_MS // 실패 · 취소면 이 시각 뒤에 다시
         job = scope.launch {
             try {
                 withContext(Dispatchers.IO) { updatesDir(activity).deleteRecursively() }
                 val release = client.fetchLatestRelease()
+                nextAutoCheckAtMs = SystemClock.elapsedRealtime() + AUTO_CHECK_INTERVAL_MS
                 val current = AppVersion.parse(BuildConfig.VERSION_NAME) ?: return@launch
-                if (release.version > current && release.apk != null && !activity.isFinishing && !activity.isDestroyed) {
-                    showUpdateOffer(release, fromStartup = true)
-                }
+                val offer = release.version > current && release.apk != null && !activity.isFinishing && !activity.isDestroyed
+                Log.i(TAG, "자동 업데이트 확인: 현재 v${BuildConfig.VERSION_NAME}, 최신 ${release.tag} → ${if (offer) "알림" else "알림 없음"}")
+                if (offer) showUpdateOffer(release, fromStartup = true)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                Log.i(TAG, "시작 시 업데이트 확인 실패 (무시): ${e.message}")
+                Log.i(TAG, "자동 업데이트 확인 실패 (무시, ${AUTO_RETRY_MS / 60_000}분 뒤 다시): ${e.message}")
             }
         }
     }
@@ -129,7 +135,7 @@ class UpdateController(
             .setNegativeButton("나중에", null)
             .apply {
                 if (fromStartup) {
-                    setNeutralButton("시작할 때 확인 안 함") { _, _ ->
+                    setNeutralButton("자동 확인 안 함") { _, _ ->
                         setCheckOnStartup(activity, false)
                         Toast.makeText(activity, "설정 → 앱 정보에서 다시 켤 수 있습니다", Toast.LENGTH_LONG).show()
                     }
@@ -264,8 +270,17 @@ class UpdateController(
         private const val PREFS = "pdf_viewer_prefs"
         private const val PREF_CHECK_ON_START = "update_check_on_start"
 
-        /** 이 프로세스에서 시작 시 확인을 이미 했나 — 화면을 돌아올 때마다 묻지 않게 */
-        private var startupCheckDone = false
+        /** 다음 자동 확인 시각 (elapsedRealtime). 0 = 아직 안 함 — 프로세스 안에서 화면이 바뀌어도 유지된다 */
+        private var nextAutoCheckAtMs = 0L
+
+        /** 자동 확인 간격 — 켜 둔 TV 도 하루에 몇 번은 새 버전을 알게 */
+        const val AUTO_CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000L
+
+        /** 네트워크 오류 등으로 실패했을 때 다시 확인하기까지 */
+        const val AUTO_RETRY_MS = 10 * 60 * 1000L
+
+        /** 자동 확인할 때가 됐나. [nextAtMs] 0 은 아직 한 번도 안 함 */
+        internal fun isAutoCheckDue(nextAtMs: Long, nowMs: Long): Boolean = nextAtMs == 0L || nowMs >= nextAtMs
 
         fun isCheckOnStartup(context: Context): Boolean =
             context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean(PREF_CHECK_ON_START, true)

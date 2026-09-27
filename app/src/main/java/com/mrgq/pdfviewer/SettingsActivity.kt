@@ -406,8 +406,8 @@ class SettingsActivity : AppCompatActivity() {
             SettingsItem(
                 id = "update_on_start_toggle",
                 icon = "🔔",
-                title = "시작할 때 업데이트 확인",
-                subtitle = if (UpdateController.isCheckOnStartup(this)) "켜짐 — 새 버전이 있으면 알려 줍니다" else "꺼짐",
+                title = "자동 업데이트 확인",
+                subtitle = if (UpdateController.isCheckOnStartup(this)) "켜짐 — 앱을 켤 때 · 6시간마다 확인해 새 버전이 있으면 알려 줍니다" else "꺼짐",
                 type = SettingsType.TOGGLE
             ),
             SettingsItem(

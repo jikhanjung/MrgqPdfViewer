@@ -61,16 +61,24 @@ class MainActivity : AppCompatActivity() {
         // Handle file request from SettingsActivity
         handleFileRequest()
 
-        // 새 버전 확인 — 화면이 뜬 뒤 조용히. 합주 중에는 방해하지 않는다
-        if (savedInstanceState == null && com.mrgq.pdfviewer.update.UpdateController.isCheckOnStartup(this)) {
-            binding.root.postDelayed({
-                if (!isFinishing && GlobalCollaborationManager.getInstance().getCurrentMode() == CollaborationMode.NONE) {
-                    updateController.checkOnStartup()
-                }
-            }, STARTUP_UPDATE_CHECK_DELAY_MS)
-        }
     }
     
+    /**
+     * 새 버전 자동 확인 — 앱 시작과 화면으로 돌아올 때, 마지막 확인 뒤 6시간이 지났으면 (UpdateController.checkIfDue).
+     * 화면이 뜬 뒤 조용히. 합주 중에는 방해하지 않는다
+     */
+    private fun scheduleAutoUpdateCheck() {
+        if (!com.mrgq.pdfviewer.update.UpdateController.isCheckOnStartup(this)) return
+        binding.root.removeCallbacks(autoUpdateCheck)
+        binding.root.postDelayed(autoUpdateCheck, STARTUP_UPDATE_CHECK_DELAY_MS)
+    }
+
+    private val autoUpdateCheck = Runnable {
+        if (!isFinishing && hasWindowFocus() && GlobalCollaborationManager.getInstance().getCurrentMode() == CollaborationMode.NONE) {
+            updateController.checkIfDue()
+        }
+    }
+
     private fun setupRecyclerView() {
         pdfAdapter = PdfFileAdapter(
             onItemClick = { pdfFile, position ->
@@ -93,6 +101,7 @@ class MainActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         updateController.onResume()
+        scheduleAutoUpdateCheck()
         
         // ====================[ 핵심 수정 사항 ]====================
         // 액티비티가 다시 활성화될 때마다 협업 콜백을 재등록합니다.
