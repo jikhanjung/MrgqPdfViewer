@@ -60,8 +60,6 @@ data class SyncReport(
     val removed: Int = 0,
     /** 서버가 아직 처리 중이라 건너뛴 악보 */
     val pending: Int = 0,
-    /** 안전장치로 지우지 않은 악보 수 — 사용자 확인 뒤 [ScoreMateSync.sync] 를 allowLargeRemoval 로 다시 */
-    val removalBlocked: Int = 0,
     val errors: List<String> = emptyList(),
 ) {
     val changed: Boolean get() = downloaded + moved + removed > 0
@@ -73,7 +71,9 @@ data class SyncReport(
  * 1. 커서부터 `has_more` 가 끝날 때까지 쪽을 모두 받는다 (마지막 쪽의 `ids` = 지금 볼 수 있는 악보 전부)
  * 2. 받은 악보를 반영한다 — 판(sha256)이 다르거나 파일이 없으면 받기(`.part` → SHA-256 검증 → 교체),
  *    제목 · 파트 · 앙상블 이름이 바뀌어 경로가 달라지면 옮기기(레코드 먼저). 같은 내용의 파일이 이미 그 자리에 있으면 받지 않고 쓴다
- * 3. `ids` 에 없는 악보는 지운다 — **안전장치**: 목록이 비었거나 절반 넘게 사라지면 지우지 않고 [SyncReport.removalBlocked]
+ * 3. `ids` 에 없는 악보는 지운다 — 묻지 않는다(사용자 결정): 서버 0.7.0 부터 TV 가 받는 것은 웹에서 고른 세트리스트의 곡이라
+ *    곡목을 바꾸면 한꺼번에 많이 빠지는 것이 정상이다. **파일별 설정(`pdf_files` 레코드)은 남긴다** — 그 곡이 다시 곡목에 들어오면
+ *    같은 경로로 받아 두 페이지 · 클리핑 · 메트로놈 · 구간 설정이 돌아온다
  * 4. 모두 성공했을 때만 커서를 저장한다 — 중간에 실패하면 다음에 같은 자리부터 다시 (이미 받은 것은 sha 가 같아 건너뛴다)
  *
  * 합주 중 · 악보를 보는 중에는 부르지 않는다 (파일 목록 화면에서만 — 열린 파일을 바꾸지 않게).
@@ -90,7 +90,7 @@ class ScoreMateSync(
 ) {
     val scoreMateRoot: File get() = File(pdfRoot, FOLDER)
 
-    suspend fun sync(allowLargeRemoval: Boolean = false): SyncReport {
+    suspend fun sync(): SyncReport {
         // 1. 쪽을 모두 받는다. 깨진 커서면 한 번 처음부터
         val pages = try {
             fetchAll(tokens.syncCursor)
@@ -108,14 +108,12 @@ class ScoreMateSync(
         var removed = 0
         var pending = 0
 
-        // 3 먼저 판단: 지울 것 (안전장치)
+        // 3 먼저 판단: 지울 것 — 서버가 지금 이 TV 에 주는 것(ids) 밖
         val local = store.all().associateBy { it.serverId }
         val gone = local.values.filter { it.serverId !in ids }
-        val blocked = !allowLargeRemoval && gone.isNotEmpty() &&
-            (ids.isEmpty() || gone.size > maxOf(2, local.size / 2))
 
         // 2. 이름 — 남을 악보 전부(받아 둔 것 + 새로 온 것)로 정해야 겹침을 안다
-        val keep = local.filterKeys { it in ids || blocked }
+        val keep = local.filterKeys { it in ids }
         val names = assignPaths(keep, incoming)
 
         for (remote in incoming.values) {
@@ -156,21 +154,17 @@ class ScoreMateSync(
             }
         }
 
-        if (!blocked) {
-            for (score in gone) {
-                if (!score.hidden) {
-                    File(score.filePath).delete()
-                    records.afterDelete(score.filePath)
-                }
-                store.delete(score.serverId)
-                removed++
-            }
+        for (score in gone) {
+            // 파일만 지운다 — 레코드(파일별 설정)는 남겨 다시 받으면 돌아오게
+            if (!score.hidden) File(score.filePath).delete()
+            store.delete(score.serverId)
+            removed++
         }
         removeEmptyFolders()
 
         // 4. 모두 됐을 때만 커서를 넘긴다
         if (errors.isEmpty()) tokens.syncCursor = pages.last().cursor ?: tokens.syncCursor
-        return SyncReport(downloaded, moved, removed, pending, if (blocked) gone.size else 0, errors)
+        return SyncReport(downloaded, moved, removed, pending, errors)
     }
 
     /** TV 에서 지운 서버 악보 — 목록에서 빼고 다시 받지 않는다. 파일은 호출한 쪽이 지웠다 */

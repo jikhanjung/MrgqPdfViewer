@@ -107,13 +107,13 @@ class MainActivity : AppCompatActivity() {
     }
 
     /**
-     * ScoreMate 악보 동기화. 바뀐 게 있으면 목록을 다시 읽는다. 서버에서 많이 사라졌으면(안전장치) 지울지 묻는다.
+     * ScoreMate 악보 동기화. 바뀐 게 있으면 목록을 다시 읽는다.
      * [quiet] 면 네트워크 오류 · 변경 없음은 알리지 않는다 (앱 시작 시)
      */
-    private suspend fun runScoreMateSync(quiet: Boolean, allowLargeRemoval: Boolean = false) {
+    private suspend fun runScoreMateSync(quiet: Boolean) {
         if (GlobalCollaborationManager.getInstance().getCurrentMode() != CollaborationMode.NONE) return
         val report = try {
-            scoreMateSync().sync(allowLargeRemoval)
+            scoreMateSync().sync()
         } catch (e: com.mrgq.pdfviewer.scoremate.ScoreMateException) {
             Log.i("MainActivity", "ScoreMate 동기화 실패: ${e.message}")
             if (!quiet || e is com.mrgq.pdfviewer.scoremate.ScoreMateUnlinkedException) {
@@ -128,19 +128,6 @@ class MainActivity : AppCompatActivity() {
             Toast.makeText(this, summary, Toast.LENGTH_LONG).show()
         } else if (summary == null && !quiet) {
             Toast.makeText(this, "ScoreMate: 바뀐 악보가 없습니다", Toast.LENGTH_SHORT).show()
-        }
-        if (report.removalBlocked > 0 && !isFinishing) {
-            androidx.appcompat.app.AlertDialog.Builder(this)
-                .setTitle("ScoreMate 악보 정리")
-                .setMessage(
-                    "서버에서 볼 수 없게 된 악보가 ${report.removalBlocked}개입니다 (삭제 · 앙상블 나가기 등).\n" +
-                        "한꺼번에 많이 사라져 확인합니다. 이 TV 에서도 지울까요?"
-                )
-                .setPositiveButton("지우기") { _, _ ->
-                    lifecycleScope.launch { runScoreMateSync(quiet = false, allowLargeRemoval = true) }
-                }
-                .setNegativeButton("남겨 두기", null)
-                .show()
         }
     }
 

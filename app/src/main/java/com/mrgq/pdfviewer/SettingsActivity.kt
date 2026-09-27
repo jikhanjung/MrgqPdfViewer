@@ -468,11 +468,11 @@ class SettingsActivity : AppCompatActivity() {
         }
     }
 
-    private fun syncScoreMateNow(allowLargeRemoval: Boolean = false) {
+    private fun syncScoreMateNow() {
         Toast.makeText(this, "ScoreMate 동기화 중…", Toast.LENGTH_SHORT).show()
         lifecycleScope.launch {
             val report = try {
-                scoreMateSync.sync(allowLargeRemoval)
+                scoreMateSync.sync()
             } catch (e: ScoreMateException) {
                 Toast.makeText(this@SettingsActivity, e.message, Toast.LENGTH_LONG).show()
                 showScoreMatePanel()
@@ -483,14 +483,6 @@ class SettingsActivity : AppCompatActivity() {
                 com.mrgq.pdfviewer.scoremate.ScoreMateSyncText.summary(report) ?: "ScoreMate: 바뀐 악보가 없습니다",
                 Toast.LENGTH_LONG
             ).show()
-            if (report.removalBlocked > 0) {
-                AlertDialog.Builder(this@SettingsActivity)
-                    .setTitle("ScoreMate 악보 정리")
-                    .setMessage("서버에서 볼 수 없게 된 악보가 ${report.removalBlocked}개입니다. 한꺼번에 많이 사라져 확인합니다. 이 TV 에서도 지울까요?")
-                    .setPositiveButton("지우기") { _, _ -> syncScoreMateNow(allowLargeRemoval = true) }
-                    .setNegativeButton("남겨 두기", null)
-                    .show()
-            }
         }
     }
 

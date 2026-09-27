@@ -217,21 +217,23 @@ class ScoreMateSyncTest {
         val report = sync().sync()
         assertEquals(1, report.removed)
         assertFalse(file("현악 4중주", "곡4.pdf").exists())
-        assertTrue(records.deletes.single().endsWith("곡4.pdf"))
+        assertTrue("파일별 설정(레코드)은 남긴다 — 다시 곡목에 들어오면 돌아오게", records.deletes.isEmpty())
         assertNull(db.rows[4])
     }
 
     @Test
-    fun 한꺼번에_많이_사라지면_확인_전에는_지우지_않는다() = runBlocking {
+    fun 곡목을_바꿔_한꺼번에_빠져도_묻지_않고_정리한다() = runBlocking {
         (1L..4L).forEach { server.put(Score(it, "곡$it", "c$it")) }
         sync().sync()
         (1L..4L).forEach { server.remove(it) }
-        val blocked = sync().sync()
-        assertEquals(4, blocked.removalBlocked)
-        assertEquals(0, blocked.removed)
-        assertTrue(file("현악 4중주", "곡1.pdf").exists())
-        val confirmed = sync().sync(allowLargeRemoval = true)
-        assertEquals(4, confirmed.removed)
+        server.put(Score(5, "곡5", "c5"))
+        val report = sync().sync()
+        assertEquals(4, report.removed)
+        assertEquals(1, report.downloaded)
+        assertEquals(listOf("곡5.pdf"), PdfLibrary.listPdfFiles(root, scoreMate = true).map { it.name })
+        // 빈 목록(고른 세트리스트가 없음)도 그대로 따른다
+        server.remove(5)
+        assertEquals(1, sync().sync().removed)
         assertFalse(file("현악 4중주").exists())
     }
 
