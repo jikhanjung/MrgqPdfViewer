@@ -516,8 +516,9 @@ class MainActivity : AppCompatActivity() {
         if (globalCollaborationManager.getCurrentMode() == CollaborationMode.CONDUCTOR) {
             Log.d("MainActivity", "🎵 지휘자 모드: 파일 선택 브로드캐스트 - ${pdfFile.name}")
             globalCollaborationManager.addFileToServer(pdfFile.name, pdfFile.path)
-            // ScoreMate 악보면 id 도 — 같은 계정의 연주자는 자기 ScoreMate 에서 연다 (#063)
-            globalCollaborationManager.broadcastFileChange(pdfFile.name, 1, pdfFile.scoreId) // 첫 페이지로
+            // 내용 해시도 — 연주자가 내용으로 찾는다(서버 · 계정 무관, 판까지 맞다 — #063). 로컬 파일은 한 번 계산해 기억
+            val sha256 = com.mrgq.pdfviewer.ensemble.EnsembleFiles.sha256Of(File(pdfFile.path), pdfFile.sha256)
+            globalCollaborationManager.broadcastFileChange(pdfFile.name, 1, sha256) // 첫 페이지로
         }
         
         val intent = Intent(this, PdfViewerActivity::class.java).apply {
@@ -559,7 +560,7 @@ class MainActivity : AppCompatActivity() {
                     author = record?.author,
                     cloudLabel = synced[file.path]?.let { cloudLabel(it) }
                         ?: PdfLibrary.scoreMateGroupOf(appPdfDir, file),
-                    scoreId = synced[file.path]?.serverId
+                    sha256 = synced[file.path]?.sha256
                 ))
             }
         }
@@ -630,9 +631,9 @@ class MainActivity : AppCompatActivity() {
         val globalCollaborationManager = GlobalCollaborationManager.getInstance()
         
         // Set up file change callback for performer mode
-        globalCollaborationManager.setOnFileChangeReceived { fileName, page, scoreId ->
+        globalCollaborationManager.setOnFileChangeReceived { fileName, page, sha256 ->
             runOnUiThread {
-                handleRemoteFileChange(fileName, page, scoreId)
+                handleRemoteFileChange(fileName, page, sha256)
             }
         }
         
@@ -716,17 +717,17 @@ class MainActivity : AppCompatActivity() {
     }
     
     /**
-     * 연주자: 지휘자가 파일을 바꿨다 (#063). 연결된 TV 는 `score_id` 로 내 ScoreMate 에서, 없으면 캐시에서 찾고 없으면 캐시로 받는다.
+     * 연주자: 지휘자가 파일을 바꿨다 (#063). 연결된 TV 는 내용 해시로 내 ScoreMate 에서, 없으면 캐시에서 찾고 없으면 캐시로 받는다.
      * 연결하지 않은 TV 는 이름으로 찾고 없으면 `PDFs/` 에 받는다 (EnsembleFiles)
      */
-    private fun handleRemoteFileChange(fileName: String, page: Int = 1, scoreId: Long? = null) {
-        Log.d("MainActivity", "🎼 연주자 모드: 파일 '$fileName' 변경 요청 (페이지 $page, score_id=$scoreId)")
+    private fun handleRemoteFileChange(fileName: String, page: Int = 1, sha256: String? = null) {
+        Log.d("MainActivity", "🎼 연주자 모드: 파일 '$fileName' 변경 요청 (페이지 $page, sha256=${sha256?.take(12)})")
         lifecycleScope.launch {
             val linked = scoreMateLinked || com.mrgq.pdfviewer.scoremate.ScoreMateStore(this@MainActivity).tokens != null
             val synced = if (linked) withContext(Dispatchers.IO) { scoreMateLocal.all() } else emptyList()
             val resolution = com.mrgq.pdfviewer.ensemble.EnsembleFiles.resolve(
                 fileName = fileName,
-                scoreId = scoreId,
+                sha256 = sha256,
                 linked = linked,
                 listed = allPdfFiles.map { it.name to it.path },
                 synced = synced,

@@ -12,7 +12,7 @@ import org.junit.Test
 import java.io.File
 import java.nio.file.Files
 
-/** 연주자가 지휘자 파일을 찾고 받는 곳 (#063) — 연결된 TV: score_id → 캐시, 연결 안 된 TV: 이름 → PDFs/ */
+/** 연주자가 지휘자 파일을 찾고 받는 곳 (#063) — 연결된 TV: 내용 해시 → 캐시, 연결 안 된 TV: 이름 → PDFs/ */
 class PdfLibraryTest {
 
     private lateinit var root: File
@@ -30,34 +30,43 @@ class PdfLibraryTest {
         cache.parentFile.deleteRecursively()
     }
 
-    private fun synced(id: Long, file: File, hidden: Boolean = false) =
-        SyncedScore(id, file.path, 1, "sha", "t", "", "", null, null, hidden)
+    private val shaA = "a".repeat(64)
+    private val shaB = "b".repeat(64)
 
-    private fun resolve(name: String, scoreId: Long?, linked: Boolean, listed: List<File> = emptyList(), synced: List<SyncedScore> = emptyList()) =
-        EnsembleFiles.resolve(name, scoreId, linked, listed.map { it.name to it.path }, synced, root, cache)
+    private fun synced(id: Long, file: File, sha: String, hidden: Boolean = false) =
+        SyncedScore(id, file.path, 1, sha, "t", "", "", null, null, hidden)
+
+    private fun resolve(name: String, sha: String?, linked: Boolean, listed: List<File> = emptyList(), synced: List<SyncedScore> = emptyList()) =
+        EnsembleFiles.resolve(name, sha, linked, listed.map { it.name to it.path }, synced, root, cache)
 
     @Test
-    fun 연결된_TV_는_score_id_로_내_ScoreMate_에서() {
+    fun 연결된_TV_는_같은_내용이면_내_ScoreMate_에서_이름이_달라도() {
         val mine = File(root, "ScoreMate/현악/몰다우.pdf").apply { parentFile!!.mkdirs(); writeText("x") }
-        assertEquals(Resolution.Open(mine.path), resolve("다른 이름.pdf", 7, linked = true, synced = listOf(synced(7, mine))))
+        assertEquals(Resolution.Open(mine.path), resolve("다른 이름.pdf", shaA, linked = true, synced = listOf(synced(7, mine, shaA))))
+        assertEquals("대소문자 무시", Resolution.Open(mine.path), resolve("몰다우.pdf", shaA.uppercase(), linked = true, synced = listOf(synced(7, mine, shaA))))
     }
 
     @Test
-    fun 연결된_TV_에_없는_악보는_캐시로() {
+    fun 연결된_TV_에_같은_내용이_없으면_캐시로_내용마다_폴더() {
         val mine = File(root, "ScoreMate/현악/몰다우.pdf").apply { parentFile!!.mkdirs(); writeText("x") }
-        // 다른 계정의 악보 · 숨긴 악보 · 지휘자의 로컬 파일(score_id 없음) — 모두 캐시
-        assertEquals(Resolution.Download(File(cache, "몰다우.pdf"), cached = true), resolve("몰다우.pdf", 99, linked = true, synced = listOf(synced(7, mine))))
-        assertEquals(Resolution.Download(File(cache, "몰다우.pdf"), cached = true), resolve("몰다우.pdf", 7, linked = true, synced = listOf(synced(7, mine, hidden = true))))
+        val cachedB = File(File(cache, shaB.take(16)), "몰다우.pdf")
+        // 판이 다름(내용이 다름) · 숨긴 악보 → 캐시
+        assertEquals(Resolution.Download(cachedB, cached = true), resolve("몰다우.pdf", shaB, linked = true, synced = listOf(synced(7, mine, shaA))))
+        assertEquals(
+            Resolution.Download(File(File(cache, shaA.take(16)), "몰다우.pdf"), cached = true),
+            resolve("몰다우.pdf", shaA, linked = true, synced = listOf(synced(7, mine, shaA, hidden = true))),
+        )
+        // 해시를 보내지 않는 옛 지휘자 → 이름으로
         assertEquals(Resolution.Download(File(cache, "몰다우.pdf"), cached = true), resolve("몰다우.pdf", null, linked = true))
         // 받아 둔 캐시가 있으면 연다
-        File(cache, "몰다우.pdf").apply { parentFile!!.mkdirs(); writeText("x") }
-        assertEquals(Resolution.Open(File(cache, "몰다우.pdf").path), resolve("몰다우.pdf", null, linked = true))
+        cachedB.apply { parentFile!!.mkdirs(); writeText("x") }
+        assertEquals(Resolution.Open(cachedB.path), resolve("몰다우.pdf", shaB, linked = true))
     }
 
     @Test
     fun 연결_안_된_TV_는_이름으로_없으면_PDFs_로() {
         val local = File(root, "몰다우.pdf").apply { writeText("x") }
-        assertEquals(Resolution.Open(local.path), resolve("몰다우.pdf", 7, linked = false, listed = listOf(local)))
+        assertEquals(Resolution.Open(local.path), resolve("몰다우.pdf", shaA, linked = false, listed = listOf(local)))
         assertEquals(Resolution.Download(File(root, "아리랑.pdf"), cached = false), resolve("아리랑.pdf", null, linked = false, listed = listOf(local)))
     }
 
@@ -81,5 +90,14 @@ class PdfLibraryTest {
         assertEquals(listOf(old, mid), removed)
         assertFalse(old.exists())
         assertTrue(now.exists())
+    }
+
+    @Test
+    fun 지휘자_파일_해시는_아는_값을_쓰고_로컬은_한_번_계산() {
+        val f = File(root, "a.pdf").apply { writeText("hello") }
+        assertEquals(shaA, EnsembleFiles.sha256Of(f, known = shaA.uppercase()))
+        val computed = EnsembleFiles.sha256Of(f)
+        assertEquals("2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824", computed)
+        assertEquals(null, EnsembleFiles.sha256Of(File(root, "없음.pdf")))
     }
 }

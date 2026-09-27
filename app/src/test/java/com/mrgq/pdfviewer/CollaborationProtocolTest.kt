@@ -46,12 +46,14 @@ class CollaborationProtocolTest {
     }
 
     @Test
-    fun `file_change 의 score_id 는 있을 때만 싣는다`() {
-        val withId = CollaborationProtocol.parseFileChange(parse(CollaborationProtocol.buildFileChange("a.pdf", scoreId = 12_345L).toString()))
-        assertEquals(12_345L, withId.scoreId)
+    fun `file_change 의 sha256 은 있을 때만 싣고 형식이 맞아야 한다`() {
+        val sha = "A".repeat(64)
+        val r = CollaborationProtocol.parseFileChange(parse(CollaborationProtocol.buildFileChange("a.pdf", sha256 = sha).toString()))
+        assertEquals("소문자로", "a".repeat(64), r.sha256)
         val built = CollaborationProtocol.buildFileChange("a.pdf")
-        assertTrue("로컬 파일이면 필드 없음", !built.has("score_id"))
-        assertEquals(null, CollaborationProtocol.parseFileChange(parse(built.toString())).scoreId)
+        assertTrue("없으면 필드 없음(옛 지휘자와 같다)", !built.has("sha256"))
+        assertEquals(null, CollaborationProtocol.parseFileChange(parse(built.toString())).sha256)
+        assertEquals("형식이 틀리면 버린다", null, CollaborationProtocol.parseFileChange(parse("""{"file":"a","sha256":"zz"}""")).sha256)
     }
 
     @Test

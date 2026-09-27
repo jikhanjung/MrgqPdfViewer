@@ -52,8 +52,11 @@ object CollaborationProtocol {
     const val KEY_SECTIONS = "tempo_sections"
     /** 예비박 마디 수 (#060). 없으면 1 */
     const val KEY_COUNT_IN_BARS = "count_in_bars"
-    /** file_change 의 ScoreMate 악보 id (#063) — 지휘자가 ScoreMate 악보를 열었을 때만. 연결된 연주자가 자기 ScoreMate 에서 찾는다 */
-    const val KEY_SCORE_ID = "score_id"
+    /**
+     * file_change 의 파일 내용 SHA-256 (#063). 연주자는 **내용으로** 찾는다 — 서버 · 계정과 상관없고 판(버전)까지 맞다.
+     * (score_id 는 서버마다 따로 매기는 번호이고 판이 달라도 같아 쓰지 않는다)
+     */
+    const val KEY_SHA256 = "sha256"
 
     // ── 액션 ────────────────────────────────────────────────────────────────
     const val ACTION_PAGE_CHANGE = "page_change"
@@ -87,14 +90,14 @@ object CollaborationProtocol {
         pageNumber: Int = 1,
         fileServerUrl: String? = null,
         timestamp: Long = System.currentTimeMillis(),
-        scoreId: Long? = null,
+        sha256: String? = null,
     ): JsonObject = JsonObject().apply {
         addProperty(KEY_ACTION, ACTION_FILE_CHANGE)
         addProperty(KEY_FILE, fileName)
         addProperty(KEY_PAGE, pageNumber)
         addProperty(KEY_TIMESTAMP, timestamp)
         fileServerUrl?.let { addProperty(KEY_FILE_SERVER_URL, it) }
-        scoreId?.let { addProperty(KEY_SCORE_ID, it) }
+        sha256?.let { addProperty(KEY_SHA256, it) }
     }
 
     fun buildBackToList(timestamp: Long = System.currentTimeMillis()): JsonObject =
@@ -179,7 +182,8 @@ object CollaborationProtocol {
 
     data class PageChange(val page: Int, val file: String, val turnAt: Long?)
 
-    data class FileChange(val file: String, val page: Int, val fileServerUrl: String?, val scoreId: Long? = null)
+    /** [sha256] = 파일 내용 해시(소문자 hex, #063). 옛 지휘자(v0.2.6 이하)는 없다 → 이름으로 찾는다 */
+    data class FileChange(val file: String, val page: Int, val fileServerUrl: String?, val sha256: String? = null)
 
     fun parsePageChange(json: JsonObject) = PageChange(
         page = json.optInt(KEY_PAGE, 1),
@@ -191,7 +195,7 @@ object CollaborationProtocol {
         file = json.optStringOrNull(KEY_FILE) ?: "",
         page = json.optInt(KEY_PAGE, 1),
         fileServerUrl = json.optStringOrNull(KEY_FILE_SERVER_URL),
-        scoreId = json.optLong(KEY_SCORE_ID),
+        sha256 = json.optStringOrNull(KEY_SHA256)?.lowercase()?.takeIf { it.matches(Regex("[0-9a-f]{64}")) },
     )
 
     // ── 안전한 필드 접근 ────────────────────────────────────────────────────

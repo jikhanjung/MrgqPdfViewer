@@ -196,7 +196,9 @@ class PdfViewerActivity : AppCompatActivity() {
     // ScoreMate (#063) — onCreate 에서 읽는다
     private var syncedScores: List<com.mrgq.pdfviewer.scoremate.SyncedScore> = emptyList()
     private var scoreMateLinked = false
-    private fun scoreIdOf(path: String): Long? = syncedScores.firstOrNull { it.filePath == path && !it.hidden }?.serverId
+    /** 지휘자: 연 파일의 내용 해시 — ScoreMate 악보는 받을 때 검증한 값, 로컬 파일은 한 번 계산 (#063) */
+    private fun sha256Of(path: String): String? =
+        com.mrgq.pdfviewer.ensemble.EnsembleFiles.sha256Of(File(path), syncedScores.firstOrNull { it.filePath == path }?.sha256)
 
     // 구간별 빠르기 (#057): 이 파일의 둘째 구간부터의 설정. 대화상자에서 바꾸면 바로 여기에, 닫을 때 DB 에
     private var tempoSectionSettings: List<TempoSectionSetting> = emptyList()
@@ -1364,7 +1366,7 @@ class PdfViewerActivity : AppCompatActivity() {
                                 globalCollaborationManager.addFileToServer(pdfFileName, pdfFilePath)
                                 // Then broadcast the change with the target page number
                                 val actualPageNumber = targetPage + 1 // Convert to 1-based index
-                                globalCollaborationManager.broadcastFileChange(pdfFileName, actualPageNumber, scoreIdOf(pdfFilePath))
+                                globalCollaborationManager.broadcastFileChange(pdfFileName, actualPageNumber, sha256Of(pdfFilePath))
                             }
                         }
                     } else {
@@ -1640,7 +1642,7 @@ class PdfViewerActivity : AppCompatActivity() {
                 globalCollaborationManager.addFileToServer(pdfFileName, pdfFilePath)
                 
                 val actualPageNumber = if (isTwoPageMode) pageIndex + 1 else pageIndex + 1
-                globalCollaborationManager.broadcastFileChange(pdfFileName, actualPageNumber, scoreIdOf(pdfFilePath))
+                globalCollaborationManager.broadcastFileChange(pdfFileName, actualPageNumber, sha256Of(pdfFilePath))
             }
         }
         
@@ -1679,9 +1681,9 @@ class PdfViewerActivity : AppCompatActivity() {
             }
         }
         
-        globalCollaborationManager.setOnFileChangeReceived { file, page, scoreId ->
+        globalCollaborationManager.setOnFileChangeReceived { file, page, sha256 ->
             runOnUiThread {
-                handleRemoteFileChange(file, page, scoreId)
+                handleRemoteFileChange(file, page, sha256)
             }
         }
         
@@ -1768,16 +1770,16 @@ class PdfViewerActivity : AppCompatActivity() {
     }
     
     /**
-     * 연주자: 지휘자가 파일을 바꿨다 (#063). 찾는 순서는 파일 목록 화면과 같다 (EnsembleFiles) — 연결된 TV 는 `score_id` 로 내 ScoreMate,
+     * 연주자: 지휘자가 파일을 바꿨다 (#063). 찾는 순서는 파일 목록 화면과 같다 (EnsembleFiles) — 연결된 TV 는 내용 해시로 내 ScoreMate,
      * 없으면 캐시, 없으면 캐시로 받는다. 연결하지 않은 TV 는 이름, 없으면 `PDFs/` 로 받는다. 찾은 파일이 지금 목록에 없으면 끝에 붙인다
      */
-    private fun handleRemoteFileChange(file: String, targetPage: Int, scoreId: Long? = null) {
+    private fun handleRemoteFileChange(file: String, targetPage: Int, sha256: String? = null) {
         // Update sync time for input blocking
         updateSyncTime()
 
         val resolution = com.mrgq.pdfviewer.ensemble.EnsembleFiles.resolve(
             fileName = file,
-            scoreId = scoreId,
+            sha256 = sha256,
             linked = scoreMateLinked,
             listed = fileNameList.zip(filePathList),
             synced = syncedScores,
@@ -1803,7 +1805,7 @@ class PdfViewerActivity : AppCompatActivity() {
                 loadFileWithTargetPage(pdfFilePath, pdfFileName, targetPage, originalMode)
             }
             is com.mrgq.pdfviewer.ensemble.EnsembleFiles.Resolution.Download -> {
-                Log.w("PdfViewerActivity", "🎼 연주자 모드: 요청된 파일을 찾을 수 없습니다: $file (score_id=$scoreId)")
+                Log.w("PdfViewerActivity", "🎼 연주자 모드: 요청된 파일을 찾을 수 없습니다: $file (sha256=${sha256?.take(12)})")
                 val conductorAddress = globalCollaborationManager.getConductorAddress()
                 if (conductorAddress.isNotEmpty()) {
                     showDownloadDialog(file, conductorAddress, targetPage, resolution.target, resolution.cached)
