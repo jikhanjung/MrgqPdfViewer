@@ -193,6 +193,11 @@ class PdfViewerActivity : AppCompatActivity() {
     /** 세는 단위를 바꿔 다음 시작부터 적용된다는 안내를 이번 연주에서 이미 보였나 */
     private var followTempoDeferredNotice = false
 
+    // ScoreMate (#063) — onCreate 에서 읽는다
+    private var syncedScores: List<com.mrgq.pdfviewer.scoremate.SyncedScore> = emptyList()
+    private var scoreMateLinked = false
+    private fun scoreIdOf(path: String): Long? = syncedScores.firstOrNull { it.filePath == path && !it.hidden }?.serverId
+
     // 구간별 빠르기 (#057): 이 파일의 둘째 구간부터의 설정. 대화상자에서 바꾸면 바로 여기에, 닫을 때 DB 에
     private var tempoSectionSettings: List<TempoSectionSetting> = emptyList()
     private var tempoSectionSettingsFileId: String? = null
@@ -260,6 +265,14 @@ class PdfViewerActivity : AppCompatActivity() {
         
         // Initialize preferences
         preferences = getSharedPreferences("pdf_viewer_prefs", MODE_PRIVATE)
+
+        // ScoreMate (#063): 지휘자는 연 파일의 악보 id 를 file_change 에 싣고, 연주자는 그 id 로 자기 ScoreMate 에서 찾는다
+        lifecycleScope.launch {
+            scoreMateLinked = com.mrgq.pdfviewer.scoremate.ScoreMateStore(this@PdfViewerActivity).tokens != null
+            syncedScores = withContext(Dispatchers.IO) {
+                com.mrgq.pdfviewer.repository.ScoreMateLocal(this@PdfViewerActivity).all()
+            }
+        }
 
 
         // Initialize database repository
@@ -1351,7 +1364,7 @@ class PdfViewerActivity : AppCompatActivity() {
                                 globalCollaborationManager.addFileToServer(pdfFileName, pdfFilePath)
                                 // Then broadcast the change with the target page number
                                 val actualPageNumber = targetPage + 1 // Convert to 1-based index
-                                globalCollaborationManager.broadcastFileChange(pdfFileName, actualPageNumber)
+                                globalCollaborationManager.broadcastFileChange(pdfFileName, actualPageNumber, scoreIdOf(pdfFilePath))
                             }
                         }
                     } else {
@@ -1627,7 +1640,7 @@ class PdfViewerActivity : AppCompatActivity() {
                 globalCollaborationManager.addFileToServer(pdfFileName, pdfFilePath)
                 
                 val actualPageNumber = if (isTwoPageMode) pageIndex + 1 else pageIndex + 1
-                globalCollaborationManager.broadcastFileChange(pdfFileName, actualPageNumber)
+                globalCollaborationManager.broadcastFileChange(pdfFileName, actualPageNumber, scoreIdOf(pdfFilePath))
             }
         }
         
@@ -1666,9 +1679,9 @@ class PdfViewerActivity : AppCompatActivity() {
             }
         }
         
-        globalCollaborationManager.setOnFileChangeReceived { file, page ->
+        globalCollaborationManager.setOnFileChangeReceived { file, page, scoreId ->
             runOnUiThread {
-                handleRemoteFileChange(file, page)
+                handleRemoteFileChange(file, page, scoreId)
             }
         }
         
@@ -1754,37 +1767,49 @@ class PdfViewerActivity : AppCompatActivity() {
         }
     }
     
-    private fun handleRemoteFileChange(file: String, targetPage: Int) {
+    /**
+     * 연주자: 지휘자가 파일을 바꿨다 (#063). 찾는 순서는 파일 목록 화면과 같다 (EnsembleFiles) — 연결된 TV 는 `score_id` 로 내 ScoreMate,
+     * 없으면 캐시, 없으면 캐시로 받는다. 연결하지 않은 TV 는 이름, 없으면 `PDFs/` 로 받는다. 찾은 파일이 지금 목록에 없으면 끝에 붙인다
+     */
+    private fun handleRemoteFileChange(file: String, targetPage: Int, scoreId: Long? = null) {
         // Update sync time for input blocking
         updateSyncTime()
-        
-        // Check if the requested file exists in our file list
-        val fileIndex = fileNameList.indexOf(file)
-        
-        if (fileIndex >= 0 && fileIndex < filePathList.size) {
-            // Load the requested file
-            currentFileIndex = fileIndex
-            pdfFilePath = filePathList[fileIndex]
-            pdfFileName = fileNameList[fileIndex]
-            
-            // Temporarily disable collaboration to prevent loops
-            val originalMode = collaborationMode
-            collaborationMode = CollaborationMode.NONE
-            
-            Log.d("PdfViewerActivity", "🎼 연주자 모드: 파일 '$file' 로 변경 중... (목표 페이지: $targetPage)")
-            
-            // Load file and navigate to target page after loading completes
-            loadFileWithTargetPage(pdfFilePath, pdfFileName, targetPage, originalMode)
-            
-        } else {
-            Log.w("PdfViewerActivity", "🎼 연주자 모드: 요청된 파일을 찾을 수 없습니다: $file")
-            
-            // Try to download from conductor
-            val conductorAddress = globalCollaborationManager.getConductorAddress()
-            if (conductorAddress.isNotEmpty()) {
-                showDownloadDialog(file, conductorAddress, targetPage)
-            } else {
-                Toast.makeText(this, "요청된 파일을 찾을 수 없습니다: $file", Toast.LENGTH_LONG).show()
+
+        val resolution = com.mrgq.pdfviewer.ensemble.EnsembleFiles.resolve(
+            fileName = file,
+            scoreId = scoreId,
+            linked = scoreMateLinked,
+            listed = fileNameList.zip(filePathList),
+            synced = syncedScores,
+            pdfRoot = File(getExternalFilesDir(null), "PDFs"),
+            cacheDir = File(cacheDir, "ensemble"),
+        )
+        when (resolution) {
+            is com.mrgq.pdfviewer.ensemble.EnsembleFiles.Resolution.Open -> {
+                val index = filePathList.indexOf(resolution.path)
+                if (index < 0) {
+                    com.mrgq.pdfviewer.ensemble.EnsembleFiles.touch(File(resolution.path))
+                    refreshFileListAndLoad(File(resolution.path).name, resolution.path, targetPage)
+                    return
+                }
+                currentFileIndex = index
+                pdfFilePath = filePathList[index]
+                pdfFileName = fileNameList[index]
+
+                // Temporarily disable collaboration to prevent loops
+                val originalMode = collaborationMode
+                collaborationMode = CollaborationMode.NONE
+                Log.d("PdfViewerActivity", "🎼 연주자 모드: 파일 '$file' 로 변경 중... (목표 페이지: $targetPage)")
+                loadFileWithTargetPage(pdfFilePath, pdfFileName, targetPage, originalMode)
+            }
+            is com.mrgq.pdfviewer.ensemble.EnsembleFiles.Resolution.Download -> {
+                Log.w("PdfViewerActivity", "🎼 연주자 모드: 요청된 파일을 찾을 수 없습니다: $file (score_id=$scoreId)")
+                val conductorAddress = globalCollaborationManager.getConductorAddress()
+                if (conductorAddress.isNotEmpty()) {
+                    showDownloadDialog(file, conductorAddress, targetPage, resolution.target, resolution.cached)
+                } else {
+                    Toast.makeText(this, "요청된 파일을 찾을 수 없습니다: $file", Toast.LENGTH_LONG).show()
+                }
             }
         }
     }
@@ -1808,21 +1833,25 @@ class PdfViewerActivity : AppCompatActivity() {
         }
     }
     
-    private fun showDownloadDialog(fileName: String, conductorAddress: String, targetPage: Int = 1) {
+    private fun showDownloadDialog(fileName: String, conductorAddress: String, targetPage: Int, target: File, cached: Boolean) {
         val ipOnly = conductorAddress.split(":").firstOrNull() ?: conductorAddress
         val fileServerUrl = "http://$ipOnly:8090"
         
         AlertDialog.Builder(this)
             .setTitle("파일 다운로드")
-            .setMessage("'$fileName' 파일이 없습니다.\n지휘자로부터 다운로드하시겠습니까?")
+            .setMessage(
+                "'$fileName' 파일이 없습니다.\n지휘자로부터 다운로드하시겠습니까?" +
+                    if (cached) "\n(이 기기의 ScoreMate 에 없는 악보 — 합주용으로만 받아 두고 목록에는 넣지 않습니다)" else ""
+            )
             .setPositiveButton("다운로드") { _, _ ->
-                downloadFileFromConductor(fileName, fileServerUrl, targetPage)
+                downloadFileFromConductor(fileName, fileServerUrl, targetPage, target, cached)
             }
             .setNegativeButton("취소", null)
             .show()
     }
     
-    private fun downloadFileFromConductor(fileName: String, serverUrl: String, targetPage: Int = 1) {
+    /** [target] 으로 받는다 — 연결하지 않은 TV 는 PDFs/, 연결된 TV 에서 ScoreMate 에 없는 악보는 캐시 (#063) */
+    private fun downloadFileFromConductor(fileName: String, serverUrl: String, targetPage: Int, target: File, cached: Boolean) {
         val progressDialog = AlertDialog.Builder(this)
             .setTitle("다운로드 중...")
             .setMessage("$fileName\n0%")
@@ -1844,11 +1873,11 @@ class PdfViewerActivity : AppCompatActivity() {
                 
                 val fileLength = connection.contentLength
                 val input = connection.getInputStream()
-                // 앱 PDF 폴더 바로 아래 — 파일 목록 "이 기기" 탭 (#062). 예전에는 공용 Download/ 에 써서 목록에 나오지 않았다
-                // (v0.1.8 에서 앱 전용 폴더로 옮길 때 빠진 경로). 받는 중에는 .part 로 — 끊긴 파일이 목록에 보이지 않게
-                val pdfDir = File(getExternalFilesDir(null), "PDFs").apply { mkdirs() }
-                val downloadPath = File(pdfDir, fileName)
-                val partPath = File(pdfDir, "$fileName.part")
+                // 예전에는 공용 Download/ 에 써서 목록에 나오지 않았다 (v0.1.8 에서 앱 전용 폴더로 옮길 때 빠진 경로, #062).
+                // 받는 중에는 .part 로 — 끊긴 파일이 목록에 보이지 않게. 이름은 EnsembleFiles 가 경로로 쓸 수 있게 다듬었다
+                target.parentFile?.mkdirs()
+                val downloadPath = target
+                val partPath = File(target.path + ".part")
                 val output = java.io.FileOutputStream(partPath)
                 
                 val buffer = ByteArray(4096)
@@ -1873,13 +1902,14 @@ class PdfViewerActivity : AppCompatActivity() {
                     downloadPath.delete()
                     if (!partPath.renameTo(downloadPath)) throw java.io.IOException("받은 파일을 저장하지 못했습니다")
                 }
+                if (cached) com.mrgq.pdfviewer.ensemble.EnsembleFiles.trimCache(downloadPath.parentFile!!, keep = downloadPath)
                 
                 withContext(Dispatchers.Main) {
                     progressDialog.dismiss()
                     Toast.makeText(this@PdfViewerActivity, "다운로드 완료: $fileName", Toast.LENGTH_SHORT).show()
                     
                     // Refresh file list and load the downloaded file with target page
-                    refreshFileListAndLoad(fileName, downloadPath.absolutePath, targetPage)
+                    refreshFileListAndLoad(downloadPath.name, downloadPath.absolutePath, targetPage)
                 }
                 
             } catch (e: Exception) {

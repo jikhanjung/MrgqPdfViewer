@@ -18,7 +18,8 @@ import java.util.concurrent.atomic.AtomicInteger
 
 class CollaborationClientManager(
     private val onPageChangeReceived: (Int, String, Long?) -> Unit,
-    private val onFileChangeReceived: (String, Int) -> Unit,
+    /** (파일 이름, 페이지, ScoreMate 악보 id — #063) */
+    private val onFileChangeReceived: (String, Int, Long?) -> Unit,
     private val onConnectionStatusChanged: (Boolean) -> Unit,
     private val onBackToListReceived: (() -> Unit)? = null,
     /** 지휘자 메트로놈 상태 (#055) */
@@ -215,7 +216,7 @@ class CollaborationClientManager(
                 CollaborationProtocol.ACTION_FILE_CHANGE -> {
                     val m = CollaborationProtocol.parseFileChange(json)
                     Log.d(TAG, "Received file change: file=${m.file}, page=${m.page}")
-                    onFileChangeReceived(m.file, m.page)
+                    onFileChangeReceived(m.file, m.page, m.scoreId)
                 }
                 "connect_response" -> {
                     val status = json.get("status")?.asString

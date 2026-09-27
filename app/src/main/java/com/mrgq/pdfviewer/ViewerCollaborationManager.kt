@@ -149,7 +149,7 @@ class ViewerCollaborationManager(
             }
         }
         
-        globalCollaborationManager.setOnFileChangeReceived { file, page ->
+        globalCollaborationManager.setOnFileChangeReceived { file, page, _ ->
             Log.d("ViewerCollabManager", "🎼 Received file change: $file at page $page")
             // Update sync time for input blocking
             lastSyncTime = System.currentTimeMillis()

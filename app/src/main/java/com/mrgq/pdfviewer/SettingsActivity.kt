@@ -127,8 +127,10 @@ class SettingsActivity : AppCompatActivity() {
             arrow = "▶"
         ))
         
-        // 웹서버 섹션
-        val webStatus = if (isWebServerRunning) {
+        // 웹서버 섹션 — ScoreMate 에 연결된 TV 에서는 쓰지 않는다 (#063)
+        val webStatus = if (scoreMateClient.isLinked) {
+            "ScoreMate 연결 중에는 쓸 수 없음"
+        } else if (isWebServerRunning) {
             val port = preferences.getInt("web_server_port", 8080)
             val ipAddress = NetworkUtils.getLocalIpAddress()
             "실행 중 ($ipAddress:$port)"
@@ -259,6 +261,19 @@ class SettingsActivity : AppCompatActivity() {
     }
     
     private fun showWebServerPanel() {
+        // ScoreMate 에 연결된 TV 는 서재가 ScoreMate 악보뿐이라 웹서버로 올린 파일이 보이지 않는다 → 쓰지 않는다 (#063, 사용자 결정)
+        if (scoreMateClient.isLinked) {
+            showDetailPanel("웹서버", listOf(
+                SettingsItem(
+                    id = "web_server_disabled",
+                    icon = "☁️",
+                    title = "ScoreMate 에 연결된 TV 에서는 쓸 수 없습니다",
+                    subtitle = "악보는 ScoreMate 웹에 올리고 동기화하세요. 웹서버를 쓰려면 설정 → ScoreMate 에서 연결을 해제하세요",
+                    type = SettingsType.INFO
+                )
+            ))
+            return
+        }
         val port = preferences.getInt("web_server_port", 8080)
         val ipAddress = NetworkUtils.getLocalIpAddress()
         val status = if (isWebServerRunning) "실행 중 ($ipAddress:$port)" else "중지됨"
@@ -428,7 +443,9 @@ class SettingsActivity : AppCompatActivity() {
 
     private fun linkScoreMate() {
         DeviceLinkDialog(this, scoreMateClient, scoreMateStore) {
-            Toast.makeText(this, "ScoreMate 에 연결되었습니다", Toast.LENGTH_SHORT).show()
+            // 연결되면 서재가 ScoreMate 악보로 바뀌고 웹서버는 쓰지 않는다 (#063)
+            if (isWebServerRunning) stopWebServer()
+            Toast.makeText(this, "ScoreMate 에 연결되었습니다 — 파일 목록에는 ScoreMate 악보가 보입니다", Toast.LENGTH_LONG).show()
             setupMainMenu() // 뒤의 메인 메뉴 요약도
             showScoreMatePanel()
         }.show()
@@ -493,7 +510,7 @@ class SettingsActivity : AppCompatActivity() {
             .setTitle("ScoreMate 연결 해제")
             .setMessage(
                 "이 TV 의 ScoreMate 연결을 끊습니다. 다시 쓰려면 휴대폰으로 다시 연결해야 합니다.\n\n" +
-                    "받아 둔 악보는 어떻게 할까요? 남기면 보통 파일로 남습니다."
+                    "받아 둔 악보는 어떻게 할까요? 남기면 이 기기 파일로 옮겨져 연결 해제 뒤의 파일 목록에 보입니다."
             )
             .setPositiveButton("해제 · 악보 남기기") { _, _ -> unlinkScoreMate(deleteFiles = false) }
             .setNeutralButton("해제 · 악보 지우기") { _, _ -> unlinkScoreMate(deleteFiles = true) }
@@ -890,6 +907,10 @@ class SettingsActivity : AppCompatActivity() {
     }
     
     private fun toggleWebServer() {
+        if (!isWebServerRunning && scoreMateClient.isLinked) {
+            Toast.makeText(this, "ScoreMate 에 연결된 TV 에서는 웹서버를 쓸 수 없습니다", Toast.LENGTH_LONG).show()
+            return
+        }
         if (isWebServerRunning) {
             stopWebServer()
         } else {

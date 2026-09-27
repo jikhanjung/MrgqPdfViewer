@@ -3,8 +3,8 @@ package com.mrgq.pdfviewer
 import java.io.File
 
 /**
- * 앱 PDF 폴더에서 보여 줄 파일 (P05 C2). `PDFs/` 바로 아래 파일(웹 업로드 · 합주로 받은 파일)과
- * `PDFs/ScoreMate/<앙상블 | 내 악보>/` 아래 파일(ScoreMate 동기화). 그 밖의 하위 폴더는 보지 않는다.
+ * 앱 PDF 폴더의 서재 (#063). **한 번에 한 서재**(사용자 결정): ScoreMate 에 연결된 TV 는 `PDFs/ScoreMate/<앙상블 | 내 악보>/` 아래
+ * 파일만, 연결하지 않은 TV 는 `PDFs/` 바로 아래 파일(웹 업로드 · 합주로 받은 파일)만. 다른 쪽 파일은 지우지 않고 보이지 않을 뿐이다.
  * `.part`(받는 중) 는 PDF 확장자가 아니라 빠진다.
  *
  * Android 에 의존하지 않는다 — JVM 단위 테스트 대상.
@@ -12,13 +12,11 @@ import java.io.File
 object PdfLibrary {
     const val SCOREMATE_FOLDER = "ScoreMate"
 
-    fun listPdfFiles(root: File): List<File> {
+    fun listPdfFiles(root: File, scoreMate: Boolean): List<File> {
         if (!root.isDirectory) return emptyList()
-        val files = root.listFiles { f -> f.isPdf() }.orEmpty().toMutableList()
-        File(root, SCOREMATE_FOLDER).listFiles { f -> f.isDirectory }?.forEach { group ->
-            files += group.listFiles { f -> f.isPdf() }.orEmpty()
-        }
-        return files
+        if (!scoreMate) return root.listFiles { f -> f.isPdf() }.orEmpty().toList()
+        return File(root, SCOREMATE_FOLDER).listFiles { f -> f.isDirectory }.orEmpty()
+            .flatMap { group -> group.listFiles { f -> f.isPdf() }.orEmpty().toList() }
     }
 
     /** ScoreMate 폴더 아래 파일이면 그 폴더 이름(앙상블 · "내 악보"), 아니면 null */
@@ -28,24 +26,4 @@ object PdfLibrary {
     }
 
     private fun File.isPdf() = isFile && extension.equals("pdf", ignoreCase = true)
-
-    /** 파일 목록 탭 (#062) */
-    enum class Source {
-        /** 모두 */
-        ALL,
-        /** `PDFs/` 바로 아래 — 웹 업로드 · 합주 중 지휘자에게서 받은 파일 */
-        DEVICE,
-        /** `PDFs/ScoreMate/` 아래 — 서버 동기화 */
-        SCOREMATE;
-
-        fun includes(fromScoreMate: Boolean): Boolean = when (this) {
-            ALL -> true
-            DEVICE -> !fromScoreMate
-            SCOREMATE -> fromScoreMate
-        }
-
-        companion object {
-            fun fromName(name: String?): Source = values().firstOrNull { it.name == name } ?: ALL
-        }
-    }
 }

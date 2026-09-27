@@ -151,7 +151,7 @@ class ScoreMateSyncTest {
         assertEquals("a", file(ScoreMateNaming.PERSONAL_FOLDER, "아리랑 (바이올린 1).pdf").readText())
         assertEquals("2", tokens.syncCursor)
         assertEquals("서명 URL 에는 Authorization 을 싣지 않는다", 0, server.signedWithAuth)
-        assertEquals(2, PdfLibrary.listPdfFiles(root).size)
+        assertEquals(2, PdfLibrary.listPdfFiles(root, scoreMate = true).size)
     }
 
     @Test
@@ -280,16 +280,31 @@ class ScoreMateSyncTest {
     }
 
     @Test
-    fun 연결을_끊을_때_남긴_파일은_다시_연결하면_받지_않고_쓴다() = runBlocking {
+    fun 연결을_끊을_때_남기면_이_기기_파일로_옮기고_레코드도_따라간다() = runBlocking {
         server.put(Score(1, "몰다우", "v1"))
+        server.put(Score(2, "아리랑", "a", ensemble = null))
+        File(root, "몰다우.pdf").writeText("원래 있던 로컬 파일")
         val sync = sync()
         sync.sync()
         sync.forgetAll(deleteFiles = false)
-        tokens.syncCursor = null
-        assertTrue(file("현악 4중주", "몰다우.pdf").exists())
+        assertEquals("원래 있던 로컬 파일", File(root, "몰다우.pdf").readText())
+        assertEquals("이름이 겹치면 (2)", "v1", File(root, "몰다우 (2).pdf").readText())
+        assertEquals("a", File(root, "아리랑.pdf").readText())
+        assertFalse("ScoreMate 폴더는 비면 지운다", file().exists())
+        assertTrue(records.moves.contains(file("현악 4중주", "몰다우.pdf").path to File(root, "몰다우 (2).pdf").path))
+        assertTrue(db.rows.isEmpty())
+        assertEquals(3, PdfLibrary.listPdfFiles(root, scoreMate = false).size)
+    }
+
+    @Test
+    fun 연결을_끊을_때_지우기() = runBlocking {
+        server.put(Score(1, "몰다우", "v1"))
+        val sync = sync()
         sync.sync()
-        assertEquals("같은 내용이면 받지 않는다", 1, server.downloads)
-        assertEquals(1, db.rows.size)
+        sync.forgetAll(deleteFiles = true)
+        assertTrue(PdfLibrary.listPdfFiles(root, scoreMate = true).isEmpty())
+        assertTrue(PdfLibrary.listPdfFiles(root, scoreMate = false).isEmpty())
+        assertEquals(1, records.deletes.size)
     }
 
     @Test
@@ -303,13 +318,13 @@ class ScoreMateSyncTest {
     }
 
     @Test
-    fun 파일_목록은_ScoreMate_폴더_한_단계_아래까지() {
+    fun 서재는_연결되면_ScoreMate_아니면_로컬_파일만() {
         File(root, "a.pdf").writeText("x")
         File(root, "other/b.pdf").apply { parentFile!!.mkdirs(); writeText("x") }
         file("앙상블", "c.pdf").apply { parentFile!!.mkdirs(); writeText("x") }
         file("앙상블", "d.pdf.part").writeText("x")
-        val names = PdfLibrary.listPdfFiles(root).map { it.name }.sorted()
-        assertEquals(listOf("a.pdf", "c.pdf"), names)
+        assertEquals(listOf("c.pdf"), PdfLibrary.listPdfFiles(root, scoreMate = true).map { it.name })
+        assertEquals(listOf("a.pdf"), PdfLibrary.listPdfFiles(root, scoreMate = false).map { it.name })
         assertEquals("앙상블", PdfLibrary.scoreMateGroupOf(root, file("앙상블", "c.pdf")))
         assertNull(PdfLibrary.scoreMateGroupOf(root, File(root, "a.pdf")))
     }

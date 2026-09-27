@@ -46,6 +46,15 @@ class CollaborationProtocolTest {
     }
 
     @Test
+    fun `file_change 의 score_id 는 있을 때만 싣는다`() {
+        val withId = CollaborationProtocol.parseFileChange(parse(CollaborationProtocol.buildFileChange("a.pdf", scoreId = 12_345L).toString()))
+        assertEquals(12_345L, withId.scoreId)
+        val built = CollaborationProtocol.buildFileChange("a.pdf")
+        assertTrue("로컬 파일이면 필드 없음", !built.has("score_id"))
+        assertEquals(null, CollaborationProtocol.parseFileChange(parse(built.toString())).scoreId)
+    }
+
+    @Test
     fun `한글 파일명이 왕복에서 깨지지 않는다`() {
         assertEquals("바흐-무반주 첼로 1번 (사본).pdf",
             roundTripPage(1, "바흐-무반주 첼로 1번 (사본).pdf", null).file)

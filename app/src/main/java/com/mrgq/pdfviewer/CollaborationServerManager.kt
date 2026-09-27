@@ -179,8 +179,8 @@ class CollaborationServerManager(
         Log.d(TAG, "Broadcasted page change: page=$pageNumber, file=$fileName" + (turnAt?.let { ", turn_at=$it" } ?: ""))
     }
     
-    fun broadcastFileChange(fileName: String, pageNumber: Int = 1, fileServerUrl: String? = null) {
-        val message = CollaborationProtocol.buildFileChange(fileName, pageNumber, fileServerUrl)
+    fun broadcastFileChange(fileName: String, pageNumber: Int = 1, fileServerUrl: String? = null, scoreId: Long? = null) {
+        val message = CollaborationProtocol.buildFileChange(fileName, pageNumber, fileServerUrl, scoreId = scoreId)
         
         broadcastToClients(message.toString())
         Log.d(TAG, "Broadcasted file change: $fileName, page: $pageNumber" + if (fileServerUrl != null) " (with file server: $fileServerUrl)" else "")

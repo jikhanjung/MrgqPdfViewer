@@ -52,6 +52,8 @@ object CollaborationProtocol {
     const val KEY_SECTIONS = "tempo_sections"
     /** 예비박 마디 수 (#060). 없으면 1 */
     const val KEY_COUNT_IN_BARS = "count_in_bars"
+    /** file_change 의 ScoreMate 악보 id (#063) — 지휘자가 ScoreMate 악보를 열었을 때만. 연결된 연주자가 자기 ScoreMate 에서 찾는다 */
+    const val KEY_SCORE_ID = "score_id"
 
     // ── 액션 ────────────────────────────────────────────────────────────────
     const val ACTION_PAGE_CHANGE = "page_change"
@@ -85,12 +87,14 @@ object CollaborationProtocol {
         pageNumber: Int = 1,
         fileServerUrl: String? = null,
         timestamp: Long = System.currentTimeMillis(),
+        scoreId: Long? = null,
     ): JsonObject = JsonObject().apply {
         addProperty(KEY_ACTION, ACTION_FILE_CHANGE)
         addProperty(KEY_FILE, fileName)
         addProperty(KEY_PAGE, pageNumber)
         addProperty(KEY_TIMESTAMP, timestamp)
         fileServerUrl?.let { addProperty(KEY_FILE_SERVER_URL, it) }
+        scoreId?.let { addProperty(KEY_SCORE_ID, it) }
     }
 
     fun buildBackToList(timestamp: Long = System.currentTimeMillis()): JsonObject =
@@ -175,7 +179,7 @@ object CollaborationProtocol {
 
     data class PageChange(val page: Int, val file: String, val turnAt: Long?)
 
-    data class FileChange(val file: String, val page: Int, val fileServerUrl: String?)
+    data class FileChange(val file: String, val page: Int, val fileServerUrl: String?, val scoreId: Long? = null)
 
     fun parsePageChange(json: JsonObject) = PageChange(
         page = json.optInt(KEY_PAGE, 1),
@@ -187,6 +191,7 @@ object CollaborationProtocol {
         file = json.optStringOrNull(KEY_FILE) ?: "",
         page = json.optInt(KEY_PAGE, 1),
         fileServerUrl = json.optStringOrNull(KEY_FILE_SERVER_URL),
+        scoreId = json.optLong(KEY_SCORE_ID),
     )
 
     // ── 안전한 필드 접근 ────────────────────────────────────────────────────

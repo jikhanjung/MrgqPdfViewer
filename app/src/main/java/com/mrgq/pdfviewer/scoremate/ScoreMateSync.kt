@@ -188,16 +188,36 @@ class ScoreMateSync(
         return hidden.size
     }
 
-    /** 연결을 끊을 때 — [deleteFiles] 면 받은 악보 파일도 지운다. 남기면 보통 파일로 남는다(다시 연결하면 같은 내용은 받지 않고 쓴다) */
+    /**
+     * 연결을 끊을 때 — [deleteFiles] 면 받은 악보 파일도 지운다. 남기면 **`PDFs/` 바로 아래로 옮긴다** — 연결을 끊은 TV 의 서재는
+     * 로컬 파일뿐이라(#063) 그대로 두면 보이지 않는다. 레코드를 먼저 옮겨 파일별 설정이 따라간다. 이름이 겹치면 ` (2)`
+     */
     suspend fun forgetAll(deleteFiles: Boolean) {
         for (score in store.all()) {
-            if (deleteFiles && !score.hidden) {
-                File(score.filePath).delete()
-                records.afterDelete(score.filePath)
+            if (!score.hidden) {
+                val file = File(score.filePath)
+                if (deleteFiles) {
+                    file.delete()
+                    records.afterDelete(score.filePath)
+                } else if (file.isFile) {
+                    moveToLocal(file)
+                }
             }
             store.delete(score.serverId)
         }
-        if (deleteFiles) removeEmptyFolders()
+        removeEmptyFolders()
+        scoreMateRoot.takeIf { it.isDirectory && it.listFiles()?.isEmpty() == true }?.delete()
+    }
+
+    private suspend fun moveToLocal(file: File) {
+        var target = File(pdfRoot, file.name)
+        var n = 2
+        while (target.exists()) {
+            target = File(pdfRoot, "${file.nameWithoutExtension} ($n).${file.extension}")
+            n++
+        }
+        records.beforeMove(file.path, target.path)
+        if (!file.renameTo(target)) records.beforeMove(target.path, file.path) // 되돌린다 — 파일은 ScoreMate 폴더에 남는다
     }
 
     private enum class Change { NONE, DOWNLOADED, MOVED }

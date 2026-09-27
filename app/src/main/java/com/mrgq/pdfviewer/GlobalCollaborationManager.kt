@@ -37,7 +37,8 @@ class GlobalCollaborationManager private constructor() {
     private var onServerClientDisconnected: ((String) -> Unit)? = null
     private var onClientConnectionStatusChanged: ((Boolean) -> Unit)? = null
     private var onPageChangeReceived: ((Int, String, Long?) -> Unit)? = null
-    private var onFileChangeReceived: ((String, Int) -> Unit)? = null // Updated to include page
+    /** (파일 이름, 페이지, ScoreMate 악보 id — #063) */
+    private var onFileChangeReceived: ((String, Int, Long?) -> Unit)? = null
     private var onBackToListReceived: (() -> Unit)? = null
     private var onMetronomeRunReceived: ((com.mrgq.pdfviewer.ensemble.EnsembleRun) -> Unit)? = null
     private var onClockSynced: (() -> Unit)? = null
@@ -265,9 +266,9 @@ class GlobalCollaborationManager private constructor() {
                     Log.d(TAG, "Page change received: $page, $file, turnAt=$turnAt")
                     onPageChangeReceived?.invoke(page, file, turnAt)
                 },
-                onFileChangeReceived = { file, page ->
+                onFileChangeReceived = { file, page, scoreId ->
                     Log.d(TAG, "File change received: $file, page: $page")
-                    onFileChangeReceived?.invoke(file, page)
+                    onFileChangeReceived?.invoke(file, page, scoreId)
                 },
                 onConnectionStatusChanged = { isConnected ->
                     Log.d(TAG, "Connection status changed: $isConnected")
@@ -311,9 +312,10 @@ class GlobalCollaborationManager private constructor() {
         collaborationServerManager?.broadcastPageChange(pageNumber, fileName, turnAt)
     }
     
-    fun broadcastFileChange(fileName: String, pageNumber: Int = 1) {
+    /** [scoreId] = 지휘자가 연 파일이 ScoreMate 악보면 그 id (#063) */
+    fun broadcastFileChange(fileName: String, pageNumber: Int = 1, scoreId: Long? = null) {
         val fileServerUrl = getFileServerUrl()
-        collaborationServerManager?.broadcastFileChange(fileName, pageNumber, fileServerUrl)
+        collaborationServerManager?.broadcastFileChange(fileName, pageNumber, fileServerUrl, scoreId)
     }
     
     /** 합주 메트로놈 상태를 연주자들에게 (#055) */
@@ -395,7 +397,7 @@ class GlobalCollaborationManager private constructor() {
         onPageChangeReceived = callback
     }
     
-    fun setOnFileChangeReceived(callback: (String, Int) -> Unit) {
+    fun setOnFileChangeReceived(callback: (String, Int, Long?) -> Unit) {
         onFileChangeReceived = callback
     }
     
