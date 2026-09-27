@@ -33,8 +33,8 @@ ScoreMateServer `devlog/20260926_054_악보공유_및_TV클라이언트_계획.m
 |---|---|---|
 | 코드 | `POST /api/v1/device/code` `{name, model, app_version}` | `{device_code, user_code, verification_uri, verification_uri_complete, expires_in: 600, interval: 5}` — QR = `verification_uri_complete` |
 | 토큰 폴링 | `POST /api/v1/device/token` `{device_code}` `interval` 초마다 | 400 `authorization_pending` 계속 · `slow_down` 간격 +5초 · `expired_token` 새 코드 · `access_denied` 처음부터 · `invalid_grant` 처음부터 / 200 `{access_token, refresh_token, token_type, expires_in: 3600, device_id}` |
-| 갱신 | `POST /api/v1/auth/token/refresh/` `{refresh}` | `{access, refresh}` — **필드 이름이 폴링 응답과 다르다**. refresh 도 새 것 → **바로 저장**(access 를 쓰기 전에) |
-| 401 | 아무 요청 | 기기 해제됨(또는 refresh 만료 180일) → 토큰 지우고 다시 연결 |
+| 갱신 | `POST /api/v1/auth/token/refresh/` `{refresh}` | `{access, refresh}` — **필드 이름이 폴링 응답과 다르다**. refresh 도 새 것 → **바로 저장**(access 를 쓰기 전에). **한 번에 하나만**(§3.1) |
+| 401 | API 요청 | access 만료일 수 있다 → 갱신 후 **한 번만** 재시도. **갱신 요청 자체가 401** 일 때만 기기 해제됨(또는 refresh 만료 180일) → 토큰 지우고 다시 연결 |
 | 동기화 | `GET /api/v1/sync/scores/?cursor=` | `{cursor, has_more, scores[], ids[]}` — §4 |
 | 받기 | `GET {download_url}` (Bearer) | 302 → 서명 URL(5분, 인증 불필요) → PDF |
 | 세트리스트 | `GET /api/v1/sync/setlists/` | `{setlists: [{id, title, description, ensemble, updated_at, items: [{score_id, position, notes}]}]}` — 통째로 바꿔 끼운다 |
@@ -53,10 +53,23 @@ ScoreMateServer `devlog/20260926_054_악보공유_및_TV클라이언트_계획.m
 | `scoremate/ScoreMateClient` | HTTP (업데이트 기능의 `HttpURLConnection` 방식) — code · token 폴링 · refresh(401 이면 한 번 갱신 후 재시도) · sync · download · analysis · heartbeat · 해제 |
 | `scoremate/DeviceLinkDialog` | 코드 · QR 표시, 폴링(서버 `interval`, `slow_down` 반영), 만료 시 새 코드 |
 | QR 생성 | `com.google.zxing:core` (순수 Java, 작다) → Bitmap |
-| 토큰 저장 | 앱 전용 SharedPreferences (앱 샌드박스): access · refresh · device_id · 서버 주소 |
-| `scoremate/ScoreSync` | §4 — 커서로 변경분 → 새 판 다운로드(`.part` → **SHA-256 검증** → 교체, `UpdateClient` 재사용) → `ids` 에 없는 악보 정리 |
-| DB (v13) | `server_scores`(serverId PK, pdfFileId, versionNumber, sha256, ensembleId, ensembleName, partName, title, hidden, syncedAt) · `scoremate_state`(cursor, lastSyncAt) · 2차: `server_setlists` · `server_setlist_items` |
+| 토큰 저장 | 앱 전용 SharedPreferences (앱 샌드박스): access · refresh · device_id · 서버 주소. **백업에서 뺀다**(§3.1) |
+| `scoremate/ScoreSync` | §4 — 커서로 변경분 → 새 판 다운로드(`.part` → **SHA-256 검증** → 교체, `UpdateClient` 재사용 — 단 리다이렉트는 직접, §3.1) → `ids` 에 없는 악보 정리 |
+| DB (v14) | `server_scores`(serverId PK, pdfFileId, versionNumber, sha256, ensembleId, ensembleName, partName, title, hidden, syncedAt) · `scoremate_state`(cursor, lastSyncAt) · 2차: `server_setlists` · `server_setlist_items` |
 | 저장 위치 | §6 |
+
+> DB 버전: 처음엔 v13 이었으나 구간별 빠르기(#057)가 v13(`user_preferences.metronomeSections`)을 먼저 썼다 → **v14**.
+
+### 3.1 구현 주의 (2026-09-27 검토)
+
+- **갱신은 한 번에 하나만.** refresh 토큰이 매번 새로 바뀌므로(rotation), 앱 시작 때 동기화 · heartbeat · 분석 요청이 동시에 갱신하면
+  두 번째 요청은 이미 무효가 된 refresh 를 써서 401 → 연결이 끊긴다. `ScoreMateClient` 안에서 갱신을 `Mutex` 로 묶고,
+  기다렸던 요청은 갱신된 access 로 다시 시도한다(갱신을 또 하지 않는다)
+- **토큰은 백업에서 뺀다.** 매니페스트가 `android:allowBackup="true"` 라 SharedPreferences 가 백업되어 **다른 TV 에 복원되면 두 대가 같은
+  `device_id` · refresh 를 쓴다**. ScoreMate 토큰 prefs 파일만 `dataExtractionRules`(API 31+) · `fullBackupContent`(API 30) 에서 제외한다
+- **다운로드 리다이렉트는 직접 따라간다.** `UpdateClient` 는 `instanceFollowRedirects = true` 인데, `download_url`(Bearer) → 302 → 서명 URL 에서
+  Authorization 헤더가 함께 가면 S3 계열 서명 URL 은 거부할 수 있다("인증 방식 둘"). `instanceFollowRedirects = false` 로 302 를 받고
+  `Location` 을 **헤더 없이** 받는다 — 서버 저장소 종류와 무관하게 안전하다. 서명 URL 은 5분이라 재시도는 `download_url` 부터
 
 ## 4. 동기화 (서버 devlog 060 §1)
 
@@ -65,12 +78,16 @@ loop:
   GET /sync/scores/?cursor=<저장값>          (처음엔 cursor 없이)
   for s in scores:
       로컬 판(versionNumber, sha256)과 다르면 → 받기 대상
-      s.version.sha256 == null  → 아직 서버 처리 중, 이번엔 건너뜀(다음 동기화에 다시 온다)
+      s.version.sha256 == null  → 아직 서버 처리 중, 이번엔 건너뜀(다음 동기화에 다시 온다 — ⚠️ 서버가 처리 완료 때 변경 시각을 올려야 성립. 060 에서 확인할 것)
       제목 · 파트 · 앙상블이 바뀌었으면 → 이름 바꾸기(§6)
   cursor 저장 (받기가 끝난 뒤 — 중간에 끊기면 다시 받는다)
   has_more 면 곧바로 다시
-ids 에 없는 server_scores → 지운다(또는 사용자에게 묻기) — 삭제 · 앙상블 나가기 · 내보내기 · 앙상블 삭제 · 개인 악보로 옮김이 모두 이것
+ids 에 없는 server_scores → 정리 (아래 안전장치) — 삭제 · 앙상블 나가기 · 내보내기 · 앙상블 삭제 · 개인 악보로 옮김이 모두 이것
 ```
+
+- **`ids` 정리 안전장치**: `has_more` 루프를 **끝까지** 돈 뒤에만(중간에 끊기면 정리하지 않는다) · 마지막 응답의 `ids` 로.
+  `ids` 가 비었거나 로컬 동기화 악보의 절반 넘게 사라지면(서버 이상 · 계정 전환) 지우지 않고 사용자에게 묻는다.
+  지우는 대신 먼저 목록에서 숨기고(`hidden`) 파일은 다음 확인 때 지우는 방식도 가능 — C2 착수 때 결정. **지금 열려 있는 파일은 닫은 뒤에**
 
 - **지운 목록(deleted)은 없다.** 서버는 매번 "지금 볼 수 있는 id 전부"(`ids`)를 준다. 로컬에만 있는 것이 지워진 것
 - **개인 악보도 온다**(`ensemble: null`) — 내가 웹에 올린 개인 악보
@@ -101,16 +118,21 @@ ids 에 없는 server_scores → 지운다(또는 사용자에게 묻기) — �
   `{"schema": 1, "measures": [{"n": measureNumber, "p": pageIndex, "s": systemIndex, "box": [left, top, right, bottom], "page": [widthPt, heightPt], "ts": [num, den] | null}]}`
 - 멤버 TV 는 같은 판에 이미 분석이 있으면 **더 새 analyzer_version** 일 때만 바꿀 수 있다(서버 규칙). 소유자 · 리더 계정의 TV 는 언제나
 - 분석이 1MB 를 넘으면 413 — 큰 총보(수백 마디)도 위 형식이면 수십 KB
+- **구간별 빠르기(#057)도 이 전제 위에 있다.** 구간 설정은 시작 마디 번호로 저장되고, 합주에서 연주자는 지휘자가 보낸 구간 설정과 **자기 악보의 마디**로
+  박 시각을 계산한다. 분석이 TV 마다 다르면 구간 템포가 어긋난다 — 분석 공유가 이것도 맞춘다. 새 판으로 마디가 바뀌면 시작 마디가 맞지 않는 구간 설정은 무시된다
 
 ## 6. 저장 위치 · 파일 이름
 
 - `PDFs/ScoreMate/<앙상블 이름 | 내 악보>/<제목>[ (파트)].pdf` — 기존 파일과 섞이지 않게
 - **⚠️ 지금 파일 목록은 PDF 폴더를 `listFiles()` 한 단계로만 읽는다**(MainActivity · SettingsActivity · WebServerManager). 하위 폴더를 쓰려면
   목록 · 웹 서버 파일 관리 · 합주 파일 전달을 함께 바꿔야 한다 — C2 의 선행 작업. (대안: 하위 폴더 없이 `ScoreMate - <앙상블> - <제목>.pdf` — 간단하지만 목록이 길어진다. C2 착수 때 결정)
-- 이름 규칙: 파일 시스템에 못 쓰는 글자(`/ \ : * ? " < > |`)는 `_`, 앞뒤 공백 · 점 제거, 길이 제한. **같은 이름이 둘이면 뒤에 ` [#<serverId>]`** — 모든 TV 가 같은 규칙을 써야 한다
-- 제목 · 파트 · 앙상블 이름이 바뀌면(동기화로 옴) 파일 이름을 바꾼다 — `pdf_files` 레코드를 **update**(REPLACE 금지 규칙)해 파일별 표시 설정을 유지
+- 이름 규칙: 파일 시스템에 못 쓰는 글자(`/ \ : * ? " < > |`)는 `_`, 앞뒤 공백 · 점 제거, 길이 제한. **같은 이름이 둘이면 뒤에 ` [#<serverId>]`** — 모든 TV 가 같은 규칙을 써야 한다.
+  ⚠️ 그래도 **이름이 모든 TV 에서 같다는 보장은 없다** — 겹침은 그 TV 가 보는 악보(개인 악보 · 들어간 앙상블)에 따라 달라진다. 그래서 아래 `score_id` 는 선택이 아니라 필요하다
+- 제목 · 파트 · 앙상블 이름이 바뀌면(동기화로 옴) 파일 이름을 바꾼다 — `pdf_files` 레코드를 **update**(REPLACE 금지 규칙)해 파일별 표시 설정을 유지.
+  ⚠️ `PdfFileSync` 는 레코드를 **경로로** 찾는다(`getPdfFileByPath`). 파일만 바꾸면 새 레코드가 생겨 표시 · 메트로놈 · 구간 설정이 사라진다 →
+  `pdf_files.filePath`(· `filename`) 를 먼저 update 하고 파일 이름을 바꾸며, 그 사이 목록 새로고침이 끼지 않게 한 곳(같은 Mutex)에서
 - **합주 모드 파일 맞추기**: 지금 `file_change` 는 파일 이름(`file`)으로 가리킨다. ScoreMate 악보는 TV 마다 이름이 같도록 위 규칙을 지키되,
-  더 확실하게 **`file_change` 에 `score_id`(서버 악보 id)를 선택 필드로 더하고**, 연주자는 `score_id` 가 있으면 `server_scores` 로 찾는다(없으면 지금처럼 이름).
+  **`file_change` 에 `score_id`(서버 악보 id)를 더하고**(와이어에서는 선택 필드 — 옛 버전 호환), 연주자는 `score_id` 가 있으면 `server_scores` 로 찾는다(없으면 지금처럼 이름).
   같은 앙상블 악보가 이미 동기화돼 있으면 LAN 다운로드가 필요 없다
 
 ## 7. 새 판으로 바뀔 때
@@ -122,14 +144,17 @@ ids 에 없는 server_scores → 지운다(또는 사용자에게 묻기) — �
 
 | 단계 | 클라이언트 | 서버 |
 |---|---|---|
-| C1 | ScoreMate 설정 화면 · 서버 주소 · 연결(코드 + QR + 폴링) · 토큰 저장 · 갱신 · 401 처리 · 해제 · heartbeat | S3 ✅ |
-| C2 | 하위 폴더 지원(또는 이름 규칙 결정) → 동기화: 목록 · 다운로드 · SHA-256 · 새 판 교체 · `ids` 정리 · 숨김 · DB v13 | S4 ✅ |
+| C1 | ScoreMate 설정 화면 · 서버 주소 · 연결(코드 + QR + 폴링) · 토큰 저장(백업 제외) · 갱신(한 번에 하나) · 401 처리 · 해제 · heartbeat | S3 ✅ |
+| C2 | 하위 폴더 지원(또는 이름 규칙 결정) → 동기화: 목록 · 다운로드 · SHA-256 · 새 판 교체 · `ids` 정리 · 숨김 · DB v14 | S4 ✅ |
 | C3 | 파일 목록 ☁️ 표시 · 앙상블 · 파트 · 판 번호, 시작 시 자동 동기화 | S4 ✅ |
 | C4 | 분석 공유(`ANALYZER_VERSION` · GET/PUT) · `file_change` 의 `score_id` · 세트리스트(연주회 곡목) 화면 | S6 ✅ |
 
-테스트: 순수 로직(폴링 상태 기계 · 커서 · 판 비교 · `ids` 정리 · 파일 이름 규칙 · 분석 JSON 변환)은 JVM 단위, 다운로드 교체 · DB 는 계측,
+테스트: 순수 로직(폴링 상태 기계 · 커서 · 판 비교 · `ids` 정리와 안전장치 · 파일 이름 규칙 · 분석 JSON 변환 · 동시 갱신이 한 번만 일어나는지)은 JVM 단위, 다운로드 교체 · DB 는 계측,
 실기기는 Google TV Streamer · Z18TV Pro. 서버 쪽 E2E 는 운영 서버에 임시 계정으로(서버 devlog 059 · 060 방식).
 
 ## 9. 개정 이력
 - 2026-09-27: 서버 구현(0.1.0~0.6.1)에 맞춤 — 지운 목록 대신 `ids`, 개인 악보, 분석 공유 흐름 · `ANALYZER_VERSION` · data 형식,
   세트리스트 API, 해제 · heartbeat · 401 · 토큰 필드 이름 차이, 기기별 요청 제한, 하위 폴더 미지원 발견, `file_change` 의 `score_id` 제안
+- 2026-09-27 (검토 반영): DB v13 → **v14**(구간별 빠르기 #057 이 v13 사용), 토큰 갱신 한 번에 하나(rotation 경쟁) · 401 구분, 토큰 백업 제외(`allowBackup`),
+  다운로드 리다이렉트 직접 처리, `ids` 정리 안전장치, `sha256 == null` 재전송 전제 확인, 이름 변경 시 `filePath` 먼저 update,
+  이름 일치 보장 불가 → `score_id` 필요, 분석 공유와 구간별 빠르기의 관계 (§3.1 신설)
