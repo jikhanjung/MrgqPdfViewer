@@ -22,8 +22,24 @@ data class Beat(
     val isAccent: Boolean get() = indexInBar == 0
 }
 
-/** 악보 연동에서 박 번호가 가리키는 마디 안 위치와 그 마디의 박자·박 단위. */
-data class BarPosition(val indexInBar: Int, val timeSignature: TimeSignature, val dotted: Boolean = false)
+/**
+ * 악보 연동에서 박 번호가 가리키는 마디 안 위치와 그 마디의 박자·박 단위.
+ * [bpm] 은 구간별 빠르기(#057)가 있으면 그 박의 템포 — 이 박에서 다음 박까지의 간격을 정한다. null 이면 엔진 템포.
+ */
+data class BarPosition(
+    val indexInBar: Int,
+    val timeSignature: TimeSignature,
+    val dotted: Boolean = false,
+    val bpm: Double? = null,
+)
+
+/**
+ * 박 번호 → 박 0 부터의 경과 시간(초). 구간마다 템포가 다른 악보 연동에서 박 간격을 정한다 (#057).
+ * 박 번호에 대해 증가해야 하고, 음수 박 · 끝 너머 박에도 값을 내야 한다 (시간표가 앞뒤로 찾는다).
+ */
+fun interface BeatTimes {
+    fun secondsAt(beat: Long): Double
+}
 
 /**
  * 박 위치를 **샘플 단위로** 계산한다. 타이머(Handler·delay)가 아니라 오디오 스트림의 프레임 수로
@@ -46,7 +62,8 @@ class MetronomeClock(private val sampleRate: Int, startFrame: Long = 0) {
      *
      * @param dotted 겹박자를 점음표 박으로 센다 — [bpm] 도 점음표 기준
      * @param barPosition 박 번호 → 마디 안 위치와 그 마디 박자·박 단위. 주면 [timeSignature]·[dotted] 로 세는 대신 이것을 쓴다 —
-     *   악보 연동에서 박자표가 바뀌는 마디의 강박을 악보대로 맞춘다 ([ScoreFollower.barPositionAt]).
+     *   악보 연동에서 박자표가 바뀌는 마디의 강박을 악보대로 맞춘다 ([ScoreFollower.barPositionAt]). 그 박의 템포가 있으면
+     *   [bpm] 대신 그것으로 다음 박까지 간다 (구간별 빠르기, #057).
      */
     fun next(
         bpm: Int,
@@ -54,7 +71,7 @@ class MetronomeClock(private val sampleRate: Int, startFrame: Long = 0) {
         dotted: Boolean = false,
         barPosition: ((Long) -> BarPosition)? = null,
     ): Beat {
-        val tempo = bpm.coerceIn(MIN_BPM, MAX_BPM)
+        var tempo = bpm.coerceIn(MIN_BPM, MAX_BPM).toDouble()
         val index = nextBeatIndex++
 
         val meter: TimeSignature
@@ -65,6 +82,7 @@ class MetronomeClock(private val sampleRate: Int, startFrame: Long = 0) {
             meter = position.timeSignature.coerced()
             beatDotted = position.dotted
             inBar = position.indexInBar.coerceIn(0, meter.beatsPerBar(beatDotted) - 1)
+            position.bpm?.let { tempo = it.coerceIn(MIN_BPM.toDouble(), TempoSections.MAX_SECTION_BPM) }
         } else {
             meter = timeSignature.coerced()
             beatDotted = dotted
@@ -74,7 +92,7 @@ class MetronomeClock(private val sampleRate: Int, startFrame: Long = 0) {
             nextIndexInBar = (inBar + 1) % beats
         }
 
-        val beat = Beat(Math.round(nextFrame), inBar, meter, tempo, index, beatDotted)
+        val beat = Beat(Math.round(nextFrame), inBar, meter, Math.round(tempo).toInt(), index, beatDotted)
         nextFrame += sampleRate * 60.0 / tempo
         return beat
     }

@@ -8,6 +8,9 @@ import com.mrgq.pdfviewer.ensemble.EnsembleRun
 import com.mrgq.pdfviewer.ensemble.EnsembleSchedule
 import com.mrgq.pdfviewer.metronome.Accent
 import com.mrgq.pdfviewer.metronome.BarPosition
+import com.mrgq.pdfviewer.metronome.BeatTimes
+import com.mrgq.pdfviewer.metronome.TempoRelation
+import com.mrgq.pdfviewer.metronome.TempoSectionSetting
 import com.mrgq.pdfviewer.metronome.TimeSignature
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -104,6 +107,32 @@ class EnsembleSyncTest {
         assertEquals(10L, t.retimed(120, 10, newBarBeat = 10).barBeat)
     }
 
+    /** 박 0~9 는 1초, 10 부터 0.5초 간격 (구간별 빠르기, #057) */
+    private val twoTempos = BeatTimes { beat -> if (beat < 10) beat.toDouble() else 10.0 + (beat - 10) * 0.5 }
+
+    @Test
+    fun 구간별_빠르기면_박_간격이_BeatTimes_를_따른다() {
+        val t = BeatTimeline(anchorBeat = 0, anchorNs = 1_000 * ms, bpm = 60)
+        assertEquals(1_000 * ms, t.timeOf(0, twoTempos))
+        assertEquals(10_000 * ms, t.timeOf(9, twoTempos))
+        assertEquals("박 12 = 10초 + 0.5초 × 2, 기준 1초 뒤", 12_000 * ms, t.timeOf(12, twoTempos))
+        for (k in -20L..200L) {
+            assertEquals(k, t.beatAt(t.timeOf(k, twoTempos), twoTempos))
+            assertEquals(k - 1, t.beatAt(t.timeOf(k, twoTempos) - 1, twoTempos))
+        }
+        assertEquals("BeatTimes 가 없으면 bpm 으로", t.timeOf(12), t.timeOf(12, null))
+    }
+
+    @Test
+    fun 구간별_빠르기를_연주_중에_바꿔도_앞_박들의_시각은_그대로() {
+        val t = BeatTimeline(0, 0, 60)
+        val faster = BeatTimes { beat -> beat * 0.25 }
+        val r = t.retimed(newBpm = 60, fromBeat = 12, oldTimes = twoTempos)
+        assertEquals(t.timeOf(12, twoTempos), r.timeOf(12, faster))
+        assertEquals(t.timeOf(12, twoTempos) + 250 * ms, r.timeOf(13, faster))
+        assertEquals(13, r.beatAt(r.timeOf(13, faster), faster))
+    }
+
     // ── EnsembleSchedule ────────────────────────────────────────────────────
 
     @Test
@@ -122,6 +151,17 @@ class EnsembleSyncTest {
         assertEquals(listOf(4, 5, 0, 1, 2, 3, 4, 5, 0), (0L..8L).map { schedule.beatInfo(it).indexInBar })
         assertEquals(Accent.MEDIUM, schedule.beatInfo(5).accent)
         assertEquals(120, schedule.beatInfo(5).bpm)
+    }
+
+    @Test
+    fun 구간별_빠르기면_시간표와_박_템포가_함께_바뀐다() {
+        val schedule = EnsembleSchedule(BeatTimeline(0, 0, 60), TimeSignature(4, 4), false, twoTempos) { 0 }
+        assertEquals(11_000 * ms, schedule.localTimeOf(12))
+        assertEquals(12, schedule.beatAtLocal(11_200 * ms))
+        schedule.barPosition = { k -> BarPosition(0, TimeSignature(6, 8), bpm = if (k < 10) 60.0 else 120.0) }
+        assertEquals(120, schedule.beatInfo(12).bpm)
+        schedule.update(BeatTimeline(0, 0, 60), TimeSignature(4, 4), false, null)
+        assertEquals(12_000 * ms, schedule.localTimeOf(12))
     }
 
     @Test
@@ -150,6 +190,12 @@ class EnsembleSyncTest {
         assertEquals(run, CollaborationProtocol.parseMetronomeRun(wire(CollaborationProtocol.buildMetronomeRun(run))))
         val plain = run.copy(state = EnsembleRun.State.PLAYING, startMeasure = null, focusMeasure = null)
         assertEquals(plain, CollaborationProtocol.parseMetronomeRun(wire(CollaborationProtocol.buildMetronomeRun(plain))))
+        val sectioned = run.copy(
+            sections = listOf(TempoSectionSetting(33, TempoRelation.BEAT, 100, true), TempoSectionSetting(57, TempoRelation.SET, 132)),
+        )
+        assertEquals(sectioned, CollaborationProtocol.parseMetronomeRun(wire(CollaborationProtocol.buildMetronomeRun(sectioned))))
+        val empty = run.copy(sections = emptyList())
+        assertEquals("빈 구간 목록(박자가 안 바뀌는 곡)도 null 과 구별된다", empty, CollaborationProtocol.parseMetronomeRun(wire(CollaborationProtocol.buildMetronomeRun(empty))))
     }
 
     @Test
@@ -163,6 +209,7 @@ class EnsembleSyncTest {
         assertNull(parse(ok.replace("playing", "dancing")))
         assertNull(parse(ok.replace(",\"anchor_ns\":5", "")))
         assertNull(parse(ok.replace("\"run_id\":\"a\",", "")))
+        assertNull("구간을 모르는 지휘자(v0.2.4)", parsed.sections)
     }
 
     @Test

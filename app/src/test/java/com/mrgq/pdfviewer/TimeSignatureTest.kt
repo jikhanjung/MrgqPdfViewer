@@ -64,6 +64,12 @@ class TimeSignatureTest {
     }
 
     @Test
+    fun 첫_화면_박자는_상세에도_있다() {
+        assertTrue(TimeSignature.COMMON.containsAll(TimeSignature.PRIMARY))
+        TimeSignature.PRIMARY.forEach { assertEquals(it, it.coerced()) }
+    }
+
+    @Test
     fun 표시는_분자_분모() {
         assertEquals("6/8", TimeSignature(6, 8).toString())
         assertEquals("8분음표", TimeSignature(6, 8).beatNoteName())

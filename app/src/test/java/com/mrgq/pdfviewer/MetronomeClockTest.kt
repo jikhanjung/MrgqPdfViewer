@@ -136,6 +136,16 @@ class MetronomeClockTest {
     }
 
     @Test
+    fun 마디_위치에_템포가_있으면_그_박부터_다음_박까지_그_템포() {
+        val clock = MetronomeClock(sampleRate = 1000)
+        // 박 0~1 은 60 (1초), 박 2 부터 300 (0.2초 — 구간 템포는 MAX_BPM 240 을 넘을 수 있다)
+        val position = { k: Long -> BarPosition(0, ts(4), bpm = if (k < 2) 60.0 else 300.0) }
+        val beats = (0 until 5).map { clock.next(bpm = 120, timeSignature = ts(4), barPosition = position) }
+        assertEquals(listOf(0L, 1000L, 2000L, 2200L, 2400L), beats.map { it.frame })
+        assertEquals(300, beats[3].bpm)
+    }
+
+    @Test
     fun 클릭음은_35ms_이고_잘리지_않는다() {
         val accent = ClickSynth.render(rate, Accent.STRONG)
         assertEquals(rate * ClickSynth.DURATION_MS / 1000, accent.size)

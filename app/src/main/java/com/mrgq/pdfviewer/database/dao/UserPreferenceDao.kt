@@ -55,6 +55,10 @@ interface UserPreferenceDao {
         updatedAt: Long = System.currentTimeMillis(),
     )
 
+    /** 구간별 빠르기 (v13, #057) — 둘째 구간부터의 설정 JSON. null = 모두 기본 (음표 길이 그대로) */
+    @Query("UPDATE user_preferences SET metronomeSections = :sections, updatedAt = :updatedAt WHERE pdfFileId = :pdfFileId")
+    suspend fun updateMetronomeSections(pdfFileId: String, sections: String?, updatedAt: Long = System.currentTimeMillis())
+
     @Query("SELECT COUNT(*) FROM user_preferences")
     suspend fun getUserPreferenceCount(): Int
 }

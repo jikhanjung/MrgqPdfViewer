@@ -3,6 +3,7 @@ package com.mrgq.pdfviewer
 import com.google.gson.JsonObject
 import com.mrgq.pdfviewer.ensemble.BeatTimeline
 import com.mrgq.pdfviewer.ensemble.EnsembleRun
+import com.mrgq.pdfviewer.metronome.TempoSections
 import com.mrgq.pdfviewer.metronome.TimeSignature
 
 /**
@@ -47,6 +48,8 @@ object CollaborationProtocol {
     const val KEY_DOTTED = "dotted"
     const val KEY_START_MEASURE = "start_measure"
     const val KEY_FOCUS_MEASURE = "focus_measure"
+    /** 구간별 빠르기 (#057) — 악보 연동일 때만. 없으면 구간을 모르는 지휘자 */
+    const val KEY_SECTIONS = "tempo_sections"
 
     // ── 액션 ────────────────────────────────────────────────────────────────
     const val ACTION_PAGE_CHANGE = "page_change"
@@ -134,6 +137,7 @@ object CollaborationProtocol {
         addProperty(KEY_DOTTED, run.dotted)
         run.startMeasure?.let { addProperty(KEY_START_MEASURE, it) }
         run.focusMeasure?.let { addProperty(KEY_FOCUS_MEASURE, it) }
+        run.sections?.let { add(KEY_SECTIONS, TempoSections.toJson(it)) }
     }
 
     /**
@@ -159,6 +163,7 @@ object CollaborationProtocol {
             dotted = json.optBoolean(KEY_DOTTED),
             startMeasure = json.optLong(KEY_START_MEASURE)?.toInt(),
             focusMeasure = json.optLong(KEY_FOCUS_MEASURE)?.toInt(),
+            sections = json.get(KEY_SECTIONS)?.takeIf { it.isJsonArray }?.let { TempoSections.fromJson(it) },
         )
     }
 

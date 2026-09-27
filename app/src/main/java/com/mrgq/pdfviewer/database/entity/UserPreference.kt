@@ -25,6 +25,9 @@ data class UserPreference(
     val metronomeBeatsPerBar: Int? = null, // 메트로놈 마디당 박 수 = 박자표 분자 (v7). 첫 박 강조
     val metronomeBeatUnit: Int? = null,  // 메트로놈 박 단위 = 박자표 분모 (v10). null = 고른 적 없음 → 악보 박자표로 채운다
     val metronomeDottedBeat: Boolean? = null, // 겹박자를 점음표 박으로 센다 (v11). null = 분모 음표로 (기본)
+    // 구간별 빠르기 (v13, #057) — 악보 박자가 바뀌는 둘째 구간부터의 설정 JSON (TempoSections). 첫 구간은 위의 템포 · 점음표 박.
+    // null = 모두 기본 (음표 길이 그대로 · 분모 음표로 세기)
+    val metronomeSections: String? = null,
     val updatedAt: Long = System.currentTimeMillis()
 )
 

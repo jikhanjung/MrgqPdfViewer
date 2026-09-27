@@ -1,5 +1,6 @@
 package com.mrgq.pdfviewer.ensemble
 
+import com.mrgq.pdfviewer.metronome.TempoSectionSetting
 import com.mrgq.pdfviewer.metronome.TimeSignature
 
 /**
@@ -10,6 +11,8 @@ import com.mrgq.pdfviewer.metronome.TimeSignature
  * @param startMeasure 악보 연동이면 시작 마디, 일반 메트로놈이면 null
  * @param focusMeasure 연주자 화면에 파란 상자로 보일 마디 — [State.PAUSED] 면 멈춘 마디, [State.SELECTING] 이면 지휘자의 커서
  *   ([State.SELECTING] 에서는 [timeline] 을 쓰지 않는다)
+ * @param sections 구간별 빠르기 (#057) — 악보 연동일 때 둘째 구간부터의 설정. 첫 구간은 [timeline] 의 bpm · [dotted].
+ *   연주자는 이것과 자기 악보로 지휘자와 같은 박 시각을 만든다. null 이면 구간을 모르는 지휘자(v0.2.4) — 박 길이 일정
  */
 data class EnsembleRun(
     val runId: String,
@@ -20,6 +23,7 @@ data class EnsembleRun(
     val dotted: Boolean,
     val startMeasure: Int?,
     val focusMeasure: Int? = null,
+    val sections: List<TempoSectionSetting>? = null,
 ) {
     enum class State(val wire: String) {
         PLAYING("playing"), PAUSED("paused"), SELECTING("selecting"), STOPPED("stopped");

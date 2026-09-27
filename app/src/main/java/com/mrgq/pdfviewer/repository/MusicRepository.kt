@@ -7,6 +7,8 @@ import com.mrgq.pdfviewer.database.entity.PdfFile
 import com.mrgq.pdfviewer.database.entity.ScoreMeasure
 import com.mrgq.pdfviewer.score.ScoreLayoutStore
 import com.mrgq.pdfviewer.database.entity.UserPreference
+import com.mrgq.pdfviewer.metronome.TempoSectionSetting
+import com.mrgq.pdfviewer.metronome.TempoSections
 import kotlinx.coroutines.flow.Flow
 
 class MusicRepository(context: Context) {
@@ -110,6 +112,12 @@ class MusicRepository(context: Context) {
     suspend fun setMetronomeForFile(pdfFileId: String, bpm: Int, beatsPerBar: Int, beatUnit: Int, dottedBeat: Boolean) {
         getOrCreateUserPreference(pdfFileId)
         userPreferenceDao.updateMetronome(pdfFileId, bpm, beatsPerBar, beatUnit, dottedBeat)
+    }
+
+    /** 이 파일의 구간별 빠르기 (둘째 구간부터, #057). 설정 행이 없으면 먼저 만든다. */
+    suspend fun setMetronomeSectionsForFile(pdfFileId: String, sections: List<TempoSectionSetting>) {
+        getOrCreateUserPreference(pdfFileId)
+        userPreferenceDao.updateMetronomeSections(pdfFileId, TempoSections.encode(sections))
     }
 
     suspend fun setLastPageForFile(pdfFileId: String, pageNumber: Int) {

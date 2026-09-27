@@ -50,7 +50,7 @@ class ScoreOverlayView @JvmOverloads constructor(
     private val focusFill = Paint().apply { style = Paint.Style.FILL }
     private val focusStroke = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.STROKE
-        strokeWidth = 6f
+        strokeWidth = CURSOR_STROKE_WIDTH
     }
 
     init {
@@ -95,15 +95,18 @@ class ScoreOverlayView @JvmOverloads constructor(
             FocusStyle.CURSOR -> {
                 focusFill.color = CURSOR_FILL
                 focusStroke.color = CURSOR_STROKE
+                focusStroke.strokeWidth = CURSOR_STROKE_WIDTH
             }
             FocusStyle.CURRENT -> {
                 focusFill.color = CURRENT_FILL
                 focusStroke.color = CURRENT_STROKE
+                focusStroke.strokeWidth = CURRENT_STROKE_WIDTH
             }
         }
         canvas.drawRect(rect, focusFill)
         canvas.drawRect(rect, focusStroke)
-        drawLabel(canvas, current.measureNumber, focusStroke.color)
+        // 번호표는 테두리가 반투명이어도 읽히게 불투명으로
+        drawLabel(canvas, current.measureNumber, focusStroke.color or 0xFF000000.toInt())
     }
 
     private fun mapToView(box: OverlayBox) {
@@ -129,6 +132,9 @@ class ScoreOverlayView @JvmOverloads constructor(
         val CURSOR_FILL = 0x331E88E5
         val CURSOR_STROKE = 0xFF1E88E5.toInt()
         val CURRENT_FILL = 0x4DFFC107
-        val CURRENT_STROKE = 0xFFFF9800.toInt()
+        /** 연주 중 마디 테두리 — 악보를 가리지 않게 가늘고 반투명하게 (사용자 요청, #057) */
+        val CURRENT_STROKE = 0x99FF9800.toInt()
+        const val CURRENT_STROKE_WIDTH = 3f
+        const val CURSOR_STROKE_WIDTH = 6f
     }
 }

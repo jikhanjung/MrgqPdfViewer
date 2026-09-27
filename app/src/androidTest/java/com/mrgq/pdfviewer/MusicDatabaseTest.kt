@@ -153,6 +153,12 @@ class MusicDatabaseTest {
         assertEquals(true, loaded.metronomeDottedBeat)
         assertEquals(DisplayMode.DOUBLE, loaded.displayMode)
         assertEquals(0.05f, loaded.topClippingPercent, 1e-6f)
+
+        // 구간별 빠르기 (v13) — 다른 메트로놈 값을 건드리지 않는다
+        prefDao.updateMetronomeSections("file-1", "[{\"m\":33,\"rel\":\"beat\",\"bpm\":120,\"dotted\":true}]")
+        val withSections = prefDao.getUserPreference("file-1")!!
+        assertEquals(72, withSections.metronomeBpm)
+        assertEquals("[{\"m\":33,\"rel\":\"beat\",\"bpm\":120,\"dotted\":true}]", withSections.metronomeSections)
     }
 
     @Test

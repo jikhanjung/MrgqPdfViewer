@@ -58,8 +58,11 @@ data class TimeSignature(val numerator: Int, val denominator: Int) {
         /** 고를 수 있는 박 단위 */
         val DENOMINATORS = listOf(2, 4, 8, 16)
 
+        /** 메트로놈 대화상자 첫 화면의 박자 버튼 — 나머지는 "박자 상세"에서 고른다 */
+        val PRIMARY = listOf(TimeSignature(2, 4), TimeSignature(3, 4), TimeSignature(4, 4), TimeSignature(6, 8))
+
         /**
-         * 대화상자에 미리 보이는 박자 — 흔한 순서. 곡 수 기준의 믿을 만한 코퍼스 통계는 찾지 못했고, 음악 이론 자료들이
+         * "박자 상세"에 미리 보이는 박자 — 흔한 순서. 곡 수 기준의 믿을 만한 코퍼스 통계는 찾지 못했고, 음악 이론 자료들이
          * 공통으로 드는 순서를 따랐다: 4/4 가 압도적, 그다음 3/4 · 2/4 · 6/8, 이어서 2/2(알라 브레베) · 12/8 · 3/8 · 9/8,
          * 홀수 박자 중 가장 흔한 5/4 (#051).
          */
