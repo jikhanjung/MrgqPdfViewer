@@ -194,6 +194,8 @@ class EnsembleSyncTest {
             sections = listOf(TempoSectionSetting(33, TempoRelation.BEAT, 100, true), TempoSectionSetting(57, TempoRelation.SET, 132)),
         )
         assertEquals(sectioned, CollaborationProtocol.parseMetronomeRun(wire(CollaborationProtocol.buildMetronomeRun(sectioned))))
+        val twoBars = run.copy(countInBars = 2)
+        assertEquals(twoBars, CollaborationProtocol.parseMetronomeRun(wire(CollaborationProtocol.buildMetronomeRun(twoBars))))
         val empty = run.copy(sections = emptyList())
         assertEquals("빈 구간 목록(박자가 안 바뀌는 곡)도 null 과 구별된다", empty, CollaborationProtocol.parseMetronomeRun(wire(CollaborationProtocol.buildMetronomeRun(empty))))
     }
@@ -210,6 +212,7 @@ class EnsembleSyncTest {
         assertNull(parse(ok.replace(",\"anchor_ns\":5", "")))
         assertNull(parse(ok.replace("\"run_id\":\"a\",", "")))
         assertNull("구간을 모르는 지휘자(v0.2.4)", parsed.sections)
+        assertEquals("예비박을 고를 수 없던 지휘자(v0.2.5)는 한 마디", 1, parsed.countInBars)
     }
 
     @Test

@@ -35,6 +35,18 @@ class ScoreFollowerTest {
     }
 
     @Test
+    fun 예비박이_두_마디면_마디마다_다시_세고_남은_마디를_알려준다() {
+        val follower = ScoreFollower(listOf(measure(1, 3, 4), measure(2, 3, 4)), startMeasureNumber = 1, countInBars = 2)
+        assertEquals(6, follower.countInBeats)
+        assertEquals(Position.CountIn(0, TimeSignature(3, 4), barsLeft = 2), follower.positionAt(0))
+        assertEquals(Position.CountIn(2, TimeSignature(3, 4), barsLeft = 2), follower.positionAt(2))
+        assertEquals("둘째 예비박 마디는 첫 박부터 다시", Position.CountIn(0, TimeSignature(3, 4), barsLeft = 1), follower.positionAt(3))
+        assertEquals(BarPosition(0, TimeSignature(3, 4)), follower.barPositionAt(3))
+        assertEquals(1, measureOf(follower.positionAt(6)))
+        assertEquals(2, measureOf(follower.positionAt(9)))
+    }
+
+    @Test
     fun 박자가_바뀌면_마디_길이도_바뀐다() {
         val follower = ScoreFollower(listOf(measure(1, 3, 4), measure(2, 2, 4), measure(3, 2, 4)), startMeasureNumber = 1)
         assertEquals(3, follower.countInBeats)

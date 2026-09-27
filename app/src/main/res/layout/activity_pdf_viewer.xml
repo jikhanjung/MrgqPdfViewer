@@ -45,6 +45,23 @@
         app:layout_constraintTop_toTopOf="parent"
         app:layout_constraintStart_toStartOf="parent" />
 
+    <!-- 악보 연동 예비박: 남은 마디 수를 화면 가운데에 크게 (노래방처럼 2 → 1, #060). 예비박 동안에만 -->
+    <TextView
+        android:id="@+id/countInNumber"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:textSize="240sp"
+        android:textStyle="bold"
+        android:textColor="#D9FF9800"
+        android:shadowColor="#99000000"
+        android:shadowRadius="24"
+        android:includeFontPadding="false"
+        android:visibility="gone"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent" />
+
     <TextView
         android:id="@+id/pageInfo"
         android:layout_width="wrap_content"

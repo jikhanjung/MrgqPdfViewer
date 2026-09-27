@@ -44,6 +44,10 @@ class GlobalCollaborationManager private constructor() {
     private var onConductorDiscovered: ((ConductorDiscovery.ConductorInfo) -> Unit)? = null
     private var onDiscoveryTimeout: (() -> Unit)? = null
     private var onAutoConnectionResult: ((Boolean, String) -> Unit)? = null
+    /** 합주 상대와 앱 버전이 다르다 (#061). 화면(액티비티)이 onResume 에서 등록 — 없으면 토스트 */
+    private var onVersionMismatch: ((String) -> Unit)? = null
+    /** 이미 알린 안내 — 재연결마다 같은 안내를 다시 띄우지 않는다 (앱을 끄면 다시) */
+    private val shownVersionNotices = java.util.Collections.synchronizedSet(mutableSetOf<String>())
     
     private var isInitialized = false
     
@@ -211,6 +215,8 @@ class GlobalCollaborationManager private constructor() {
                     } ?: Log.w(TAG, "🎯 No server client connected callback set!")
                 }
                 
+                setOnVersionMismatch { message -> notifyVersionMismatch(message) }
+
                 setOnClientDisconnected { clientId ->
                     Log.d(TAG, "🎯 Server: Client disconnected: $clientId")
                     onServerClientDisconnected?.let { callback ->
@@ -273,6 +279,7 @@ class GlobalCollaborationManager private constructor() {
                 },
                 onMetronomeRunReceived = { run -> onMetronomeRunReceived?.invoke(run) },
                 onClockSynced = { onClockSynced?.invoke() },
+                onVersionMismatch = { message -> notifyVersionMismatch(message) },
             )
             
             // Initialize conductor discovery for performer mode
@@ -420,6 +427,23 @@ class GlobalCollaborationManager private constructor() {
         onDiscoveryTimeout = callback
     }
     
+    /** 합주 상대와 버전이 다를 때 보일 곳 (#061). null 이면 토스트 */
+    fun setOnVersionMismatch(callback: ((String) -> Unit)?) {
+        onVersionMismatch = callback
+    }
+
+    private fun notifyVersionMismatch(message: String) {
+        if (!shownVersionNotices.add(message)) return
+        android.os.Handler(android.os.Looper.getMainLooper()).post {
+            val callback = onVersionMismatch
+            if (callback != null) {
+                callback(message)
+            } else {
+                applicationContext?.let { Toast.makeText(it, message, Toast.LENGTH_LONG).show() }
+            }
+        }
+    }
+
     fun setOnAutoConnectionResult(callback: (Boolean, String) -> Unit) {
         onAutoConnectionResult = callback
     }

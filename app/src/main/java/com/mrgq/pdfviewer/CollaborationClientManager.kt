@@ -25,6 +25,8 @@ class CollaborationClientManager(
     private val onMetronomeRunReceived: ((EnsembleRun) -> Unit)? = null,
     /** 시계 동기 표본을 처음 얻었을 때 — 기다리던 합주 메트로놈을 시작할 수 있다 */
     private val onClockSynced: (() -> Unit)? = null,
+    /** 지휘자와 앱 버전이 다르다 (#061) — 보일 안내문 */
+    private val onVersionMismatch: ((String) -> Unit)? = null,
 ) {
 
     /** 지휘자 시계와의 차이 (#055) */
@@ -217,6 +219,12 @@ class CollaborationClientManager(
                 }
                 "connect_response" -> {
                     val status = json.get("status")?.asString
+                    // 버전 확인 (#061): 새 지휘자는 app_version, 옛 지휘자(v0.2.5 이하)는 server_version 에 "v0.1.5" 고정
+                    val conductorVersion = json.get("app_version")?.asString ?: json.get("server_version")?.asString
+                    com.mrgq.pdfviewer.ensemble.EnsembleVersion.check(BuildConfig.VERSION_NAME, conductorVersion)?.let {
+                        Log.w(TAG, "지휘자와 버전이 다르다: $it")
+                        onVersionMismatch?.invoke(com.mrgq.pdfviewer.ensemble.EnsembleVersion.performerMessage(it))
+                    }
                     if (status == "success") {
                         isConnected.set(true)
                         reconnectAttempts.set(0)
@@ -291,7 +299,7 @@ class CollaborationClientManager(
                 addProperty("action", "client_connect")
                 addProperty("device_id", clientId)
                 addProperty("device_name", deviceName)
-                addProperty("app_version", "v0.1.5") // This should be dynamic
+                addProperty("app_version", BuildConfig.VERSION_NAME) // 지휘자가 버전을 비교한다 (#061). v0.2.5 까지는 "v0.1.5" 고정
             }
             
             webSocket.send(connectMessage.toString())

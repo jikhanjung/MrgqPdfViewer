@@ -5,7 +5,8 @@ import com.mrgq.pdfviewer.database.entity.ScoreMeasure
 /**
  * 메트로놈 박 번호를 악보 위치로 옮긴다 (#050).
  *
- * 박 0 부터 **시작 마디의 박자로 예비박 한 마디**를 세고, 그다음부터 각 마디의 박 수만큼 박을 센다.
+ * 박 0 부터 **시작 마디의 박자로 예비박 [countInBars] 마디**를 세고, 그다음부터 각 마디의 박 수만큼 박을 센다.
+ * 예비박은 앱 기본 두 마디, 설정에서 한 마디 (#060) — 이 클래스의 기본값 1 은 옛 동작(테스트 · 옛 지휘자)이다.
  * 박자표가 비어 있는 마디는 앞 마디의 박자를 이어 쓴다. 반복 기호는 따르지 않는다 (악보에 적힌 순서대로).
  *
  * 박은 박자표 분모 음표 하나다 — 6/8 이면 한 마디에 8분음표 6박. [dottedBeat] 면 겹박자 마디는 점음표 박으로 센다
@@ -22,11 +23,14 @@ class ScoreFollower(
     startMeasureNumber: Int,
     private val dottedBeat: Boolean = false,
     sections: List<TempoSection> = emptyList(),
+    /** 예비박 마디 수 (1 이상) */
+    countInBars: Int = 1,
 ) {
 
     sealed interface Position {
-        /** 예비박 [beatInBar] 번째 (0부터) */
-        data class CountIn(val beatInBar: Int, val timeSignature: TimeSignature) : Position
+        /** 예비박 마디 안 [beatInBar] 번째 (0부터 — 예비박이 두 마디면 마디마다 다시 0부터) */
+        /** [barsLeft] = 이 마디를 포함해 남은 예비박 마디 수 — 화면 가운데에 크게 (2 → 1, #060) */
+        data class CountIn(val beatInBar: Int, val timeSignature: TimeSignature, val barsLeft: Int = 1) : Position
 
         /** [measure] 의 [beatInMeasure] 번째 박. [next] 는 다음 마디 (마지막이면 null) — 미리 넘기기에 쓴다 */
         data class InMeasure(
@@ -62,8 +66,11 @@ class ScoreFollower(
     /** 시작 마디의 템포 (구간별 빠르기가 없으면 null) — 예비박도 이 템포 */
     val startBpm: Double?
 
-    /** 예비박 수 = 시작 마디 박 수 */
-    val countInBeats: Int get() = startTimeSignature.beatsPerBar(startDotted)
+    /** 예비박 마디 수 */
+    val countInBars: Int = countInBars.coerceAtLeast(1)
+
+    /** 예비박 수 = 시작 마디 박 수 × 예비박 마디 수 */
+    val countInBeats: Int get() = startTimeSignature.beatsPerBar(startDotted) * countInBars
 
     init {
         val ordered = measures.sortedBy { it.measureNumber }
@@ -140,7 +147,11 @@ class ScoreFollower(
             countInBeats == other.countInBeats && meters.contentEquals(other.meters) && dotteds.contentEquals(other.dotteds)
 
     fun positionAt(beatIndex: Long): Position {
-        if (beatIndex < countInBeats) return Position.CountIn(beatIndex.coerceAtLeast(0).toInt(), startTimeSignature)
+        if (beatIndex < countInBeats) {
+            val barBeats = startTimeSignature.beatsPerBar(startDotted)
+            val beat = beatIndex.coerceAtLeast(0)
+            return Position.CountIn((beat % barBeats).toInt(), startTimeSignature, countInBars - (beat / barBeats).toInt())
+        }
         if (beatIndex >= totalBeats) return Position.Finished
         val i = measureIndexAt(beatIndex)
         return Position.InMeasure(

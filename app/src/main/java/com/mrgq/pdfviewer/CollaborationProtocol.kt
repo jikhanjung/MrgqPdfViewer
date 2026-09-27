@@ -50,6 +50,8 @@ object CollaborationProtocol {
     const val KEY_FOCUS_MEASURE = "focus_measure"
     /** 구간별 빠르기 (#057) — 악보 연동일 때만. 없으면 구간을 모르는 지휘자 */
     const val KEY_SECTIONS = "tempo_sections"
+    /** 예비박 마디 수 (#060). 없으면 1 */
+    const val KEY_COUNT_IN_BARS = "count_in_bars"
 
     // ── 액션 ────────────────────────────────────────────────────────────────
     const val ACTION_PAGE_CHANGE = "page_change"
@@ -138,6 +140,7 @@ object CollaborationProtocol {
         run.startMeasure?.let { addProperty(KEY_START_MEASURE, it) }
         run.focusMeasure?.let { addProperty(KEY_FOCUS_MEASURE, it) }
         run.sections?.let { add(KEY_SECTIONS, TempoSections.toJson(it)) }
+        addProperty(KEY_COUNT_IN_BARS, run.countInBars)
     }
 
     /**
@@ -164,6 +167,7 @@ object CollaborationProtocol {
             startMeasure = json.optLong(KEY_START_MEASURE)?.toInt(),
             focusMeasure = json.optLong(KEY_FOCUS_MEASURE)?.toInt(),
             sections = json.get(KEY_SECTIONS)?.takeIf { it.isJsonArray }?.let { TempoSections.fromJson(it) },
+            countInBars = json.optInt(KEY_COUNT_IN_BARS, 1).coerceIn(1, 2),
         )
     }
 

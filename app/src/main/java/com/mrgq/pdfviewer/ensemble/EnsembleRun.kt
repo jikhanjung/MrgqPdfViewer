@@ -13,6 +13,8 @@ import com.mrgq.pdfviewer.metronome.TimeSignature
  *   ([State.SELECTING] 에서는 [timeline] 을 쓰지 않는다)
  * @param sections 구간별 빠르기 (#057) — 악보 연동일 때 둘째 구간부터의 설정. 첫 구간은 [timeline] 의 bpm · [dotted].
  *   연주자는 이것과 자기 악보로 지휘자와 같은 박 시각을 만든다. null 이면 구간을 모르는 지휘자(v0.2.4) — 박 길이 일정
+ * @param countInBars 악보 연동의 예비박 마디 수 (#060) — 연주자가 같은 수로 세야 박 번호가 같은 마디를 가리킨다.
+ *   필드가 없으면 1 (예비박을 고를 수 없던 지휘자, v0.2.5 까지)
  */
 data class EnsembleRun(
     val runId: String,
@@ -24,6 +26,7 @@ data class EnsembleRun(
     val startMeasure: Int?,
     val focusMeasure: Int? = null,
     val sections: List<TempoSectionSetting>? = null,
+    val countInBars: Int = 1,
 ) {
     enum class State(val wire: String) {
         PLAYING("playing"), PAUSED("paused"), SELECTING("selecting"), STOPPED("stopped");

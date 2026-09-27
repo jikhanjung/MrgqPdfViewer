@@ -1082,8 +1082,14 @@ class SettingsActivity : AppCompatActivity() {
             .show()
     }
     
+    override fun onPause() {
+        super.onPause()
+        com.mrgq.pdfviewer.ensemble.VersionNotice.detach()
+    }
+
     override fun onResume() {
         super.onResume()
+        com.mrgq.pdfviewer.ensemble.VersionNotice.attach(this) // 합주 상대와 버전이 다르면 대화상자로 (#061)
         updateController.onResume()
         checkWebServerStatus()
         // 메인 화면으로 돌아올 때 전체 메뉴를 다시 로드하여 웹서버 상태 반영

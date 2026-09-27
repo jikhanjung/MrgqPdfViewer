@@ -179,6 +179,7 @@ class MainActivity : AppCompatActivity() {
     
     override fun onResume() {
         super.onResume()
+        com.mrgq.pdfviewer.ensemble.VersionNotice.attach(this) // 합주 상대와 버전이 다르면 대화상자로 (#061)
         updateController.onResume()
         scheduleAutoUpdateCheck()
         
@@ -556,6 +557,7 @@ class MainActivity : AppCompatActivity() {
     
     override fun onPause() {
         super.onPause()
+        com.mrgq.pdfviewer.ensemble.VersionNotice.detach()
         // Note: 웹서버 관리는 이제 설정 화면에서 담당
     }
     

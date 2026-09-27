@@ -67,6 +67,9 @@ class PdfViewerActivity : AppCompatActivity() {
         // 메트로놈 클릭음 설정 (전역). 템포·박자는 파일별로 DB 에 저장한다
         private const val PREF_METRONOME_SOUND = "metronome_sound_enabled"
         private const val PREF_METRONOME_VOLUME = "metronome_volume"
+        /** 악보 연동 예비박 마디 수 — 기본 2, 1 도 고를 수 있다 (전역, #060) */
+        private const val PREF_METRONOME_COUNT_IN_BARS = "metronome_count_in_bars"
+        private const val DEFAULT_COUNT_IN_BARS = 2
 
         /** 악보 연동 자동 넘김: 페이지 마지막 마디가 끝나기 몇 박 전에 넘길지 */
         private const val TURN_LEAD_BEATS = 2
@@ -160,7 +163,7 @@ class PdfViewerActivity : AppCompatActivity() {
         }
     }
 
-    // 메트로놈 악보 연동 (#050): 시작 마디 고르기 → 예비박 한 마디 → 현재 마디 표시 + 자동 넘김
+    // 메트로놈 악보 연동 (#050): 시작 마디 고르기 → 예비박(기본 두 마디, #060) → 현재 마디 표시 + 자동 넘김
     // PAUSED (#053): 연주 중 메뉴(↑ 메트로놈 메뉴, OK 길게 PDF 표시 옵션)를 띄우면 멈추고, 메뉴를 모두 닫으면 다음 동작을 고른다
     private enum class FollowState { OFF, SELECTING, PLAYING, PAUSED }
     private var followState = FollowState.OFF
@@ -2270,12 +2273,22 @@ class PdfViewerActivity : AppCompatActivity() {
                 setTextColor(0xFFFFD54F.toInt())
                 setPadding(0, 4, 0, 4)
             }
+            // 예비박: 악보 연동에서 시작 마디 앞에 몇 마디를 셀지 (기본 2, 전역 설정 — #060)
+            val countInLabel = label().apply { text = "예비박 (악보 연동으로 시작할 때 · 모든 파일 공통)" }
+            val countInButtons = listOf(1, 2).associateWith { android.widget.Button(this).apply { isAllCaps = false } }
+            val countInRow = buttonRow().apply { countInButtons.values.forEach { addView(it) } }
+            countInButtons.forEach { (bars, button) ->
+                button.setOnClickListener {
+                    preferences.edit().putInt(PREF_METRONOME_COUNT_IN_BARS, bars).apply()
+                    render()
+                }
+            }
             val scoreHint = if (scoreMeter != null) "악보에서 읽은 박자표는 $scoreMeter 입니다. " else ""
             val hint = hintText(
                 scoreHint + "박은 박자표 아래 숫자의 음표이고 BPM 도 그 음표 기준입니다(6/8 이면 8분음표). " +
                     "6/8 같은 겹박자는 점음표로 셀 수도 있습니다(6/8 이면 점4분음표 2박).\n" +
                     "악보에서 박자표를 읽을 수 있으면 처음엔 그 박자로 채워집니다. 시작을 누른 뒤 악보에서 시작 마디를 고르면 " +
-                    "한 마디 예비박 후 현재 마디를 표시하며 페이지를 넘기고, 이때 마디 길이와 강박은 악보 박자표를 따릅니다."
+                    "예비박 뒤(화면 가운데에 남은 마디 수) 현재 마디를 표시하며 페이지를 넘기고, 이때 마디 길이와 강박은 악보 박자표를 따릅니다."
             )
 
             numeratorSeek.onProgress { selectMeter(TimeSignature(MetronomeClock.MIN_BEATS + it, meter.denominator)) }
@@ -2285,8 +2298,10 @@ class PdfViewerActivity : AppCompatActivity() {
             dottedButton.setOnClickListener { selectDotted(true) }
 
             val views = listOf<View>(accentLabel) + presetRows +
-                listOf(numeratorLabel, numeratorSeek, denominatorRow, beatUnitLabel, beatUnitRow, beatUnitHint, hint)
+                listOf(numeratorLabel, numeratorSeek, denominatorRow, beatUnitLabel, beatUnitRow, beatUnitHint, countInLabel, countInRow, hint)
             detailDialog("박자 상세", views) {
+                val countIn = countInBarsSetting()
+                countInButtons.forEach { (bars, button) -> button.text = (if (bars == countIn) "✓ " else "") + "${bars}마디" }
                 val beats = meter.beatsPerBar(dotted)
                 val medium = (1 until beats).filter { meter.accentAt(it, dotted) == Accent.MEDIUM }
                 val accents = if (medium.isEmpty()) {
@@ -2617,6 +2632,7 @@ class PdfViewerActivity : AppCompatActivity() {
         metronome.barPosition = null
         binding.metronomeBeat.removeCallbacks(metronomeTicker)
         binding.metronomeBeat.visibility = View.GONE
+        showCountIn(null)
         metronomeFileId = null
         if (followState != FollowState.OFF) {
             val fileId = followFileId
@@ -2662,6 +2678,7 @@ class PdfViewerActivity : AppCompatActivity() {
             dotted = metronome.dottedBeat,
             startMeasure = if (following) followMeasure?.measureNumber else null,
             sections = if (following) followTempo?.third.orEmpty() else null,
+            countInBars = if (following) follower?.countInBars ?: 1 else 1,
         )
         binding.root.removeCallbacks(ensembleRebroadcast)
         ensembleRebroadcast.run()
@@ -2844,7 +2861,7 @@ class PdfViewerActivity : AppCompatActivity() {
      */
     private fun ensembleFollower(run: EnsembleRun, startable: List<ScoreMeasure>, startMeasure: Int): ScoreFollower {
         val sections = run.sections?.let { TempoSections.forFollowing(startable, run.timeline.bpm, run.dotted, it) }.orEmpty()
-        return ScoreFollower(startable, startMeasure, run.dotted, sections)
+        return ScoreFollower(startable, startMeasure, run.dotted, sections, run.countInBars)
     }
 
     /**
@@ -2883,6 +2900,7 @@ class PdfViewerActivity : AppCompatActivity() {
             metronome.barPosition = null
             binding.metronomeBeat.removeCallbacks(metronomeTicker)
             binding.metronomeBeat.visibility = View.GONE
+            showCountIn(null)
         }
         if (followState == FollowState.SELECTING) cancelMeasureSelection()
         follower = null
@@ -3093,6 +3111,7 @@ class PdfViewerActivity : AppCompatActivity() {
         metronome.barPosition = null
         binding.metronomeBeat.removeCallbacks(metronomeTicker)
         binding.metronomeBeat.visibility = View.GONE
+        showCountIn(null)
         follower = null
         followInCountIn = false
         cursorIndex = followMeasures.indexOfFirst { it.measureNumber == at?.measureNumber }.coerceAtLeast(0)
@@ -3106,7 +3125,7 @@ class PdfViewerActivity : AppCompatActivity() {
         refreshScoreOverlay()
     }
 
-    /** 이어서 — 멈춘 마디의 처음부터, 시작할 때처럼 한 마디 예비박 뒤 */
+    /** 이어서 — 멈춘 마디의 처음부터, 시작할 때처럼 예비박(기본 두 마디) 뒤 */
     private fun resumeFollowing() {
         if (followState == FollowState.PAUSED) startFollowing()
     }
@@ -3136,7 +3155,7 @@ class PdfViewerActivity : AppCompatActivity() {
         val paused = followState == FollowState.PAUSED
         when {
             paused -> {
-                items += "이어서 — ${followMeasure?.measureNumber}번 마디부터 (예비박 한 마디 뒤)" to { resumeFollowing() }
+                items += "이어서 — ${followMeasure?.measureNumber}번 마디부터 (예비박 ${countInBarsSetting()}마디 뒤)" to { resumeFollowing() }
                 items += "마디 골라 다시 시작" to { reselectFromPause() }
                 items += "정지" to { stopMetronome() }
             }
@@ -3215,7 +3234,7 @@ class PdfViewerActivity : AppCompatActivity() {
         // 구간별 빠르기 (#057) — 첫 구간은 엔진의 템포 · 세는 단위, 둘째 구간부터는 이 파일의 구간 설정
         val tempo = Triple(metronome.bpm, metronome.dottedBeat, sectionSettingsFor(followFileId))
         val sections = TempoSections.forFollowing(followMeasures, tempo.first, tempo.second, tempo.third)
-        val scoreFollower = ScoreFollower(followMeasures, start.measureNumber, metronome.dottedBeat, sections)
+        val scoreFollower = ScoreFollower(followMeasures, start.measureNumber, metronome.dottedBeat, sections, countInBarsSetting())
         follower = scoreFollower
         followStartMeasure = start.measureNumber
         followTempo = tempo
@@ -3243,7 +3262,7 @@ class PdfViewerActivity : AppCompatActivity() {
         if (tempo == followTempo) return
         val sections = TempoSections.forFollowing(followMeasures, tempo.first, tempo.second, tempo.third)
         if (sections.isEmpty()) return
-        val next = ScoreFollower(followMeasures, start, tempo.second, sections)
+        val next = ScoreFollower(followMeasures, start, tempo.second, sections, current.countInBars)
         if (!next.sameBeatsAs(current)) {
             if (!followTempoDeferredNotice) {
                 followTempoDeferredNotice = true
@@ -3256,13 +3275,30 @@ class PdfViewerActivity : AppCompatActivity() {
         metronome.barPosition = { index -> next.barPositionAt(index) }
     }
 
+    /** 악보 연동 예비박 마디 수 (설정, 기본 2 — #060) */
+    private fun countInBarsSetting(): Int =
+        preferences.getInt(PREF_METRONOME_COUNT_IN_BARS, DEFAULT_COUNT_IN_BARS).coerceIn(1, 2)
+
+    /** 예비박 동안 화면 가운데에 남은 마디 수를 크게 (노래방처럼 2 → 1, #060). null 이면 숨긴다 */
+    private fun showCountIn(barsLeft: Int?) {
+        val view = binding.countInNumber
+        if (barsLeft == null) {
+            if (view.visibility != View.GONE) view.visibility = View.GONE
+            return
+        }
+        val text = barsLeft.toString()
+        if (view.text != text) view.text = text
+        if (view.visibility != View.VISIBLE) view.visibility = View.VISIBLE
+    }
+
     /** 메트로놈 틱마다: 들리는 박을 악보 위치로 옮겨 현재 마디를 표시하고 필요하면 넘긴다. */
     private fun updateFollow(beat: Beat?) {
         val scoreFollower = follower ?: return
         if (beat == null) return
         when (val position = scoreFollower.positionAt(beat.index)) {
-            is ScoreFollower.Position.CountIn -> Unit
+            is ScoreFollower.Position.CountIn -> showCountIn(position.barsLeft)
             is ScoreFollower.Position.InMeasure -> {
+                showCountIn(null)
                 metronome.timeSignature = position.timeSignature
                 if (followInCountIn || followMeasure?.measureNumber != position.measure.measureNumber) {
                     followInCountIn = false
@@ -3277,6 +3313,7 @@ class PdfViewerActivity : AppCompatActivity() {
                 ensureMeasureVisible(if (turnEarly) position.next ?: position.measure else position.measure)
             }
             ScoreFollower.Position.Finished -> {
+                showCountIn(null)
                 // 연주자는 끝난 연주를 다시 받아도 또 따라가지 않게 (#055)
                 if (ensembleRole == EnsembleRole.FOLLOWING) performerDetachedRunId = performerRun?.runId
                 stopMetronome()
@@ -4072,6 +4109,7 @@ class PdfViewerActivity : AppCompatActivity() {
 
     override fun onPause() {
         super.onPause()
+        com.mrgq.pdfviewer.ensemble.VersionNotice.detach()
         
         // Clear collaboration callbacks when PdfViewerActivity goes to background
         // This allows MainActivity to properly register its callbacks when it resumes
@@ -4083,6 +4121,7 @@ class PdfViewerActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
+        com.mrgq.pdfviewer.ensemble.VersionNotice.attach(this) // 합주 상대와 버전이 다르면 대화상자로 (#061)
         // 합주 연주자: 돌아오면 지휘자 연주에 다시 합류 (#055)
         performerRun?.let { onEnsembleRunReceived(it, retry = true) }
     }

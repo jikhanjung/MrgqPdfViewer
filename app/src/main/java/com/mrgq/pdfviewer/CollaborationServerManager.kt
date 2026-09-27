@@ -28,6 +28,7 @@ class CollaborationServerManager(
     private var serverStarted = false
     
     private var onClientConnected: ((String, String) -> Unit)? = null
+    private var onVersionMismatch: ((String) -> Unit)? = null
     private var onClientDisconnected: ((String) -> Unit)? = null
     
     companion object {
@@ -283,18 +284,24 @@ class CollaborationServerManager(
                     // Handle client connection message
                     val deviceId = json.get("device_id")?.asString ?: clientId
                     val deviceName = json.get("device_name")?.asString ?: "Unknown Device"
-                    val appVersion = json.get("app_version")?.asString ?: "Unknown"
+                    val appVersion = json.get("app_version")?.asString
                     
                     Log.d(TAG, "Client $clientId connected: $deviceName ($appVersion)")
                     
-                    // Send welcome response
+                    // Send welcome response — app_version 으로 연주자도 버전을 비교한다 (#061).
+                    // server_version 은 옛 연주자와의 호환용(읽는 곳은 없다)
                     val response = JsonObject().apply {
                         addProperty("action", "connect_response")
                         addProperty("status", "success")
                         addProperty("server_version", "v0.1.5")
+                        addProperty("app_version", BuildConfig.VERSION_NAME)
                         addProperty("timestamp", System.currentTimeMillis())
                     }
                     connectedClients[clientId]?.send(response.toString())
+                    com.mrgq.pdfviewer.ensemble.EnsembleVersion.check(BuildConfig.VERSION_NAME, appVersion)?.let {
+                        Log.w(TAG, "연주자 $deviceName 와 버전이 다르다: $it")
+                        onVersionMismatch?.invoke(com.mrgq.pdfviewer.ensemble.EnsembleVersion.conductorMessage(deviceName, it))
+                    }
                 }
                 "request_sync" -> {
                     // Client requesting current state
@@ -316,6 +323,11 @@ class CollaborationServerManager(
     
     fun setOnClientDisconnected(callback: (String) -> Unit) {
         onClientDisconnected = callback
+    }
+
+    /** 연주자와 앱 버전이 다르다 (#061) — 보일 안내문 */
+    fun setOnVersionMismatch(callback: ((String) -> Unit)?) {
+        onVersionMismatch = callback
     }
     
     private fun isPortAvailable(port: Int): Boolean {
