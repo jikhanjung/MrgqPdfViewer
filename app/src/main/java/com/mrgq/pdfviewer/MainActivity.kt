@@ -29,7 +29,7 @@ class MainActivity : AppCompatActivity() {
         const val STARTUP_UPDATE_CHECK_DELAY_MS = 1500L
 
 
-        /** 마지막으로 고른 세트리스트 id (#064). [ALL_SCORES] = 모든 악보 */
+        /** 마지막으로 고른 세트리스트 id (#064). [ALL_SCORES] = 고른 적 없음(첫 세트리스트) */
         const val PREF_SETLIST = "scoremate_setlist"
         const val ALL_SCORES = -1L
         /** 키를 누른 뒤 이 안에 생긴 포커스 이동만 세트리스트 선택으로 본다 */
@@ -244,7 +244,7 @@ class MainActivity : AppCompatActivity() {
     // ── 세트리스트 (#064): 연결된 TV 에서 받은 곡목을 골라 곡 순서대로 본다 ─────────────────────
     private var setlists: List<com.mrgq.pdfviewer.scoremate.Setlist> = emptyList()
     private var syncedRows: List<com.mrgq.pdfviewer.scoremate.SyncedScore> = emptyList()
-    /** 고른 세트리스트 — null 이면 모든 악보 */
+    /** 고른 세트리스트 — null 이거나 없어졌으면 첫 세트리스트 */
     private var selectedSetlistId: Long? = null
     /** 세트리스트 줄에 지금 그려 둔 것 (id 목록) — 같으면 다시 만들지 않는다(포커스를 잃지 않게) */
     private var renderedSetlistIds: List<Long?> = emptyList()
@@ -263,7 +263,7 @@ class MainActivity : AppCompatActivity() {
         showLibrary()
     }
 
-    /** 세트리스트 줄 — [모든 악보] [곡목 …]. 포커스만 옮겨도 바뀐다(리모컨 키 뒤 500ms 안의 이동만 — 저절로 놓인 포커스는 무시) */
+    /** 세트리스트 줄 — [곡목 …]. 연결된 TV 는 세트리스트만 본다("모든 악보" 없음 — 곡목에 없는 악보는 받지 않는다, 서버 0.7.0). 포커스만 옮겨도 바뀐다(리모컨 키 뒤 500ms 안의 이동만 — 저절로 놓인 포커스는 무시) */
     private fun renderSetlistTabs(current: com.mrgq.pdfviewer.scoremate.Setlist?) {
         val show = scoreMateLinked && setlists.isNotEmpty()
         binding.setlistScroll.visibility = if (show) View.VISIBLE else View.GONE
@@ -272,7 +272,7 @@ class MainActivity : AppCompatActivity() {
             binding.setlistTabs.removeAllViews()
             return
         }
-        val ids = listOf<Long?>(null) + setlists.map { it.id }
+        val ids: List<Long?> = setlists.map { it.id }
         if (ids != renderedSetlistIds) {
             binding.setlistTabs.removeAllViews()
             ids.forEach { id ->
@@ -300,14 +300,16 @@ class MainActivity : AppCompatActivity() {
             val view = binding.setlistTabs.getChildAt(i) as android.widget.TextView
             val id = view.tag as Long?
             val setlist = setlists.firstOrNull { it.id == id }
-            view.text = if (setlist == null) "모든 악보 ${allPdfFiles.size}" else "${setlist.title} ${setlist.items.size}"
+            view.text = if (setlist == null) "" else "${setlist.title} ${setlist.items.size}"
             view.isSelected = id == current?.id
         }
     }
 
     private fun showLibrary() {
-        // 고른 세트리스트가 없어졌으면(곡목 해제 · 연결 해제) 모든 악보로
-        val current = if (scoreMateLinked) setlists.firstOrNull { it.id == selectedSetlistId } else null
+        // 연결된 TV 는 세트리스트로 본다. 고른 것이 없거나 없어졌으면(곡목 해제) 첫 세트리스트
+        val current = if (scoreMateLinked) {
+            setlists.firstOrNull { it.id == selectedSetlistId } ?: setlists.firstOrNull()
+        } else null
         renderSetlistTabs(current)
         binding.scoreMateSyncBtn.visibility = if (scoreMateLinked) View.VISIBLE else View.GONE
 
@@ -324,18 +326,19 @@ class MainActivity : AppCompatActivity() {
             binding.librarySource.text = "☁️ ScoreMate" + if (missing > 0) " · ${entries.size}곡 중 ${shown.size}곡" else ""
             binding.emptyTitle.text = "이 세트리스트의 악보를 아직 받지 않았습니다"
             binding.emptyHint.text = "☁️ 동기화 를 누르세요"
+        } else if (scoreMateLinked) {
+            // 받은 세트리스트가 없다 — 곡목에 없는 악보는 보이지 않는다
+            shown = emptyList()
+            binding.librarySource.text = "☁️ ScoreMate"
+            binding.emptyTitle.text = "받은 세트리스트가 없습니다"
+            binding.emptyHint.text = "웹에서 이 TV 로 보낼 세트리스트를 고른 뒤 ☁️ 동기화 를 누르세요"
         } else {
             shown = allPdfFiles
-            binding.librarySource.text = if (scoreMateLinked) "☁️ ScoreMate" else "이 기기 파일 ${allPdfFiles.size}"
-            if (scoreMateLinked) {
-                binding.emptyTitle.text = "ScoreMate 에서 받은 악보가 없습니다"
-                binding.emptyHint.text = "웹에서 이 TV 로 보낼 세트리스트를 고른 뒤 ☁️ 동기화 를 누르세요"
-            } else {
-                binding.emptyTitle.text = "PDF 파일이 없습니다"
-                binding.emptyHint.text = "설정에서 웹서버를 통해 파일을 업로드하세요"
-            }
+            binding.librarySource.text = "이 기기 파일 ${allPdfFiles.size}"
+            binding.emptyTitle.text = "PDF 파일이 없습니다"
+            binding.emptyHint.text = "설정에서 웹서버를 통해 파일을 업로드하세요"
         }
-        val sortVisibility = if (current != null) View.GONE else View.VISIBLE
+        val sortVisibility = if (scoreMateLinked) View.GONE else View.VISIBLE
         binding.sortLabel.visibility = sortVisibility
         binding.sortByNameBtn.visibility = sortVisibility
         binding.sortByTimeBtn.visibility = sortVisibility
