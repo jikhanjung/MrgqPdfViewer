@@ -5,7 +5,9 @@ import android.graphics.pdf.PdfRenderer
 import android.os.Bundle
 import android.os.ParcelFileDescriptor
 import android.util.Log
+import android.os.SystemClock
 import android.view.KeyEvent
+import android.view.View
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
@@ -26,6 +28,11 @@ class MainActivity : AppCompatActivity() {
     private companion object {
         /** 파일 목록이 뜬 뒤 확인한다 — 시작 화면 전환과 겹치지 않게 */
         const val STARTUP_UPDATE_CHECK_DELAY_MS = 1500L
+
+        /** 마지막으로 본 파일 목록 탭 (#062) */
+        const val PREF_SOURCE_TAB = "file_source_tab"
+        /** 키를 누른 뒤 이 안에 생긴 포커스 이동만 탭 선택으로 본다 */
+        const val TAB_FOCUS_KEY_WINDOW_MS = 500L
 
         /** 이 프로세스에서 ScoreMate heartbeat 를 보냈나 — 앱을 켤 때 한 번 */
         var scoreMateHeartbeatSent = false
@@ -51,6 +58,7 @@ class MainActivity : AppCompatActivity() {
         loadPdfFiles()
         setupCollaborationButton()
         setupSortButtons()
+        setupSourceTabs()
         setupSettingsButton()
         setupFileManagementButton()
         setupCollaborationCallbacks()
@@ -210,14 +218,86 @@ class MainActivity : AppCompatActivity() {
     private fun loadPdfFiles() {
         CoroutineScope(Dispatchers.IO).launch {
             val pdfFiles = getCurrentPdfFiles()
-            
+            val linked = com.mrgq.pdfviewer.scoremate.ScoreMateStore(this@MainActivity).tokens != null
+
             withContext(Dispatchers.Main) {
-                pdfAdapter.submitList(pdfFiles)
-                binding.emptyView.visibility = if (pdfFiles.isEmpty()) {
-                    android.view.View.VISIBLE
+                allPdfFiles = pdfFiles
+                scoreMateLinked = linked
+                applySourceTab()
+            }
+        }
+    }
+
+    // ── 파일 출처 탭 (#062): 전체 · 이 기기 · ☁️ ScoreMate ────────────────────
+    // 목록(어댑터)은 고른 탭만. 합주에서 파일을 찾을 때는 탭과 상관없이 [allPdfFiles] 전체에서 찾는다
+
+    /** 모든 PDF (탭과 상관없이) — 합주 파일 찾기 · 연주자가 여는 악보 목록 */
+    private var allPdfFiles: List<PdfFile> = emptyList()
+    private val preferences by lazy { getSharedPreferences("pdf_viewer_prefs", MODE_PRIVATE) }
+    private var sourceTab = PdfLibrary.Source.ALL
+    private var scoreMateLinked = false
+    /** 마지막 리모컨 키 시각 — 포커스 이동이 사용자 조작인지 가린다 */
+    private var lastKeyAtMs = 0L
+
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        if (event.action == KeyEvent.ACTION_DOWN) lastKeyAtMs = SystemClock.uptimeMillis()
+        return super.dispatchKeyEvent(event)
+    }
+
+    private fun setupSourceTabs() {
+        sourceTab = PdfLibrary.Source.fromName(preferences.getString(PREF_SOURCE_TAB, null))
+        val tabs = mapOf(
+            binding.tabAll to PdfLibrary.Source.ALL,
+            binding.tabDevice to PdfLibrary.Source.DEVICE,
+            binding.tabScoreMate to PdfLibrary.Source.SCOREMATE,
+        )
+        tabs.forEach { (view, source) ->
+            view.setOnClickListener { selectSourceTab(source) }
+            // TV 처럼 포커스만 옮겨도 바뀐다 — 리모컨으로 옮겼을 때만. 앱을 켜거나 악보에서 돌아올 때 포커스가 저절로
+            // 탭에 놓여도 기억한 탭을 바꾸지 않는다
+            view.setOnFocusChangeListener { _, hasFocus ->
+                if (hasFocus && SystemClock.uptimeMillis() - lastKeyAtMs < TAB_FOCUS_KEY_WINDOW_MS) selectSourceTab(source)
+            }
+        }
+    }
+
+    private fun selectSourceTab(source: PdfLibrary.Source) {
+        if (source == sourceTab) return
+        sourceTab = source
+        preferences.edit().putString(PREF_SOURCE_TAB, source.name).apply()
+        applySourceTab()
+    }
+
+    private fun applySourceTab() {
+        val hasScoreMateFiles = allPdfFiles.any { it.fromScoreMate }
+        // ScoreMate 에 연결하지 않았고 받은 악보도 없으면 ScoreMate 탭을 숨긴다
+        val showScoreMate = scoreMateLinked || hasScoreMateFiles
+        binding.tabScoreMate.visibility = if (showScoreMate) View.VISIBLE else View.GONE
+        if (!showScoreMate && sourceTab == PdfLibrary.Source.SCOREMATE) sourceTab = PdfLibrary.Source.ALL
+
+        val deviceCount = allPdfFiles.count { !it.fromScoreMate }
+        binding.tabAll.text = "전체 ${allPdfFiles.size}"
+        binding.tabDevice.text = "이 기기 $deviceCount"
+        binding.tabScoreMate.text = "☁️ ScoreMate ${allPdfFiles.size - deviceCount}"
+        binding.tabAll.isSelected = sourceTab == PdfLibrary.Source.ALL
+        binding.tabDevice.isSelected = sourceTab == PdfLibrary.Source.DEVICE
+        binding.tabScoreMate.isSelected = sourceTab == PdfLibrary.Source.SCOREMATE
+
+        val shown = allPdfFiles.filter { sourceTab.includes(it.fromScoreMate) }
+        pdfAdapter.submitList(shown)
+        binding.emptyView.visibility = if (shown.isEmpty()) View.VISIBLE else View.GONE
+        when (sourceTab) {
+            PdfLibrary.Source.SCOREMATE -> {
+                binding.emptyTitle.text = "ScoreMate 에서 받은 악보가 없습니다"
+                binding.emptyHint.text = if (scoreMateLinked) {
+                    "설정 → ScoreMate → 지금 동기화"
                 } else {
-                    android.view.View.GONE
+                    "설정 → ScoreMate 에서 이 TV 를 연결하세요"
                 }
+            }
+            else -> {
+                binding.emptyTitle.text = "PDF 파일이 없습니다"
+                binding.emptyHint.text = "설정에서 웹서버를 통해 파일을 업로드하세요"
             }
         }
     }
@@ -455,7 +535,9 @@ class MainActivity : AppCompatActivity() {
     }
     
     private fun openPdfFile(pdfFile: PdfFile, position: Int) {
-        val currentPdfFiles = pdfAdapter.currentList
+        // 악보 화면의 이전/다음 파일은 고른 탭 안에서. 연주자는 전체 — 지휘자가 다른 탭의 파일로 바꿔도 악보 화면에서 찾게
+        val performer = GlobalCollaborationManager.getInstance().getCurrentMode() == CollaborationMode.PERFORMER
+        val currentPdfFiles = if (performer) allPdfFiles else pdfAdapter.currentList
         
         // Use the stable file path to find the ACTUAL current index.
         // This is the crucial fix for the race condition.
@@ -520,7 +602,8 @@ class MainActivity : AppCompatActivity() {
                     title = record?.title,
                     author = record?.author,
                     cloudLabel = synced[file.path]?.let { cloudLabel(it) }
-                        ?: PdfLibrary.scoreMateGroupOf(appPdfDir, file)
+                        ?: PdfLibrary.scoreMateGroupOf(appPdfDir, file),
+                    fromScoreMate = PdfLibrary.scoreMateGroupOf(appPdfDir, file) != null
                 ))
             }
         }
@@ -650,7 +733,7 @@ class MainActivity : AppCompatActivity() {
             
             // Wait for file list to load, then try to open the requested file
             binding.recyclerView.post {
-                val currentFiles = pdfAdapter.currentList
+                val currentFiles = allPdfFiles
                 if (currentFiles.isNotEmpty()) {
                     val fileIndex = currentFiles.indexOfFirst { it.name == requestedFile }
                     if (fileIndex >= 0) {
@@ -679,8 +762,8 @@ class MainActivity : AppCompatActivity() {
     private fun handleRemoteFileChange(fileName: String, page: Int = 1) {
         Log.d("MainActivity", "🎼 연주자 모드: 파일 '$fileName' 변경 요청 받음 (페이지: $page) (MainActivity)")
         
-        // Find the file in current list
-        val currentFiles = pdfAdapter.currentList
+        // 탭과 상관없이 전체에서 찾는다 (#062)
+        val currentFiles = allPdfFiles
         Log.d("MainActivity", "🎼 현재 파일 목록 크기: ${currentFiles.size}")
         
         // 파일 목록이 비어있으면 잠시 기다린 후 재시도
@@ -809,7 +892,7 @@ class MainActivity : AppCompatActivity() {
                     
                     // Wait a bit for the file list to refresh, then try to open the file
                     binding.recyclerView.postDelayed({
-                        val currentFiles = pdfAdapter.currentList
+                        val currentFiles = allPdfFiles
                         val fileIndex = currentFiles.indexOfFirst { it.name == fileName }
                         if (fileIndex >= 0) {
                             val pdfFile = currentFiles[fileIndex]

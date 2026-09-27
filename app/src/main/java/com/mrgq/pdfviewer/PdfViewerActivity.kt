@@ -27,7 +27,6 @@ import kotlinx.coroutines.sync.withLock
 import android.util.Log
 import android.content.SharedPreferences
 import android.util.DisplayMetrics
-import android.os.Environment
 import java.io.File
 import com.mrgq.pdfviewer.database.entity.DisplayMode
 import com.mrgq.pdfviewer.database.entity.PageOrientation
@@ -1845,8 +1844,12 @@ class PdfViewerActivity : AppCompatActivity() {
                 
                 val fileLength = connection.contentLength
                 val input = connection.getInputStream()
-                val downloadPath = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), fileName)
-                val output = java.io.FileOutputStream(downloadPath)
+                // 앱 PDF 폴더 바로 아래 — 파일 목록 "이 기기" 탭 (#062). 예전에는 공용 Download/ 에 써서 목록에 나오지 않았다
+                // (v0.1.8 에서 앱 전용 폴더로 옮길 때 빠진 경로). 받는 중에는 .part 로 — 끊긴 파일이 목록에 보이지 않게
+                val pdfDir = File(getExternalFilesDir(null), "PDFs").apply { mkdirs() }
+                val downloadPath = File(pdfDir, fileName)
+                val partPath = File(pdfDir, "$fileName.part")
+                val output = java.io.FileOutputStream(partPath)
                 
                 val buffer = ByteArray(4096)
                 var total: Long = 0
@@ -1866,6 +1869,10 @@ class PdfViewerActivity : AppCompatActivity() {
                 output.flush()
                 output.close()
                 input.close()
+                if (!partPath.renameTo(downloadPath)) {
+                    downloadPath.delete()
+                    if (!partPath.renameTo(downloadPath)) throw java.io.IOException("받은 파일을 저장하지 못했습니다")
+                }
                 
                 withContext(Dispatchers.Main) {
                     progressDialog.dismiss()
@@ -1886,14 +1893,6 @@ class PdfViewerActivity : AppCompatActivity() {
     }
     
     private fun refreshFileListAndLoad(fileName: String, filePath: String, targetPage: Int = 1) {
-        // Trigger media scanner to make file visible
-        android.media.MediaScannerConnection.scanFile(
-            this,
-            arrayOf(filePath),
-            arrayOf("application/pdf"),
-            null
-        )
-        
         // Add to current file lists
         fileNameList = fileNameList.toMutableList().apply { add(fileName) }
         filePathList = filePathList.toMutableList().apply { add(filePath) }

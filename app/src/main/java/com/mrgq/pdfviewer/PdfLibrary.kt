@@ -28,4 +28,24 @@ object PdfLibrary {
     }
 
     private fun File.isPdf() = isFile && extension.equals("pdf", ignoreCase = true)
+
+    /** 파일 목록 탭 (#062) */
+    enum class Source {
+        /** 모두 */
+        ALL,
+        /** `PDFs/` 바로 아래 — 웹 업로드 · 합주 중 지휘자에게서 받은 파일 */
+        DEVICE,
+        /** `PDFs/ScoreMate/` 아래 — 서버 동기화 */
+        SCOREMATE;
+
+        fun includes(fromScoreMate: Boolean): Boolean = when (this) {
+            ALL -> true
+            DEVICE -> !fromScoreMate
+            SCOREMATE -> fromScoreMate
+        }
+
+        companion object {
+            fun fromName(name: String?): Source = values().firstOrNull { it.name == name } ?: ALL
+        }
+    }
 }
