@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  백업 · 기기 간 이전 규칙. ScoreMate 연결 정보(토큰 · device_id)는 뺀다 — 다른 TV 에 복원되면 두 대가 같은 기기로 보인다
+  (devlog P05 §3.1). targetSdk 30 이라 Android 12+ 에서도 이 fullBackupContent 규칙을 쓴다.
+-->
+<full-backup-content>
+    <exclude domain="sharedpref" path="scoremate.xml" />
+</full-backup-content>

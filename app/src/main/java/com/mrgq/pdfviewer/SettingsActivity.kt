@@ -26,6 +26,12 @@ import com.mrgq.pdfviewer.server.WebServerManager
 import com.mrgq.pdfviewer.repository.MusicRepository
 import com.mrgq.pdfviewer.database.entity.DisplayMode
 import com.mrgq.pdfviewer.update.UpdateController
+import com.mrgq.pdfviewer.scoremate.DeviceLinkDialog
+import com.mrgq.pdfviewer.scoremate.ScoreMateClient
+import com.mrgq.pdfviewer.scoremate.ScoreMateException
+import com.mrgq.pdfviewer.scoremate.ScoreMateProtocol
+import com.mrgq.pdfviewer.scoremate.ScoreMateStore
+import androidx.lifecycle.lifecycleScope
 
 class SettingsActivity : AppCompatActivity() {
     
@@ -49,6 +55,10 @@ class SettingsActivity : AppCompatActivity() {
 
     // 앱 안 업데이트 (devlog #054)
     private lateinit var updateController: UpdateController
+
+    // ScoreMate 서버 연결 (P05 C1)
+    private val scoreMateStore by lazy { ScoreMateStore(this) }
+    private val scoreMateClient by lazy { ScoreMateClient(scoreMateStore) }
     
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -136,6 +146,15 @@ class SettingsActivity : AppCompatActivity() {
             arrow = "▶"
         ))
         
+        // ScoreMate 섹션 (P05 C1)
+        currentItems.add(SettingsItem(
+            id = "scoremate",
+            icon = "☁️",
+            title = "ScoreMate",
+            subtitle = scoreMateSummary(),
+            arrow = "▶"
+        ))
+
         // 애니메이션/사운드 섹션
         currentItems.add(SettingsItem(
             id = "animation_sound",
@@ -200,6 +219,7 @@ class SettingsActivity : AppCompatActivity() {
                 when (item.id) {
                     "file_management" -> showFileManagementPanel()
                     "collaboration" -> showCollaborationPanel()
+                    "scoremate" -> showScoreMatePanel()
                     "animation_sound" -> showAnimationSoundPanel()
                     "display_mode" -> showDisplayModePanel()
                     "info" -> showInfoPanel()
@@ -210,6 +230,7 @@ class SettingsActivity : AppCompatActivity() {
                 "file_management" -> showFileManagementPanel()
                 "web_server" -> showWebServerPanel()
                 "collaboration" -> showCollaborationPanel()
+                "scoremate" -> showScoreMatePanel()
                 "animation_sound" -> showAnimationSoundPanel()
                 "display_mode" -> showDisplayModePanel()
                 "info" -> showInfoPanel()
@@ -332,6 +353,132 @@ class SettingsActivity : AppCompatActivity() {
         showDetailPanel("협업 모드", items)
     }
     
+    // ── ScoreMate (P05 C1) ──────────────────────────────────────────────────
+
+    private fun scoreMateSummary(): String =
+        if (scoreMateClient.isLinked) "연결됨 — ${scoreMateStore.deviceName ?: "이 TV"}" else "연결 안 됨 — 악보 서버에 이 TV 연결"
+
+    private fun showScoreMatePanel() {
+        val linked = scoreMateClient.isLinked
+        val server = scoreMateStore.server.removePrefix("https://")
+        val items = mutableListOf(
+            SettingsItem(
+                id = "scoremate_status",
+                icon = if (linked) "✅" else "⚪",
+                title = if (linked) "연결됨" else "연결 안 됨",
+                subtitle = if (linked) "${scoreMateStore.deviceName ?: "이 TV"} · $server" else "휴대폰으로 QR 을 찍어 ScoreMate 계정에 이 TV 를 연결합니다",
+                type = SettingsType.INFO
+            )
+        )
+        if (linked) {
+            items += SettingsItem(
+                id = "scoremate_check",
+                icon = "🔍",
+                title = "연결 확인",
+                subtitle = "서버에서 이 TV 정보 받기",
+                type = SettingsType.ACTION
+            )
+            items += SettingsItem(
+                id = "scoremate_unlink",
+                icon = "⛔",
+                title = "연결 해제",
+                subtitle = "이 TV 의 ScoreMate 연결을 끊습니다",
+                type = SettingsType.ACTION
+            )
+        } else {
+            items += SettingsItem(
+                id = "scoremate_link",
+                icon = "🔗",
+                title = "이 TV 연결",
+                subtitle = "화면의 QR 코드 · 연결 코드로 휴대폰에서 연결",
+                type = SettingsType.ACTION
+            )
+            items += SettingsItem(
+                id = "scoremate_server",
+                icon = "🌐",
+                title = "서버 주소",
+                subtitle = server,
+                type = SettingsType.INPUT
+            )
+        }
+        items += SettingsItem(
+            id = "scoremate_sync_info",
+            icon = "📥",
+            title = "악보 동기화",
+            subtitle = "준비 중 — 앙상블 악보가 이 TV 로 저절로 들어오게 됩니다",
+            type = SettingsType.INFO
+        )
+        showDetailPanel("ScoreMate", items)
+    }
+
+    private fun linkScoreMate() {
+        DeviceLinkDialog(this, scoreMateClient, scoreMateStore) {
+            Toast.makeText(this, "ScoreMate 에 연결되었습니다", Toast.LENGTH_SHORT).show()
+            setupMainMenu() // 뒤의 메인 메뉴 요약도
+            showScoreMatePanel()
+        }.show()
+    }
+
+    private fun checkScoreMate() {
+        lifecycleScope.launch {
+            try {
+                val info = scoreMateClient.me()
+                if (info.name.isNotBlank()) scoreMateStore.deviceName = info.name
+                AlertDialog.Builder(this@SettingsActivity)
+                    .setTitle("ScoreMate 연결 확인")
+                    .setMessage("이 TV: ${info.name}\n서버: ${scoreMateStore.server}\n마지막 접속: ${info.lastSeenAt ?: "-"}")
+                    .setPositiveButton("확인", null)
+                    .show()
+            } catch (e: ScoreMateException) {
+                Toast.makeText(this@SettingsActivity, e.message, Toast.LENGTH_LONG).show()
+            }
+            showScoreMatePanel()
+        }
+    }
+
+    private fun confirmUnlinkScoreMate() {
+        AlertDialog.Builder(this)
+            .setTitle("ScoreMate 연결 해제")
+            .setMessage("이 TV 의 ScoreMate 연결을 끊습니다. 다시 쓰려면 휴대폰으로 다시 연결해야 합니다.")
+            .setPositiveButton("연결 해제") { _, _ ->
+                lifecycleScope.launch {
+                    val notified = scoreMateClient.unlink()
+                    Toast.makeText(
+                        this@SettingsActivity,
+                        if (notified) "ScoreMate 연결을 해제했습니다" else "이 TV 에서 연결을 해제했습니다 (서버에 닿지 못함 — 웹의 TV 화면에서도 해제하세요)",
+                        Toast.LENGTH_LONG
+                    ).show()
+                    setupMainMenu()
+                    showScoreMatePanel()
+                }
+            }
+            .setNegativeButton("취소", null)
+            .show()
+    }
+
+    private fun showScoreMateServerDialog() {
+        val editText = EditText(this).apply {
+            setText(scoreMateStore.server)
+            hint = ScoreMateProtocol.DEFAULT_SERVER
+        }
+        AlertDialog.Builder(this)
+            .setTitle("ScoreMate 서버 주소")
+            .setMessage("보통은 바꿀 필요가 없습니다 (개발 서버용). 비우면 기본값.")
+            .setView(editText)
+            .setPositiveButton("저장") { _, _ ->
+                val input = editText.text.toString()
+                val server = if (input.isBlank()) ScoreMateProtocol.DEFAULT_SERVER else ScoreMateProtocol.normalizeServer(input)
+                if (server == null) {
+                    Toast.makeText(this, "서버 주소를 해석할 수 없습니다", Toast.LENGTH_SHORT).show()
+                } else {
+                    scoreMateStore.server = server
+                    showScoreMatePanel()
+                }
+            }
+            .setNegativeButton("취소", null)
+            .show()
+    }
+
     private fun showAnimationSoundPanel() {
         val animationEnabled = preferences.getBoolean("page_turn_animation_enabled", true)
         val soundEnabled = preferences.getBoolean("page_turn_sound_enabled", true)
@@ -472,6 +619,10 @@ class SettingsActivity : AppCompatActivity() {
             "sync_turn_lead" -> showSyncTurnLeadDialog()
             "message_queue_stats" -> showMessageQueueDisabledDialog()
             "check_update" -> updateController.checkForUpdate()
+            "scoremate_link" -> linkScoreMate()
+            "scoremate_check" -> checkScoreMate()
+            "scoremate_unlink" -> confirmUnlinkScoreMate()
+            "scoremate_server" -> showScoreMateServerDialog()
             "update_on_start_toggle" -> {
                 UpdateController.setCheckOnStartup(this, !UpdateController.isCheckOnStartup(this))
                 showInfoPanel()

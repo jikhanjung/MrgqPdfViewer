@@ -161,6 +161,9 @@ dependencies {
     // PDF 문서 정보(제목·작성자) 읽기 — PdfRenderer 는 렌더링만 한다.
     // 암호화 PDF 처리용 BouncyCastle 이 전이 의존성으로 따라온다.
     implementation("com.tom-roush:pdfbox-android:2.0.27.0")
+
+    // ScoreMate 기기 연결 화면의 QR 코드 (P05 C1) — 순수 Java 인코더만 쓴다
+    implementation("com.google.zxing:core:3.5.3")
     
     testImplementation("junit:junit:4.13.2")
     androidTestImplementation("androidx.test.ext:junit:1.1.5")

@@ -26,6 +26,9 @@ class MainActivity : AppCompatActivity() {
     private companion object {
         /** 파일 목록이 뜬 뒤 확인한다 — 시작 화면 전환과 겹치지 않게 */
         const val STARTUP_UPDATE_CHECK_DELAY_MS = 1500L
+
+        /** 이 프로세스에서 ScoreMate heartbeat 를 보냈나 — 앱을 켤 때 한 번 */
+        var scoreMateHeartbeatSent = false
     }
 
     private lateinit var binding: ActivityMainBinding
@@ -68,9 +71,33 @@ class MainActivity : AppCompatActivity() {
      * 화면이 뜬 뒤 조용히. 합주 중에는 방해하지 않는다
      */
     private fun scheduleAutoUpdateCheck() {
+        sendScoreMateHeartbeat()
         if (!com.mrgq.pdfviewer.update.UpdateController.isCheckOnStartup(this)) return
         binding.root.removeCallbacks(autoUpdateCheck)
         binding.root.postDelayed(autoUpdateCheck, STARTUP_UPDATE_CHECK_DELAY_MS)
+    }
+
+    /**
+     * ScoreMate 에 연결된 TV 면 앱을 켤 때 한 번 알린다 (P05 C1) — 웹 "TV" 목록에 앱 버전 · 모델 · 마지막 접속.
+     * 조용히: 네트워크 오류는 무시, 웹에서 해제됐으면(401) 토큰을 지우고 한 번 알린다. 합주 중에는 하지 않는다
+     */
+    private fun sendScoreMateHeartbeat() {
+        if (scoreMateHeartbeatSent) return
+        val store = com.mrgq.pdfviewer.scoremate.ScoreMateStore(this)
+        val client = com.mrgq.pdfviewer.scoremate.ScoreMateClient(store)
+        if (!client.isLinked || GlobalCollaborationManager.getInstance().getCurrentMode() != CollaborationMode.NONE) return
+        scoreMateHeartbeatSent = true
+        lifecycleScope.launch {
+            try {
+                client.heartbeat(BuildConfig.VERSION_NAME, android.os.Build.MODEL)?.let { info ->
+                    if (info.name.isNotBlank()) store.deviceName = info.name
+                }
+            } catch (e: com.mrgq.pdfviewer.scoremate.ScoreMateUnlinkedException) {
+                Toast.makeText(this@MainActivity, e.message, Toast.LENGTH_LONG).show()
+            } catch (e: com.mrgq.pdfviewer.scoremate.ScoreMateException) {
+                Log.i("MainActivity", "ScoreMate heartbeat 실패 (무시): ${e.message}")
+            }
+        }
     }
 
     private val autoUpdateCheck = Runnable {
