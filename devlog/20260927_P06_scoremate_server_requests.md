@@ -148,6 +148,7 @@ TV 는 같은 폴더에 같은 이름(`<제목> (<파트>).pdf`)이 둘 이상�
 | `POST /api/v1/auth/token/refresh/` | `{access, refresh}`. 무효 refresh 는 **400/401 → TV 는 해제로 보고 토큰을 지운다** (5xx · 네트워크 오류는 지우지 않음) |
 | 모든 인증 API | 401 → 한 번 갱신 후 재시도. 그래도 401 이면 해제로 본다 |
 | `GET /api/v1/devices/me/` · `POST …/me/heartbeat/` | `id` · `name` · `last_seen_at` |
+| (서버 0.7.0 에 추가 — TV 가 아직 쓰지 않음) `GET /api/v1/devices/me/` | `sync_mode`(`setlists` · `all`) · `sync_setlists`(세트리스트 id 목록) — **읽기 전용**, 고르기는 웹에서만. §7 |
 | `DELETE /api/v1/devices/{id}/` | 204 (TV 가 자기 토큰으로 해제). 404 도 해제된 것으로 본다 |
 | `GET /api/v1/sync/scores/?cursor=` | `cursor` · `has_more` · `ids`(**모든 쪽에 전체 목록**) · `scores[i]` 의 `id` · `title` · `composer` · `part_name` · `ensemble.{id,name}` · `version.{number, sha256, size_bytes}` · `download_url`. 400 본문에 `"cursor"` 가 있으면 커서를 버린다 |
 | `GET {download_url}` | 3xx + `Location`(절대 · 상대 모두). TV 는 리다이렉트를 직접 따라가며 **서명 URL 에는 Authorization 을 싣지 않는다**. `download_url` 은 **경로만** 쓰고 호스트는 TV 에 설정한 서버 |
@@ -178,6 +179,18 @@ TV 는 같은 폴더에 같은 이름(`<제목> (<파트>).pdf`)이 둘 이상�
 다른 워커에서 사라지고 요청 제한이 느슨했다 → 워커 공유 파일 캐시(0.6.3, `7d21251`). 운영에서 API 업로드 10/10 확인.
 TV 는 동기화 · 받기만 해서 영향이 없었다.
 
+## 7. 서버 0.7.0 — TV 마다 받을 것 (2026-09-27, 요청 아님 · 알림)
+
+서버 devlog `062_TV마다_세트리스트_동기화.md`.
+- 기기마다 **고른 세트리스트의 곡만**(새 기기 기본) 또는 **모든 악보**. 고르는 곳은 웹뿐 — TV 화면 · 세트리스트의 "보낼 TV" · 연결 확인 화면
+- 기기가 `setlists` 면 `sync/scores` 의 `scores` · `ids` 와 `sync/setlists` 가 **고른 세트리스트(의 곡)로 좁혀진다**.
+  곡목에 곡을 넣거나 곡목을 새로 고르면 옛 악보라도 다음 동기화에 온다. 빼거나 해제하면 `ids` 에서 빠진다
+- **TV 코드 변경 필요 없음** — 지금처럼 `ids` 에 없는 악보를 정리하면 된다. `all` → `setlists` 로 바꾸면 한꺼번에 많이 빠져
+  §3 끝의 안전장치(절반 넘게 사라지면 묻기)가 한 번 뜰 수 있다 — 의도한 동작
+- 이 변경 전에 연결된 기기(운영 "4K Google TV Stick")는 마이그레이션에서 `all` 로 두었다 — 받던 것이 그대로다
+- (선택) TV 화면에 "받는 것: 세트리스트 N개 / 모든 악보"를 보이려면 `GET /api/v1/devices/me/` 의 `sync_mode` · `sync_setlists`
+
 ## 변경 이력
 - 2026-09-27: 처음 작성 (C2 구현 중 발견). 같은 날 서버 작업용으로 보강 — 이름 변경 경로가 API · 웹 둘인 것, 제안 코드 · 테스트 · 완료 기준, TV 가 의존하는 필드 표
 - 2026-09-27: 서버 처리 결과(§6) — 0.6.2 · 0.6.3 운영 배포
+- 2026-09-27: §3 표 · §7 — 서버 0.7.0 기기별 동기화 범위(세트리스트 / 모든 악보) 알림
