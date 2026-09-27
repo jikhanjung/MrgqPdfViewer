@@ -28,6 +28,7 @@ class ScoreMateClientTest {
     private class MemoryStore(override var tokens: Tokens? = null) : ScoreMateTokenStore {
         override val server = "https://example.test/"
         override var syncCursor: String? = null
+        override var setlistsBody: String? = null
         override fun saveTokens(tokens: Tokens) {
             this.tokens = tokens
         }

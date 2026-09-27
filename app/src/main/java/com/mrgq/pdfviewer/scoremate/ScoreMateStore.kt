@@ -33,6 +33,12 @@ class ScoreMateStore(context: Context) : ScoreMateTokenStore {
             prefs.edit().putString(KEY_CURSOR, value).commit()
         }
 
+    override var setlistsBody: String?
+        get() = prefs.getString(KEY_SETLISTS, null)
+        set(value) {
+            prefs.edit().putString(KEY_SETLISTS, value).apply()
+        }
+
     /** 이 TV 가 서버에 알려진 이름 (연결할 때 · 기기 정보에서) — 화면 표시용 */
     var deviceName: String?
         get() = prefs.getString(KEY_DEVICE_NAME, null)
@@ -56,6 +62,7 @@ class ScoreMateStore(context: Context) : ScoreMateTokenStore {
             .remove(KEY_DEVICE_ID)
             .remove(KEY_DEVICE_NAME)
             .remove(KEY_CURSOR)
+            .remove(KEY_SETLISTS)
             .commit()
     }
 
@@ -68,5 +75,6 @@ class ScoreMateStore(context: Context) : ScoreMateTokenStore {
         private const val KEY_DEVICE_ID = "device_id"
         private const val KEY_DEVICE_NAME = "device_name"
         private const val KEY_CURSOR = "sync_cursor"
+        private const val KEY_SETLISTS = "setlists"
     }
 }

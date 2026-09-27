@@ -17,6 +17,7 @@ object ScoreMateProtocol {
     const val PATH_ME = "/api/v1/devices/me/"
     const val PATH_HEARTBEAT = "/api/v1/devices/me/heartbeat/"
     const val PATH_SYNC_SCORES = "/api/v1/sync/scores/"
+    const val PATH_SYNC_SETLISTS = "/api/v1/sync/setlists/"
     fun pathDevice(deviceId: String) = "/api/v1/devices/$deviceId/"
 
     /** 코드 받기 응답 */

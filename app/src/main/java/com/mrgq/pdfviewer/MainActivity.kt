@@ -29,6 +29,12 @@ class MainActivity : AppCompatActivity() {
         const val STARTUP_UPDATE_CHECK_DELAY_MS = 1500L
 
 
+        /** 마지막으로 고른 세트리스트 id (#064). [ALL_SCORES] = 모든 악보 */
+        const val PREF_SETLIST = "scoremate_setlist"
+        const val ALL_SCORES = -1L
+        /** 키를 누른 뒤 이 안에 생긴 포커스 이동만 세트리스트 선택으로 본다 */
+        const val TAB_FOCUS_KEY_WINDOW_MS = 500L
+
         /** 이 프로세스에서 ScoreMate heartbeat 를 보냈나 — 앱을 켤 때 한 번 */
         var scoreMateHeartbeatSent = false
     }
@@ -202,12 +208,17 @@ class MainActivity : AppCompatActivity() {
     
     private fun loadPdfFiles() {
         CoroutineScope(Dispatchers.IO).launch {
-            val linked = com.mrgq.pdfviewer.scoremate.ScoreMateStore(this@MainActivity).tokens != null
+            val store = com.mrgq.pdfviewer.scoremate.ScoreMateStore(this@MainActivity)
+            val linked = store.tokens != null
             val pdfFiles = getCurrentPdfFiles(linked)
+            val lists = if (linked) com.mrgq.pdfviewer.scoremate.ScoreMateSetlists.parse(store.setlistsBody) else emptyList()
+            val rows = if (linked) scoreMateLocal.all() else emptyList()
 
             withContext(Dispatchers.Main) {
                 allPdfFiles = pdfFiles
                 scoreMateLinked = linked
+                setlists = lists
+                syncedRows = rows
                 showLibrary()
             }
         }
@@ -220,30 +231,116 @@ class MainActivity : AppCompatActivity() {
     private var allPdfFiles: List<PdfFile> = emptyList()
     private var scoreMateLinked = false
     private val ensembleCacheDir by lazy { File(cacheDir, "ensemble") }
+    private val preferences by lazy { getSharedPreferences("pdf_viewer_prefs", MODE_PRIVATE) }
 
     private fun setupLibraryHeader() {
         binding.scoreMateSyncBtn.setOnClickListener {
             Toast.makeText(this, "ScoreMate 동기화 중…", Toast.LENGTH_SHORT).show()
             lifecycleScope.launch { runScoreMateSync(quiet = false) }
         }
+        selectedSetlistId = preferences.getLong(PREF_SETLIST, ALL_SCORES).takeIf { it != ALL_SCORES }
+    }
+
+    // ── 세트리스트 (#064): 연결된 TV 에서 받은 곡목을 골라 곡 순서대로 본다 ─────────────────────
+    private var setlists: List<com.mrgq.pdfviewer.scoremate.Setlist> = emptyList()
+    private var syncedRows: List<com.mrgq.pdfviewer.scoremate.SyncedScore> = emptyList()
+    /** 고른 세트리스트 — null 이면 모든 악보 */
+    private var selectedSetlistId: Long? = null
+    /** 세트리스트 줄에 지금 그려 둔 것 (id 목록) — 같으면 다시 만들지 않는다(포커스를 잃지 않게) */
+    private var renderedSetlistIds: List<Long?> = emptyList()
+    /** 마지막 리모컨 키 시각 — 포커스 이동이 사용자 조작인지 가린다 */
+    private var lastKeyAtMs = 0L
+
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        if (event.action == KeyEvent.ACTION_DOWN) lastKeyAtMs = android.os.SystemClock.uptimeMillis()
+        return super.dispatchKeyEvent(event)
+    }
+
+    private fun selectSetlist(id: Long?) {
+        if (id == selectedSetlistId) return
+        selectedSetlistId = id
+        preferences.edit().putLong(PREF_SETLIST, id ?: ALL_SCORES).apply()
+        showLibrary()
+    }
+
+    /** 세트리스트 줄 — [모든 악보] [곡목 …]. 포커스만 옮겨도 바뀐다(리모컨 키 뒤 500ms 안의 이동만 — 저절로 놓인 포커스는 무시) */
+    private fun renderSetlistTabs(current: com.mrgq.pdfviewer.scoremate.Setlist?) {
+        val show = scoreMateLinked && setlists.isNotEmpty()
+        binding.setlistScroll.visibility = if (show) View.VISIBLE else View.GONE
+        if (!show) {
+            renderedSetlistIds = emptyList()
+            binding.setlistTabs.removeAllViews()
+            return
+        }
+        val ids = listOf<Long?>(null) + setlists.map { it.id }
+        if (ids != renderedSetlistIds) {
+            binding.setlistTabs.removeAllViews()
+            ids.forEach { id ->
+                binding.setlistTabs.addView(android.widget.TextView(this).apply {
+                    tag = id
+                    textSize = 17f
+                    setTextColor(android.graphics.Color.WHITE)
+                    setPadding(36, 14, 36, 14)
+                    setBackgroundResource(R.drawable.setlist_tab_background)
+                    isFocusable = true
+                    isClickable = true
+                    setOnClickListener { selectSetlist(id) }
+                    setOnFocusChangeListener { _, hasFocus ->
+                        if (hasFocus && android.os.SystemClock.uptimeMillis() - lastKeyAtMs < TAB_FOCUS_KEY_WINDOW_MS) selectSetlist(id)
+                    }
+                    layoutParams = android.widget.LinearLayout.LayoutParams(
+                        android.widget.LinearLayout.LayoutParams.WRAP_CONTENT,
+                        android.widget.LinearLayout.LayoutParams.WRAP_CONTENT,
+                    ).apply { marginEnd = 12 }
+                })
+            }
+            renderedSetlistIds = ids
+        }
+        for (i in 0 until binding.setlistTabs.childCount) {
+            val view = binding.setlistTabs.getChildAt(i) as android.widget.TextView
+            val id = view.tag as Long?
+            val setlist = setlists.firstOrNull { it.id == id }
+            view.text = if (setlist == null) "모든 악보 ${allPdfFiles.size}" else "${setlist.title} ${setlist.items.size}"
+            view.isSelected = id == current?.id
+        }
     }
 
     private fun showLibrary() {
-        binding.librarySource.text = if (scoreMateLinked) {
-            "☁️ ScoreMate 악보 ${allPdfFiles.size}"
-        } else {
-            "이 기기 파일 ${allPdfFiles.size}"
-        }
+        // 고른 세트리스트가 없어졌으면(곡목 해제 · 연결 해제) 모든 악보로
+        val current = if (scoreMateLinked) setlists.firstOrNull { it.id == selectedSetlistId } else null
+        renderSetlistTabs(current)
         binding.scoreMateSyncBtn.visibility = if (scoreMateLinked) View.VISIBLE else View.GONE
-        pdfAdapter.submitList(allPdfFiles)
-        binding.emptyView.visibility = if (allPdfFiles.isEmpty()) View.VISIBLE else View.GONE
-        if (scoreMateLinked) {
-            binding.emptyTitle.text = "ScoreMate 에서 받은 악보가 없습니다"
-            binding.emptyHint.text = "☁️ 동기화 를 누르거나 ScoreMate 웹에 악보를 올리세요"
+
+        val shown: List<PdfFile>
+        if (current != null) {
+            // 곡 순서대로 — 정렬 버튼은 쓰지 않는다. 이 TV 에 아직 없는 곡(받는 중 · 숨김)은 빼고 개수로 알린다
+            val entries = com.mrgq.pdfviewer.scoremate.ScoreMateSetlists.entries(current, syncedRows)
+            val byPath = allPdfFiles.associateBy { it.path }
+            shown = entries.mapNotNull { entry ->
+                entry.path?.let { byPath[it] }?.copy(setlistPosition = entry.item.position, setlistNotes = entry.item.notes)
+            }
+            val missing = entries.size - shown.size
+            // 세트리스트 이름은 줄에 이미 보인다 — 여기는 아직 받지 않은 곡이 있을 때만 알린다
+            binding.librarySource.text = "☁️ ScoreMate" + if (missing > 0) " · ${entries.size}곡 중 ${shown.size}곡" else ""
+            binding.emptyTitle.text = "이 세트리스트의 악보를 아직 받지 않았습니다"
+            binding.emptyHint.text = "☁️ 동기화 를 누르세요"
         } else {
-            binding.emptyTitle.text = "PDF 파일이 없습니다"
-            binding.emptyHint.text = "설정에서 웹서버를 통해 파일을 업로드하세요"
+            shown = allPdfFiles
+            binding.librarySource.text = if (scoreMateLinked) "☁️ ScoreMate" else "이 기기 파일 ${allPdfFiles.size}"
+            if (scoreMateLinked) {
+                binding.emptyTitle.text = "ScoreMate 에서 받은 악보가 없습니다"
+                binding.emptyHint.text = "웹에서 이 TV 로 보낼 세트리스트를 고른 뒤 ☁️ 동기화 를 누르세요"
+            } else {
+                binding.emptyTitle.text = "PDF 파일이 없습니다"
+                binding.emptyHint.text = "설정에서 웹서버를 통해 파일을 업로드하세요"
+            }
         }
+        val sortVisibility = if (current != null) View.GONE else View.VISIBLE
+        binding.sortLabel.visibility = sortVisibility
+        binding.sortByNameBtn.visibility = sortVisibility
+        binding.sortByTimeBtn.visibility = sortVisibility
+        pdfAdapter.submitList(shown)
+        binding.emptyView.visibility = if (shown.isEmpty()) View.VISIBLE else View.GONE
     }
     
     private fun setupCollaborationButton() {

@@ -60,9 +60,11 @@ data class SyncReport(
     val removed: Int = 0,
     /** 서버가 아직 처리 중이라 건너뛴 악보 */
     val pending: Int = 0,
+    /** 세트리스트(곡목 · 순서 · 메모)가 바뀌었다 (#064) */
+    val setlistsChanged: Boolean = false,
     val errors: List<String> = emptyList(),
 ) {
-    val changed: Boolean get() = downloaded + moved + removed > 0
+    val changed: Boolean get() = downloaded + moved + removed > 0 || setlistsChanged
 }
 
 /**
@@ -164,7 +166,19 @@ class ScoreMateSync(
 
         // 4. 모두 됐을 때만 커서를 넘긴다
         if (errors.isEmpty()) tokens.syncCursor = pages.last().cursor ?: tokens.syncCursor
-        return SyncReport(downloaded, moved, removed, pending, errors)
+
+        // 5. 세트리스트 — 통째로 바꿔 끼운다(개수가 적다). 실패해도 악보 동기화는 된 것이고 저장한 세트리스트를 그대로 쓴다 (#064)
+        var setlistsChanged = false
+        try {
+            val body = client.fetchSetlists()
+            if (ScoreMateSetlists.parse(body) != ScoreMateSetlists.parse(tokens.setlistsBody)) setlistsChanged = true
+            tokens.setlistsBody = body
+        } catch (e: ScoreMateUnlinkedException) {
+            throw e
+        } catch (e: ScoreMateException) {
+            errors += "세트리스트: ${e.message}"
+        }
+        return SyncReport(downloaded, moved, removed, pending, setlistsChanged, errors)
     }
 
     /** TV 에서 지운 서버 악보 — 목록에서 빼고 다시 받지 않는다. 파일은 호출한 쪽이 지웠다 */
@@ -436,6 +450,7 @@ object ScoreMateSyncText {
         if (report.moved > 0) parts += "${report.moved}개 이름 바뀜"
         if (report.removed > 0) parts += "${report.removed}개 지움"
         if (report.pending > 0) parts += "${report.pending}개는 서버 처리 중"
+        if (report.setlistsChanged) parts += "세트리스트 갱신"
         if (report.errors.isNotEmpty()) parts += "${report.errors.size}개 실패 (${report.errors.first()})"
         return if (parts.isEmpty()) null else "ScoreMate: " + parts.joinToString(", ")
     }

@@ -87,7 +87,8 @@ class PdfFileAdapter(
         fun bind(pdfFile: PdfFile, position: Int, isFileManagementMode: Boolean) {
             currentItem = pdfFile
             currentPosition = position
-            fileNameText.text = pdfFile.name
+            // 세트리스트로 볼 때는 곡 순서를 앞에 (#064)
+            fileNameText.text = pdfFile.setlistPosition?.let { "$it. ${pdfFile.name}" } ?: pdfFile.name
 
             // PDF 문서 정보 (제목 · 작성자). 없거나 제목이 파일명과 같으면 줄을 숨긴다
             val subtitle = PdfDocumentInfo.subtitle(pdfFile.name, pdfFile.title, pdfFile.author)
@@ -100,7 +101,8 @@ class PdfFileAdapter(
             val fileSize = formatFileSize(pdfFile.size)
             val pageInfo = if (pdfFile.pageCount > 0) "${pdfFile.pageCount}페이지" else "페이지 수 알 수 없음"
             // ScoreMate 에서 받은 악보는 앞에 ☁️ 앙상블 · 파트 · 판 (P05 C2)
-            val cloud = pdfFile.cloudLabel?.let { "☁️ $it • " } ?: ""
+            val notes = pdfFile.setlistNotes?.takeIf { it.isNotBlank() }?.let { "📝 $it • " } ?: ""
+            val cloud = notes + (pdfFile.cloudLabel?.let { "☁️ $it • " } ?: "")
             fileInfoText.text = "$cloud$fileSize • $pageInfo • $modifiedDate"
             
             // 파일 관리 모드에 따라 삭제 버튼 표시/숨김

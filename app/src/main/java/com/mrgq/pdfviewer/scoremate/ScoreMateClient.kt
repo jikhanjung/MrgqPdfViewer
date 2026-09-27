@@ -30,6 +30,9 @@ interface ScoreMateTokenStore {
     /** 악보 동기화 커서 (P05 C2, 서버가 준 불투명 값). 연결을 끊으면 함께 지운다 */
     var syncCursor: String?
 
+    /** 받은 세트리스트 (`GET /sync/setlists/` 응답 그대로, #064). 연결을 끊으면 함께 지운다 */
+    var setlistsBody: String?
+
     /** 갱신된 토큰은 **바로**(디스크까지) 저장해야 한다 — refresh 가 회전하므로 잃으면 다시 연결해야 한다 */
     fun saveTokens(tokens: Tokens)
     fun clearTokens()
@@ -131,6 +134,13 @@ class ScoreMateClient(
         if (response.code == 429) throw ScoreMateException("동기화 요청이 너무 많습니다. 잠시 후 다시")
         if (response.code != 200) throw ScoreMateException("동기화 목록을 받지 못했습니다 (HTTP ${response.code})")
         return ScoreMateSync.parsePage(response.body) ?: throw ScoreMateException("동기화 응답을 해석하지 못했습니다")
+    }
+
+    /** 세트리스트 전부 (서버가 이 TV 에 주는 것 — 0.7.0 부터 고른 곡목만). 응답 본문을 그대로 돌려준다 (#064) */
+    suspend fun fetchSetlists(): String {
+        val response = authorized("GET", ScoreMateProtocol.PATH_SYNC_SETLISTS)
+        if (response.code != 200) throw ScoreMateException("세트리스트를 받지 못했습니다 (HTTP ${response.code})")
+        return response.body
     }
 
     /**

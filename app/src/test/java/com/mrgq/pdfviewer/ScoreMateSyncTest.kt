@@ -42,6 +42,7 @@ class ScoreMateSyncTest {
         override val server = "https://sm.test"
         override var tokens: Tokens? = Tokens("a", "r", "d")
         override var syncCursor: String? = null
+        override var setlistsBody: String? = null
         override fun saveTokens(tokens: Tokens) {
             this.tokens = tokens
         }
@@ -94,8 +95,12 @@ class ScoreMateSyncTest {
             scores.remove(id)
         }
 
+        var setlists = """{"setlists":[]}"""
+        var setlistsFail = false
+
         override fun execute(request: HttpRequest): HttpResponse {
             val path = request.url.removePrefix("https://sm.test")
+            if (path.startsWith("/api/v1/sync/setlists/")) return if (setlistsFail) HttpResponse(500, "") else HttpResponse(200, setlists)
             if (!path.startsWith("/api/v1/sync/scores/")) return HttpResponse(404, "")
             val cursor = Regex("cursor=([0-9]+)").find(path)?.groupValues?.get(1)?.toInt() ?: 0
             if (path.contains("cursor=bad")) return HttpResponse(400, """{"cursor":"Invalid cursor"}""")
@@ -307,6 +312,21 @@ class ScoreMateSyncTest {
         assertTrue(PdfLibrary.listPdfFiles(root, scoreMate = true).isEmpty())
         assertTrue(PdfLibrary.listPdfFiles(root, scoreMate = false).isEmpty())
         assertEquals(1, records.deletes.size)
+    }
+
+    @Test
+    fun 세트리스트도_받아_저장하고_바뀌면_알린다() = runBlocking {
+        server.put(Score(1, "몰다우", "v1"))
+        server.setlists = """{"setlists":[{"id":3,"title":"10월 연주회","items":[{"score_id":1,"position":1,"notes":""}]}]}"""
+        val first = sync().sync()
+        assertTrue(first.setlistsChanged)
+        assertEquals("10월 연주회", com.mrgq.pdfviewer.scoremate.ScoreMateSetlists.parse(tokens.setlistsBody).single().title)
+        assertFalse("같으면 바뀐 것이 아니다", sync().sync().setlistsChanged)
+        // 세트리스트를 못 받아도 악보 동기화는 된 것 — 저장한 세트리스트를 그대로 쓴다
+        server.setlistsFail = true
+        val failed = sync().sync()
+        assertTrue(failed.errors.single().startsWith("세트리스트"))
+        assertEquals(1, com.mrgq.pdfviewer.scoremate.ScoreMateSetlists.parse(tokens.setlistsBody).size)
     }
 
     @Test
