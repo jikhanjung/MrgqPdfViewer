@@ -3624,15 +3624,20 @@ class PdfViewerActivity : AppCompatActivity() {
     private suspend fun preparePartPdf(fileId: String, source: File, staff: Int): Triple<File, String, PartLayout>? {
         val staves = musicRepository.getOrAnalyzeScoreStaves(fileId, source) ?: return null
         val part = (ScoreParts.of(staves) as? ScoreParts.Result.Parts)?.parts?.firstOrNull { it.staffIndex == staff } ?: return null
-        // 배치는 DB 의 분석 결과로 늘 다시 계산한다 (가볍다) — 화면의 "총보 n쪽" 표시에 쓴다
-        val measures = musicRepository.getOrAnalyzeScoreMeasures(fileId, source) ?: return null
-        val layout = PartLayout.build(staves, measures, staff) ?: return null
         val out = PartPdfBuilder.cacheFile(cacheDir, fileId, source, staff)
-        if (!out.isFile) {
-            withContext(Dispatchers.Main) { Toast.makeText(this@PdfViewerActivity, "파트보 만드는 중…", Toast.LENGTH_SHORT).show() }
-            PartPdfBuilder.build(source, layout, out)
-            PartPdfBuilder.prune(out, fileId, staff)
+        val layoutFile = PartPdfBuilder.layoutFile(out)
+        // 만들어 둔 것이 있으면 그 배치 그대로 (넓히기에 쪽 경로를 다시 읽지 않게)
+        if (out.isFile && layoutFile.isFile) {
+            PartLayout.decode(layoutFile.readText())?.let { return Triple(out, part.name, it) }
         }
+        withContext(Dispatchers.Main) { Toast.makeText(this@PdfViewerActivity, "파트보 만드는 중…", Toast.LENGTH_SHORT).show() }
+        val measures = musicRepository.getOrAnalyzeScoreMeasures(fileId, source) ?: return null
+        // 가운데선을 걸친 슬러 · 빔 · 덧줄 음을 소속에 따라 넓혀 자르려고 쪽 경로를 읽는다 (PartClip)
+        val boxes = com.mrgq.pdfviewer.score.ScoreLayoutAnalyzer.pathBoxes(source, measures.map { it.pageIndex }.toSet())
+        val layout = PartLayout.build(staves, measures, staff, boxes) ?: return null
+        PartPdfBuilder.build(source, layout, out)
+        layoutFile.writeText(PartLayout.encode(layout))
+        PartPdfBuilder.prune(out, fileId, staff)
         return Triple(out, part.name, layout)
     }
 

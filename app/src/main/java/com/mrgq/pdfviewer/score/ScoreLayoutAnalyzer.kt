@@ -18,6 +18,27 @@ object ScoreLayoutAnalyzer {
      * 파일을 열 수 없으면 null. 악보 구조를 못 찾은 페이지는 시스템이 빈 [PageLayout] 이다
      * (스캔 PDF, 다른 작성기, 악보가 아닌 문서).
      */
+    /**
+     * 쪽마다 경로 박스 (crop 기준, 아래→위) — 파트보를 소속에 따라 넓혀 자를 때 쓴다 ([PartClip]). 분석과 같은 해석기다.
+     * [pages] 의 쪽만 읽는다. 열 수 없으면 빈 맵. 회전된 쪽은 뺀다 (분석도 하지 않는다)
+     */
+    fun pathBoxes(file: File, pages: Set<Int>): Map<Int, List<PathBox>> = try {
+        PDDocument.load(file).use { doc ->
+            pages.filter { it in 0 until doc.numberOfPages }.associateWith { index ->
+                val page = doc.getPage(index)
+                if (page.rotation % 360 != 0) return@associateWith emptyList<PathBox>()
+                val crop = page.cropBox
+                val boxes = ArrayList<PathBox>()
+                PathContentInterpreter(crop.lowerLeftX, crop.lowerLeftY) { boxes += it }
+                    .run(PdfBoxContent.pageContent(page), PdfBoxXObjects(page.resources))
+                boxes
+            }
+        }
+    } catch (e: Exception) {
+        Log.w(TAG, "경로 읽기 실패: ${file.name}", e)
+        emptyMap()
+    }
+
     fun analyze(file: File): ScoreLayout? = try {
         val started = System.currentTimeMillis()
         PDDocument.load(file).use { doc ->

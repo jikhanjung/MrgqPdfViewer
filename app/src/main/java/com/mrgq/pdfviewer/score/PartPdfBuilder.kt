@@ -49,7 +49,11 @@ object PartPdfBuilder {
                             val dstBottomUp = layout.pageHeight - strip.dstBottom
                             val srcBottomUp = crop.height - strip.srcBottom
                             cs.saveGraphicsState()
-                            cs.addRect(strip.srcLeft, dstBottomUp, strip.srcRight - strip.srcLeft, strip.height)
+                            // 잘라 낼 모양 = 사각형들의 합 (같은 방향 re 들의 nonzero → 합집합). 원본 좌표 → 가상 쪽 좌표는 세로로만 옮긴다
+                            for (clip in strip.clips) {
+                                val bottomUp = layout.pageHeight - (strip.dstTop + (clip.bottom - strip.srcTop))
+                                cs.addRect(clip.left, bottomUp, clip.right - clip.left, clip.bottom - clip.top)
+                            }
                             cs.clip()
                             // importPageAsForm 의 폼 행렬이 crop 원점을 (0,0) 으로 옮겨 둔다 — 조각 높이만큼만 옮긴다
                             cs.transform(Matrix.getTranslateInstance(0f, dstBottomUp - srcBottomUp))
@@ -106,13 +110,16 @@ object PartPdfBuilder {
     fun cacheFile(cacheDir: File, pdfFileId: String, source: File, staffIndex: Int): File =
         File(File(cacheDir, "parts"), "${pdfFileId}_${source.length()}_${source.lastModified()}_s${staffIndex}_f$FORMAT.pdf")
 
-    /** [keep] 과 같은 파일의 다른 캐시(옛 원본 · 옛 형식)를 지운다 — 보표가 다른 것은 둔다 */
+    /** 파트 PDF 옆에 두는 배치 ([PartLayout.encode]) */
+    fun layoutFile(pdf: File): File = File(pdf.path.removeSuffix(".pdf") + ".json")
+
+    /** [keep] 과 같은 파일의 다른 캐시(옛 원본 · 옛 형식, 배치 json 포함)를 지운다 — 보표가 다른 것은 둔다 */
     fun prune(keep: File, pdfFileId: String, staffIndex: Int) {
         keep.parentFile?.listFiles()?.forEach { f ->
-            if (f != keep && f.name.startsWith("${pdfFileId}_") && f.name.contains("_s${staffIndex}_")) f.delete()
+            if (f != keep && f != layoutFile(keep) && f.name.startsWith("${pdfFileId}_") && f.name.contains("_s${staffIndex}_")) f.delete()
         }
     }
 
-    /** 2: 왼쪽 여백에 원본 마디 · 쪽 번호, 3: 번호를 키움(11 · 9pt) */
-    private const val FORMAT = 3
+    /** 2: 왼쪽 여백에 원본 마디 · 쪽 번호, 3: 번호를 키움(11 · 9pt), 4: 소속에 따라 넓혀 자르기(PartClip) */
+    private const val FORMAT = 4
 }

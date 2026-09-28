@@ -2,6 +2,9 @@ package com.mrgq.pdfviewer.score
 
 import com.mrgq.pdfviewer.database.entity.ScoreMeasure
 import com.mrgq.pdfviewer.database.entity.ScoreStaff
+import com.google.gson.JsonArray
+import com.google.gson.JsonObject
+import com.google.gson.JsonParser
 
 /**
  * 파트보 한 조각 — 원본 쪽 [srcPage] 의 사각형(보표 한 줄)을 가상 쪽 [dstPage] 의 [dstTop] 에 그대로(1:1) 옮긴다.
@@ -9,6 +12,8 @@ import com.mrgq.pdfviewer.database.entity.ScoreStaff
  *
  * @param staffTop 조각 안 보표의 위 오선 · [staffBottom] 아래 오선 (원본 좌표) — 왼쪽 여백의 번호를 보표 높이에 맞춘다
  * @param firstMeasure 이 조각의 첫 마디 번호 — 왼쪽 여백에 적는다 (총보는 보통 맨 위 보표에만 마디 번호가 있다)
+ * @param clips 실제로 잘라 낼 모양 = 사각형들의 합 (원본 좌표). 기본 띠 + 소속에 따라 넓힌 부분([PartClip]).
+ *   [srcTop] ~ [srcBottom] 은 이 모두를 덮는 범위 — 가상 쪽에 놓을 높이
  */
 data class PartStrip(
     val srcPage: Int,
@@ -22,6 +27,7 @@ data class PartStrip(
     val firstMeasure: Int?,
     val staffTop: Float = srcTop,
     val staffBottom: Float = srcBottom,
+    val clips: List<ClipRect> = listOf(ClipRect(srcLeft, srcTop, srcRight, srcBottom)),
 ) {
     val height: Float get() = srcBottom - srcTop
     val dstBottom: Float get() = dstTop + height
@@ -33,7 +39,7 @@ data class PartStrip(
  * 넘김 애니메이션을 그대로 쓴다 (P07 결정: 세로 A4).
  *
  * 띠의 위아래는 **이웃 보표와의 가운데까지** — 덧줄 · 셈여림 · 가사를 살리고 옆 파트는 들이지 않는다. 시스템 맨 위 · 맨 아래 보표는
- * 반대쪽 이웃과의 간격을 그대로 쓴다. 왼쪽은 시스템 첫 마디선에서 [LEFT_PAD] 더 (괄호 · 음자리표 앞), 오른쪽은 끝 마디선에서 [RIGHT_PAD] 더.
+ * 반대쪽 이웃과의 간격을 그대로 쓴다. 쪽의 경로 박스를 주면 가운데선을 걸친 슬러 · 빔 · 덧줄 음을 소속에 따라 넓혀 자른다([PartClip]). 왼쪽은 시스템 첫 마디선에서 [LEFT_PAD] 더 (괄호 · 음자리표 앞), 오른쪽은 끝 마디선에서 [RIGHT_PAD] 더.
  *
  * Android 에 의존하지 않는다 — JVM 단위 테스트 대상.
  */
@@ -69,7 +75,12 @@ data class PartLayout(
          * @param measures 이 파일의 마디 전부 (시스템 가로 범위와 첫 마디 번호)
          * @return 고른 보표가 있는 시스템이 없으면 null
          */
-        fun build(staves: List<ScoreStaff>, measures: List<ScoreMeasure>, staffIndex: Int): PartLayout? {
+        fun build(
+            staves: List<ScoreStaff>,
+            measures: List<ScoreMeasure>,
+            staffIndex: Int,
+            pageBoxes: Map<Int, List<PathBox>> = emptyMap(),
+        ): PartLayout? {
             val measuresBySystem = measures.groupBy { it.pageIndex to it.systemIndex }
             val first = measures.firstOrNull() ?: return null
             val pageWidth = first.pageWidthPt
@@ -97,7 +108,12 @@ data class PartLayout(
                 val bottom = (band.bottomPt + (below ?: above ?: fallback)).coerceAtMost(srcPageHeight)
                 val left = (systemMeasures.minOf { it.leftPt } - LEFT_PAD).coerceAtLeast(0f)
                 val right = (systemMeasures.maxOf { it.rightPt } + RIGHT_PAD).coerceAtMost(srcPageWidth)
-                val height = bottom - top
+                val extras = pageBoxes[key.first]?.let { boxes ->
+                    PartClip.extras(boxes, srcPageHeight, bands.map { it.topPt to it.bottomPt }, k, top, bottom, left, right)
+                }.orEmpty()
+                val stripTop = minOf(top, extras.minOfOrNull { it.top } ?: top)
+                val stripBottom = maxOf(bottom, extras.maxOfOrNull { it.bottom } ?: bottom)
+                val height = stripBottom - stripTop
 
                 if (cursor + height > pageHeight - BOTTOM_MARGIN && cursor > TOP_MARGIN) {
                     dstPage++
@@ -107,19 +123,72 @@ data class PartLayout(
                     srcPage = key.first,
                     srcSystem = key.second,
                     srcLeft = left,
-                    srcTop = top,
+                    srcTop = stripTop,
                     srcRight = right,
-                    srcBottom = bottom,
+                    srcBottom = stripBottom,
                     dstPage = dstPage,
                     dstTop = cursor,
                     firstMeasure = systemMeasures.minOf { it.measureNumber },
                     staffTop = band.topPt,
                     staffBottom = band.bottomPt,
+                    clips = listOf(ClipRect(left, top, right, bottom)) + extras,
                 )
                 cursor += height + STRIP_GAP
             }
             if (strips.isEmpty()) return null
             return PartLayout(staffIndex, pageWidth, pageHeight, dstPage + 1, strips)
+        }
+
+        /**
+         * 파트 PDF 옆에 저장하는 배치 (`.json`) — 넓히기에 쪽 경로를 다시 읽어야 해서, 한 번 만든 배치는 저장해 두고 화면의
+         * "총보 n쪽" 표시에 쓴다. Gson 트리로 직접 쓴다 (리플렉션 없이 — release 는 R8 로 줄인다)
+         */
+        fun encode(layout: PartLayout): String = JsonObject().apply {
+            addProperty("staff", layout.staffIndex)
+            addProperty("w", layout.pageWidth)
+            addProperty("h", layout.pageHeight)
+            addProperty("pages", layout.pageCount)
+            add("strips", JsonArray().apply {
+                layout.strips.forEach { s ->
+                    add(JsonObject().apply {
+                        addProperty("sp", s.srcPage); addProperty("ss", s.srcSystem)
+                        addProperty("l", s.srcLeft); addProperty("t", s.srcTop); addProperty("r", s.srcRight); addProperty("b", s.srcBottom)
+                        addProperty("dp", s.dstPage); addProperty("dt", s.dstTop)
+                        s.firstMeasure?.let { addProperty("m", it) }
+                        addProperty("st", s.staffTop); addProperty("sb", s.staffBottom)
+                        add("c", JsonArray().apply {
+                            s.clips.forEach { c -> add(JsonArray().apply { add(c.left); add(c.top); add(c.right); add(c.bottom) }) }
+                        })
+                    })
+                }
+            })
+        }.toString()
+
+        /** [encode] 의 반대. 깨졌으면 null (다시 만든다) */
+        fun decode(json: String): PartLayout? = try {
+            val o = JsonParser.parseString(json).asJsonObject
+            PartLayout(
+                staffIndex = o["staff"].asInt,
+                pageWidth = o["w"].asFloat,
+                pageHeight = o["h"].asFloat,
+                pageCount = o["pages"].asInt,
+                strips = o["strips"].asJsonArray.map { e ->
+                    val s = e.asJsonObject
+                    PartStrip(
+                        srcPage = s["sp"].asInt, srcSystem = s["ss"].asInt,
+                        srcLeft = s["l"].asFloat, srcTop = s["t"].asFloat, srcRight = s["r"].asFloat, srcBottom = s["b"].asFloat,
+                        dstPage = s["dp"].asInt, dstTop = s["dt"].asFloat,
+                        firstMeasure = s["m"]?.asInt,
+                        staffTop = s["st"].asFloat, staffBottom = s["sb"].asFloat,
+                        clips = s["c"].asJsonArray.map { c ->
+                            val a = c.asJsonArray
+                            ClipRect(a[0].asFloat, a[1].asFloat, a[2].asFloat, a[3].asFloat)
+                        },
+                    )
+                },
+            )
+        } catch (e: RuntimeException) {
+            null
         }
     }
 }
