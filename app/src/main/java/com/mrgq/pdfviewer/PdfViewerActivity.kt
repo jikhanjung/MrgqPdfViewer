@@ -2991,7 +2991,7 @@ class PdfViewerActivity : AppCompatActivity() {
     private suspend fun scoreMeasuresFor(fileId: String): List<ScoreMeasure>? {
         if (scoreMeasuresFileId == fileId) return scoreMeasures
         val file = File(pdfFilePath)
-        val measures = withContext(Dispatchers.IO) { musicRepository.getOrAnalyzeScoreMeasures(fileId, file) }
+        val measures = withContext(Dispatchers.IO) { measuresForView(fileId, file) }
         if (measures != null && currentPdfFileId == fileId) {
             scoreMeasures = measures
             scoreMeasuresFileId = fileId
@@ -3104,12 +3104,6 @@ class PdfViewerActivity : AppCompatActivity() {
      */
     private fun startMetronomeFromDialog() {
         val fileId = currentPdfFileId
-        if (partViewStaff != null) {
-            // 악보 연동(현재 마디 · 자동 넘김)을 파트 화면에 옮기는 건 P07 3단계 — 지금은 일반 메트로놈
-            Toast.makeText(this, "파트 보기에서는 악보 연동 없이 메트로놈만 켭니다", Toast.LENGTH_SHORT).show()
-            startMetronome()
-            return
-        }
         if (fileId == null) {
             startMetronome()
             return
@@ -3118,7 +3112,7 @@ class PdfViewerActivity : AppCompatActivity() {
         if (cached == null) Toast.makeText(this, "악보 분석 중…", Toast.LENGTH_SHORT).show()
         val file = File(pdfFilePath)
         lifecycleScope.launch {
-            val measures = cached ?: withContext(Dispatchers.IO) { musicRepository.getOrAnalyzeScoreMeasures(fileId, file) }
+            val measures = cached ?: withContext(Dispatchers.IO) { measuresForView(fileId, file) }
             if (currentPdfFileId != fileId) return@launch
             if (cached == null && measures != null) {
                 scoreMeasures = measures
@@ -3414,11 +3408,6 @@ class PdfViewerActivity : AppCompatActivity() {
     /** 현재 화면(페이지·두 페이지 모드·클리핑·여백)에 맞춰 마디 박스를 다시 그린다. */
     private fun refreshScoreOverlay() {
         val overlay = binding.scoreOverlay
-        if (partViewStaff != null) {
-            // 마디 좌표는 원본 쪽 기준 — 파트 화면으로 옮기는 건 P07 3단계
-            overlay.clear()
-            return
-        }
         val fileId = currentPdfFileId
         val focus = when (followState) {
             FollowState.SELECTING -> followMeasures.getOrNull(cursorIndex)
@@ -3465,7 +3454,7 @@ class PdfViewerActivity : AppCompatActivity() {
         scoreLoadingFileId = fileId
         val file = File(pdfFilePath)
         lifecycleScope.launch {
-            val measures = withContext(Dispatchers.IO) { musicRepository.getOrAnalyzeScoreMeasures(fileId, file) }
+            val measures = withContext(Dispatchers.IO) { measuresForView(fileId, file) }
             scoreLoadingFileId = null
             // null = 파일 전환 중이라 레코드와 경로가 어긋났다. 전환이 끝나면 showPage 가 다시 부른다
             if (measures == null || currentPdfFileId != fileId) return@launch
@@ -3557,6 +3546,15 @@ class PdfViewerActivity : AppCompatActivity() {
         }
     }
 
+    /**
+     * 뷰어가 쓰는 마디 목록 — 파트 보기면 파트 PDF 좌표로 옮긴 것 (P07 3단계, [PartLayout.mapMeasures]). 마디 박스 · 악보 연동이 모두 이것을 쓴다.
+     * 캐시([scoreMeasures])는 파트 보기가 바뀔 때마다 비운다 ([applyPartViewSelection])
+     */
+    private suspend fun measuresForView(fileId: String, file: File): List<ScoreMeasure>? {
+        val measures = musicRepository.getOrAnalyzeScoreMeasures(fileId, file) ?: return null
+        return partViewLayout?.mapMeasures(measures) ?: measures
+    }
+
     private fun toast(message: String) {
         Toast.makeText(this, message, Toast.LENGTH_LONG).show()
     }
@@ -3573,9 +3571,12 @@ class PdfViewerActivity : AppCompatActivity() {
             null
         }
         if (fileId == null || staff == null) {
-            partViewStaff = null
-            partViewName = null
-            partViewLayout = null
+            withContext(Dispatchers.Main) {
+                partViewStaff = null
+                partViewName = null
+                partViewLayout = null
+                clearMeasureCache()
+            }
             return
         }
         val source = File(pdfFilePath)
@@ -3586,6 +3587,7 @@ class PdfViewerActivity : AppCompatActivity() {
             null
         }
         withContext(Dispatchers.Main) {
+            clearMeasureCache()
             if (prepared == null) {
                 partViewStaff = null
                 partViewName = null
@@ -3618,6 +3620,14 @@ class PdfViewerActivity : AppCompatActivity() {
             currentBottomClipping = 0f
             Log.i("PdfViewerActivity", "파트 보기: ${source.name} — $name, ${pageCount}쪽")
         }
+    }
+
+    /** 마디 캐시를 비운다 — 파트 보기가 바뀌면 같은 파일이라도 마디 좌표가 다르다 */
+    private fun clearMeasureCache() {
+        scoreMeasures = emptyList()
+        scoreMeasuresFileId = null
+        followMeasures = emptyList()
+        followFileId = null
     }
 
     /** 파트 PDF (캐시에 없으면 만든다) · 파트 이름 · 배치. 파트를 가를 수 없는 악보면 null */

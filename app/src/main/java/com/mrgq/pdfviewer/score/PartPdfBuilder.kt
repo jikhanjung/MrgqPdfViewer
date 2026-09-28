@@ -120,6 +120,6 @@ object PartPdfBuilder {
         }
     }
 
-    /** 2: 왼쪽 여백에 원본 마디 · 쪽 번호, 3: 번호를 키움(11 · 9pt), 4: 소속에 따라 넓혀 자르기(PartClip) */
-    private const val FORMAT = 4
+    /** 2: 왼쪽 여백에 원본 마디 · 쪽 번호, 3: 번호를 키움(11 · 9pt), 4: 소속에 따라 넓혀 자르기(PartClip), 5: 위 여백 64pt(박 표시), 6: 64pt 는 왼쪽 쪽(짝수)만 */
+    private const val FORMAT = 6
 }

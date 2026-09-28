@@ -24,22 +24,23 @@ class MetronomeBeatView @JvmOverloads constructor(
     private var dotted = false
     private var currentIndex = -1
 
+    // 크기는 v0.2.10 까지의 약 70% — 화면 왼쪽 위에서 악보 첫 줄을 덜 가리게 (P07 작업 중 사용자 요청, 2026-09-28)
     private val density = resources.displayMetrics.density
-    private val dotRadius = 7f * density
-    private val dotGap = 8f * density
-    private val groupGap = 8f * density
-    private val padding = 12f * density
-    private val heightPx = 40f * density
+    private val dotRadius = 5f * density
+    private val dotGap = 5.5f * density
+    private val groupGap = 5.5f * density
+    private val padding = 8f * density
+    private val heightPx = 28f * density
 
     private val background = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xB3000000.toInt() }
     private val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = Color.WHITE
-        textSize = 18f * density
+        textSize = 13f * density
         typeface = Typeface.DEFAULT_BOLD
     }
     private val idleDot = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.STROKE
-        strokeWidth = 2f * density
+        strokeWidth = 1.5f * density
         color = 0x99FFFFFF.toInt()
     }
     private val activeDot = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }

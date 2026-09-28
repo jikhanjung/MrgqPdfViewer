@@ -53,15 +53,15 @@ class PartLayoutTest {
 
     @Test
     fun 위에서부터_쌓고_넘치면_다음_쪽() {
-        // 띠 높이 60 + 간격 4 → 쪽(842, 위 36 · 아래 28)에 12줄: 36 + 12×64 = 804 ≤ 814, 13번째는 넘친다
+        // 띠 높이 60 + 간격 4 → 왼쪽 쪽(842, 위 64 · 아래 28)에 11줄: 64 + 11×64 = 768 ≤ 814, 12번째는 넘친다
         val part = layout(7, 1)!!
         assertEquals(14, part.strips.size)
         assertEquals(2, part.pageCount)
         val firstPage = part.strips.filter { it.dstPage == 0 }
-        assertEquals(12, firstPage.size)
-        assertEquals(PartLayout.TOP_MARGIN, firstPage.first().dstTop)
+        assertEquals(11, firstPage.size)
+        assertEquals(PartLayout.LEFT_PAGE_TOP_MARGIN, firstPage.first().dstTop)
         assertTrue(firstPage.last().dstBottom <= part.pageHeight - PartLayout.BOTTOM_MARGIN)
-        assertEquals(PartLayout.TOP_MARGIN, part.strips[12].dstTop)
+        assertEquals(PartLayout.TOP_MARGIN, part.strips[11].dstTop) // 오른쪽 쪽은 원래 여백
         // 순서는 원본 순서 그대로, 쪽 크기는 원본 쪽
         assertEquals(listOf(0 to 0, 0 to 1, 1 to 0), part.strips.take(3).map { it.srcPage to it.srcSystem })
         assertEquals(595f to 842f, part.pageWidth to part.pageHeight)
@@ -75,15 +75,37 @@ class PartLayoutTest {
 
     @Test
     fun 가상_쪽의_원본_쪽_범위와_쪽_번호를_적을_조각() {
-        val part = layout(7, 1)!! // 가상 1쪽 = 원본 1~6쪽(조각 12), 가상 2쪽 = 원본 7쪽
+        val part = layout(7, 1)!! // 가상 1쪽 = 원본 1~6쪽 첫 시스템(조각 11), 가상 2쪽 = 원본 6쪽 둘째 시스템 ~ 7쪽
         assertEquals(0..5, part.sourcePages(0..0))
-        assertEquals(6..6, part.sourcePages(1..1))
+        assertEquals(5..6, part.sourcePages(1..1))
         assertEquals(0..6, part.sourcePages(0..1))
         assertNull(part.sourcePages(5..5))
-        // 원본 쪽이 바뀌는 조각(0, 2, 4, …)과 가상 쪽의 첫 조각(12)
-        assertEquals(listOf(0, 2, 4, 6, 8, 10, 12), part.strips.indices.filter { part.showsSourcePage(it) })
+        // 원본 쪽이 바뀌는 조각(0, 2, 4, …, 12)과 가상 쪽의 첫 조각(11)
+        assertEquals(listOf(0, 2, 4, 6, 8, 10, 11, 12), part.strips.indices.filter { part.showsSourcePage(it) })
         // 보표 높이도 들고 있다 (번호를 보표 가운데에 맞춘다)
         assertEquals(160f to 180f, part.strips.first().staffTop to part.strips.first().staffBottom)
+    }
+
+    @Test
+    fun 마디를_파트_PDF_좌표로_옮긴다() {
+        val s = score(7)
+        val part = PartLayout.build(s.toStaves("f"), s.toMeasures("f"), 1)!!
+        val mapped = part.mapMeasures(s.toMeasures("f"))
+        assertEquals(28, mapped.size) // 7쪽 × 시스템 2 × 마디 2 — 하나도 빠지지 않는다
+        assertEquals((1..28).toList(), mapped.map { it.measureNumber })
+        // 원본 1쪽 둘째 시스템(마디 3 · 4) → 가상 1쪽 둘째 줄
+        val m3 = mapped[2]
+        assertEquals(0, m3.pageIndex)
+        assertEquals(1, m3.systemIndex)
+        assertEquals(part.strips[1].dstTop, m3.topPt)
+        assertEquals(part.strips[1].dstBottom, m3.bottomPt)
+        assertEquals(80f to 300f, m3.leftPt to m3.rightPt) // 가로는 그대로
+        // 원본 7쪽 첫 시스템 (조각 12) → 가상 2쪽 둘째 줄 (첫 줄은 원본 6쪽 둘째 시스템)
+        val m25 = mapped[24]
+        assertEquals(1 to 1, m25.pageIndex to m25.systemIndex)
+        assertEquals(595f to 842f, m25.pageWidthPt to m25.pageHeightPt)
+        // 박자표는 그대로 (악보 연동이 쓴다)
+        assertEquals(s.toMeasures("f").map { it.timeSigNumerator }, mapped.map { it.timeSigNumerator })
     }
 
     @Test

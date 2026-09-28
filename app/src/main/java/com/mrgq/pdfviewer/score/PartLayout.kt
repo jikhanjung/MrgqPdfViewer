@@ -56,6 +56,30 @@ data class PartLayout(
         return if (pages.isEmpty()) null else pages.min()..pages.max()
     }
 
+    /**
+     * 원본 마디를 **파트 PDF 좌표**로 옮긴다 (P07 3단계) — 쪽은 가상 쪽, 세로는 그 조각(줄) 범위, 가로는 그대로, 시스템 번호는 가상 쪽 안의
+     * 줄 순서. 마디 번호 · 박자표는 그대로라 마디 박스 · 시작 마디 커서(←→ 마디, ↑↓ 줄) · 현재 마디 · 자동 넘김이 파트 화면에서 그대로 돈다.
+     * 조각이 없는 시스템의 마디는 뺀다 (보표 수가 같은 악보만 파트 보기를 쓰므로 생기지 않는다)
+     */
+    fun mapMeasures(measures: List<ScoreMeasure>): List<ScoreMeasure> {
+        val stripOf = strips.associateBy { it.srcPage to it.srcSystem }
+        val lineOf = strips.groupBy { it.dstPage }.values.flatMap { onPage ->
+            onPage.sortedBy { it.dstTop }.mapIndexed { line, strip -> (strip.srcPage to strip.srcSystem) to line }
+        }.toMap()
+        return measures.mapNotNull { m ->
+            val key = m.pageIndex to m.systemIndex
+            val strip = stripOf[key] ?: return@mapNotNull null
+            m.copy(
+                pageIndex = strip.dstPage,
+                systemIndex = lineOf.getValue(key),
+                topPt = strip.dstTop,
+                bottomPt = strip.dstBottom,
+                pageWidthPt = pageWidth,
+                pageHeightPt = pageHeight,
+            )
+        }
+    }
+
     /** 조각 [index] 에 원본 쪽 번호를 적을까 — 원본 쪽이 바뀌는 첫 조각과 가상 쪽마다 첫 조각 */
     fun showsSourcePage(index: Int): Boolean {
         val strip = strips[index]
@@ -65,6 +89,15 @@ data class PartLayout(
 
     companion object {
         const val TOP_MARGIN = 36f
+        /**
+         * 두 쪽 모드에서 **왼쪽에 오는 쪽**(짝수 순번 — 뷰어는 0-1, 2-3 … 으로 짝짓는다)의 위 여백. 메트로놈 박 표시(화면 왼쪽 위, 여백 8dp +
+         * 높이 28dp)가 첫 줄을 가리지 않게 넉넉히 (1080p 에서 쪽 높이를 맞추면 약 80px). 오른쪽 쪽은 [TOP_MARGIN] — 좌우 줄 높이는 덧줄로
+         * 어차피 다르니 맞추지 않는다 (사용자 판단). 한 쪽 모드는 쪽이 화면 가운데라 박 표시와 겹치지 않는다
+         */
+        const val LEFT_PAGE_TOP_MARGIN = 64f
+
+        /** 가상 쪽 [page] 의 위 여백 */
+        fun topMargin(page: Int): Float = if (page % 2 == 0) LEFT_PAGE_TOP_MARGIN else TOP_MARGIN
         const val BOTTOM_MARGIN = 28f
         const val STRIP_GAP = 4f
         const val LEFT_PAD = 8f
@@ -88,7 +121,7 @@ data class PartLayout(
 
             val strips = ArrayList<PartStrip>()
             var dstPage = 0
-            var cursor = TOP_MARGIN
+            var cursor = topMargin(0)
             val systems = staves.groupBy { it.pageIndex to it.systemIndex }.toSortedMap(compareBy({ it.first }, { it.second }))
             for ((key, systemStaves) in systems) {
                 val bands = systemStaves.sortedBy { it.staffIndex }
@@ -115,9 +148,9 @@ data class PartLayout(
                 val stripBottom = maxOf(bottom, extras.maxOfOrNull { it.bottom } ?: bottom)
                 val height = stripBottom - stripTop
 
-                if (cursor + height > pageHeight - BOTTOM_MARGIN && cursor > TOP_MARGIN) {
+                if (cursor + height > pageHeight - BOTTOM_MARGIN && cursor > topMargin(dstPage)) {
                     dstPage++
-                    cursor = TOP_MARGIN
+                    cursor = topMargin(dstPage)
                 }
                 strips += PartStrip(
                     srcPage = key.first,
