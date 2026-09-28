@@ -62,8 +62,10 @@ class PdfFileAdapter(
         private var currentPosition: Int = -1
         
         init {
+            // 리모컨(TV)은 포커스로 고르고 OK 로 연다. 터치(태블릿)에서 포커스를 받으면 첫 탭이 포커스에 쓰여 두 번 눌러야 열린다 —
+            // 터치 모드에서는 포커스를 받지 않게 해 한 번에 연다 (사용자 요청 2026-09-28)
             itemView.isFocusable = true
-            itemView.isFocusableInTouchMode = true
+            itemView.isFocusableInTouchMode = false
             
             itemView.setOnClickListener {
                 currentItem?.let { onItemClick(it, currentPosition) }
