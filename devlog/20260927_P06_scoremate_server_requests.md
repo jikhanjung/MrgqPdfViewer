@@ -254,7 +254,7 @@ ScoreLayout)를 **그대로** 파이썬으로 옮겨(서버 `scores/score_layout
            "pdf_sha256": "…(= version.sha256)", "measures": 99, "systems": 27, "updated_at": "…"}
 ```
 - 받기: `GET layout.url` → 서명 URL 로 302(PDF · MusicXML 과 같다). `?version=n` 이면 그 판
-- **`analyzer_version`** = 서버 포트 판 + 기준으로 옮긴 앱 `score/` 커밋. 서버가 분석기를 고치거나 앱 `score/` 를 다시 옮기면 오른다 →
+- **`analyzer_version`** = 서버 분석 코드 판 + 기준으로 옮긴 앱 `score/` 커밋(예: `1+app.9557497`). 서버 분석 코드를 고치거나 앱 `score/` 를 다시 옮기면 바뀐다 →
   서버가 모든 판을 다시 분석하고, 기기는 이 값(또는 `sha256`)이 가진 것과 다를 때 다시 받는다 — 앱이 DB 마이그레이션(v9 · v12 · v15)으로
   캐시를 비우던 것을 대신한다
 - **`pdf_sha256`** = 분석한 PDF(판). 기기가 가진 PDF 의 sha256 과 같을 때만 쓴다
