@@ -83,7 +83,7 @@ def normalize(c):
     return c / (np.linalg.norm(c, axis=0, keepdims=True) + 1e-9)
 
 
-def online_dtw(C, start_frame=0, start_col=0, window_s=4.0, every=4, ahead_s=8.0):
+def online_dtw(C, start_frame=0, start_col=0, window_s=4.0, every=4, ahead_s=8.0, quiet=None, prior=0.02):
     """앞만 보는(인과적) 추정 — [every] 프레임마다 **최근 [window_s] 초 녹음**을 지금 추정 위치 근처 악보 구간
     ([-2s, +ahead_s])에 부분 DTW 로 맞춰 경로 끝을 지금 위치로. 처음에는 악보 앞 [start_s] 초 안에서 시작한다
     (끝은 지난 위치에서 0 ~ 2배 속도만 — 반복 음형으로 뛰지 않게. 앱은 시작 마디와 연주 시작 시각을 안다 — [start_frame] 녹음 프레임에 악보 [start_col]). 사이 프레임은 직전 추정"""
@@ -101,9 +101,58 @@ def online_dtw(C, start_frame=0, start_col=0, window_s=4.0, every=4, ahead_s=8.0
             D = librosa.sequence.dtw(C=C[a:i + 1, lo:hi], subseq=True, backtrack=False, step_sizes_sigma=SLOPE)
             # 끝 위치는 빠르기 제약 안에서만 — 지난 갱신 뒤로 0 ~ 2배 진행 (반복 음형으로 멀리 뛰지 않게)
             e0, e1 = est - lo, min(hi - lo, est - lo + 2 * every + 1)
-            last = D[-1] / (i + 1 - a)
-            est = lo + e0 + int(np.argmin(last[e0:e1]))
+            if quiet is not None and quiet[i]:
+                est += every  # 소리가 거의 없으면(쉼 · 아주 여린 곳) 기준 빠르기로 그냥 간다
+            else:
+                last = D[-1] / (i + 1 - a)
+                # 빠르기 사전 — 기준 빠르기로 간 곳(est + every)에서 멀수록 조금씩 비싸게
+                cand = np.arange(e0, e1)
+                last = last[e0:e1] + prior * np.abs(cand - (est - lo + every))
+                est = lo + e0 + int(np.argmin(last))
         path[i] = est
+    return path
+
+
+def oltw(C, start_frame=0, start_col=0, band_s=3.0, prior=0.0, tempo_s=4.0):
+    """온라인 DTW (Dixon MATCH 식) — 녹음 프레임마다 누적 비용 한 줄을 지금 위치 ±[band_s] 초 띠 안에서만 갱신.
+    D(i,j) = min(D(i-1,j) + d, D(i,j-1) + d, D(i-1,j-1) + 2d) — 대각선이 두 배라 경로 기울기(빠르기)에 치우치지 않는다.
+    지금 위치 = 띠 안에서 D(i,j) / (i + j) 가 가장 작은 j. 되돌아가지 않는다(앞으로만).
+    [prior] > 0 이면 **최근 [tempo_s] 초 경로 기울기로 잰 빠르기**로 예측한 곳에서 멀수록 조금 비싸게 — 똑같이 반복되는
+    악절 · 여린 곳에서 멈춰 서지 않게 (기준 빠르기가 아니라 지금 연주 빠르기)"""
+    n, m = C.shape
+    band = int(band_s * SR / HOP)
+    path = np.zeros(n, dtype=int)
+    prev = np.full(m, np.inf)
+    prev[start_col] = 2 * C[start_frame, start_col]
+    est = start_col
+    path[start_frame] = est
+    for i in range(start_frame + 1, n):
+        lo, hi = max(0, est - band), min(m, est + band)
+        d = C[i, lo:hi]
+        cur = np.full(m, np.inf)
+        a = prev[lo:hi] + d  # 녹음만 진행
+        diag = np.full(hi - lo, np.inf)
+        diag[1:] = prev[lo:hi - 1] + 2 * d[1:]
+        if lo > 0:
+            diag[0] = prev[lo - 1] + 2 * d[0]
+        row = np.minimum(a, diag)
+        for k in range(1, hi - lo):  # 악보만 진행 (같은 녹음 프레임 안)
+            v = row[k - 1] + d[k]
+            if v < row[k]:
+                row[k] = v
+        cur[lo:hi] = row
+        steps = (i - start_frame) + (np.arange(lo, hi) - start_col) + 1
+        norm = row / np.maximum(steps, 1)
+        if prior > 0:
+            back = int(tempo_s * SR / HOP)
+            k0 = max(start_frame, i - back)
+            slope = (path[i - 1] - path[k0]) / max(1, i - 1 - k0) if i - 1 - k0 >= back // 2 else 1.0
+            slope = min(2.0, max(0.5, slope))
+            predicted = path[i - 1] + slope
+            norm = norm + prior * np.abs(np.arange(lo, hi) - predicted) / band
+        est = max(est, lo + int(np.argmin(norm)))
+        path[i] = est
+        prev = cur
     return path
 
 
@@ -113,6 +162,9 @@ def main():
     ap.add_argument("musicxml")
     ap.add_argument("--offset-ms", type=float, default=60.0, help="기록 → 실제 소리 지연 (recording_align.py)")
     ap.add_argument("--online", action="store_true")
+    ap.add_argument("--stretch", type=float, default=1.0, help="녹음을 이 배율로 빠르게(>1) · 느리게(<1) 바꿔 시험 — 빠르기를 따라가는지")
+    ap.add_argument("--method", choices=["oltw", "window"], default="oltw", help="온라인 방식: oltw(누적 · MATCH 식) | window(최근 4초 창)")
+    ap.add_argument("--prior", type=float, default=0.0, help="온라인: 빠르기 사전 무게 (0 = 없음)")
     args = ap.parse_args()
     base = args.base.removesuffix(".json").removesuffix(".wav")
     meta = json.load(open(base + ".json", encoding="utf-8"))
@@ -130,15 +182,21 @@ def main():
     Y = normalize(score_chroma(notes, total_q, sec_per_q))
 
     y, _ = librosa.load(base + ".wav", sr=SR, mono=True)
+    if args.stretch != 1.0:
+        y = librosa.effects.time_stretch(y, rate=args.stretch)
+        for e in meta["events"]:
+            e["t_ms"] = (e["t_ms"] + args.offset_ms) / args.stretch - args.offset_ms
     X = normalize(librosa.feature.chroma_cqt(y=y, sr=SR, hop_length=HOP))
     C = 1 - X.T @ Y  # 코사인 거리 (녹음 프레임 × 악보 프레임)
-    silent = np.sqrt((librosa.feature.rms(y=y, hop_length=HOP)[0]) ** 2) < 10 ** (-50 / 20)
+    rms = librosa.feature.rms(y=y, hop_length=HOP)[0]
+    silent = rms < 10 ** (-60 / 20)
+    quiet = np.convolve(rms, np.ones(20) / 20, mode="same") < 10 ** (-50 / 20)  # 약 0.5초 평균
 
     if args.online:
         first = next(e for e in meta["events"] if e["type"] == "beat" and "measure" in e)
         start_frame = int((first["t_ms"] + args.offset_ms) / 1000 * SR / HOP)
         start_col = int(mstarts[first["measure"] - 1] * sec_per_q * SR / HOP)
-        path = online_dtw(C, start_frame, start_col)
+        path = oltw(C, start_frame, start_col, prior=args.prior) if args.method == "oltw" else online_dtw(C, start_frame, start_col, quiet=quiet, prior=args.prior)
     else:
         _, wp = librosa.sequence.dtw(C=C, subseq=True)
         wp = wp[::-1]
@@ -163,7 +221,7 @@ def main():
         hits += est_m == m
         rows.append((e["t_ms"], m, e["beat_in_measure"], est_m, (est_q - truth_q) / q_per_beat))
     errs = np.array(errs)
-    mode = "온라인(최근 4초 창)" if args.online else "오프라인 부분 DTW"
+    mode = f"온라인 {args.method}" if args.online else "오프라인 부분 DTW"
     near = int(np.sum(np.abs(errs) <= 0.5))
     print(f"[{mode}] 박 {len(errs)}개: 마디 정답 {hits}/{len(errs)} ({100 * hits / max(1, len(errs)):.0f}%), ±0.5박 안 {near}/{len(errs)}, "
           f"박 오차 중앙값 {np.median(np.abs(errs)):.2f}박, 90% {np.percentile(np.abs(errs), 90):.2f}박, 최대 {np.abs(errs).max():.2f}박")
