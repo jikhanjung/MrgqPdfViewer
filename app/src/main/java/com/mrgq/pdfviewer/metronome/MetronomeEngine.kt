@@ -34,6 +34,14 @@ class MetronomeEngine(private val sampleRate: Int = 44100) {
     /** 악보 연동 중이면 박 번호 → 마디 안 위치와 박자 (강박을 악보 박자표대로). null 이면 [timeSignature] 로 센다. */
     @Volatile var barPosition: ((Long) -> BarPosition)? = null
 
+    /**
+     * 반주 (P07 6단계) — 악보 연동으로 시작할 때 넣는다. 음은 박 위치(소수)로 적혀 있어 클릭과 **같은 샘플 시계**로 놓인다:
+     * 박 k 가 울릴 때 박 k 와 k+1 의 프레임 사이에 그 박의 음들을 나눠 놓는다. 클릭을 꺼도([soundEnabled]) 반주는 [accompanimentVolume] 으로 난다.
+     * 합주(시간표 모드)에서는 쓰지 않는다.
+     */
+    @Volatile var accompaniment: Accompaniment? = null
+    @Volatile var accompanimentVolume = 0.6f
+
     @Volatile var isRunning = false
         private set
 
@@ -153,7 +161,11 @@ class MetronomeEngine(private val sampleRate: Int = 44100) {
         val mediumClick = ClickSynth.render(sampleRate, Accent.MEDIUM)
         val normalClick = ClickSynth.render(sampleRate, Accent.WEAK)
         val buffer = ShortArray(CHUNK_FRAMES)
+        val mix = IntArray(CHUNK_FRAMES)
         val clock = MetronomeClock(sampleRate, startFrame = (sampleRate * LEAD_IN_SEC).toLong())
+        val voices = AccompanimentVoices(sampleRate)
+        var notes: Accompaniment? = null
+        var nextNote = 0
 
         var next = record(clock.next(bpm, timeSignature, dottedBeat, barPosition))
         var written = 0L
@@ -170,7 +182,26 @@ class MetronomeEngine(private val sampleRate: Int = 44100) {
                         Accent.WEAK -> normalClick
                     }
                     clickPos = 0
+                    val beat = next
                     next = record(clock.next(bpm, timeSignature, dottedBeat, barPosition))
+                    // 반주: 이 박(beat ~ next) 안에서 시작하는 음을 두 박 프레임 사이에 나눠 놓는다
+                    val acc = accompaniment
+                    if (acc != null) {
+                        if (acc !== notes) {
+                            notes = acc
+                            nextNote = acc.firstAtOrAfter(beat.index.toDouble())
+                        }
+                        val span = (next.frame - beat.frame).toDouble()
+                        val limit = beat.index + 1.0
+                        while (nextNote < acc.size && acc.beats[nextNote] < limit) {
+                            val offset = acc.beats[nextNote] - beat.index
+                            if (offset >= 0) {
+                                val on = beat.frame + Math.round(offset * span)
+                                voices.noteOn(on, on + Math.round(acc.lengths[nextNote] * span), acc.midis[nextNote], acc.parts[nextNote])
+                            }
+                            nextNote++
+                        }
+                    }
                 }
                 var sample = 0
                 val current = click
@@ -179,8 +210,10 @@ class MetronomeEngine(private val sampleRate: Int = 44100) {
                     clickPos++
                     if (clickPos >= current.size) click = null
                 }
-                buffer[i] = sample.toShort()
+                mix[i] = sample
             }
+            voices.mixInto(mix, written, CHUNK_FRAMES, accompanimentVolume.coerceIn(0f, 1f))
+            for (i in 0 until CHUNK_FRAMES) buffer[i] = mix[i].coerceIn(Short.MIN_VALUE.toInt(), Short.MAX_VALUE.toInt()).toShort()
             val result = try {
                 audio.write(buffer, 0, CHUNK_FRAMES)
             } catch (e: IllegalStateException) {

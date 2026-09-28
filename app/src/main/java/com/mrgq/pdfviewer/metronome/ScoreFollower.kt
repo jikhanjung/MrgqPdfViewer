@@ -146,6 +146,19 @@ class ScoreFollower(
             firstBeat.contentEquals(other.firstBeat) && totalBeats == other.totalBeats &&
             countInBeats == other.countInBeats && meters.contentEquals(other.meters) && dotteds.contentEquals(other.dotteds)
 
+    /**
+     * 마디 [measureNumber] 첫머리에서 [quarters](4분음표 단위)만큼 지난 곳의 **박 위치**(소수) — 반주 음을 박 시간표에 놓는다 (P07 6단계).
+     * 연주하지 않는 마디(시작 마디 앞)면 null. 박 단위는 그 마디의 세는 단위를 따른다 (6/8 · 점음표 박이면 한 박 = 4분음표 1.5)
+     */
+    fun beatAt(measureNumber: Int, quarters: Double): Double? {
+        val i = indexOfMeasure[measureNumber] ?: return null
+        val meter = meters[i]
+        val measureQuarters = meter.numerator * 4.0 / meter.denominator
+        return firstBeat[i] + quarters * meter.beatsPerBar(dotteds[i]) / measureQuarters
+    }
+
+    private val indexOfMeasure: Map<Int, Int> by lazy { playing.withIndex().associate { (i, m) -> m.measureNumber to i } }
+
     fun positionAt(beatIndex: Long): Position {
         if (beatIndex < countInBeats) {
             val barBeats = startTimeSignature.beatsPerBar(startDotted)

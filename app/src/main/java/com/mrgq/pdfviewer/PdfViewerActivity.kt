@@ -72,6 +72,8 @@ class PdfViewerActivity : AppCompatActivity() {
         private const val PREF_METRONOME_VOLUME = "metronome_volume"
         /** 악보 연동 예비박 마디 수 — 기본 2, 1 도 고를 수 있다 (전역, #060) */
         private const val PREF_METRONOME_COUNT_IN_BARS = "metronome_count_in_bars"
+        /** 반주 (MusicXML, P07 6단계) 켜기 — 전역, 기본 켜짐 (MusicXML 이 있는 악보에서만 뜻이 있다) */
+        private const val PREF_ACCOMPANIMENT = "metronome_accompaniment"
         private const val DEFAULT_COUNT_IN_BARS = 2
 
         /** 악보 연동 자동 넘김: 페이지 마지막 마디가 끝나기 몇 박 전에 넘길지 */
@@ -145,6 +147,10 @@ class PdfViewerActivity : AppCompatActivity() {
     private var partViewStaves: Set<Int>? = null
     private var partViewName: String? = null
     private var partViewLayout: PartLayout? = null
+
+    // 반주 연습 (P07 5 · 6단계): 이 파일 옆 `.musicxml` 을 읽은 것. 없거나 읽지 못하면 null
+    private var musicXml: com.mrgq.pdfviewer.score.MusicXmlScore? = null
+    private var musicXmlFileId: String? = null
 
     // 악보 분석 확인용 마디 박스 오버레이 (PDF 표시 옵션에서 켬, 전역 설정)
     private var scoreMeasures: List<ScoreMeasure> = emptyList()
@@ -490,6 +496,7 @@ class PdfViewerActivity : AppCompatActivity() {
 
                 // 파트보 보기를 고른 파일이면 렌더러를 파트 PDF 로 바꾼다 (P07) — 쪽 비율로 정하는 아래 두 쪽 모드 판단도 파트 쪽 기준
                 applyPartViewSelection()
+                loadMusicXml()
                 
                 Log.d("PdfViewerActivity", "=== checkAndSetTwoPageMode: 설정 로드 완료 ===")
                 Log.d("PdfViewerActivity", "로드된 설정: 위 ${currentTopClipping * 100}%, 아래 ${currentBottomClipping * 100}%, 여백 ${currentCenterPadding}px")
@@ -2685,6 +2692,7 @@ class PdfViewerActivity : AppCompatActivity() {
         endEnsembleRun()
         metronome.stop()
         metronome.barPosition = null
+        metronome.accompaniment = null
         binding.metronomeBeat.removeCallbacks(metronomeTicker)
         binding.metronomeBeat.visibility = View.GONE
         showCountIn(null)
@@ -2953,6 +2961,7 @@ class PdfViewerActivity : AppCompatActivity() {
         if (metronome.isRunning) {
             metronome.stop()
             metronome.barPosition = null
+            metronome.accompaniment = null
             binding.metronomeBeat.removeCallbacks(metronomeTicker)
             binding.metronomeBeat.visibility = View.GONE
             showCountIn(null)
@@ -3164,6 +3173,7 @@ class PdfViewerActivity : AppCompatActivity() {
         val at = followMeasure
         metronome.stop()
         metronome.barPosition = null
+        metronome.accompaniment = null
         binding.metronomeBeat.removeCallbacks(metronomeTicker)
         binding.metronomeBeat.visibility = View.GONE
         showCountIn(null)
@@ -3298,6 +3308,8 @@ class PdfViewerActivity : AppCompatActivity() {
         followInCountIn = true
         metronome.timeSignature = scoreFollower.startTimeSignature
         metronome.barPosition = { index -> scoreFollower.barPositionAt(index) }
+        metronome.accompaniment = accompanimentFor(scoreFollower)
+        metronome.accompanimentVolume = preferences.getFloat(PREF_METRONOME_VOLUME, 0.6f)
         followState = FollowState.PLAYING
         turnRequestedTo = -1
         startMetronome()
@@ -3487,7 +3499,11 @@ class PdfViewerActivity : AppCompatActivity() {
                 else -> ""
             }}",
             "파트 보기: ${partViewName ?: "전체 악보"}",
-        )
+        ) + if (musicXml != null && musicXmlFileId == currentPdfFileId) {
+            arrayOf("반주 (MusicXML): ${if (preferences.getBoolean(PREF_ACCOMPANIMENT, true)) "켜짐" else "꺼짐"}")
+        } else {
+            emptyArray()
+        }
 
         AlertDialog.Builder(this)
             .setTitle("PDF 표시 옵션")
@@ -3501,6 +3517,11 @@ class PdfViewerActivity : AppCompatActivity() {
                     2 -> toggleScoreOverlay()
                     3 -> showMetronomeDialog()
                     4 -> showPartViewDialog()
+                    5 -> {
+                        val on = !preferences.getBoolean(PREF_ACCOMPANIMENT, true)
+                        preferences.edit().putBoolean(PREF_ACCOMPANIMENT, on).apply()
+                        Toast.makeText(this, if (on) "반주 켜짐 — 악보 연동 메트로놈을 켜면 다른 파트가 함께 연주합니다" else "반주 꺼짐", Toast.LENGTH_LONG).show()
+                    }
                 }
             }
             .setNegativeButton("닫기") { dialog, _ -> dialog.dismiss() }
@@ -3557,6 +3578,43 @@ class PdfViewerActivity : AppCompatActivity() {
     private suspend fun measuresForView(fileId: String, file: File): List<ScoreMeasure>? {
         val measures = musicRepository.getOrAnalyzeScoreMeasures(fileId, file) ?: return null
         return partViewLayout?.mapMeasures(measures) ?: measures
+    }
+
+    /**
+     * 파일을 열 때 (IO): PDF 옆 같은 이름의 `.musicxml`(ScoreMate 동기화 · P06 §11)을 읽어 둔다. 반주는 악보 연동을 시작할 때 만든다
+     */
+    private suspend fun loadMusicXml() {
+        val fileId = currentPdfFileId
+        val file = com.mrgq.pdfviewer.scoremate.ScoreMateSync.musicXmlFileOf(File(pdfFilePath))
+        val score = if (fileId != null && file.isFile) com.mrgq.pdfviewer.score.MusicXmlReader.read(file) else null
+        if (file.isFile && score == null) Log.w("PdfViewerActivity", "MusicXML 을 읽지 못함: ${file.name}")
+        withContext(Dispatchers.Main) {
+            musicXml = score
+            musicXmlFileId = fileId
+        }
+        score?.let { Log.i("PdfViewerActivity", "MusicXML: ${file.name} — 파트 ${it.parts.map { p -> p.name }}, 마디 ${it.measures.size}") }
+    }
+
+    /**
+     * 악보 연동을 시작할 때 반주 (P07 6단계). 꺼 두었거나 · 합주 중이거나 · MusicXML 이 없거나 · 마디 구조가 악보와 다르면 null.
+     * 파트 보기면 **보고 있는 파트를 빼고** 나머지를, 전체 악보면 모든 파트를 들려준다.
+     */
+    private fun accompanimentFor(follower: ScoreFollower): com.mrgq.pdfviewer.metronome.Accompaniment? {
+        val score = musicXml?.takeIf { musicXmlFileId == currentPdfFileId } ?: return null
+        if (!preferences.getBoolean(PREF_ACCOMPANIMENT, true) || collaborationMode != CollaborationMode.NONE) return null
+        val measures = if (scoreMeasuresFileId == currentPdfFileId && scoreMeasures.isNotEmpty()) scoreMeasures else followMeasures
+        val match = com.mrgq.pdfviewer.metronome.MusicXmlMatch.check(score, measures)
+        if (!match.ok) {
+            toast("반주를 쓸 수 없습니다: ${match.reason}")
+            return null
+        }
+        val mine = partViewStaves
+        val play = score.parts.indices.filter { p -> mine == null || score.stavesOf(p).none { it in mine } }.toSet()
+        if (play.isEmpty()) return null
+        val accompaniment = com.mrgq.pdfviewer.metronome.Accompaniment.build(score, follower, play, match::measureNumberOf)
+        Toast.makeText(this, "반주: ${play.joinToString { score.parts[it].name }}", Toast.LENGTH_SHORT).show()
+        Log.i("PdfViewerActivity", "반주: 파트 $play, 음 ${accompaniment.size}개")
+        return accompaniment
     }
 
     private fun toast(message: String) {
