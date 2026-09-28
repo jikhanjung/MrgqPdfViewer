@@ -250,18 +250,18 @@ ScoreLayout)를 **그대로** 파이썬으로 옮겨(서버 `scores/score_layout
 `GET /api/v1/sync/scores/` 의 각 악보에 **`layout`**(추가만 — 없으면 `null`):
 ```json
 "layout": {"url": "https://…/api/v1/scores/6/layout/", "sha256": "…(이 JSON 파일의)", "size_bytes": 41234,
-           "filename": "모차르트_K488_2악장_0728.layout.json", "analyzer_version": "1+app.9557497",
+           "filename": "모차르트_K488_2악장_0728.layout.json", "analyzer_version": "2+app.9557497",
            "pdf_sha256": "…(= version.sha256)", "measures": 99, "systems": 27, "updated_at": "…"}
 ```
 - 받기: `GET layout.url` → 서명 URL 로 302(PDF · MusicXML 과 같다). `?version=n` 이면 그 판
-- **`analyzer_version`** = 서버 분석 코드 판 + 기준으로 옮긴 앱 `score/` 커밋(예: `1+app.9557497`). 서버 분석 코드를 고치거나 앱 `score/` 를 다시 옮기면 바뀐다 →
+- **`analyzer_version`** = 서버 분석 코드 판 + 기준으로 옮긴 앱 `score/` 커밋(예: `2+app.9557497`). 서버 분석 코드를 고치거나 앱 `score/` 를 다시 옮기면 바뀐다 →
   서버가 모든 판을 다시 분석하고, 기기는 이 값(또는 `sha256`)이 가진 것과 다를 때 다시 받는다 — 앱이 DB 마이그레이션(v9 · v12 · v15)으로
   캐시를 비우던 것을 대신한다
 - **`pdf_sha256`** = 분석한 PDF(판). 기기가 가진 PDF 의 sha256 과 같을 때만 쓴다
 
 ### 파일 모양 — 앱 `ScoreLayout` 그대로 (+ 펼친 행)
 ```json
-{"format": "scoremate-score-layout", "format_version": 1, "analyzer": "score-layout", "analyzer_version": "1+app.9557497",
+{"format": "scoremate-score-layout", "format_version": 1, "analyzer": "score-layout", "analyzer_version": "2+app.9557497",
  "app_commit": "9557497", "pdf_sha256": "…", "page_count": 6, "system_count": 27, "measure_count": 99,
  "pages": [{"pageIndex": 0, "widthPt": 595.3, "heightPt": 841.9,
             "systems": [{"top": …, "bottom": …, "left": …, "right": …,
