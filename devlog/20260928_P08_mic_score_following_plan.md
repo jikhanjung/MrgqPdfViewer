@@ -118,7 +118,7 @@
 ## 7. A단계 오프라인 실험 — 합성 총보 (2026-09-28)
 
 스크립트: `data/score_follow_dtw.py`(크로마 + DTW, `--online` · `--stretch`), `data/recording_align.py`(기록 → 소리 지연).
-녹음은 저장소 밖(태블릿 `files/recordings/`, 작업용 사본은 임시). 곡은 몰다우(6/8, 박 = 8분음표, 120 bpm → 박 0.5초, 268마디).
+녹음은 `data/recordings/`(git 에서 빠짐 — 목록 · 설명은 [`data/recordings/README.md`](../data/recordings/README.md)), 원본은 태블릿 `files/recordings/`. 곡은 몰다우(6/8, 박 = 8분음표, 120 bpm → 박 0.5초, 268마디).
 
 ### 녹음
 

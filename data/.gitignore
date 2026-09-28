@@ -1,2 +1,8 @@
 # 재생성 가능한 오디오 중간 산출물 (스크립트로 다시 만들 수 있음)
 *.wav
+
+# 연습 녹음 (P08) — 녹음 · 악보 사본은 저장소에 넣지 않는다(크기 · 저작권). 목록(README.md)만 추적
+recordings/*
+!recordings/README.md
+
+__pycache__/
