@@ -271,7 +271,7 @@ class MainActivity : AppCompatActivity() {
     /** 세트리스트 줄 — [곡목 …]. 연결된 TV 는 세트리스트만 본다("모든 악보" 없음 — 곡목에 없는 악보는 받지 않는다, 서버 0.7.0). 포커스만 옮겨도 바뀐다(리모컨 키 뒤 500ms 안의 이동만 — 저절로 놓인 포커스는 무시) */
     private fun renderSetlistTabs(current: com.mrgq.pdfviewer.scoremate.Setlist?) {
         val show = scoreMateLinked && setlists.isNotEmpty()
-        // 숨길 때도 자리는 남긴다(INVISIBLE) — 오른쪽 끝 ☁️ 동기화 버튼을 밀어 두는 칸이다
+        // 숨길 때도 자리는 남긴다(INVISIBLE) — 오른쪽 끝 🔄 동기화 버튼을 밀어 두는 칸이다
         binding.setlistScroll.visibility = if (show) View.VISIBLE else View.INVISIBLE
         if (!show) {
             renderedSetlistIds = emptyList()
@@ -318,8 +318,9 @@ class MainActivity : AppCompatActivity() {
         } else null
         renderSetlistTabs(current)
         binding.scoreMateSyncBtn.visibility = if (scoreMateLinked) View.VISIBLE else View.GONE
+        binding.scoreMateBadge.visibility = if (scoreMateLinked) View.VISIBLE else View.GONE
         // 연결된 TV 는 정렬(늘 곡 순서) · 파일관리(서버가 관리 — 웹에서 곡목 고르기)가 필요 없다 → 그 줄을 통째로 숨긴다.
-        // ☁️ 동기화는 세트리스트 줄 오른쪽 끝에 있다
+        // 🔄 동기화는 세트리스트 줄 오른쪽 끝에 있다
         binding.controlStrip.visibility = if (scoreMateLinked) View.GONE else View.VISIBLE
         if (scoreMateLinked && isFileManagementMode) {
             isFileManagementMode = false
@@ -337,21 +338,24 @@ class MainActivity : AppCompatActivity() {
             }
             val missing = entries.size - shown.size
             // 세트리스트 이름은 줄에 이미 보인다 — 여기는 아직 받지 않은 곡이 있을 때만 알린다
-            binding.librarySource.text = "☁️ ScoreMate" + if (missing > 0) " · ${entries.size}곡 중 ${shown.size}곡" else ""
+            // "ScoreMate" 는 첫 줄 앱 이름 옆에 있다 — 여기는 아직 받지 않은 곡이 있을 때만
+            binding.librarySource.text = if (missing > 0) "${entries.size}곡 중 ${shown.size}곡" else ""
             binding.emptyTitle.text = "이 세트리스트의 악보를 아직 받지 않았습니다"
-            binding.emptyHint.text = "☁️ 동기화 를 누르세요"
+            binding.emptyHint.text = "🔄 동기화 를 누르세요"
         } else if (scoreMateLinked) {
             // 받은 세트리스트가 없다 — 곡목에 없는 악보는 보이지 않는다
             shown = emptyList()
-            binding.librarySource.text = "☁️ ScoreMate"
+            binding.librarySource.text = ""
             binding.emptyTitle.text = "받은 세트리스트가 없습니다"
-            binding.emptyHint.text = "웹에서 이 TV 로 보낼 세트리스트를 고른 뒤 ☁️ 동기화 를 누르세요"
+            binding.emptyHint.text = "웹에서 이 TV 로 보낼 세트리스트를 고른 뒤 🔄 동기화 를 누르세요"
         } else {
             shown = allPdfFiles
             binding.librarySource.text = "이 기기 파일 ${allPdfFiles.size}"
             binding.emptyTitle.text = "PDF 파일이 없습니다"
             binding.emptyHint.text = "설정에서 웹서버를 통해 파일을 업로드하세요"
         }
+        // 비었으면 자리도 비운다 — 세트리스트 줄이 왼쪽부터
+        binding.librarySource.visibility = if (binding.librarySource.text.isNullOrEmpty()) View.GONE else View.VISIBLE
         pdfAdapter.submitList(shown)
         binding.emptyView.visibility = if (shown.isEmpty()) View.VISIBLE else View.GONE
     }

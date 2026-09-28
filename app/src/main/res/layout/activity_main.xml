@@ -49,6 +49,17 @@
                 android:textColor="#80FFFFFF"
                 android:textSize="12sp"
                 android:layout_marginStart="8dp" />
+
+            <!-- ScoreMate 에 연결된 TV: 앱 이름 옆에 "× ScoreMate ☁️" (사용자 요청 2026-09-28) — 서재가 ScoreMate 라는 표시 -->
+            <TextView
+                android:id="@+id/scoreMateBadge"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="×  ScoreMate ☁️"
+                android:textColor="#E6FFFFFF"
+                android:textSize="20sp"
+                android:layout_marginStart="14dp"
+                android:visibility="gone" />
         </LinearLayout>
 
         <!-- Action Buttons -->
@@ -97,7 +108,7 @@
         </LinearLayout>
     </LinearLayout>
 
-    <!-- 지금 서재 (#063) + 세트리스트 줄 (#064): 연결된 TV 에서 받은 세트리스트가 있으면 [곡목 A] [곡목 B] … [☁️ 동기화]
+    <!-- 지금 서재 (#063) + 세트리스트 줄 (#064): 연결된 TV 에서 받은 세트리스트가 있으면 [곡목 A] [곡목 B] … [🔄 동기화]
          포커스만 옮겨도 바뀐다. 세트리스트를 고르면 곡 순서대로 (이전/다음 파일도) -->
     <LinearLayout
         android:id="@+id/libraryRow"
@@ -140,7 +151,7 @@
             android:id="@+id/scoreMateSyncBtn"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="☁️ 동기화"
+            android:text="🔄 동기화"
             android:textSize="13sp"
             android:textColor="@android:color/white"
             android:background="@drawable/elegant_button_background"
