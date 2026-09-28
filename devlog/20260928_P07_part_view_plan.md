@@ -133,7 +133,7 @@ ScoreMateServer `devlog/20260928_P01_악보인식_MusicXML_및_곡단위_합주.
   | Piano Concerto No 23 | 6 · 27 · 99 | 2 | 못 읽음 |
   | Clair de Lune (MuseScore) | 4 · 21 · 72 | 2 | "G u i t a r" → 글자마다 찍힌 조각을 붙여 읽게 고침 |
 - 같이 고친 것: **C · ¢ 박자표**(Sibelius Opus 글꼴의 `c` · `C`, SMuFL `U+E08A` · `U+E08B`) — Arpeggione 가 박자표 없음 → `[4/4]`(실기기 확인)
-- ⚠️ Sibelius → Microsoft Print to PDF 악보는 파트 이름이 글자로 읽히지 않는다 → 2단계에 **파트 이름 붙이기**(파일별)가 필요
+- ⚠️ Sibelius → Microsoft Print to PDF 악보는 파트 이름이 글자로 읽히지 않는다 → "보표 n" 으로 둔다. **파트 이름 붙이기(파일별)는 나중에**(사용자 결정 2026-09-28)
 
 ## 4. 열린 질문
 
