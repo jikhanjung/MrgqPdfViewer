@@ -34,22 +34,22 @@ object PartClip {
      * @param boxes 이 쪽의 경로 박스 (crop 기준, 아래→위)
      * @param pageHeight 쪽 높이 (crop)
      * @param bands 이 시스템의 보표 띠 (위→아래, 위 보표부터)
-     * @param staff 고른 보표 순번
+     * @param firstStaff 조각의 첫 보표 · [lastStaff] 끝 보표 (이웃한 파트 여럿을 한 조각으로 이으면 다르다) — 순번
      * @param top 기본 띠 위 · [bottom] 아래 · [left] 왼쪽 · [right] 오른쪽 (위→아래 좌표)
      */
     fun extras(
         boxes: List<PathBox>,
         pageHeight: Float,
         bands: List<Pair<Float, Float>>,
-        staff: Int,
+        firstStaff: Int,
+        lastStaff: Int,
         top: Float,
         bottom: Float,
         left: Float,
         right: Float,
     ): List<ClipRect> {
-        val band = bands[staff]
-        val upperLimit = if (staff > 0) bands[staff - 1].second + PAD else 0f
-        val lowerLimit = if (staff < bands.size - 1) bands[staff + 1].first - PAD else pageHeight
+        val upperLimit = if (firstStaff > 0) bands[firstStaff - 1].second + PAD else 0f
+        val lowerLimit = if (lastStaff < bands.size - 1) bands[lastStaff + 1].first - PAD else pageHeight
         val out = ArrayList<ClipRect>()
 
         // 위→아래로 바꾼 박스 (시스템 가로 범위 안, 너무 큰 것 빼고)
@@ -71,7 +71,7 @@ object PartClip {
         }
 
         // 덧줄 기둥
-        val space = (band.second - band.first) / 4
+        val space = (bands[firstStaff].second - bands[firstStaff].first) / 4
         if (space > 0f) {
             val ledgers = candidates.filter {
                 it.b - it.t < LEDGER_MAX_HEIGHT && (it.x1 - it.x0) in LEDGER_MIN_WIDTH..LEDGER_MAX_WIDTH &&
@@ -81,7 +81,7 @@ object PartClip {
                 kotlin.math.abs((it.t + it.b) / 2 - y) < space * LEDGER_Y_TOL && it.x0 < x1 && it.x1 > x0
             }
             for (direction in intArrayOf(-1, 1)) {
-                val edge = if (direction < 0) band.first else band.second
+                val edge = if (direction < 0) bands[firstStaff].first else bands[lastStaff].second
                 for (first in ledgers) {
                     if (kotlin.math.abs((first.t + first.b) / 2 - (edge + direction * space)) >= space * LEDGER_Y_TOL) continue
                     var x0 = first.x0

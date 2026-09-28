@@ -59,8 +59,8 @@ interface UserPreferenceDao {
     @Query("UPDATE user_preferences SET metronomeSections = :sections, updatedAt = :updatedAt WHERE pdfFileId = :pdfFileId")
     suspend fun updateMetronomeSections(pdfFileId: String, sections: String?, updatedAt: Long = System.currentTimeMillis())
 
-    @Query("UPDATE user_preferences SET partStaff = :partStaff, updatedAt = :updatedAt WHERE pdfFileId = :pdfFileId")
-    suspend fun updatePartStaff(pdfFileId: String, partStaff: Int?, updatedAt: Long = System.currentTimeMillis())
+    @Query("UPDATE user_preferences SET partStaff = :mask, updatedAt = :updatedAt WHERE pdfFileId = :pdfFileId")
+    suspend fun updatePartStaves(pdfFileId: String, mask: Long?, updatedAt: Long = System.currentTimeMillis())
 
     @Query("SELECT COUNT(*) FROM user_preferences")
     suspend fun getUserPreferenceCount(): Int

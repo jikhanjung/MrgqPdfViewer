@@ -28,7 +28,7 @@ class PartLayoutTest {
 
     private fun layout(pages: Int, staff: Int): PartLayout? {
         val s = score(pages)
-        return PartLayout.build(s.toStaves("f"), s.toMeasures("f"), staff)
+        return PartLayout.build(s.toStaves("f"), s.toMeasures("f"), setOf(staff))
     }
 
     @Test
@@ -83,13 +83,13 @@ class PartLayoutTest {
         // 원본 쪽이 바뀌는 조각(0, 2, 4, …, 12)과 가상 쪽의 첫 조각(11)
         assertEquals(listOf(0, 2, 4, 6, 8, 10, 11, 12), part.strips.indices.filter { part.showsSourcePage(it) })
         // 보표 높이도 들고 있다 (번호를 보표 가운데에 맞춘다)
-        assertEquals(160f to 180f, part.strips.first().staffTop to part.strips.first().staffBottom)
+        assertEquals(listOf(com.mrgq.pdfviewer.score.StaffMark(1, 160f, 180f)), part.strips.first().staffMarks)
     }
 
     @Test
     fun 마디를_파트_PDF_좌표로_옮긴다() {
         val s = score(7)
-        val part = PartLayout.build(s.toStaves("f"), s.toMeasures("f"), 1)!!
+        val part = PartLayout.build(s.toStaves("f"), s.toMeasures("f"), setOf(1))!!
         val mapped = part.mapMeasures(s.toMeasures("f"))
         assertEquals(28, mapped.size) // 7쪽 × 시스템 2 × 마디 2 — 하나도 빠지지 않는다
         assertEquals((1..28).toList(), mapped.map { it.measureNumber })
@@ -109,8 +109,40 @@ class PartLayoutTest {
     }
 
     @Test
+    fun 이웃한_파트_둘은_한_조각으로_잇는다() {
+        val s = score(1)
+        val part = PartLayout.build(s.toStaves("f"), s.toMeasures("f"), setOf(0, 1))!!
+        assertEquals(listOf(0, 1), part.staves)
+        assertEquals(2, part.strips.size) // 시스템마다 한 조각
+        val strip = part.strips.first()
+        assertEquals(80f, strip.srcTop)     // 보표 0 위 (100 - 20)
+        assertEquals(200f, strip.srcBottom) // 보표 1 아래 (180 + 20) — 사이를 자르지 않는다
+        assertEquals(listOf(0, 1), strip.staffMarks.map { it.index }) // 파트 번호 · 사이 번호 자리
+    }
+
+    @Test
+    fun 떨어진_파트는_시스템마다_조각을_붙이고_같은_쪽에() {
+        val s = score(7)
+        val part = PartLayout.build(s.toStaves("f"), s.toMeasures("f"), setOf(0, 2))!!
+        assertEquals(28, part.strips.size) // 시스템 14 × 조각 2
+        val (a, b) = part.strips.take(2)
+        assertEquals(a.srcSystem to a.srcPage, b.srcSystem to b.srcPage)
+        assertEquals(a.dstBottom + PartLayout.PART_GAP, b.dstTop)
+        // 마디 번호는 첫 조각에만
+        assertEquals(1, a.firstMeasure)
+        assertNull(b.firstMeasure)
+        // 한 시스템의 두 조각은 갈라지지 않는다
+        part.strips.chunked(2).forEach { (x, y) -> assertEquals(x.dstPage, y.dstPage) }
+        // 마디 박스는 두 조각을 덮는다
+        val m1 = part.mapMeasures(s.toMeasures("f")).first()
+        assertEquals(a.dstTop to b.dstBottom, m1.topPt to m1.bottomPt)
+        // 배치 저장 · 읽기
+        assertEquals(part, PartLayout.decode(PartLayout.encode(part)))
+    }
+
+    @Test
     fun 없는_보표나_마디가_없으면_null() {
         assertNull(layout(1, 5))
-        assertNull(PartLayout.build(score(1).toStaves("f"), emptyList(), 0))
+        assertNull(PartLayout.build(score(1).toStaves("f"), emptyList(), setOf(0)))
     }
 }

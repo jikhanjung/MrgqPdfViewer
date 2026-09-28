@@ -23,7 +23,7 @@ class PartClipTest {
     /** 위→아래 좌표로 만든 경로 박스 */
     private fun box(x0: Float, top: Float, x1: Float, bottom: Float, curved: Boolean = false) = PathBox(x0, h - bottom, x1, h - top, curved)
 
-    private fun extras(vararg boxes: PathBox) = PartClip.extras(boxes.toList(), h, bands, 1, 140f, 200f, 72f, 564f)
+    private fun extras(vararg boxes: PathBox) = PartClip.extras(boxes.toList(), h, bands, 1, 1, 140f, 200f, 72f, 564f)
 
     @Test
     fun 가운데가_띠_쪽인_걸친_슬러는_넓힌다() {
@@ -67,7 +67,7 @@ class PartClipTest {
         val system = SystemLayout(100f, 240f, 80f, 560f, bands, listOf(80f, 300f, 560f))
         val score = ScoreLayout(listOf(PageLayout(0, 595f, h, listOf(system))))
         val slur = box(100f, 190f, 160f, 206f, curved = true)
-        val layout = PartLayout.build(score.toStaves("f"), score.toMeasures("f"), 1, mapOf(0 to listOf(slur)))!!
+        val layout = PartLayout.build(score.toStaves("f"), score.toMeasures("f"), setOf(1), mapOf(0 to listOf(slur)))!!
         val strip = layout.strips.single()
         assertEquals(140f, strip.srcTop)
         assertEquals(207f, strip.srcBottom) // 200 → 슬러 끝 + 1

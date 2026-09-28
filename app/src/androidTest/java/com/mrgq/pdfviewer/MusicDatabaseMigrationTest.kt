@@ -384,6 +384,36 @@ class MusicDatabaseMigrationTest {
     }
 
     @Test
+    fun v16_에서_v17_은_파트_보표_순번을_마스크로_바꾼다() {
+        helper.createDatabase(TEST_DB, 16).apply {
+            execSQL(INSERT_FILE)
+            execSQL(INSERT_FILE.replace("'file-1'", "'file-2'").replace("1번.pdf'", "2번.pdf'"))
+            execSQL(
+                "INSERT INTO user_preferences (pdfFileId, displayMode, lastPageNumber, bookmarkedPages, " +
+                    "topClippingPercent, bottomClippingPercent, centerPadding, updatedAt, partStaff) " +
+                    "VALUES ('file-1', 'DOUBLE', 7, '', 0.05, 0.03, 0.1, 1000, 3)"
+            )
+            execSQL(
+                "INSERT INTO user_preferences (pdfFileId, displayMode, lastPageNumber, bookmarkedPages, " +
+                    "topClippingPercent, bottomClippingPercent, centerPadding, updatedAt) " +
+                    "VALUES ('file-2', 'SINGLE', 1, '', 0, 0, 0, 1000)"
+            )
+            close()
+        }
+
+        val db = helper.runMigrationsAndValidate(TEST_DB, 17, true, *MusicDatabase.ALL_MIGRATIONS)
+
+        db.query("SELECT pdfFileId, partStaff, displayMode FROM user_preferences ORDER BY pdfFileId").use { c ->
+            assertEquals(2, c.count)
+            c.moveToFirst()
+            assertEquals("보표 3 → 1 shl 3", 8L, c.getLong(1))
+            assertEquals("DOUBLE", c.getString(2))
+            c.moveToNext()
+            assertTrue("전체 악보는 그대로 null", c.isNull(1))
+        }
+    }
+
+    @Test
     fun v2_to_v3_중앙여백_픽셀이_비율로_변환된다() {
         val db = createDbAt(2, V2_USER_PREFERENCES) {
             it.execSQL(INSERT_FILE)

@@ -5,6 +5,7 @@ import com.mrgq.pdfviewer.database.MusicDatabase
 import com.mrgq.pdfviewer.database.entity.DisplayMode
 import com.mrgq.pdfviewer.database.entity.PdfFile
 import com.mrgq.pdfviewer.database.entity.ScoreMeasure
+import com.mrgq.pdfviewer.score.PartStaves
 import com.mrgq.pdfviewer.score.ScoreLayoutStore
 import com.mrgq.pdfviewer.database.entity.UserPreference
 import com.mrgq.pdfviewer.metronome.TempoSectionSetting
@@ -118,10 +119,10 @@ class MusicRepository(context: Context) {
         userPreferenceDao.updateMetronome(pdfFileId, bpm, beatsPerBar, beatUnit, dottedBeat)
     }
 
-    /** 이 파일의 파트보 보기 보표 (P07). null = 전체 악보. 설정 행이 없으면 먼저 만든다. */
-    suspend fun setPartStaffForFile(pdfFileId: String, staffIndex: Int?) {
+    /** 이 파일의 파트보 보기 보표들 (P07, 여러 파트). null · 빈 집합 = 전체 악보. 설정 행이 없으면 먼저 만든다. */
+    suspend fun setPartStavesForFile(pdfFileId: String, staves: Set<Int>?) {
         getOrCreateUserPreference(pdfFileId)
-        userPreferenceDao.updatePartStaff(pdfFileId, staffIndex)
+        userPreferenceDao.updatePartStaves(pdfFileId, PartStaves.toMask(staves))
     }
 
     /** 이 파일의 구간별 빠르기 (둘째 구간부터, #057). 설정 행이 없으면 먼저 만든다. */

@@ -38,6 +38,7 @@ import com.mrgq.pdfviewer.score.ScoreOverlayGeometry
 import com.mrgq.pdfviewer.score.PartLayout
 import com.mrgq.pdfviewer.score.PartPdfBuilder
 import com.mrgq.pdfviewer.score.ScoreParts
+import com.mrgq.pdfviewer.score.PartStaves
 import com.mrgq.pdfviewer.metronome.Accent
 import com.mrgq.pdfviewer.metronome.MetronomeClock
 import com.mrgq.pdfviewer.metronome.MetronomeEngine
@@ -141,7 +142,7 @@ class PdfViewerActivity : AppCompatActivity() {
 
     // 파트보 보기 (P07): 보여 주는 보표 순번 · 이름 — null 이면 전체 악보. 이때 렌더러는 파트 PDF(앱 캐시)를 연다.
     // pdfFilePath · currentPdfFileId 는 원본 그대로다 (설정 · 합주 · 분석은 원본 기준)
-    private var partViewStaff: Int? = null
+    private var partViewStaves: Set<Int>? = null
     private var partViewName: String? = null
     private var partViewLayout: PartLayout? = null
 
@@ -632,7 +633,7 @@ class PdfViewerActivity : AppCompatActivity() {
     }
     
     private fun saveLastPageNumber(pageNumber: Int) {
-        if (partViewStaff != null) return // 파트 PDF 의 쪽 번호는 원본 쪽 번호가 아니다
+        if (partViewStaves != null) return // 파트 PDF 의 쪽 번호는 원본 쪽 번호가 아니다
         currentPdfFileId?.let { fileId ->
             CoroutineScope(Dispatchers.IO).launch {
                 try {
@@ -1162,7 +1163,7 @@ class PdfViewerActivity : AppCompatActivity() {
     
     /** 파트 보기면 " · 보표 2 (총보 11~15쪽)" — 지금 가상 쪽에 담긴 원본 쪽 (P07) */
     private fun partSourceInfo(pages: IntRange): String {
-        if (partViewStaff == null) return ""
+        if (partViewStaves == null) return ""
         val source = partViewLayout?.sourcePages(pages)?.let { r ->
             if (r.first == r.last) " (총보 ${r.first + 1}쪽)" else " (총보 ${r.first + 1}~${r.last + 1}쪽)"
         }.orEmpty()
@@ -3528,19 +3529,22 @@ class PdfViewerActivity : AppCompatActivity() {
                 ScoreParts.Result.SingleStaff -> return@launch toast("보표가 하나라 이미 파트보입니다")
                 is ScoreParts.Result.VaryingStaves -> return@launch toast("시스템마다 보표 수가 달라 아직 파트 보기를 지원하지 않습니다")
             }
-            val labels = arrayOf("전체 악보") + parts.map { it.name }
-            AlertDialog.Builder(this@PdfViewerActivity)
-                .setTitle("파트 보기")
-                .setSingleChoiceItems(labels, partViewStaff?.let { staff -> parts.indexOfFirst { it.staffIndex == staff } + 1 } ?: 0) { dialog, which ->
-                    dialog.dismiss()
-                    val staff = if (which == 0) null else parts[which - 1].staffIndex
-                    if (staff == partViewStaff) return@setSingleChoiceItems
-                    if (metronome.isRunning || followState != FollowState.OFF) stopMetronome()
-                    lifecycleScope.launch {
-                        withContext(Dispatchers.IO) { musicRepository.setPartStaffForFile(fileId, staff) }
-                        if (currentPdfFileId == fileId) loadFile(pdfFilePath, pdfFileName)
-                    }
+            // 여러 파트를 고를 수 있다 (사용자 요청 2026-09-28). 하나도 안 고르거나 모두 고르면 전체 악보
+            val checked = BooleanArray(parts.size) { partViewStaves?.contains(parts[it].staffIndex) == true }
+            fun apply(staves: Set<Int>?) {
+                val target = staves?.takeIf { it.isNotEmpty() && it.size < parts.size }
+                if (target == partViewStaves) return
+                if (metronome.isRunning || followState != FollowState.OFF) stopMetronome()
+                lifecycleScope.launch {
+                    withContext(Dispatchers.IO) { musicRepository.setPartStavesForFile(fileId, target) }
+                    if (currentPdfFileId == fileId) loadFile(pdfFilePath, pdfFileName)
                 }
+            }
+            AlertDialog.Builder(this@PdfViewerActivity)
+                .setTitle("파트 보기 (여러 개 고를 수 있음)")
+                .setMultiChoiceItems(parts.map { it.name }.toTypedArray(), checked) { _, which, isChecked -> checked[which] = isChecked }
+                .setPositiveButton("보기") { _, _ -> apply(parts.filterIndexed { i, _ -> checked[i] }.map { it.staffIndex }.toSet()) }
+                .setNeutralButton("전체 악보") { _, _ -> apply(null) }
                 .setNegativeButton("닫기", null)
                 .show()
         }
@@ -3561,18 +3565,18 @@ class PdfViewerActivity : AppCompatActivity() {
 
     /**
      * 파일을 열 때 (checkAndSetTwoPageMode, IO): 이 파일에 파트를 골라 두었으면 파트 PDF 를 준비해 렌더러를 바꾼다 (P07).
-     * 고르지 않았거나 합주 중이거나 만들 수 없으면 원본 그대로 — [partViewStaff] 는 null.
+     * 고르지 않았거나 합주 중이거나 만들 수 없으면 원본 그대로 — [partViewStaves] 는 null.
      */
     private suspend fun applyPartViewSelection() {
         val fileId = currentPdfFileId
-        val staff = if (fileId != null && collaborationMode == CollaborationMode.NONE) {
-            musicRepository.getUserPreference(fileId)?.partStaff
+        val staves = if (fileId != null && collaborationMode == CollaborationMode.NONE) {
+            PartStaves.fromMask(musicRepository.getUserPreference(fileId)?.partStavesMask)
         } else {
             null
         }
-        if (fileId == null || staff == null) {
+        if (fileId == null || staves == null) {
             withContext(Dispatchers.Main) {
-                partViewStaff = null
+                partViewStaves = null
                 partViewName = null
                 partViewLayout = null
                 clearMeasureCache()
@@ -3581,15 +3585,15 @@ class PdfViewerActivity : AppCompatActivity() {
         }
         val source = File(pdfFilePath)
         val prepared = try {
-            preparePartPdf(fileId, source, staff)
+            preparePartPdf(fileId, source, staves)
         } catch (e: Exception) {
-            Log.w("PdfViewerActivity", "파트보 만들기 실패: ${source.name} 보표 ${staff + 1}", e)
+            Log.w("PdfViewerActivity", "파트보 만들기 실패: ${source.name} 보표 $staves", e)
             null
         }
         withContext(Dispatchers.Main) {
             clearMeasureCache()
             if (prepared == null) {
-                partViewStaff = null
+                partViewStaves = null
                 partViewName = null
                 partViewLayout = null
                 toast("파트보를 만들지 못해 전체 악보로 봅니다")
@@ -3612,7 +3616,7 @@ class PdfViewerActivity : AppCompatActivity() {
             pageCount = pdfRenderer?.pageCount ?: 0
             pageCache = PageCache(pdfRenderer!!, screenWidth, screenHeight)
             registerSettingsCallback()
-            partViewStaff = staff
+            partViewStaves = staves
             partViewName = name
             partViewLayout = layout
             // 조각은 이미 잘려 있다 — 위/아래 클리핑은 쓰지 않는다 (저장된 값은 전체 악보용으로 그대로 둔다)
@@ -3630,25 +3634,27 @@ class PdfViewerActivity : AppCompatActivity() {
         followFileId = null
     }
 
-    /** 파트 PDF (캐시에 없으면 만든다) · 파트 이름 · 배치. 파트를 가를 수 없는 악보면 null */
-    private suspend fun preparePartPdf(fileId: String, source: File, staff: Int): Triple<File, String, PartLayout>? {
+    /** 파트 PDF (캐시에 없으면 만든다) · 파트 이름들 · 배치. 파트를 가를 수 없는 악보거나 고른 보표가 없으면 null */
+    private suspend fun preparePartPdf(fileId: String, source: File, selected: Set<Int>): Triple<File, String, PartLayout>? {
         val staves = musicRepository.getOrAnalyzeScoreStaves(fileId, source) ?: return null
-        val part = (ScoreParts.of(staves) as? ScoreParts.Result.Parts)?.parts?.firstOrNull { it.staffIndex == staff } ?: return null
-        val out = PartPdfBuilder.cacheFile(cacheDir, fileId, source, staff)
+        val parts = (ScoreParts.of(staves) as? ScoreParts.Result.Parts)?.parts?.filter { it.staffIndex in selected } ?: return null
+        if (parts.isEmpty()) return null
+        val name = parts.joinToString(" + ") { it.name }
+        val out = PartPdfBuilder.cacheFile(cacheDir, fileId, source, selected)
         val layoutFile = PartPdfBuilder.layoutFile(out)
         // 만들어 둔 것이 있으면 그 배치 그대로 (넓히기에 쪽 경로를 다시 읽지 않게)
         if (out.isFile && layoutFile.isFile) {
-            PartLayout.decode(layoutFile.readText())?.let { return Triple(out, part.name, it) }
+            PartLayout.decode(layoutFile.readText())?.let { return Triple(out, name, it) }
         }
         withContext(Dispatchers.Main) { Toast.makeText(this@PdfViewerActivity, "파트보 만드는 중…", Toast.LENGTH_SHORT).show() }
         val measures = musicRepository.getOrAnalyzeScoreMeasures(fileId, source) ?: return null
         // 가운데선을 걸친 슬러 · 빔 · 덧줄 음을 소속에 따라 넓혀 자르려고 쪽 경로를 읽는다 (PartClip)
         val boxes = com.mrgq.pdfviewer.score.ScoreLayoutAnalyzer.pathBoxes(source, measures.map { it.pageIndex }.toSet())
-        val layout = PartLayout.build(staves, measures, staff, boxes) ?: return null
+        val layout = PartLayout.build(staves, measures, selected, boxes) ?: return null
         PartPdfBuilder.build(source, layout, out)
         layoutFile.writeText(PartLayout.encode(layout))
-        PartPdfBuilder.prune(out, fileId, staff)
-        return Triple(out, part.name, layout)
+        PartPdfBuilder.prune(out, fileId, selected)
+        return Triple(out, name, layout)
     }
 
     /**
