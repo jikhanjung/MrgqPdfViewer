@@ -7,6 +7,7 @@ import androidx.test.platform.app.InstrumentationRegistry
 import com.mrgq.pdfviewer.score.ScoreLayout
 import com.mrgq.pdfviewer.score.ScoreLayoutAnalyzer
 import com.mrgq.pdfviewer.score.ScoreOverlayGeometry
+import com.mrgq.pdfviewer.score.ScoreParts
 import com.tom_roush.pdfbox.android.PDFBoxResourceLoader
 import com.tom_roush.pdfbox.pdmodel.PDDocument
 import com.tom_roush.pdfbox.pdmodel.PDPage
@@ -155,6 +156,14 @@ class ScoreLayoutAnalyzerTest {
                 }
             }
         }
+    }
+
+    @Test
+    fun 파트는_5개_모든_시스템에_보표_5개() {
+        // Moldau 는 이름(진호 · 예진 …)이 글자로 읽히지 않는다 — pdftotext 로도 안 나온다. 이름은 "보표 n" 이어도 된다
+        val parts = ScoreParts.of(layout.toStaves("moldau"))
+        assertTrue("파트 목록이어야 한다: $parts", parts is ScoreParts.Result.Parts)
+        assertEquals(listOf(0, 1, 2, 3, 4), (parts as ScoreParts.Result.Parts).parts.map { it.staffIndex })
     }
 
     @Test

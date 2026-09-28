@@ -1,6 +1,7 @@
 package com.mrgq.pdfviewer.score
 
 import com.mrgq.pdfviewer.database.entity.ScoreMeasure
+import com.mrgq.pdfviewer.database.entity.ScoreStaff
 
 /** 한 페이지의 분석 결과. 크기는 PDF 포인트(CropBox). */
 data class PageLayout(
@@ -56,5 +57,22 @@ data class ScoreLayout(val pages: List<PageLayout>) {
             }
         }
         return measures
+    }
+
+    /** DB 에 저장할 보표 목록 (v15, P07) — 시스템마다 위 보표부터 */
+    fun toStaves(pdfFileId: String): List<ScoreStaff> = pages.flatMap { page ->
+        page.systems.flatMapIndexed { systemIndex, system ->
+            system.staffBands.mapIndexed { staffIndex, (top, bottom) ->
+                ScoreStaff(
+                    pdfFileId = pdfFileId,
+                    pageIndex = page.pageIndex,
+                    systemIndex = systemIndex,
+                    staffIndex = staffIndex,
+                    topPt = top,
+                    bottomPt = bottom,
+                    label = system.staffLabels.getOrNull(staffIndex),
+                )
+            }
+        }
     }
 }

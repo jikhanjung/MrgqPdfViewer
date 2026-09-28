@@ -6,7 +6,7 @@ import java.io.File
 
 /**
  * PDF 한 개의 악보 구조를 분석한다: 페이지마다 콘텐츠 스트림을 [PathContentInterpreter] 로 읽어 경로 박스와 텍스트를
- * 모으고, [StaffSystemDetector] 로 시스템·마디를, [TimeSignatureDetector] 로 박자표를 찾는다.
+ * 모으고, [StaffSystemDetector] 로 시스템·마디를, [StaffLabelDetector] 로 보표 이름을, [TimeSignatureDetector] 로 박자표를 찾는다.
  *
  * PdfBox 는 문서 열기, 스트림 압축 해제, 글꼴 해독에만 쓴다. 사용 전 `PDFBoxResourceLoader.init` 이 필요하다 (PdfViewerApplication).
  */
@@ -32,7 +32,7 @@ object ScoreLayoutAnalyzer {
                     val texts = ArrayList<TextRun>()
                     PathContentInterpreter(crop.lowerLeftX, crop.lowerLeftY, textSink = { texts += it }) { boxes += it }
                         .run(PdfBoxContent.pageContent(page), PdfBoxXObjects(page.resources))
-                    val systems = StaffSystemDetector.detect(boxes, crop.height, texts)
+                    val systems = StaffLabelDetector.attach(texts, StaffSystemDetector.detect(boxes, crop.height, texts), crop.height)
                     PageLayout(index, crop.width, crop.height, systems, TimeSignatureDetector.detect(texts, systems, crop.height))
                 }
             }

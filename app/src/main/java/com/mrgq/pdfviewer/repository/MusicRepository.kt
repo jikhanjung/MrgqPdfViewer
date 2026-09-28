@@ -35,6 +35,10 @@ class MusicRepository(context: Context) {
     suspend fun getOrAnalyzeScoreMeasures(pdfFileId: String, file: java.io.File): List<ScoreMeasure>? =
         ScoreLayoutStore.getOrAnalyze(database, pdfFileId, file)
 
+    /** 악보 보표 (파트보 보기, P07) — 분석 캐시는 마디와 같다 */
+    suspend fun getOrAnalyzeScoreStaves(pdfFileId: String, file: java.io.File): List<com.mrgq.pdfviewer.database.entity.ScoreStaff>? =
+        ScoreLayoutStore.getOrAnalyzeStaves(database, pdfFileId, file)
+
     suspend fun insertPdfFile(pdfFile: PdfFile) = pdfFileDao.insertPdfFile(pdfFile)
     
     suspend fun updatePdfFile(pdfFile: PdfFile) = pdfFileDao.updatePdfFile(pdfFile)

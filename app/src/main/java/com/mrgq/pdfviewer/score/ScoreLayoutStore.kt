@@ -9,7 +9,8 @@ import kotlinx.coroutines.sync.withLock
 import java.io.File
 
 /**
- * 마디 레이아웃 캐시. 파일마다 **처음 한 번만** 분석해 score_measures 에 저장한다.
+ * 마디 레이아웃 캐시. 파일마다 **처음 한 번만** 분석해 score_measures 에 저장한다. 보표(score_staves, v15 — 파트보 보기)도
+ * 같은 분석에서 함께 쓰고 지운다.
  *
  * "분석했음"은 `PdfFile.scoreAnalyzedAt` 으로 표시한다 — 마디가 0개인 결과(악보가 아님, 열 수 없음)도
  * 표시해서 다시 분석하지 않는다. 파일이 바뀌면 PdfFileSync 가 레코드를 새로 쓰면서 이 값이 비워지고,
@@ -41,13 +42,28 @@ object ScoreLayoutStore {
             return@withLock db.scoreMeasureDao().getMeasures(pdfFileId)
         }
 
-        val measures = analyze(file)?.toMeasures(pdfFileId).orEmpty()
+        val layout = analyze(file)
+        val measures = layout?.toMeasures(pdfFileId).orEmpty()
+        val staves = layout?.toStaves(pdfFileId).orEmpty()
         db.withTransaction {
             db.scoreMeasureDao().deleteForFile(pdfFileId)
+            db.scoreStaffDao().deleteForFile(pdfFileId)
             if (measures.isNotEmpty()) db.scoreMeasureDao().insertAll(measures)
+            if (staves.isNotEmpty()) db.scoreStaffDao().insertAll(staves)
             db.pdfFileDao().setScoreAnalyzedAt(pdfFileId, System.currentTimeMillis())
         }
-        Log.i(TAG, "마디 ${measures.size}개 저장: ${file.name}")
+        Log.i(TAG, "마디 ${measures.size}개 · 보표 ${staves.size}개 저장: ${file.name}")
         measures
+    }
+
+    /** 이 파일의 보표 (분석이 끝났을 때만 — [getOrAnalyze] 가 먼저 불려야 한다). 레코드와 파일이 어긋나면 null */
+    suspend fun getOrAnalyzeStaves(
+        db: MusicDatabase,
+        pdfFileId: String,
+        file: File,
+        analyze: (File) -> ScoreLayout? = ScoreLayoutAnalyzer::analyze,
+    ): List<com.mrgq.pdfviewer.database.entity.ScoreStaff>? {
+        getOrAnalyze(db, pdfFileId, file, analyze) ?: return null
+        return db.scoreStaffDao().getStaves(pdfFileId)
     }
 }

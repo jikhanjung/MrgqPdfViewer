@@ -123,4 +123,36 @@ class ScoreLayoutStoreTest {
         db.pdfFileDao().deletePdfFileById("file-1")
         assertTrue(db.scoreMeasureDao().getMeasures("file-1").isEmpty())
     }
+
+    /** 보표 2개(이름 하나) 시스템 — 파트보 보기 (P07) */
+    private fun layoutWithStaves(vararg barlines: Float) = ScoreLayout(listOf(
+        PageLayout(0, 595f, 842f, listOf(SystemLayout(
+            100f, 165f, barlines.first(), barlines.last(),
+            listOf(100f to 120f, 145f to 165f), barlines.toList(), listOf("Violin", null),
+        )))
+    ))
+
+    @Test
+    fun 보표도_마디와_함께_저장하고_다시_분석하면_바꾼다() = runBlocking {
+        val staves = ScoreLayoutStore.getOrAnalyzeStaves(db, "file-1", file, counting(layoutWithStaves(50f, 200f, 500f)))
+        assertEquals(listOf(0, 1), staves?.map { it.staffIndex })
+        assertEquals(listOf("Violin", null), staves?.map { it.label })
+        assertEquals(145f, staves!![1].topPt)
+        // 두 번째는 캐시
+        ScoreLayoutStore.getOrAnalyzeStaves(db, "file-1", file, counting(layoutWithStaves(50f, 500f)))
+        assertEquals(1, analyzeCalls)
+
+        // 파일이 바뀌면 다시 분석 — 이전 보표는 남지 않는다
+        db.pdfFileDao().getPdfFileById("file-1")!!.let { db.pdfFileDao().updatePdfFile(it.copy(scoreAnalyzedAt = null)) }
+        get(counting(layoutWith(50f, 500f)))
+        assertTrue(db.scoreStaffDao().getStaves("file-1").isEmpty())
+    }
+
+    @Test
+    fun 파일_레코드를_지우면_보표도_지워진다() = runBlocking {
+        get(counting(layoutWithStaves(50f, 200f, 500f)))
+        assertEquals(2, db.scoreStaffDao().getStaves("file-1").size)
+        db.pdfFileDao().deletePdfFileById("file-1")
+        assertTrue(db.scoreStaffDao().getStaves("file-1").isEmpty())
+    }
 }

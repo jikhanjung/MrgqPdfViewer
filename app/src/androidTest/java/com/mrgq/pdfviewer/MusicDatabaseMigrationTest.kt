@@ -330,6 +330,37 @@ class MusicDatabaseMigrationTest {
     }
 
     @Test
+    fun v14_에서_v15_는_보표_테이블을_더하고_마디를_다시_분석하게_한다() {
+        helper.createDatabase(TEST_DB, 14).apply {
+            execSQL(INSERT_FILE)
+            execSQL("UPDATE pdf_files SET scoreAnalyzedAt = 5678 WHERE id = 'file-1'")
+            execSQL(
+                "INSERT INTO user_preferences (pdfFileId, displayMode, lastPageNumber, bookmarkedPages, " +
+                    "topClippingPercent, bottomClippingPercent, centerPadding, updatedAt, metronomeBpm) " +
+                    "VALUES ('file-1', 'DOUBLE', 7, '', 0.05, 0.03, 0.1, 1000, 72)"
+            )
+            close()
+        }
+
+        val db = helper.runMigrationsAndValidate(TEST_DB, 15, true, *MusicDatabase.ALL_MIGRATIONS)
+
+        db.query("SELECT scoreAnalyzedAt FROM pdf_files WHERE id = 'file-1'").use { c ->
+            c.moveToFirst()
+            assertTrue("보표를 채우려면 다시 분석해야 한다", c.isNull(0))
+        }
+        db.query("SELECT metronomeBpm, displayMode FROM user_preferences").use { c ->
+            assertEquals("v14→v15 에서 파일별 설정이 사라졌다", 1, c.count)
+            c.moveToFirst()
+            assertEquals(72, c.getInt(0))
+            assertEquals("DOUBLE", c.getString(1))
+        }
+        db.query("SELECT COUNT(*) FROM score_staves").use { c ->
+            c.moveToFirst()
+            assertEquals(0, c.getInt(0))
+        }
+    }
+
+    @Test
     fun v2_to_v3_중앙여백_픽셀이_비율로_변환된다() {
         val db = createDbAt(2, V2_USER_PREFERENCES) {
             it.execSQL(INSERT_FILE)

@@ -20,6 +20,7 @@ data class PathBox(
  *
  * @param staffBands 보표별 (위 오선, 아래 오선) — 위 보표부터
  * @param barlines 마디 경계 x. 첫 값은 시스템 왼쪽 끝, 마지막 값은 끝 마디선
+ * @param staffLabels 보표마다 왼쪽에 적힌 이름(악기 · 연주자, P07) — [staffBands] 와 같은 순서, 못 읽으면 null. 비어 있으면 읽지 않음
  */
 data class SystemLayout(
     val top: Float,
@@ -28,6 +29,7 @@ data class SystemLayout(
     val right: Float,
     val staffBands: List<Pair<Float, Float>>,
     val barlines: List<Float>,
+    val staffLabels: List<String?> = emptyList(),
 ) {
     val measureCount: Int get() = (barlines.size - 1).coerceAtLeast(0)
 }
