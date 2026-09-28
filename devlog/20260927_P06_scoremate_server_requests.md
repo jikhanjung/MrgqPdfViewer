@@ -239,6 +239,50 @@ TV 는 동기화 · 받기만 해서 영향이 없었다.
   옛 앱이 이미 지나간 변경을 놓치지 않게 **앱 동기화 형식**(`sync_format` = 1)이 처음이면 커서를 한 번 처음부터 — PDF 는 sha 가 같아 다시 받지 않는다.
   Z18TV Pro 에서 K488 `.musicxml` 670,776 bytes 받음(PDF 0개 다시 받음). 앱에서 쓰는 건 P07 5 · 6단계(반주 연습)
 
+## 12. 서버 0.10.x — 보표 · 마디 분석 파일(layout) 동기화 (2026-09-28, TV 앱 작업이 있어야 쓰인다)
+
+서버가 앱의 `score/`(Kotlin — PathContentInterpreter · StaffSystemDetector · StaffLabelDetector · TimeSignatureDetector ·
+ScoreLayout)를 **그대로** 파이썬으로 옮겨(서버 `scores/score_layout.py`, devlog 068) 판마다 돌린다.
+앱 골든 테스트(`ScoreLayoutAnalyzerTest`, Moldau 26 시스템 / 81 마디, ±0.6pt)와 같은 단언을 서버 테스트가 확인한다.
+앱 단위 테스트(StaffSystemDetectorTest · StaffLabelDetectorTest · TimeSignatureDetectorTest · PathContentInterpreterTest)도 서버로 옮겨 대조 중.
+
+### 동기화 응답
+`GET /api/v1/sync/scores/` 의 각 악보에 **`layout`**(추가만 — 없으면 `null`):
+```json
+"layout": {"url": "https://…/api/v1/scores/6/layout/", "sha256": "…(이 JSON 파일의)", "size_bytes": 41234,
+           "filename": "모차르트_K488_2악장_0728.layout.json", "analyzer_version": "1+app.9557497",
+           "pdf_sha256": "…(= version.sha256)", "measures": 99, "systems": 27, "updated_at": "…"}
+```
+- 받기: `GET layout.url` → 서명 URL 로 302(PDF · MusicXML 과 같다). `?version=n` 이면 그 판
+- **`analyzer_version`** = 서버 포트 판 + 기준으로 옮긴 앱 `score/` 커밋. 서버가 분석기를 고치거나 앱 `score/` 를 다시 옮기면 오른다 →
+  서버가 모든 판을 다시 분석하고, 기기는 이 값(또는 `sha256`)이 가진 것과 다를 때 다시 받는다 — 앱이 DB 마이그레이션(v9 · v12 · v15)으로
+  캐시를 비우던 것을 대신한다
+- **`pdf_sha256`** = 분석한 PDF(판). 기기가 가진 PDF 의 sha256 과 같을 때만 쓴다
+
+### 파일 모양 — 앱 `ScoreLayout` 그대로 (+ 펼친 행)
+```json
+{"format": "scoremate-score-layout", "format_version": 1, "analyzer": "score-layout", "analyzer_version": "1+app.9557497",
+ "app_commit": "9557497", "pdf_sha256": "…", "page_count": 6, "system_count": 27, "measure_count": 99,
+ "pages": [{"pageIndex": 0, "widthPt": 595.3, "heightPt": 841.9,
+            "systems": [{"top": …, "bottom": …, "left": …, "right": …,
+                         "staffBands": [[top, bottom], …], "barlines": [x, …], "staffLabels": ["Guitar 1", null, …]}],
+            "timeSignatures": [{"systemIndex": 0, "x": 105.9, "numerator": 6, "denominator": 8}]}],
+ "measures": [ScoreMeasure 행 — measureNumber · pageIndex · systemIndex · leftPt · topPt · rightPt · bottomPt ·
+              pageWidthPt · pageHeightPt · timeSigNumerator · timeSigDenominator],
+ "staves":   [ScoreStaff 행 — pageIndex · systemIndex · staffIndex · topPt · bottomPt · label]}
+```
+- 이름은 Kotlin 데이터 클래스(`PageLayout` · `SystemLayout` · `TimeSignatureMark`) 필드 그대로 — `pages` 를 `ScoreLayout` 으로 읽어
+  **기존 `toMeasures()` · `toStaves()` 로 두 테이블을 채우고 `scoreAnalyzedAt` 만 표시**하면 된다. (`measures` · `staves` 는 같은 내용을
+  이미 펼친 것 — `pdfFileId` 만 붙여 바로 넣어도 된다)
+- 좌표: PDF 포인트, **CropBox 왼쪽 위 원점, y 아래로** — 앱과 같다. 회전된 쪽은 `systems: []`
+- 0마디(악보가 아닌 PDF)도 파일이 있다 — 그대로 "분석 마침"으로 표시하면 된다
+- 서버에 결과가 없거나(`layout: null`) 서버에 연결하지 않은 TV 는 지금처럼 앱에서 분석한다. 파트보 배치(cacheDir/parts)는 여기서 만드는 파생 캐시
+
+### 언제 생기나
+- 서버 호스트 cron 이 5분마다 분석 없는 판(또는 옛 `analyzer_version`)을 채운다 — 올린 뒤 몇 분 안
+- 운영 결과(2026-09-28): K488 27 시스템 · 99마디(6/8) · Arpeggione 82 · 278(C → 4/4) · Clair de Lune 21 · 72(9/8) ·
+  Moldau(42쪽) 84 · 268(6/8 → 2/4 → 4/4 → 6/8). 앞의 셋은 악보 인식(MusicXML) 마디 수와 같다
+
 ## 변경 이력
 - 2026-09-27: 처음 작성 (C2 구현 중 발견). 같은 날 서버 작업용으로 보강 — 이름 변경 경로가 API · 웹 둘인 것, 제안 코드 · 테스트 · 완료 기준, TV 가 의존하는 필드 표
 - 2026-09-27: 서버 처리 결과(§6) — 0.6.2 · 0.6.3 운영 배포
@@ -248,3 +292,4 @@ TV 는 동기화 · 받기만 해서 영향이 없었다.
 - 2026-09-28: §9 — 서버 0.8.1 · 0.8.2 (연결 기기, 모든 악보 모드 삭제, `devices/me` 에서 `sync_mode` 제거 — TV 변경 없음)
 - 2026-09-28: §10 — 서버 0.9.0 (`arranger` 필드 추가, PDF 문서 제목으로 제목)
 - 2026-09-28: §11 — 서버 0.9.6 동기화 응답에 `musicxml` + `GET /scores/{id}/musicxml/` (앱이 받아야 쓰인다)
+- 2026-09-28: §12 — 서버 0.10.x 보표 · 마디 분석 파일(`layout`, 앱 ScoreLayout 모양 · analyzer_version · pdf_sha256)
