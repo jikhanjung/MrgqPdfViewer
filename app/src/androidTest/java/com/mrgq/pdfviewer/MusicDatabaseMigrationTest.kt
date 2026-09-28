@@ -414,6 +414,27 @@ class MusicDatabaseMigrationTest {
     }
 
     @Test
+    fun v17_에서_v18_은_편곡자_칸을_빈_값으로_더한다() {
+        helper.createDatabase(TEST_DB, 17).apply {
+            execSQL(
+                "INSERT INTO server_scores (serverId, filePath, versionNumber, sha256, title, composer, partName, ensembleId, " +
+                    "ensembleName, hidden, syncedAt) VALUES (6, '/x/K488.pdf', 1, 'abc', 'K488', 'Mozart', 'Full Score', NULL, NULL, 0, 1000)"
+            )
+            close()
+        }
+
+        val db = helper.runMigrationsAndValidate(TEST_DB, 18, true, *MusicDatabase.ALL_MIGRATIONS)
+
+        db.query("SELECT title, composer, arranger FROM server_scores").use { c ->
+            assertEquals(1, c.count)
+            c.moveToFirst()
+            assertEquals("K488", c.getString(0))
+            assertEquals("Mozart", c.getString(1))
+            assertEquals("", c.getString(2))
+        }
+    }
+
+    @Test
     fun v2_to_v3_중앙여백_픽셀이_비율로_변환된다() {
         val db = createDbAt(2, V2_USER_PREFERENCES) {
             it.execSQL(INSERT_FILE)

@@ -21,7 +21,7 @@ import com.mrgq.pdfviewer.database.entity.UserPreference
 
 @Database(
     entities = [PdfFile::class, UserPreference::class, ScoreMeasure::class, ServerScore::class, ScoreStaff::class],
-    version = 17,
+    version = 18,
     exportSchema = true   // app/schemas 로 내보낸다 — 마이그레이션 테스트·드리프트 감지의 전제
 )
 @TypeConverters(Converters::class)
@@ -242,11 +242,19 @@ abstract class MusicDatabase : RoomDatabase() {
             }
         }
 
+        // Migration from version 17 to 18 (server_scores.arranger — 서버 0.9.0 편곡자, 파일 목록 둘째 줄)
+        // 빈 값으로 둔다 — 동기화 형식 2 가 한 번 처음부터 받아 채운다
+        private val MIGRATION_17_18 = object : Migration(17, 18) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL("ALTER TABLE server_scores ADD COLUMN arranger TEXT NOT NULL DEFAULT ''")
+            }
+        }
+
         /** 앱과 마이그레이션 테스트가 같은 목록을 쓴다 — 등록 누락을 테스트가 잡도록. */
         internal val ALL_MIGRATIONS = arrayOf(
             MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8,
             MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14,
-            MIGRATION_14_15, MIGRATION_15_16, MIGRATION_16_17,
+            MIGRATION_14_15, MIGRATION_15_16, MIGRATION_16_17, MIGRATION_17_18,
         )
 
         fun getDatabase(context: Context): MusicDatabase {

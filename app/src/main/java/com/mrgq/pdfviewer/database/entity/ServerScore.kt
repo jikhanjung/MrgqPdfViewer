@@ -1,5 +1,6 @@
 package com.mrgq.pdfviewer.database.entity
 
+import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.PrimaryKey
 
@@ -20,4 +21,6 @@ data class ServerScore(
     val ensembleName: String?,
     val hidden: Boolean,
     val syncedAt: Long,
+    /** 편곡자 (서버 0.9.0, P06 §10 — v18). 없으면 빈 문자열 */
+    @ColumnInfo(defaultValue = "") val arranger: String = "",
 )

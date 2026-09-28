@@ -306,7 +306,7 @@ class MainActivity : AppCompatActivity() {
             val view = binding.setlistTabs.getChildAt(i) as android.widget.TextView
             val id = view.tag as Long?
             val setlist = setlists.firstOrNull { it.id == id }
-            view.text = if (setlist == null) "" else "${setlist.title} ${setlist.items.size}"
+            view.text = if (setlist == null) "" else "${setlist.title} (${setlist.items.size})"
             view.isSelected = id == current?.id
         }
     }
@@ -659,6 +659,9 @@ class MainActivity : AppCompatActivity() {
                         ?: PdfLibrary.scoreMateGroupOf(appPdfDir, file),
                     sha256 = synced[file.path]?.sha256,
                     serverTitle = synced[file.path]?.title,
+                    composer = synced[file.path]?.composer,
+                    partName = synced[file.path]?.partName,
+                    arranger = synced[file.path]?.arranger,
                 ))
             }
         }

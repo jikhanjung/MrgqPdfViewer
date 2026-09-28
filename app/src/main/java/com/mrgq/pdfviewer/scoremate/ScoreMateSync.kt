@@ -14,6 +14,8 @@ data class RemoteScore(
     val ensembleId: Long?,
     val ensembleName: String?,
     val versionNumber: Int,
+    /** 편곡자 (서버 0.9.0, P06 §10) */
+    val arranger: String = "",
     /** null = 서버가 아직 처리 중 — 이번엔 건너뛴다. 처리가 끝나면 updated_at 이 바뀌어 다음 동기화에 다시 온다 */
     val sha256: String?,
     val sizeBytes: Long,
@@ -42,6 +44,8 @@ data class SyncedScore(
     val ensembleName: String?,
     val hidden: Boolean = false,
     val syncedAt: Long = 0L,
+    /** 편곡자 (v18) */
+    val arranger: String = "",
 )
 
 /** 받아 둔 서버 악보 저장소 (Room 구현은 repository, 테스트는 메모리) */
@@ -71,11 +75,13 @@ data class SyncReport(
     val musicXml: Int = 0,
     /** 받은 분석 파일 (P06 §12) */
     val layouts: Int = 0,
+    /** 파일은 그대로고 곡 정보(제목 · 작곡가 · 편곡 · 파트)만 바뀐 악보 — 목록을 다시 그려야 한다 */
+    val updated: Int = 0,
     /** 세트리스트(곡목 · 순서 · 메모)가 바뀌었다 (#064) */
     val setlistsChanged: Boolean = false,
     val errors: List<String> = emptyList(),
 ) {
-    val changed: Boolean get() = downloaded + moved + removed + musicXml + layouts > 0 || setlistsChanged
+    val changed: Boolean get() = downloaded + moved + removed + musicXml + layouts + updated > 0 || setlistsChanged
 }
 
 /**
@@ -129,6 +135,7 @@ class ScoreMateSync(
         var pending = 0
         var musicXml = 0
         var layouts = 0
+        var updated = 0
 
         // 3 먼저 판단: 지울 것 — 서버가 지금 이 TV 에 주는 것(ids) 밖
         val local = store.all().associateBy { it.serverId }
@@ -143,7 +150,7 @@ class ScoreMateSync(
             val existing = keep[remote.id]
             if (existing?.hidden == true) {
                 // TV 에서 지운 악보 — 메타데이터만 따라간다
-                store.upsert(existing.copy(title = remote.title, partName = remote.partName, composer = remote.composer,
+                store.upsert(existing.copy(title = remote.title, partName = remote.partName, composer = remote.composer, arranger = remote.arranger,
                     ensembleId = remote.ensembleId, ensembleName = remote.ensembleName))
                 continue
             }
@@ -156,6 +163,7 @@ class ScoreMateSync(
                 val changed = applyScore(remote, sha, existing, File(target))
                 if (changed == Change.DOWNLOADED) downloaded++
                 if (changed == Change.MOVED) moved++
+                if (changed == Change.UPDATED) updated++
                 if (applySidecar(remote.musicXml, musicXmlFileOf(File(target)), "MusicXML")) musicXml++
                 if (applySidecar(remote.layout, layoutFileOf(File(target)), "분석 파일")) layouts++
             } catch (e: ScoreMateUnlinkedException) {
@@ -204,7 +212,7 @@ class ScoreMateSync(
         } catch (e: ScoreMateException) {
             errors += "세트리스트: ${e.message}"
         }
-        return SyncReport(downloaded, moved, removed, pending, musicXml, layouts, setlistsChanged, errors)
+        return SyncReport(downloaded, moved, removed, pending, musicXml, layouts, updated, setlistsChanged, errors)
     }
 
     /** TV 에서 지운 서버 악보 — 목록에서 빼고 다시 받지 않는다. 파일은 호출한 쪽이 지웠다 */
@@ -260,12 +268,12 @@ class ScoreMateSync(
         moveSidecars(file, target)
     }
 
-    private enum class Change { NONE, DOWNLOADED, MOVED }
+    private enum class Change { NONE, DOWNLOADED, MOVED, UPDATED }
 
     private suspend fun applyScore(remote: RemoteScore, sha: String, existing: SyncedScore?, target: File): Change {
         val record = SyncedScore(
             serverId = remote.id, filePath = target.path, versionNumber = remote.versionNumber, sha256 = sha,
-            title = remote.title, composer = remote.composer, partName = remote.partName,
+            title = remote.title, composer = remote.composer, partName = remote.partName, arranger = remote.arranger,
             ensembleId = remote.ensembleId, ensembleName = remote.ensembleName, syncedAt = now(),
         )
         val currentFile = existing?.let { File(it.filePath) }
@@ -273,8 +281,9 @@ class ScoreMateSync(
 
         if (haveContent) {
             if (currentFile!!.path == target.path) {
-                if (existing != record.copy(syncedAt = existing.syncedAt)) store.upsert(record)
-                return Change.NONE
+                if (existing == record.copy(syncedAt = existing.syncedAt)) return Change.NONE
+                store.upsert(record)
+                return Change.UPDATED
             }
             moveTo(existing, target)
             store.upsert(record)
@@ -425,8 +434,8 @@ class ScoreMateSync(
         /** `PDFs/` 아래 서버 악보 폴더 */
         const val FOLDER = "ScoreMate"
 
-        /** 앱 동기화 형식 — 1: MusicXML (P06 §11, v0.3.0). 올리면 기존 TV 가 한 번 처음부터 다시 받는다 */
-        const val SYNC_FORMAT = 1
+        /** 앱 동기화 형식 — 1: MusicXML (P06 §11, v0.3.0), 2: 편곡자 · 분석 파일(P06 §10 · §12). 올리면 기존 TV 가 한 번 처음부터 다시 받는다 */
+        const val SYNC_FORMAT = 2
         private const val MAX_PAGES = 100
 
         fun parsePage(body: String): SyncPage? {
@@ -452,6 +461,7 @@ class ScoreMateSync(
                 id = o.get("id").asLong,
                 title = o.str("title") ?: "",
                 composer = o.str("composer") ?: "",
+                arranger = o.str("arranger") ?: "",
                 partName = o.str("part_name") ?: "",
                 ensembleId = ensemble?.get("id")?.asLong,
                 ensembleName = ensemble?.str("name"),
@@ -541,6 +551,7 @@ object ScoreMateSyncText {
         if (report.pending > 0) parts += "${report.pending}개는 서버 처리 중"
         if (report.musicXml > 0) parts += "MusicXML ${report.musicXml}개 받음"
         if (report.layouts > 0) parts += "분석 ${report.layouts}개 받음"
+        if (report.updated > 0) parts += "곡 정보 ${report.updated}개 바뀜"
         if (report.setlistsChanged) parts += "세트리스트 갱신"
         if (report.errors.isNotEmpty()) parts += "${report.errors.size}개 실패 (${report.errors.first()})"
         return if (parts.isEmpty()) null else "ScoreMate: " + parts.joinToString(", ")

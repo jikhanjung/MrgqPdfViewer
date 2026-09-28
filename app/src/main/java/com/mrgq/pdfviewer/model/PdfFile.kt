@@ -12,7 +12,11 @@ data class PdfFile(
     val sha256: String? = null, // ScoreMate 악보면 받을 때 검증한 내용 해시 — 지휘자가 file_change 에 싣는다 (#063)
     val setlistPosition: Int? = null, // 세트리스트로 볼 때 곡 순서 (#064) — 이름 앞에 "1."
     val setlistNotes: String? = null, // 세트리스트 곡 메모 (#064)
-    val serverTitle: String? = null   // ScoreMate 악보의 서버 제목 — 목록에는 파일 이름(제목 + " (파트)" + .pdf) 대신 이것만 (사용자 요청 2026-09-28)
+    val serverTitle: String? = null,  // ScoreMate 악보의 서버 제목 — 목록에는 파일 이름(제목 + " (파트)" + .pdf) 대신 이것만 (사용자 요청 2026-09-28)
+    // ScoreMate 악보의 서버 곡 정보 — 목록 첫 줄에 제목 옆 파트, 둘째 줄에 작곡 · 편곡
+    val composer: String? = null,
+    val partName: String? = null,
+    val arranger: String? = null,
 ) {
     /** 목록에 보이는 이름 — 서버 제목이 있으면 그것, 없으면 파일 이름 */
     val shownName: String get() = serverTitle?.takeIf { it.isNotBlank() } ?: name

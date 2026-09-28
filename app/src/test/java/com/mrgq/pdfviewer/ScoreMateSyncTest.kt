@@ -81,6 +81,8 @@ class ScoreMateSyncTest {
         var xml: String? = null,
         /** 서버 분석 파일 (P06 §12). null = 없음 */
         var layout: String? = null,
+        var composer: String = "",
+        var arranger: String = "",
     )
 
     /** 서버 흉내: 커서 = 마지막으로 보낸 변경 번호. 받기는 302 → 서명 URL(인증 없이만 받아 준다) */
@@ -116,7 +118,7 @@ class ScoreMateSyncTest {
             val items = page.joinToString(",") { s ->
                 val ensemble = s.ensemble?.let { """{"id":${it.hashCode().toLong() and 0xffff},"name":"$it"}""" } ?: "null"
                 val sha = if (s.processing) "null" else "\"${sha(s.content)}\""
-                """{"id":${s.id},"title":"${s.title}","composer":"","part_name":"${s.part}","ensemble":$ensemble,
+                """{"id":${s.id},"title":"${s.title}","composer":"${s.composer}","arranger":"${s.arranger}","part_name":"${s.part}","ensemble":$ensemble,
                    "version":{"number":${s.version},"sha256":$sha,"size_bytes":${s.content.length}},
                    "download_url":"http://internal:8000/api/v1/scores/${s.id}/download/",
                    "musicxml":${xmlJson(s)},"layout":${layoutJson(s)}}"""
@@ -432,6 +434,22 @@ class ScoreMateSyncTest {
         sync().sync()
         assertFalse(file("현악 4중주", "블타바.layout.json").exists())
         assertEquals(1, PdfLibrary.listPdfFiles(root, scoreMate = true).size)
+    }
+
+    @Test
+    fun 작곡가_편곡자를_저장하고_바뀌면_받지_않고_고친다() = runBlocking {
+        val s = Score(1, "K488", "v1", composer = "Mozart", arranger = "전예완")
+        server.put(s)
+        sync().sync()
+        assertEquals("Mozart" to "전예완", db.rows.getValue(1).let { it.composer to it.arranger })
+        s.arranger = "전예완 · 김하진"
+        server.put(s)
+        val report = sync().sync()
+        assertEquals("전예완 · 김하진", db.rows.getValue(1).arranger)
+        assertEquals(0, report.downloaded) // 곡 정보만 바뀌면 파일은 다시 받지 않는다
+        assertEquals(1, report.updated)    // 그래도 바뀐 것이라 목록을 다시 그린다
+        assertTrue(report.changed)
+        assertEquals(1, server.downloads)
     }
 
     @Test

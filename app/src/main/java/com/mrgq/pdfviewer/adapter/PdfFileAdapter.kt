@@ -87,11 +87,27 @@ class PdfFileAdapter(
         fun bind(pdfFile: PdfFile, position: Int, isFileManagementMode: Boolean) {
             currentItem = pdfFile
             currentPosition = position
-            // 세트리스트로 볼 때는 곡 순서를 앞에 (#064)
-            fileNameText.text = pdfFile.setlistPosition?.let { "$it. ${pdfFile.shownName}" } ?: pdfFile.shownName
+            // 세트리스트로 볼 때는 곡 순서를 앞에 (#064). ScoreMate 악보면 제목 옆에 파트(Full Score 등)를 작고 흐리게 (사용자 요청 2026-09-28)
+            val title = pdfFile.setlistPosition?.let { "$it. ${pdfFile.shownName}" } ?: pdfFile.shownName
+            val part = pdfFile.partName?.takeIf { it.isNotBlank() && pdfFile.serverTitle != null }
+            fileNameText.text = if (part == null) title else android.text.SpannableStringBuilder(title).apply {
+                val start = length
+                append("   ").append(part)
+                setSpan(android.text.style.RelativeSizeSpan(0.72f), start, length, android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                setSpan(android.text.style.ForegroundColorSpan(0xFFB0B0B0.toInt()), start, length, android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+            }
 
-            // PDF 문서 정보 (제목 · 작성자). 없거나 제목이 파일명과 같으면 줄을 숨긴다
-            val subtitle = PdfDocumentInfo.subtitle(pdfFile.shownName, pdfFile.title, pdfFile.author)
+            // 둘째 줄 — ScoreMate 악보면 "작곡 ○○ · 편곡 ○○"(서버 곡 정보), 아니면 PDF 문서 정보(제목 · 작성자). 없으면 줄을 숨긴다
+            val serverLine = if (pdfFile.serverTitle != null) {
+                listOfNotNull(
+                    pdfFile.composer?.takeIf { it.isNotBlank() }?.let { "작곡 $it" },
+                    pdfFile.arranger?.takeIf { it.isNotBlank() }?.let { "편곡 $it" },
+                ).joinToString(" · ").takeIf { it.isNotEmpty() }
+            } else {
+                null
+            }
+            val subtitle = if (pdfFile.serverTitle != null) serverLine
+            else PdfDocumentInfo.subtitle(pdfFile.shownName, pdfFile.title, pdfFile.author)
             docInfoText.text = subtitle ?: ""
             docInfoText.visibility = if (subtitle != null) View.VISIBLE else View.GONE
             
@@ -100,10 +116,9 @@ class PdfFileAdapter(
             val modifiedDate = dateFormat.format(Date(pdfFile.lastModified))
             val fileSize = formatFileSize(pdfFile.size)
             val pageInfo = if (pdfFile.pageCount > 0) "${pdfFile.pageCount}페이지" else "페이지 수 알 수 없음"
-            // ScoreMate 에서 받은 악보는 앞에 ☁️ 앙상블 · 파트 · 판 (P05 C2)
+            // ScoreMate 악보여도 ☁️ · 앙상블 · 파트 · 판은 싣지 않는다 — 서재가 이미 ScoreMate 이고 파트는 제목 옆에 (사용자 요청 2026-09-28)
             val notes = pdfFile.setlistNotes?.takeIf { it.isNotBlank() }?.let { "📝 $it • " } ?: ""
-            val cloud = notes + (pdfFile.cloudLabel?.let { "☁️ $it • " } ?: "")
-            fileInfoText.text = "$cloud$fileSize • $pageInfo • $modifiedDate"
+            fileInfoText.text = "$notes$fileSize • $pageInfo • $modifiedDate"
             
             // 파일 관리 모드에 따라 삭제 버튼 표시/숨김
             deleteButton.visibility = if (isFileManagementMode) View.VISIBLE else View.GONE
