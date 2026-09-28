@@ -21,7 +21,10 @@ import java.io.File
 object PartPdfBuilder {
 
     private const val TAG = "PartPdfBuilder"
-    private const val MEASURE_NUMBER_SIZE = 7f
+    private const val MEASURE_NUMBER_SIZE = 11f
+    private const val PAGE_NUMBER_SIZE = 9f
+    /** 왼쪽 여백의 번호와 조각 사이 */
+    private const val LABEL_GAP = 3f
 
     /** [source] 의 파트 [layout] 을 [out] 에 쓴다. 쓰는 중에는 `.part` 로 두어 끊긴 파일이 쓰이지 않게 한다 */
     fun build(source: File, layout: PartLayout, out: File) {
@@ -37,7 +40,8 @@ object PartPdfBuilder {
                 }
                 for ((pageIndex, page) in pages.withIndex()) {
                     PDPageContentStream(dst, page).use { cs ->
-                        for (strip in layout.strips.filter { it.dstPage == pageIndex }) {
+                        for ((stripIndex, strip) in layout.strips.withIndex()) {
+                            if (strip.dstPage != pageIndex) continue
                             val srcPage = src.getPage(strip.srcPage)
                             val crop = srcPage.cropBox
                             val form = forms.getOrPut(strip.srcPage) { layer.importPageAsForm(src, strip.srcPage) }
@@ -52,13 +56,7 @@ object PartPdfBuilder {
                             cs.drawForm(form)
                             cs.restoreGraphicsState()
 
-                            strip.firstMeasure?.let { number ->
-                                cs.beginText()
-                                cs.setFont(PDType1Font.HELVETICA, MEASURE_NUMBER_SIZE)
-                                cs.newLineAtOffset(strip.srcLeft, layout.pageHeight - strip.dstTop - MEASURE_NUMBER_SIZE)
-                                cs.showText(number.toString())
-                                cs.endText()
-                            }
+                            drawLabels(cs, layout, strip, showPage = layout.showsSourcePage(stripIndex))
                         }
                     }
                 }
@@ -70,6 +68,35 @@ object PartPdfBuilder {
             throw java.io.IOException("파트보를 저장하지 못했습니다: $out")
         }
         Log.i(TAG, "${source.name} 보표 ${layout.staffIndex + 1}: ${layout.strips.size}줄 → ${layout.pageCount}쪽 (${System.currentTimeMillis() - started}ms)")
+    }
+
+    /**
+     * 조각 왼쪽 여백(원래 악기 이름이 있던 자리)에 **원본 마디 번호**를 보표 가운데 조금 위에, 원본 쪽이 바뀌는 조각이면 그 아래 **원본 쪽 번호**
+     * (`p.7`)를 오른쪽 맞춤으로 적는다. 여백이 좁으면 조각 왼쪽 위 안쪽에 한 줄로.
+     */
+    private fun drawLabels(cs: PDPageContentStream, layout: PartLayout, strip: PartStrip, showPage: Boolean) {
+        val measure = strip.firstMeasure?.toString()
+        val page = if (showPage) "p.${strip.srcPage + 1}" else null
+        if (measure == null && page == null) return
+        val font = PDType1Font.HELVETICA
+        fun width(text: String, size: Float) = font.getStringWidth(text) / 1000f * size
+        fun draw(text: String, size: Float, x: Float, yDown: Float) {
+            cs.beginText()
+            cs.setFont(font, size)
+            cs.newLineAtOffset(x, layout.pageHeight - yDown)
+            cs.showText(text)
+            cs.endText()
+        }
+        val widest = maxOf(measure?.let { width(it, MEASURE_NUMBER_SIZE) } ?: 0f, page?.let { width(it, PAGE_NUMBER_SIZE) } ?: 0f)
+        if (widest + LABEL_GAP * 2 <= strip.srcLeft) {
+            val right = strip.srcLeft - LABEL_GAP
+            val center = strip.dstTop + ((strip.staffTop + strip.staffBottom) / 2 - strip.srcTop)
+            measure?.let { draw(it, MEASURE_NUMBER_SIZE, right - width(it, MEASURE_NUMBER_SIZE), center - 1f) }
+            page?.let { draw(it, PAGE_NUMBER_SIZE, right - width(it, PAGE_NUMBER_SIZE), center + PAGE_NUMBER_SIZE + 1f) }
+        } else {
+            val text = listOfNotNull(measure, page?.let { "($it)" }).joinToString(" ")
+            draw(text, PAGE_NUMBER_SIZE, strip.srcLeft, strip.dstTop + PAGE_NUMBER_SIZE)
+        }
     }
 
     /**
@@ -86,5 +113,6 @@ object PartPdfBuilder {
         }
     }
 
-    private const val FORMAT = 1
+    /** 2: 왼쪽 여백에 원본 마디 · 쪽 번호, 3: 번호를 키움(11 · 9pt) */
+    private const val FORMAT = 3
 }

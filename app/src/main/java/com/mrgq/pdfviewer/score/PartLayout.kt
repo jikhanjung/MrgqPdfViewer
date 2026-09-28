@@ -7,7 +7,8 @@ import com.mrgq.pdfviewer.database.entity.ScoreStaff
  * 파트보 한 조각 — 원본 쪽 [srcPage] 의 사각형(보표 한 줄)을 가상 쪽 [dstPage] 의 [dstTop] 에 그대로(1:1) 옮긴다.
  * 좌표는 모두 **PDF 포인트, 쪽 좌상단 원점, 위→아래** (ScoreMeasure · ScoreStaff 와 같다). 가로 위치는 원본 그대로다.
  *
- * @param firstMeasure 이 조각의 첫 마디 번호 — 조각 왼쪽 위에 적는다 (총보는 보통 맨 위 보표에만 마디 번호가 있다)
+ * @param staffTop 조각 안 보표의 위 오선 · [staffBottom] 아래 오선 (원본 좌표) — 왼쪽 여백의 번호를 보표 높이에 맞춘다
+ * @param firstMeasure 이 조각의 첫 마디 번호 — 왼쪽 여백에 적는다 (총보는 보통 맨 위 보표에만 마디 번호가 있다)
  */
 data class PartStrip(
     val srcPage: Int,
@@ -19,6 +20,8 @@ data class PartStrip(
     val dstPage: Int,
     val dstTop: Float,
     val firstMeasure: Int?,
+    val staffTop: Float = srcTop,
+    val staffBottom: Float = srcBottom,
 ) {
     val height: Float get() = srcBottom - srcTop
     val dstBottom: Float get() = dstTop + height
@@ -41,6 +44,19 @@ data class PartLayout(
     val pageCount: Int,
     val strips: List<PartStrip>,
 ) {
+    /** 가상 쪽 [dstPages] 에 담긴 원본 쪽 범위 (0부터). 없으면 null — 화면의 "총보 n~m쪽" 표시 */
+    fun sourcePages(dstPages: IntRange): IntRange? {
+        val pages = strips.filter { it.dstPage in dstPages }.map { it.srcPage }
+        return if (pages.isEmpty()) null else pages.min()..pages.max()
+    }
+
+    /** 조각 [index] 에 원본 쪽 번호를 적을까 — 원본 쪽이 바뀌는 첫 조각과 가상 쪽마다 첫 조각 */
+    fun showsSourcePage(index: Int): Boolean {
+        val strip = strips[index]
+        val previous = strips.getOrNull(index - 1) ?: return true
+        return previous.srcPage != strip.srcPage || previous.dstPage != strip.dstPage
+    }
+
     companion object {
         const val TOP_MARGIN = 36f
         const val BOTTOM_MARGIN = 28f
@@ -97,6 +113,8 @@ data class PartLayout(
                     dstPage = dstPage,
                     dstTop = cursor,
                     firstMeasure = systemMeasures.minOf { it.measureNumber },
+                    staffTop = band.topPt,
+                    staffBottom = band.bottomPt,
                 )
                 cursor += height + STRIP_GAP
             }

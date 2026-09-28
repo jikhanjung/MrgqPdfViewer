@@ -74,6 +74,19 @@ class PartLayoutTest {
     }
 
     @Test
+    fun 가상_쪽의_원본_쪽_범위와_쪽_번호를_적을_조각() {
+        val part = layout(7, 1)!! // 가상 1쪽 = 원본 1~6쪽(조각 12), 가상 2쪽 = 원본 7쪽
+        assertEquals(0..5, part.sourcePages(0..0))
+        assertEquals(6..6, part.sourcePages(1..1))
+        assertEquals(0..6, part.sourcePages(0..1))
+        assertNull(part.sourcePages(5..5))
+        // 원본 쪽이 바뀌는 조각(0, 2, 4, …)과 가상 쪽의 첫 조각(12)
+        assertEquals(listOf(0, 2, 4, 6, 8, 10, 12), part.strips.indices.filter { part.showsSourcePage(it) })
+        // 보표 높이도 들고 있다 (번호를 보표 가운데에 맞춘다)
+        assertEquals(160f to 180f, part.strips.first().staffTop to part.strips.first().staffBottom)
+    }
+
+    @Test
     fun 없는_보표나_마디가_없으면_null() {
         assertNull(layout(1, 5))
         assertNull(PartLayout.build(score(1).toStaves("f"), emptyList(), 0))

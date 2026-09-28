@@ -143,6 +143,7 @@ class PdfViewerActivity : AppCompatActivity() {
     // pdfFilePath · currentPdfFileId 는 원본 그대로다 (설정 · 합주 · 분석은 원본 기준)
     private var partViewStaff: Int? = null
     private var partViewName: String? = null
+    private var partViewLayout: PartLayout? = null
 
     // 악보 분석 확인용 마디 박스 오버레이 (PDF 표시 옵션에서 켬, 전역 설정)
     private var scoreMeasures: List<ScoreMeasure> = emptyList()
@@ -1142,13 +1143,14 @@ class PdfViewerActivity : AppCompatActivity() {
             "$pdfFileName - "
         }
         
-        val pageInfo = if (isTwoPageMode && pageIndex + 1 < pageCount) {
+        val twoPages = isTwoPageMode && pageIndex + 1 < pageCount
+        val pageInfo = if (twoPages) {
             // Two page mode: show "1-2 / 10" format
             "${pageIndex + 1}-${pageIndex + 2} / $pageCount"
         } else {
             // Single page mode: show "1 / 10" format
             "${pageIndex + 1} / $pageCount"
-        }
+        } + partSourceInfo(if (twoPages) pageIndex..pageIndex + 1 else pageIndex..pageIndex)
         
         // Add cache info for debugging (only show if cache exists)
         val cacheInfo = pageCache?.let { cache ->
@@ -1158,6 +1160,15 @@ class PdfViewerActivity : AppCompatActivity() {
         binding.pageInfo.text = "$fileInfo$pageInfo$cacheInfo"
     }
     
+    /** 파트 보기면 " · 보표 2 (총보 11~15쪽)" — 지금 가상 쪽에 담긴 원본 쪽 (P07) */
+    private fun partSourceInfo(pages: IntRange): String {
+        if (partViewStaff == null) return ""
+        val source = partViewLayout?.sourcePages(pages)?.let { r ->
+            if (r.first == r.last) " (총보 ${r.first + 1}쪽)" else " (총보 ${r.first + 1}~${r.last + 1}쪽)"
+        }.orEmpty()
+        return " · ${partViewName.orEmpty()}$source"
+    }
+
     private fun loadNextFile() {
         if (currentFileIndex < filePathList.size - 1) {
             currentFileIndex++
@@ -3564,6 +3575,7 @@ class PdfViewerActivity : AppCompatActivity() {
         if (fileId == null || staff == null) {
             partViewStaff = null
             partViewName = null
+            partViewLayout = null
             return
         }
         val source = File(pdfFilePath)
@@ -3577,10 +3589,11 @@ class PdfViewerActivity : AppCompatActivity() {
             if (prepared == null) {
                 partViewStaff = null
                 partViewName = null
+                partViewLayout = null
                 toast("파트보를 만들지 못해 전체 악보로 봅니다")
                 return@withContext
             }
-            val (file, name) = prepared
+            val (file, name, layout) = prepared
             pageCache?.destroy()
             try {
                 currentPage?.close()
@@ -3599,6 +3612,7 @@ class PdfViewerActivity : AppCompatActivity() {
             registerSettingsCallback()
             partViewStaff = staff
             partViewName = name
+            partViewLayout = layout
             // 조각은 이미 잘려 있다 — 위/아래 클리핑은 쓰지 않는다 (저장된 값은 전체 악보용으로 그대로 둔다)
             currentTopClipping = 0f
             currentBottomClipping = 0f
@@ -3606,19 +3620,20 @@ class PdfViewerActivity : AppCompatActivity() {
         }
     }
 
-    /** 파트 PDF (캐시에 없으면 만든다)와 파트 이름. 파트를 가를 수 없는 악보면 null */
-    private suspend fun preparePartPdf(fileId: String, source: File, staff: Int): Pair<File, String>? {
+    /** 파트 PDF (캐시에 없으면 만든다) · 파트 이름 · 배치. 파트를 가를 수 없는 악보면 null */
+    private suspend fun preparePartPdf(fileId: String, source: File, staff: Int): Triple<File, String, PartLayout>? {
         val staves = musicRepository.getOrAnalyzeScoreStaves(fileId, source) ?: return null
         val part = (ScoreParts.of(staves) as? ScoreParts.Result.Parts)?.parts?.firstOrNull { it.staffIndex == staff } ?: return null
+        // 배치는 DB 의 분석 결과로 늘 다시 계산한다 (가볍다) — 화면의 "총보 n쪽" 표시에 쓴다
+        val measures = musicRepository.getOrAnalyzeScoreMeasures(fileId, source) ?: return null
+        val layout = PartLayout.build(staves, measures, staff) ?: return null
         val out = PartPdfBuilder.cacheFile(cacheDir, fileId, source, staff)
         if (!out.isFile) {
-            val measures = musicRepository.getOrAnalyzeScoreMeasures(fileId, source) ?: return null
-            val layout = PartLayout.build(staves, measures, staff) ?: return null
             withContext(Dispatchers.Main) { Toast.makeText(this@PdfViewerActivity, "파트보 만드는 중…", Toast.LENGTH_SHORT).show() }
             PartPdfBuilder.build(source, layout, out)
             PartPdfBuilder.prune(out, fileId, staff)
         }
-        return out to part.name
+        return Triple(out, part.name, layout)
     }
 
     /**
