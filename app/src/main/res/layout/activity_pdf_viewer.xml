@@ -45,6 +45,34 @@
         app:layout_constraintTop_toTopOf="parent"
         app:layout_constraintStart_toStartOf="parent" />
 
+    <!-- 연습 녹음 (P08 A단계) — 태블릿(TV 아님 · 마이크 있음)에서만 보인다. 오른쪽 위 -->
+    <View
+        android:id="@+id/recordButton"
+        android:layout_width="48dp"
+        android:layout_height="48dp"
+        android:layout_margin="10dp"
+        android:background="@drawable/record_button_idle"
+        android:contentDescription="녹음"
+        android:focusable="false"
+        android:visibility="gone"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintEnd_toEndOf="parent" />
+
+    <!-- 녹음 중 지난 시간 (버튼 아래) -->
+    <TextView
+        android:id="@+id/recordTime"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:paddingHorizontal="6dp"
+        android:paddingVertical="1dp"
+        android:background="#99000000"
+        android:textColor="#FFFFFFFF"
+        android:textSize="12sp"
+        android:visibility="gone"
+        app:layout_constraintTop_toBottomOf="@id/recordButton"
+        app:layout_constraintStart_toStartOf="@id/recordButton"
+        app:layout_constraintEnd_toEndOf="@id/recordButton" />
+
     <!-- 악보 연동 예비박: 남은 마디 수를 화면 가운데에 크게 (노래방처럼 2 → 1, #060). 예비박 동안에만 -->
     <TextView
         android:id="@+id/countInNumber"

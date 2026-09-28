@@ -25,7 +25,7 @@
    - 쪽 번호 옮기기는 `PartLayout.sourcePageFor` · `dstPageForSource`, 뷰어 `outgoingPage` · `incomingPageIndex`
 2. **반주 다듬기** — 셈여림 · 아티큘레이션, 반복 기호. 반주 크기 따로는 끝남. 악기 소리(SF2)는 나중에(사용자 결정)
 3. **빈 보표 숨긴 총보** — 시스템마다 보표 수가 다르면 지금은 파트 보기를 막는다(`ScoreParts.Result.VaryingStaves`). 지금 쓰는 기타 앙상블 악보에는 없었다
-4. **곡 단위 합주** (`work_id + 마디`, 서버 P01) — 각자 다른 PDF 로 같은 곡 합주. TV 요청 문서(P08)부터
+4. **곡 단위 합주** (`work_id + 마디`, 서버 P01) — 각자 다른 PDF 로 같은 곡 합주. TV 요청 문서(P09)부터
 5. 합주 Phase 0 동기 넘김 — 기본 OFF · 보류(CLAUDE.md "합주")
 
 ## 2. 일하는 방법 (이 환경)

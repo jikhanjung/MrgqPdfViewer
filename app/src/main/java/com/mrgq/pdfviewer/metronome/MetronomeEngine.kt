@@ -148,6 +148,24 @@ class MetronomeEngine(private val sampleRate: Int = 44100) {
         }
     }
 
+    /**
+     * [beat] 가 스피커에서 나는(났던) 시각 — `System.nanoTime` 기준. 연습 녹음(P08)이 박을 화면 틱이 아니라 소리 시각으로 적는다.
+     * 시간표 모드는 시간표 시각, 소리 모드는 `AudioTrack.getTimestamp()` 로 프레임을 시각으로 옮긴다. 모르면 null.
+     */
+    fun playTimeNanos(beat: Beat): Long? {
+        if (!isRunning) return null
+        schedule?.let { return it.localTimeOf(beat.index) }
+        if (isSilentFallback) return startNanos + beat.frame * 1_000_000_000L / sampleRate
+        val timestamp = AudioTimestamp()
+        val ok = try {
+            track?.getTimestamp(timestamp) == true
+        } catch (e: IllegalStateException) {
+            false
+        }
+        if (!ok) return null
+        return timestamp.nanoTime + (beat.frame - timestamp.framePosition) * 1_000_000_000L / sampleRate
+    }
+
     private fun record(beat: Beat): Beat {
         synchronized(lock) {
             recentBeats.addLast(beat)
