@@ -4,6 +4,7 @@ import android.util.Log
 import androidx.room.withTransaction
 import com.mrgq.pdfviewer.database.MusicDatabase
 import com.mrgq.pdfviewer.database.entity.ScoreMeasure
+import com.mrgq.pdfviewer.score.ScoreParts.summary
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import java.io.File
@@ -52,7 +53,7 @@ object ScoreLayoutStore {
             if (staves.isNotEmpty()) db.scoreStaffDao().insertAll(staves)
             db.pdfFileDao().setScoreAnalyzedAt(pdfFileId, System.currentTimeMillis())
         }
-        Log.i(TAG, "마디 ${measures.size}개 · 보표 ${staves.size}개 저장: ${file.name}")
+        Log.i(TAG, "마디 ${measures.size}개 · 보표 ${staves.size}개 저장: ${file.name} — 파트 ${ScoreParts.of(staves).summary()}")
         measures
     }
 

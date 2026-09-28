@@ -29,6 +29,14 @@ object ScoreParts {
         data class Parts(val parts: List<ScorePart>) : Result
     }
 
+    /** 로그용 한 줄 */
+    fun Result.summary(): String = when (this) {
+        Result.NoStaves -> "보표 없음"
+        Result.SingleStaff -> "보표 하나"
+        is Result.VaryingStaves -> "시스템마다 보표 수가 다름 ${counts.sorted()}"
+        is Result.Parts -> "${parts.size}개 [${parts.joinToString { it.name }}]"
+    }
+
     fun of(staves: List<ScoreStaff>): Result {
         if (staves.isEmpty()) return Result.NoStaves
         val systems = staves.groupBy { it.pageIndex to it.systemIndex }

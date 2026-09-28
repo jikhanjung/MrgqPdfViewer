@@ -63,6 +63,14 @@ class StaffLabelDetectorTest {
     }
 
     @Test
+    fun 한_글자씩_찍힌_이름은_붙여_읽고_띄어_쓴_곳만_띄운다() {
+        // MuseScore: "Guitar 1" 을 글자마다 따로 (글꼴 12pt, 글자 간격 6pt, 띄어쓰기는 한 칸 더)
+        val xs = listOf(20f, 26f, 32f, 38f, 44f, 50f, 62f)
+        val runs = "Guitar1".mapIndexed { i, c -> label(c.toString(), 1, x = xs[i]) }.toTypedArray()
+        assertEquals("Guitar 1", labels(*runs)[1])
+    }
+
+    @Test
     fun 보표_사이의_이름은_가까운_보표로() {
         // 보표 0 과 1 사이(가운데 y 132.5)보다 조금 위 → 보표 0
         val between = TextRun("Horn", 20f, pageHeight - (128f + 4f), 12f)

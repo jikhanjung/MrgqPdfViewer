@@ -40,7 +40,8 @@ ScoreMateServer `devlog/20260928_P01_악보인식_MusicXML_및_곡단위_합주.
 - 시스템마다 보표 띠(`staffBands`)를 저장한다. 새 표 `score_staves(pdfFileId, pageIndex, systemIndex, staffIndex, topPt, bottomPt)` — 분석 캐시와 같이 파일 내용이 바뀌면 다시 분석
 - **파트 = 보표 순번** (1차). 모든 시스템의 보표 수가 같을 때만 파트 보기를 켠다
   - ⚠️ Sibelius · MuseScore 의 "빈 보표 숨기기"(쉬는 파트를 빼고 조판)면 시스템마다 보표 수가 다르다 → 1차는 **"이 악보는 파트 보기를 지원하지 않습니다"**. 2차에서 보표 이름 · 음자리표로 맞춘다(§4)
-  - 한 파트가 보표 두 개(피아노 · 하프, 중괄호)면 → 1차는 사용자가 **연속된 보표 여러 개**를 한 파트로 고를 수 있게(예: 4~5번 보표)
+  - **보표 하나 = 파트 하나**로 간다(사용자 결정 2026-09-28 — 쓰는 악보가 기타 2 · 3 · 5중주라 보표마다 한 파트). 한 파트가 보표 두 개(피아노 · 하프)인
+    악보는 필요해지면 "연속된 보표를 한 파트로 묶기"를 더한다
 - **파트 이름**: 첫 시스템 보표 왼쪽 텍스트(악기 · 사람 이름)를 박자표처럼 텍스트 위치로 읽는다(`TimeSignatureDetector` 와 같은 길). 못 읽으면 "보표 1, 2, …"
 
 ### 2.2 파트 화면 배치 — `PartLayout` (JVM 단위 테스트 대상)
@@ -124,6 +125,15 @@ ScoreMateServer `devlog/20260928_P01_악보인식_MusicXML_및_곡단위_합주.
 - `StaffLabelDetector` — 보표 왼쪽 텍스트를 이름으로(숫자만 · 시스템 안 글자 제외). ⚠️ **Moldau 는 이름이 글자로 읽히지 않는다**(`pdftotext` 로도 제목 · 박자표 · 마디 번호만 나옴) → "보표 1~5". 사용자가 이름을 붙이는 기능이 2단계에 필요하다
 - `ScoreParts.of(staves)` — 파트 목록 / 보표 수가 시스템마다 다름(1차 미지원) / 보표 하나 / 보표 없음. `MusicRepository.getOrAnalyzeScoreStaves`
 - 테스트: JVM `StaffLabelDetectorTest` 6 · `ScorePartsTest` 6, 계측 — 마이그레이션 v14→v15, 저장소(보표 저장 · 재분석 · CASCADE), Moldau 5파트
+- **Z18TV Pro 실기기** (기타 앙상블 총보 4개, 분석 뒤 로그 `파트 …`): 모두 시스템마다 보표 수가 일정 — 빈 보표 숨긴 악보 없음
+  | 악보 | 쪽 · 시스템 · 마디 | 파트 | 이름 |
+  |---|---|---|---|
+  | Die Moldau (Full Score) | 42 · 84 · 268 | 5 | 못 읽음 (보표 n) |
+  | Arpeggione Sonate | 28 · 82 · 278 | 3 | 못 읽음 |
+  | Piano Concerto No 23 | 6 · 27 · 99 | 2 | 못 읽음 |
+  | Clair de Lune (MuseScore) | 4 · 21 · 72 | 2 | "G u i t a r" → 글자마다 찍힌 조각을 붙여 읽게 고침 |
+- 같이 고친 것: **C · ¢ 박자표**(Sibelius Opus 글꼴의 `c` · `C`, SMuFL `U+E08A` · `U+E08B`) — Arpeggione 가 박자표 없음 → `[4/4]`(실기기 확인)
+- ⚠️ Sibelius → Microsoft Print to PDF 악보는 파트 이름이 글자로 읽히지 않는다 → 2단계에 **파트 이름 붙이기**(파일별)가 필요
 
 ## 4. 열린 질문
 

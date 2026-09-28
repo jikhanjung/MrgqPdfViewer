@@ -75,6 +75,31 @@ class TimeSignatureDetectorTest {
         assertEquals(listOf(TimeSignatureMark(0, 123.5f, 12, 8)), TimeSignatureDetector.detect(runs, listOf(s), pageHeight))
     }
 
+    /** Sibelius Opus 글꼴: 보표마다 가운데 줄 높이에 기준선을 둔 기호 글자 한 개 (Arpeggione: x 76pt) */
+    private fun symbolOnAllStaves(s: SystemLayout, text: String, x: Float = 76f, size: Float = 20f) = (0 until 5).map { staff ->
+        val (top, bottom) = s.staffBands[staff]
+        TextRun(text, x, pageHeight - (top + bottom) / 2, size)
+    }
+
+    @Test
+    fun C_기호는_4_4_알라_브레베는_2_2() {
+        val s = system(100f)
+        assertEquals(listOf(TimeSignatureMark(0, 76f, 4, 4)), TimeSignatureDetector.detect(symbolOnAllStaves(s, "c"), listOf(s), pageHeight))
+        assertEquals(listOf(TimeSignatureMark(0, 76f, 2, 2)), TimeSignatureDetector.detect(symbolOnAllStaves(s, "C"), listOf(s), pageHeight))
+        // MuseScore (SMuFL timeSigCommon)
+        assertEquals(
+            listOf(TimeSignatureMark(0, 76f, 4, 4)),
+            TimeSignatureDetector.detect(symbolOnAllStaves(s, "\uE08A"), listOf(s), pageHeight),
+        )
+    }
+
+    @Test
+    fun 작은_글자_c_는_박자표가_아니다() {
+        // 가사 · 코드 이름 크기(보표 높이 20pt 의 절반)
+        val s = system(100f)
+        assertEquals(emptyList<TimeSignatureMark>(), TimeSignatureDetector.detect(symbolOnAllStaves(s, "c", size = 10f), listOf(s), pageHeight))
+    }
+
     @Test
     fun 보표_과반에_없으면_박자표가_아니다() {
         val s = system(100f)

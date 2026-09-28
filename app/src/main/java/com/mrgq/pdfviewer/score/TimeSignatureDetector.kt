@@ -27,7 +27,12 @@ data class TimeSignatureMark(val systemIndex: Int, val x: Float, val numerator: 
  * (Clair de Lune 9/8: `U+E089` 위 · `U+E088` 아래, 같은 x). 일반 숫자로 바꿔 같은 규칙에 넣는다. 두 자리(12/8)는
  * 같은 기준선에 붙어 있는 숫자 글자를 하나로 합친다 — 위치는 글자 원점들의 가운데 (아래 한 자리 숫자의 원점과 맞는다).
  *
- * 한계: 숫자로 쓰이지 않은 박자표(C, ¢ 기호)는 못 찾는다. 텍스트가 아닌 경로로 그려진 숫자도 못 찾는다.
+ * **C · ¢ 기호** (P07 작업 중 Arpeggione 에서 발견, 2026-09-28): Sibelius 악보 글꼴(Opus)은 온음표 박자 C 를 글자 `c`,
+ * 알라 브레베 ¢ 를 `C` 로 찍는다 (Arpeggione, Microsoft Print to PDF: 보표마다 x 76pt 에 `c`). SMuFL 은 `U+E08A` · `U+E08B`.
+ * 각각 4/4 · 2/2 로 본다. 가사 · 코드 이름의 글자와 헷갈리지 않게 **한 글자 · 보표 높이의 60% 이상 글꼴 · 보표 안**이고,
+ * 숫자 박자표와 같이 보표의 과반에서 같은 x 에 반복돼야 한다.
+ *
+ * 한계: 텍스트가 아닌 경로로 그려진 박자표는 못 찾는다.
  * 박자표가 없는 파일은 [detect] 가 빈 목록을 돌려주고, 메트로놈은 악보 연동 없이 동작한다.
  */
 object TimeSignatureDetector {
@@ -42,6 +47,10 @@ object TimeSignatureDetector {
     /** 한 숫자로 합칠 글자 사이 원점 간격 상한 (글꼴 크기 배수) · 같은 기준선으로 볼 차이 */
     private const val MERGE_GAP = 0.6f
     private const val BASELINE_TOL = 0.5f
+    /** 기호 박자표 글자 → (분자, 분모). Opus: c = C(4/4), C = ¢(2/2). SMuFL timeSigCommon · timeSigCutCommon */
+    private val SYMBOLS = mapOf("c" to (4 to 4), "C" to (2 to 2), "\uE08A" to (4 to 4), "\uE08B" to (2 to 2))
+    /** 기호 글꼴 크기 하한 (보표 높이 배수) — 본문 글자와 가른다 */
+    private const val SYMBOL_MIN_SIZE = 0.6f
 
     /** SMuFL 박자 숫자를 일반 숫자로. 다른 글자는 그대로 */
     private fun normalize(text: String): String = buildString {
@@ -74,6 +83,8 @@ object TimeSignatureDetector {
     }
 
     private data class Digit(val value: Int, val x: Float, val yTop: Float)
+    /** 기호 박자표 후보 — [y] 는 기준선 (위→아래) */
+    private data class Symbol(val numerator: Int, val denominator: Int, val x: Float, val y: Float, val size: Float)
     private data class Candidate(val x: Float, val numerator: Int, val denominator: Int)
 
     /**
@@ -86,11 +97,16 @@ object TimeSignatureDetector {
             val t = run.text.trim()
             if (DIGITS.matches(t)) Digit(t.toInt(), run.x, pageHeight - run.y) else null
         }
-        if (digits.isEmpty()) return emptyList()
+        val symbols = runs.mapNotNull { run ->
+            SYMBOLS[run.text.trim()]?.let { (n, d) -> Symbol(n, d, run.x, pageHeight - run.y, run.size) }
+        }
+        if (digits.isEmpty() && symbols.isEmpty()) return emptyList()
 
         val marks = ArrayList<TimeSignatureMark>()
         for ((systemIndex, system) in systems.withIndex()) {
-            val perStaff = system.staffBands.map { (top, bottom) -> candidatesInStaff(digits, top, bottom, system) }
+            val perStaff = system.staffBands.map { (top, bottom) ->
+                candidatesInStaff(digits, top, bottom, system) + symbolsInStaff(symbols, top, bottom, system)
+            }
             val needed = maxOf(1, (system.staffBands.size + 1) / 2)
             val accepted = ArrayList<Candidate>()
             for (candidate in perStaff.flatten().sortedBy { it.x }) {
@@ -103,6 +119,16 @@ object TimeSignatureDetector {
             accepted.forEach { marks += TimeSignatureMark(systemIndex, it.x, it.numerator, it.denominator) }
         }
         return marks
+    }
+
+    private fun symbolsInStaff(symbols: List<Symbol>, top: Float, bottom: Float, system: SystemLayout): List<Candidate> {
+        val height = bottom - top
+        if (height <= 0f) return emptyList()
+        return symbols.filter {
+            it.size >= height * SYMBOL_MIN_SIZE &&
+                it.y >= top - height / 2 && it.y <= bottom + height / 2 &&
+                it.x >= system.left - X_TOL && it.x <= system.right + X_TOL
+        }.map { Candidate(it.x, it.numerator, it.denominator) }
     }
 
     private fun candidatesInStaff(digits: List<Digit>, top: Float, bottom: Float, system: SystemLayout): List<Candidate> {
