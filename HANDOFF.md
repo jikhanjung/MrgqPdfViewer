@@ -27,6 +27,10 @@
 3. **빈 보표 숨긴 총보** — 시스템마다 보표 수가 다르면 지금은 파트 보기를 막는다(`ScoreParts.Result.VaryingStaves`). 지금 쓰는 기타 앙상블 악보에는 없었다
 4. **곡 단위 합주** (`work_id + 마디`, 서버 P01) — 각자 다른 PDF 로 같은 곡 합주. TV 요청 문서(P09)부터
 5. 합주 Phase 0 동기 넘김 — 기본 OFF · 보류(CLAUDE.md "합주")
+6. **마이크 악보 추적 (P08) — ⏸ 실제 기타 녹음부터 재개**. 녹음 도구 · 합성 총보 실험까지 끝(P08 §6 · §7). 재개 순서는 P08 §8:
+   녹음 조건(파트 보기 + 내 파트 뺀 반주 + 기타, 평소처럼), 볼 지표, 결정(−0.5박 보정 보류, 반복 멈춤 재현 시 작은 다중 가설)
+   - 녹음 받기: `adb pull /sdcard/Android/data/com.mrgq.pdfviewer/files/recordings/` (WAV + JSON, 저장소에 넣지 않는다)
+   - 실행: `python data/score_follow_dtw.py <녹음 base> <곡.musicxml> --online [--stretch 0.85]` (venv 에 librosa), 지연 확인 `data/recording_align.py`
 
 ## 2. 일하는 방법 (이 환경)
 
