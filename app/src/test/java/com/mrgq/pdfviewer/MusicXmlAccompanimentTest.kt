@@ -120,6 +120,15 @@ class MusicXmlAccompanimentTest {
     }
 
     @Test
+    fun 보표_이름은_파트_이름_보표가_여럿이면_번호를_붙인다() {
+        assertEquals("하진", score.staffName(0))
+        assertEquals("예원", score.staffName(1))
+        assertNull(score.staffName(2))
+        val piano = score.copy(parts = listOf(score.parts[0], score.parts[1].copy(name = "피아노", staves = 2)))
+        assertEquals(listOf("하진", "피아노 1", "피아노 2"), (0..2).map { piano.staffName(it) })
+    }
+
+    @Test
     fun 읽을_수_없으면_null() {
         assertNull(MusicXmlReader.read("<html/>".byteInputStream()))
         assertNull(MusicXmlReader.read("깨진".byteInputStream()))

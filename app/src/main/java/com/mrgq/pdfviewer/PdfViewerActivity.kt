@@ -497,8 +497,9 @@ class PdfViewerActivity : AppCompatActivity() {
                 loadDisplaySettingsSync()
 
                 // 파트보 보기를 고른 파일이면 렌더러를 파트 PDF 로 바꾼다 (P07) — 쪽 비율로 정하는 아래 두 쪽 모드 판단도 파트 쪽 기준
-                applyPartViewSelection()
+                // MusicXML 을 먼저 — 파트 보기 이름을 PDF 가 못 읽었으면 MusicXML 의 파트 이름으로 채운다
                 loadMusicXml()
+                applyPartViewSelection()
                 
                 Log.d("PdfViewerActivity", "=== checkAndSetTwoPageMode: 설정 로드 완료 ===")
                 Log.d("PdfViewerActivity", "로드된 설정: 위 ${currentTopClipping * 100}%, 아래 ${currentBottomClipping * 100}%, 여백 ${currentCenterPadding}px")
@@ -3557,7 +3558,7 @@ class PdfViewerActivity : AppCompatActivity() {
             }
             AlertDialog.Builder(this@PdfViewerActivity)
                 .setTitle("파트 보기 (여러 개 고를 수 있음)")
-                .setMultiChoiceItems(parts.map { it.name }.toTypedArray(), checked) { _, which, isChecked -> checked[which] = isChecked }
+                .setMultiChoiceItems(parts.map { partName(it, parts.size) }.toTypedArray(), checked) { _, which, isChecked -> checked[which] = isChecked }
                 .setPositiveButton("보기") { _, _ -> apply(parts.filterIndexed { i, _ -> checked[i] }.map { it.staffIndex }.toSet()) }
                 .setNeutralButton("전체 악보") { _, _ -> apply(null) }
                 .setNegativeButton("닫기", null)
@@ -3609,6 +3610,16 @@ class PdfViewerActivity : AppCompatActivity() {
         Toast.makeText(this, "반주: ${play.joinToString { score.parts[it].name }}", Toast.LENGTH_SHORT).show()
         Log.i("PdfViewerActivity", "반주: 파트 $play, 음 ${accompaniment.size}개")
         return accompaniment
+    }
+
+    /**
+     * 파트 보기에 보일 이름 — PDF 에서 읽은 이름, 못 읽었으면(보표 n) **MusicXML 의 파트 이름**(보표 수가 같을 때만 — 순서로 맞춘다).
+     * 서버 인식이 읽은 이름이라 웹에서 고칠 수 있다(서버 0.9.8)
+     */
+    private fun partName(part: com.mrgq.pdfviewer.score.ScorePart, staffCount: Int): String {
+        if (part.named) return part.name
+        val score = musicXml?.takeIf { musicXmlFileId == currentPdfFileId && it.staffCount == staffCount } ?: return part.name
+        return score.staffName(part.staffIndex) ?: part.name
     }
 
     /** 메뉴의 반주 줄 — MusicXML 이 있는 악보에서만 (없으면 null) */
@@ -3772,7 +3783,8 @@ class PdfViewerActivity : AppCompatActivity() {
         val staves = musicRepository.getOrAnalyzeScoreStaves(fileId, source) ?: return null
         val parts = (ScoreParts.of(staves) as? ScoreParts.Result.Parts)?.parts?.filter { it.staffIndex in selected } ?: return null
         if (parts.isEmpty()) return null
-        val name = parts.joinToString(" + ") { it.name }
+        val total = (ScoreParts.of(staves) as? ScoreParts.Result.Parts)?.parts?.size ?: parts.size
+        val name = parts.joinToString(" + ") { partName(it, total) }
         val out = PartPdfBuilder.cacheFile(cacheDir, fileId, source, selected)
         val layoutFile = PartPdfBuilder.layoutFile(out)
         // 만들어 둔 것이 있으면 그 배치 그대로 (넓히기에 쪽 경로를 다시 읽지 않게)

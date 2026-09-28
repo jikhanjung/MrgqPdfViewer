@@ -25,6 +25,16 @@ data class MusicXmlScore(
     }
 
     val staffCount: Int get() = parts.sumOf { it.staves }
+
+    /**
+     * 보표 [staff](총보 위부터 0)의 이름 — 그 보표를 차지하는 파트 이름, 보표가 여럿인 파트면 뒤에 몇째 보표인지. 없으면 null.
+     * PDF 에서 파트 이름을 글자로 읽지 못한 악보(Sibelius → Microsoft Print to PDF)의 "보표 n" 을 채운다
+     */
+    fun staffName(staff: Int): String? {
+        val p = parts.indices.firstOrNull { staff in stavesOf(it) } ?: return null
+        val part = parts[p]
+        return if (part.staves > 1) "${part.name} ${staff - stavesOf(p).first + 1}" else part.name
+    }
 }
 
 data class XmlPart(val id: String, val name: String, val staves: Int)
