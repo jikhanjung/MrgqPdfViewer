@@ -271,7 +271,8 @@ class MainActivity : AppCompatActivity() {
     /** 세트리스트 줄 — [곡목 …]. 연결된 TV 는 세트리스트만 본다("모든 악보" 없음 — 곡목에 없는 악보는 받지 않는다, 서버 0.7.0). 포커스만 옮겨도 바뀐다(리모컨 키 뒤 500ms 안의 이동만 — 저절로 놓인 포커스는 무시) */
     private fun renderSetlistTabs(current: com.mrgq.pdfviewer.scoremate.Setlist?) {
         val show = scoreMateLinked && setlists.isNotEmpty()
-        binding.setlistScroll.visibility = if (show) View.VISIBLE else View.GONE
+        // 숨길 때도 자리는 남긴다(INVISIBLE) — 오른쪽 끝 ☁️ 동기화 버튼을 밀어 두는 칸이다
+        binding.setlistScroll.visibility = if (show) View.VISIBLE else View.INVISIBLE
         if (!show) {
             renderedSetlistIds = emptyList()
             binding.setlistTabs.removeAllViews()
@@ -317,6 +318,14 @@ class MainActivity : AppCompatActivity() {
         } else null
         renderSetlistTabs(current)
         binding.scoreMateSyncBtn.visibility = if (scoreMateLinked) View.VISIBLE else View.GONE
+        // 연결된 TV 는 정렬(늘 곡 순서) · 파일관리(서버가 관리 — 웹에서 곡목 고르기)가 필요 없다 → 그 줄을 통째로 숨긴다.
+        // ☁️ 동기화는 세트리스트 줄 오른쪽 끝에 있다
+        binding.controlStrip.visibility = if (scoreMateLinked) View.GONE else View.VISIBLE
+        if (scoreMateLinked && isFileManagementMode) {
+            isFileManagementMode = false
+            updateFileManagementUI()
+            pdfAdapter.setFileManagementMode(false)
+        }
 
         val shown: List<PdfFile>
         if (current != null) {
@@ -343,10 +352,6 @@ class MainActivity : AppCompatActivity() {
             binding.emptyTitle.text = "PDF 파일이 없습니다"
             binding.emptyHint.text = "설정에서 웹서버를 통해 파일을 업로드하세요"
         }
-        val sortVisibility = if (scoreMateLinked) View.GONE else View.VISIBLE
-        binding.sortLabel.visibility = sortVisibility
-        binding.sortByNameBtn.visibility = sortVisibility
-        binding.sortByTimeBtn.visibility = sortVisibility
         pdfAdapter.submitList(shown)
         binding.emptyView.visibility = if (shown.isEmpty()) View.VISIBLE else View.GONE
     }

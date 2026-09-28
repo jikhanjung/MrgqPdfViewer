@@ -97,7 +97,7 @@
         </LinearLayout>
     </LinearLayout>
 
-    <!-- 지금 서재 (#063) + 세트리스트 줄 (#064): 연결된 TV 에서 받은 세트리스트가 있으면 [모든 악보] [곡목 A] [곡목 B] …
+    <!-- 지금 서재 (#063) + 세트리스트 줄 (#064): 연결된 TV 에서 받은 세트리스트가 있으면 [곡목 A] [곡목 B] … [☁️ 동기화]
          포커스만 옮겨도 바뀐다. 세트리스트를 고르면 곡 순서대로 (이전/다음 파일도) -->
     <LinearLayout
         android:id="@+id/libraryRow"
@@ -125,7 +125,7 @@
             android:layout_height="wrap_content"
             android:layout_weight="1"
             android:scrollbars="none"
-            android:visibility="gone">
+            android:visibility="invisible">
 
             <LinearLayout
                 android:id="@+id/setlistTabs"
@@ -133,9 +133,26 @@
                 android:layout_height="wrap_content"
                 android:orientation="horizontal" />
         </HorizontalScrollView>
+
+        <!-- ScoreMate 동기화 (#062) — 연결된 TV 에서만. 주기적 동기화 대신 필요할 때 누른다 (사용자 결정).
+             연결된 TV 는 아래 정렬 · 파일관리 줄을 통째로 숨기므로 이 줄 오른쪽 끝에 둔다 -->
+        <Button
+            android:id="@+id/scoreMateSyncBtn"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="☁️ 동기화"
+            android:textSize="13sp"
+            android:textColor="@android:color/white"
+            android:background="@drawable/elegant_button_background"
+            android:paddingHorizontal="12dp"
+            android:paddingVertical="3dp"
+            android:layout_marginStart="12dp"
+            android:visibility="gone"
+            android:focusable="true"
+            android:minHeight="0dp" />
     </LinearLayout>
 
-    <!-- Control Strip -->
+    <!-- Control Strip — 정렬 · 파일관리. ScoreMate 에 연결된 TV 에서는 숨긴다(곡 순서 · 서버가 관리) -->
     <LinearLayout
         android:id="@+id/controlStrip"
         android:layout_width="0dp"
@@ -188,22 +205,6 @@
             android:layout_width="0dp"
             android:layout_height="1dp"
             android:layout_weight="1" />
-
-        <!-- ScoreMate 동기화 (#062) — 연결된 TV 에서만. 주기적 동기화 대신 필요할 때 누른다 (사용자 결정) -->
-        <Button
-            android:id="@+id/scoreMateSyncBtn"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="☁️ 동기화"
-            android:textSize="13sp"
-            android:textColor="@android:color/white"
-            android:background="@drawable/elegant_button_background"
-            android:paddingHorizontal="12dp"
-            android:paddingVertical="3dp"
-            android:layout_marginEnd="6dp"
-            android:visibility="gone"
-            android:focusable="true"
-            android:minHeight="0dp" />
 
         <Button
             android:id="@+id/fileManageBtn"
