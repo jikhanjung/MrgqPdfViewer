@@ -42,6 +42,7 @@ class ScoreMateSyncTest {
         override val server = "https://sm.test"
         override var tokens: Tokens? = Tokens("a", "r", "d")
         override var syncCursor: String? = null
+        override var syncFormat: Int = 0
         override var setlistsBody: String? = null
         override fun saveTokens(tokens: Tokens) {
             this.tokens = tokens
@@ -76,6 +77,8 @@ class ScoreMateSyncTest {
     private data class Score(
         val id: Long, var title: String, var content: String, var ensemble: String? = "현악 4중주",
         var part: String = "", var version: Int = 1, var processing: Boolean = false,
+        /** 서버가 인식한 MusicXML (P06 §11). null = 없음 */
+        var xml: String? = null,
     )
 
     /** 서버 흉내: 커서 = 마지막으로 보낸 변경 번호. 받기는 302 → 서명 URL(인증 없이만 받아 준다) */
@@ -84,6 +87,7 @@ class ScoreMateSyncTest {
         val changes = mutableListOf<Long>() // 변경 순서 (id)
         var pageSize = 50
         var downloads = 0
+        var xmlDownloads = 0
         var signedWithAuth = 0
 
         fun put(score: Score) {
@@ -111,7 +115,8 @@ class ScoreMateSyncTest {
                 val sha = if (s.processing) "null" else "\"${sha(s.content)}\""
                 """{"id":${s.id},"title":"${s.title}","composer":"","part_name":"${s.part}","ensemble":$ensemble,
                    "version":{"number":${s.version},"sha256":$sha,"size_bytes":${s.content.length}},
-                   "download_url":"http://internal:8000/api/v1/scores/${s.id}/download/"}"""
+                   "download_url":"http://internal:8000/api/v1/scores/${s.id}/download/",
+                   "musicxml":${xmlJson(s)}}"""
             }
             val ids = scores.keys.joinToString(",")
             return HttpResponse(200, """{"cursor":"$end","has_more":${end < changes.size},"scores":[$items],"ids":[$ids]}""")
@@ -122,6 +127,17 @@ class ScoreMateSyncTest {
             Regex("/api/v1/scores/([0-9]+)/download/").find(path)?.let {
                 if (request.bearer == null) return HttpResponse(401, "")
                 return HttpResponse(302, "", "/signed/${it.groupValues[1]}?sig=x")
+            }
+            Regex("/api/v1/scores/([0-9]+)/musicxml/").find(path)?.let {
+                if (request.bearer == null) return HttpResponse(401, "")
+                return HttpResponse(302, "", "/signed-xml/${it.groupValues[1]}?sig=x")
+            }
+            Regex("/signed-xml/([0-9]+)").find(path)?.let {
+                if (request.bearer != null) signedWithAuth++
+                xmlDownloads++
+                target.parentFile?.mkdirs()
+                target.writeText(scores.getValue(it.groupValues[1].toLong()).xml!!)
+                return HttpResponse(200, "")
             }
             Regex("/signed/([0-9]+)").find(path)?.let {
                 if (request.bearer != null) signedWithAuth++
@@ -134,6 +150,12 @@ class ScoreMateSyncTest {
         }
 
         companion object {
+            /** 동기화 응답의 musicxml (P06 §11) */
+            fun xmlJson(s: Score): String = s.xml?.let { x ->
+                "{\"url\":\"http://internal:8000/api/v1/scores/${s.id}/musicxml/\",\"sha256\":\"${sha(x)}\"," +
+                    "\"size_bytes\":${x.length},\"filename\":\"x.musicxml\",\"parts\":[\"A\"],\"measures\":4}"
+            } ?: "null"
+
             fun sha(text: String) = MessageDigest.getInstance("SHA-256").digest(text.toByteArray())
                 .joinToString("") { "%02x".format(it) }
         }
@@ -327,6 +349,72 @@ class ScoreMateSyncTest {
         val failed = sync().sync()
         assertTrue(failed.errors.single().startsWith("세트리스트"))
         assertEquals(1, com.mrgq.pdfviewer.scoremate.ScoreMateSetlists.parse(tokens.setlistsBody).size)
+    }
+
+    @Test
+    fun MusicXML_은_PDF_옆에_받고_같으면_다시_받지_않는다() = runBlocking {
+        val s = Score(1, "몰다우", "v1", xml = "<score-partwise/>")
+        server.put(s)
+        val report = sync().sync()
+        assertEquals(1, report.musicXml)
+        assertEquals("<score-partwise/>", file("현악 4중주", "몰다우.musicxml").readText())
+        assertEquals("서명 URL 에는 Authorization 을 싣지 않는다", 0, server.signedWithAuth)
+        // 목록에는 PDF 만
+        assertEquals(1, PdfLibrary.listPdfFiles(root, scoreMate = true).size)
+        // 인식이 끝나 악보가 다시 와도(updated_at) 내용이 같으면 받지 않는다
+        server.put(s)
+        assertEquals(0, sync().sync().musicXml)
+        assertEquals(1, server.xmlDownloads)
+        // 결과가 바뀌면 다시
+        s.xml = "<score-partwise version=\"4.0\"/>"
+        server.put(s)
+        assertEquals(1, sync().sync().musicXml)
+        assertEquals(s.xml, file("현악 4중주", "몰다우.musicxml").readText())
+    }
+
+    @Test
+    fun 옛_형식_커서면_한_번_처음부터_받아_지나간_MusicXML_을_받는다() = runBlocking {
+        // 옛 앱(형식 0)이 인식 끝난 악보까지 커서를 넘겼다 — MusicXML 필드는 몰랐다
+        val s = Score(1, "몰다우", "v1", xml = "<a/>")
+        server.put(s)
+        sync().sync()
+        file("현악 4중주", "몰다우.musicxml").delete()
+        tokens.syncFormat = 0
+        val report = sync().sync()
+        assertEquals(1, report.musicXml)
+        assertEquals(0, report.downloaded) // PDF 는 sha 가 같아 다시 받지 않는다
+        assertEquals(ScoreMateSync.SYNC_FORMAT, tokens.syncFormat)
+        // 다음부터는 커서대로 — 다시 처음부터 받지 않는다
+        assertEquals(0, sync().sync().musicXml)
+    }
+
+    @Test
+    fun 새_판이라_MusicXML_이_없어지면_지운다() = runBlocking {
+        val s = Score(1, "몰다우", "v1", xml = "<a/>")
+        server.put(s)
+        sync().sync()
+        s.content = "v2"; s.version = 2; s.xml = null
+        server.put(s)
+        sync().sync()
+        assertEquals("v2", file("현악 4중주", "몰다우.pdf").readText())
+        assertFalse(file("현악 4중주", "몰다우.musicxml").exists())
+    }
+
+    @Test
+    fun PDF_를_옮기거나_지우면_MusicXML_도_따라간다() = runBlocking {
+        val s = Score(1, "몰다우", "v1", xml = "<a/>")
+        server.put(s)
+        sync().sync()
+        s.title = "블타바"
+        server.put(s)
+        sync().sync()
+        assertFalse(file("현악 4중주", "몰다우.musicxml").exists())
+        assertEquals("<a/>", file("현악 4중주", "블타바.musicxml").readText())
+        assertEquals(1, server.xmlDownloads) // 옮겼을 뿐 다시 받지 않았다
+        server.remove(1)
+        sync().sync()
+        assertFalse(file("현악 4중주", "블타바.pdf").exists())
+        assertFalse(file("현악 4중주", "블타바.musicxml").exists())
     }
 
     @Test

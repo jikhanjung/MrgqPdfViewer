@@ -18,7 +18,12 @@ data class RemoteScore(
     val sha256: String?,
     val sizeBytes: Long,
     val downloadUrl: String,
+    /** 서버가 이 판을 MusicXML 로 옮긴 결과 (서버 0.9.6, P06 §11). null = 인식 전 · 실패 · 새 판을 아직 인식 중 */
+    val musicXml: RemoteMusicXml? = null,
 )
+
+/** 동기화 응답의 `musicxml` — 받기는 PDF 와 같이 Bearer → 302 서명 URL */
+data class RemoteMusicXml(val url: String, val sha256: String)
 
 data class SyncPage(val cursor: String?, val hasMore: Boolean, val scores: List<RemoteScore>, val ids: Set<Long>)
 
@@ -60,11 +65,13 @@ data class SyncReport(
     val removed: Int = 0,
     /** 서버가 아직 처리 중이라 건너뛴 악보 */
     val pending: Int = 0,
+    /** 받은 MusicXML (P06 §11) */
+    val musicXml: Int = 0,
     /** 세트리스트(곡목 · 순서 · 메모)가 바뀌었다 (#064) */
     val setlistsChanged: Boolean = false,
     val errors: List<String> = emptyList(),
 ) {
-    val changed: Boolean get() = downloaded + moved + removed > 0 || setlistsChanged
+    val changed: Boolean get() = downloaded + moved + removed + musicXml > 0 || setlistsChanged
 }
 
 /**
@@ -76,6 +83,8 @@ data class SyncReport(
  * 3. `ids` 에 없는 악보는 지운다 — 묻지 않는다(사용자 결정): 서버 0.7.0 부터 TV 가 받는 것은 웹에서 고른 세트리스트의 곡이라
  *    곡목을 바꾸면 한꺼번에 많이 빠지는 것이 정상이다. **파일별 설정(`pdf_files` 레코드)은 남긴다** — 그 곡이 다시 곡목에 들어오면
  *    같은 경로로 받아 두 페이지 · 클리핑 · 메트로놈 · 구간 설정이 돌아온다
+ * 2-1. **MusicXML** (서버 0.9.6, P06 §11): 응답에 `musicxml` 이 있으면 PDF 옆 같은 이름의 `.musicxml` 로 받는다 — sha256 이 가진 것과
+ *    다를 때만. `null` 이면 지운다(인식 전 · 새 판 인식 중). PDF 를 옮기거나 지울 때 함께 옮기고 지운다. 이번에 오지 않은 악보는 그대로 둔다
  * 4. 모두 성공했을 때만 커서를 저장한다 — 중간에 실패하면 다음에 같은 자리부터 다시 (이미 받은 것은 sha 가 같아 건너뛴다)
  *
  * 합주 중 · 악보를 보는 중에는 부르지 않는다 (파일 목록 화면에서만 — 열린 파일을 바꾸지 않게).
@@ -93,6 +102,8 @@ class ScoreMateSync(
     val scoreMateRoot: File get() = File(pdfRoot, FOLDER)
 
     suspend fun sync(): SyncReport {
+        // 0. 옛 형식으로 쌓은 커서면 한 번 처음부터 — 그 사이 지나간 변경의 새 필드(MusicXML)를 받으려고. sha 가 같은 PDF 는 다시 받지 않는다
+        if (tokens.syncFormat < SYNC_FORMAT) tokens.syncCursor = null
         // 1. 쪽을 모두 받는다. 깨진 커서면 한 번 처음부터
         val pages = try {
             fetchAll(tokens.syncCursor)
@@ -109,6 +120,7 @@ class ScoreMateSync(
         var moved = 0
         var removed = 0
         var pending = 0
+        var musicXml = 0
 
         // 3 먼저 판단: 지울 것 — 서버가 지금 이 TV 에 주는 것(ids) 밖
         val local = store.all().associateBy { it.serverId }
@@ -136,6 +148,7 @@ class ScoreMateSync(
                 val changed = applyScore(remote, sha, existing, File(target))
                 if (changed == Change.DOWNLOADED) downloaded++
                 if (changed == Change.MOVED) moved++
+                if (applyMusicXml(remote, File(target))) musicXml++
             } catch (e: ScoreMateUnlinkedException) {
                 throw e
             } catch (e: Exception) {
@@ -159,13 +172,17 @@ class ScoreMateSync(
         for (score in gone) {
             // 파일만 지운다 — 레코드(파일별 설정)는 남겨 다시 받으면 돌아오게
             if (!score.hidden) File(score.filePath).delete()
+            musicXmlFileOf(File(score.filePath)).delete()
             store.delete(score.serverId)
             removed++
         }
         removeEmptyFolders()
 
         // 4. 모두 됐을 때만 커서를 넘긴다
-        if (errors.isEmpty()) tokens.syncCursor = pages.last().cursor ?: tokens.syncCursor
+        if (errors.isEmpty()) {
+            tokens.syncCursor = pages.last().cursor ?: tokens.syncCursor
+            tokens.syncFormat = SYNC_FORMAT
+        }
 
         // 5. 세트리스트 — 통째로 바꿔 끼운다(개수가 적다). 실패해도 악보 동기화는 된 것이고 저장한 세트리스트를 그대로 쓴다 (#064)
         var setlistsChanged = false
@@ -178,13 +195,14 @@ class ScoreMateSync(
         } catch (e: ScoreMateException) {
             errors += "세트리스트: ${e.message}"
         }
-        return SyncReport(downloaded, moved, removed, pending, setlistsChanged, errors)
+        return SyncReport(downloaded, moved, removed, pending, musicXml, setlistsChanged, errors)
     }
 
     /** TV 에서 지운 서버 악보 — 목록에서 빼고 다시 받지 않는다. 파일은 호출한 쪽이 지웠다 */
     suspend fun markHidden(filePath: String): Boolean {
         val score = store.all().firstOrNull { it.filePath == filePath && !it.hidden } ?: return false
         store.upsert(score.copy(hidden = true))
+        musicXmlFileOf(File(filePath)).delete()
         return true
     }
 
@@ -206,6 +224,7 @@ class ScoreMateSync(
                 val file = File(score.filePath)
                 if (deleteFiles) {
                     file.delete()
+                    musicXmlFileOf(file).delete()
                     records.afterDelete(score.filePath)
                 } else if (file.isFile) {
                     moveToLocal(file)
@@ -225,7 +244,11 @@ class ScoreMateSync(
             n++
         }
         records.beforeMove(file.path, target.path)
-        if (!file.renameTo(target)) records.beforeMove(target.path, file.path) // 되돌린다 — 파일은 ScoreMate 폴더에 남는다
+        if (!file.renameTo(target)) {
+            records.beforeMove(target.path, file.path) // 되돌린다 — 파일은 ScoreMate 폴더에 남는다
+            return
+        }
+        moveMusicXml(file, target)
     }
 
     private enum class Change { NONE, DOWNLOADED, MOVED }
@@ -268,9 +291,10 @@ class ScoreMateSync(
             throw ScoreMateException("받은 파일이 서버 판과 다릅니다 (SHA-256 불일치)")
         }
         if (currentFile != null && currentFile.path != target.path && currentFile.isFile) {
-            // 새 판 + 새 이름: 레코드를 새 경로로 옮긴 뒤 옛 파일을 지운다 (파일별 설정 유지)
+            // 새 판 + 새 이름: 레코드를 새 경로로 옮긴 뒤 옛 파일을 지운다 (파일별 설정 유지). 옛 판의 MusicXML 도
             records.beforeMove(currentFile.path, target.path)
             currentFile.delete()
+            musicXmlFileOf(currentFile).delete()
         }
         if (!part.renameTo(target)) {
             target.delete()
@@ -291,7 +315,43 @@ class ScoreMateSync(
             records.beforeMove(target.path, from.path) // 되돌린다
             throw ScoreMateException("파일을 옮기지 못했습니다")
         }
+        moveMusicXml(from, target)
         store.upsert(existing.copy(filePath = target.path))
+    }
+
+    /**
+     * PDF [pdf] 옆 MusicXML 을 응답에 맞춘다. 받았으면 true. `musicxml` 이 없으면(null) 지운다 — 인식 전이거나 새 판을 인식 중이라
+     * 옛 판의 결과가 남으면 마디가 어긋난다.
+     */
+    private suspend fun applyMusicXml(remote: RemoteScore, pdf: File): Boolean {
+        val file = musicXmlFileOf(pdf)
+        val xml = remote.musicXml
+        if (xml == null) {
+            file.delete()
+            return false
+        }
+        val sha = xml.sha256.lowercase()
+        if (file.isFile && sha256Of(file) == sha) return false
+        val part = File(file.path + ".part")
+        client.downloadScore(xml.url, part)
+        if (sha256Of(part) != sha) {
+            part.delete()
+            throw ScoreMateException("받은 MusicXML 이 서버 것과 다릅니다 (SHA-256 불일치)")
+        }
+        if (!part.renameTo(file)) {
+            file.delete()
+            if (!part.renameTo(file)) throw ScoreMateException("MusicXML 을 저장하지 못했습니다")
+        }
+        return true
+    }
+
+    /** PDF 를 옮겼으면 MusicXML 도 따라 옮긴다 (없으면 그만) */
+    private fun moveMusicXml(from: File, to: File) {
+        val xml = musicXmlFileOf(from)
+        if (!xml.isFile) return
+        val target = musicXmlFileOf(to)
+        target.delete()
+        xml.renameTo(target)
     }
 
     private suspend fun fetchAll(start: String?): List<SyncPage> {
@@ -356,6 +416,9 @@ class ScoreMateSync(
     companion object {
         /** `PDFs/` 아래 서버 악보 폴더 */
         const val FOLDER = "ScoreMate"
+
+        /** 앱 동기화 형식 — 1: MusicXML (P06 §11, v0.3.0). 올리면 기존 TV 가 한 번 처음부터 다시 받는다 */
+        const val SYNC_FORMAT = 1
         private const val MAX_PAGES = 100
 
         fun parsePage(body: String): SyncPage? {
@@ -388,12 +451,20 @@ class ScoreMateSync(
                 sha256 = version?.str("sha256")?.takeIf { it.isNotBlank() },
                 sizeBytes = version?.get("size_bytes")?.takeIf { it.isJsonPrimitive }?.asLong ?: 0L,
                 downloadUrl = o.str("download_url") ?: "/api/v1/scores/${o.get("id").asLong}/download/",
+                musicXml = o.get("musicxml")?.takeIf { it.isJsonObject }?.asJsonObject?.let { x ->
+                    val url = x.str("url")
+                    val sha = x.str("sha256")?.takeIf { it.isNotBlank() }
+                    if (url != null && sha != null) RemoteMusicXml(url, sha) else null
+                },
             )
         } catch (e: RuntimeException) {
             null
         }
 
         private fun JsonObject.str(key: String): String? = get(key)?.takeIf { it.isJsonPrimitive }?.asString
+
+        /** PDF 옆 MusicXML — 같은 이름에 확장자만 `.musicxml` (P06 §11, P07 §2.7) */
+        fun musicXmlFileOf(pdf: File): File = File(pdf.parentFile, pdf.nameWithoutExtension + ".musicxml")
 
         /** 절대 URL 이면 경로(+쿼리)만 */
         fun pathOf(url: String): String {
@@ -450,6 +521,7 @@ object ScoreMateSyncText {
         if (report.moved > 0) parts += "${report.moved}개 이름 바뀜"
         if (report.removed > 0) parts += "${report.removed}개 지움"
         if (report.pending > 0) parts += "${report.pending}개는 서버 처리 중"
+        if (report.musicXml > 0) parts += "MusicXML ${report.musicXml}개 받음"
         if (report.setlistsChanged) parts += "세트리스트 갱신"
         if (report.errors.isNotEmpty()) parts += "${report.errors.size}개 실패 (${report.errors.first()})"
         return if (parts.isEmpty()) null else "ScoreMate: " + parts.joinToString(", ")

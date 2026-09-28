@@ -30,6 +30,12 @@ interface ScoreMateTokenStore {
     /** 악보 동기화 커서 (P05 C2, 서버가 준 불투명 값). 연결을 끊으면 함께 지운다 */
     var syncCursor: String?
 
+    /**
+     * 커서를 쌓을 때의 앱 동기화 형식 ([ScoreMateSync.SYNC_FORMAT]). 앱이 응답의 새 필드를 알게 되면 형식을 올리고, 옛 형식으로 쌓은 커서는
+     * 한 번 처음부터 다시 받는다 — 옛 앱이 이미 지나간 변경(예: MusicXML 인식 끝)을 새 앱이 놓치지 않게. 0 = 처음(v0.2.x)
+     */
+    var syncFormat: Int
+
     /** 받은 세트리스트 (`GET /sync/setlists/` 응답 그대로, #064). 연결을 끊으면 함께 지운다 */
     var setlistsBody: String?
 

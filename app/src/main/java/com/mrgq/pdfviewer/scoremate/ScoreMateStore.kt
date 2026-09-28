@@ -33,6 +33,12 @@ class ScoreMateStore(context: Context) : ScoreMateTokenStore {
             prefs.edit().putString(KEY_CURSOR, value).commit()
         }
 
+    override var syncFormat: Int
+        get() = prefs.getInt(KEY_SYNC_FORMAT, 0)
+        set(value) {
+            prefs.edit().putInt(KEY_SYNC_FORMAT, value).commit()
+        }
+
     override var setlistsBody: String?
         get() = prefs.getString(KEY_SETLISTS, null)
         set(value) {
@@ -62,6 +68,7 @@ class ScoreMateStore(context: Context) : ScoreMateTokenStore {
             .remove(KEY_DEVICE_ID)
             .remove(KEY_DEVICE_NAME)
             .remove(KEY_CURSOR)
+            .remove(KEY_SYNC_FORMAT)
             .remove(KEY_SETLISTS)
             .commit()
     }
@@ -75,6 +82,7 @@ class ScoreMateStore(context: Context) : ScoreMateTokenStore {
         private const val KEY_DEVICE_ID = "device_id"
         private const val KEY_DEVICE_NAME = "device_name"
         private const val KEY_CURSOR = "sync_cursor"
+        private const val KEY_SYNC_FORMAT = "sync_format"
         private const val KEY_SETLISTS = "setlists"
     }
 }
