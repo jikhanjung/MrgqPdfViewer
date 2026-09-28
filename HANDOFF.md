@@ -2,7 +2,7 @@
 
 마지막 갱신: 2026-09-28
 브랜치: `main` (origin/main 과 동기화, 미푸시 커밋 0개)
-버전: **v0.3.3** (versionCode 29) — 릴리스 완료, 실기기(Z18TV Pro)는 앱 안 업데이트로 받는다
+버전: **v0.3.4** (versionCode 30) — 릴리스 완료, 실기기(Z18TV Pro)는 앱 안 업데이트로 받는다
 관련 문서: [CLAUDE.md](CLAUDE.md) (가이드 · 알아 둘 결정) · [TODOs.md](TODOs.md) · [CHANGELOG.md](CHANGELOG.md) · [devlog 인덱스](devlog/README.md)
 
 ---
