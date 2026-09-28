@@ -113,12 +113,16 @@ def online_dtw(C, start_frame=0, start_col=0, window_s=4.0, every=4, ahead_s=8.0
     return path
 
 
-def oltw(C, start_frame=0, start_col=0, band_s=3.0, prior=0.0, tempo_s=4.0):
+def oltw(C, start_frame=0, start_col=0, band_s=3.0, prior=0.0, tempo_s=4.0, reloc=None, log=None):
     """온라인 DTW (Dixon MATCH 식) — 녹음 프레임마다 누적 비용 한 줄을 지금 위치 ±[band_s] 초 띠 안에서만 갱신.
     D(i,j) = min(D(i-1,j) + d, D(i,j-1) + d, D(i-1,j-1) + 2d) — 대각선이 두 배라 경로 기울기(빠르기)에 치우치지 않는다.
     지금 위치 = 띠 안에서 D(i,j) / (i + j) 가 가장 작은 j. 되돌아가지 않는다(앞으로만).
     [prior] > 0 이면 **최근 [tempo_s] 초 경로 기울기로 잰 빠르기**로 예측한 곳에서 멀수록 조금 비싸게 — 똑같이 반복되는
-    악절 · 여린 곳에서 멈춰 서지 않게 (기준 빠르기가 아니라 지금 연주 빠르기)"""
+    악절 · 여린 곳에서 멈춰 서지 않게 (기준 빠르기가 아니라 지금 연주 빠르기)
+
+    [reloc] = (every_s, window_s, range_s, gain): **주기적 재위치** — every_s 초마다 최근 window_s 초 녹음을 지금 위치
+    ±range_s 초 악보에 부분 DTW 로 다시 맞춰, 그 경로의 평균 거리가 지금 경로(같은 녹음 구간의 path)보다 gain 배 이상 좋고
+    끝이 1초 넘게 다르면 거기로 뛰고 OLTW 누적을 그 점에서 다시 시작한다"""
     n, m = C.shape
     band = int(band_s * SR / HOP)
     path = np.zeros(n, dtype=int)
@@ -126,7 +130,25 @@ def oltw(C, start_frame=0, start_col=0, band_s=3.0, prior=0.0, tempo_s=4.0):
     prev[start_col] = 2 * C[start_frame, start_col]
     est = start_col
     path[start_frame] = est
+    restart = start_frame  # OLTW 누적을 다시 시작한 녹음 프레임 (정규화 걸음 수의 기준)
+    restart_col = start_col
+    if reloc:
+        r_every, r_win, r_range, r_gain = (int(x * SR / HOP) if k < 3 else x for k, x in enumerate(reloc))
     for i in range(start_frame + 1, n):
+        if reloc and i - start_frame >= r_win and (i - start_frame) % r_every == 0:
+            a = i - r_win
+            lo_r, hi_r = max(0, path[i - 1] - r_range), min(m, path[i - 1] + r_range)
+            _, wp = librosa.sequence.dtw(C=C[a:i, lo_r:hi_r], subseq=True)
+            new_cost = np.mean([C[a + p, lo_r + q] for p, q in wp])
+            cur_cost = np.mean(C[np.arange(a, i), path[a:i]])
+            new_end = lo_r + int(wp[0][1])
+            if new_cost * r_gain < cur_cost and abs(new_end - path[i - 1]) > SR / HOP:
+                if log is not None:
+                    log.append((i, path[i - 1], new_end, cur_cost, new_cost))
+                est = new_end
+                prev = np.full(m, np.inf)
+                prev[est] = 2 * C[i - 1, est]
+                restart, restart_col = i - 1, est
         lo, hi = max(0, est - band), min(m, est + band)
         d = C[i, lo:hi]
         cur = np.full(m, np.inf)
@@ -141,16 +163,16 @@ def oltw(C, start_frame=0, start_col=0, band_s=3.0, prior=0.0, tempo_s=4.0):
             if v < row[k]:
                 row[k] = v
         cur[lo:hi] = row
-        steps = (i - start_frame) + (np.arange(lo, hi) - start_col) + 1
+        steps = (i - restart) + (np.arange(lo, hi) - restart_col) + 1
         norm = row / np.maximum(steps, 1)
         if prior > 0:
             back = int(tempo_s * SR / HOP)
-            k0 = max(start_frame, i - back)
+            k0 = max(restart, i - back)
             slope = (path[i - 1] - path[k0]) / max(1, i - 1 - k0) if i - 1 - k0 >= back // 2 else 1.0
             slope = min(2.0, max(0.5, slope))
             predicted = path[i - 1] + slope
             norm = norm + prior * np.abs(np.arange(lo, hi) - predicted) / band
-        est = max(est, lo + int(np.argmin(norm)))
+        est = max(est, lo + int(np.argmin(norm))) if i - 1 != restart else lo + int(np.argmin(norm))
         path[i] = est
         prev = cur
     return path
@@ -164,6 +186,10 @@ def main():
     ap.add_argument("--online", action="store_true")
     ap.add_argument("--stretch", type=float, default=1.0, help="녹음을 이 배율로 빠르게(>1) · 느리게(<1) 바꿔 시험 — 빠르기를 따라가는지")
     ap.add_argument("--method", choices=["oltw", "window"], default="oltw", help="온라인 방식: oltw(누적 · MATCH 식) | window(최근 4초 창)")
+    ap.add_argument("--reloc-every", type=float, default=1.0, help="oltw 재위치 주기 초 (0 = 끔)")
+    ap.add_argument("--reloc-window", type=float, default=30.0, help="재위치에 쓰는 최근 녹음 초 — 똑같이 반복되는 악절(몰다우 8마디 ≈ 24초)보다 길어야 한다")
+    ap.add_argument("--reloc-range", type=float, default=40.0, help="재위치로 찾는 악보 범위 ± 초")
+    ap.add_argument("--reloc-gain", type=float, default=1.15, help="지금 경로보다 이 배 이상 좋아야 뛴다")
     ap.add_argument("--prior", type=float, default=0.0, help="온라인: 빠르기 사전 무게 (0 = 없음)")
     args = ap.parse_args()
     base = args.base.removesuffix(".json").removesuffix(".wav")
@@ -196,7 +222,9 @@ def main():
         first = next(e for e in meta["events"] if e["type"] == "beat" and "measure" in e)
         start_frame = int((first["t_ms"] + args.offset_ms) / 1000 * SR / HOP)
         start_col = int(mstarts[first["measure"] - 1] * sec_per_q * SR / HOP)
-        path = oltw(C, start_frame, start_col, prior=args.prior) if args.method == "oltw" else online_dtw(C, start_frame, start_col, quiet=quiet, prior=args.prior)
+        reloc = (args.reloc_every, args.reloc_window, args.reloc_range, args.reloc_gain) if args.reloc_every > 0 else None
+        jumps = []
+        path = oltw(C, start_frame, start_col, prior=args.prior, reloc=reloc, log=jumps) if args.method == "oltw" else online_dtw(C, start_frame, start_col, quiet=quiet, prior=args.prior)
     else:
         _, wp = librosa.sequence.dtw(C=C, subseq=True)
         wp = wp[::-1]
@@ -223,8 +251,18 @@ def main():
     errs = np.array(errs)
     mode = f"온라인 {args.method}" if args.online else "오프라인 부분 DTW"
     near = int(np.sum(np.abs(errs) <= 0.5))
-    print(f"[{mode}] 박 {len(errs)}개: 마디 정답 {hits}/{len(errs)} ({100 * hits / max(1, len(errs)):.0f}%), ±0.5박 안 {near}/{len(errs)}, "
+    print(f"[{mode}] 박 {len(errs)}개: 마디 정답 {hits}/{len(errs)} ({100 * hits / max(1, len(errs)):.0f}%), ±0.5박 안 {near}/{len(errs)}, ±1박 안 {int(np.sum(np.abs(errs) <= 1.0))}/{len(errs)}, "
           f"박 오차 중앙값 {np.median(np.abs(errs)):.2f}박, 90% {np.percentile(np.abs(errs), 90):.2f}박, 최대 {np.abs(errs).max():.2f}박")
+    if args.online and args.method == "oltw" and jumps:
+        to_q = lambda col: col * HOP / SR / sec_per_q
+        mnum = lambda col: int(np.searchsorted(mstarts, to_q(col), side="right"))
+        print(f"  재위치 {len(jumps)}번: " + ", ".join(f"{i * HOP / SR:.0f}s {mnum(a)}→{mnum(b)}마디" for i, a, b, _, _ in jumps[:12]))
+    bad = {}
+    for t, m, b, em, err in rows:
+        if abs(err) > 0.5:
+            bad.setdefault(m, []).append(err)
+    if bad:
+        print("  ±0.5박 밖 마디: " + ", ".join(f"{m}({len(v)}박, {np.median(v):+.1f})" for m, v in sorted(bad.items())))
     for t, m, b, em, err in rows[:: max(1, len(rows) // 12)]:
         print(f"  {t / 1000:6.2f}s  정답 {m}마디 {b + 1}박  → 추정 {em}마디  ({err:+.2f}박)")
 
