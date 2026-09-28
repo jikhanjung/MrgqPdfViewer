@@ -55,7 +55,7 @@ class UpdateController(
                 if (current != null && release.version <= current) {
                     showMessage("최신 버전입니다", "현재 v${BuildConfig.VERSION_NAME} 이 최신입니다.")
                 } else {
-                    showUpdateOffer(release)
+                    showUpdateOffer(release.copy(body = client.fetchReleaseNotes(release)))
                 }
             } catch (e: CancellationException) {
                 throw e
@@ -68,29 +68,32 @@ class UpdateController(
     }
 
     /**
-     * 자동 확인 — 앱 시작과 화면으로 돌아올 때(onResume). 조용히 확인하고 **새 버전이 있을 때만** 대화상자를 띄운다 —
-     * 최신이거나 네트워크 오류면 아무것도 보이지 않는다.
+     * 자동 확인 — 파일 목록이 떠 있는 동안 MainActivity 가 자주 부르고, 여기서 **[AUTO_CHECK_INTERVAL_MS] 마다** 한 번만 확인한다
+     * (성공 · 실패와 상관없이). 조용히 확인하고 **새 버전이 있을 때만** 대화상자를 띄운다 — 최신이거나 네트워크 오류면 아무것도 보이지 않는다.
      *
-     * TV 는 앱을 며칠씩 켜 두므로(홈에 다녀와도 프로세스가 그대로) 프로세스당 한 번이 아니라 **[AUTO_CHECK_INTERVAL_MS] 마다** 확인한다.
-     * 실패하면 [AUTO_RETRY_MS] 뒤에 다시 (#057 뒤 v0.2.5 에서 발견: 릴리스 7분 전에 켠 앱이 알림을 못 받았다).
+     * 예전에는 6시간마다(실패하면 10분 뒤), 그것도 화면으로 돌아올 때만 확인해서 파일 목록에 켜 둔 TV 가 알림을 못 받았다
+     * (v0.2.9: 절전에서 깬 직후 네트워크 오류로 한 번 실패한 뒤 그대로). "나중에" 를 누른 버전은 이 프로세스에서 다시 묻지 않는다.
      */
     fun checkIfDue() {
         val now = SystemClock.elapsedRealtime()
         if (!isAutoCheckDue(nextAutoCheckAtMs, now) || job?.isActive == true) return
-        nextAutoCheckAtMs = now + AUTO_RETRY_MS // 실패 · 취소면 이 시각 뒤에 다시
+        nextAutoCheckAtMs = now + AUTO_CHECK_INTERVAL_MS
         job = scope.launch {
             try {
                 withContext(Dispatchers.IO) { updatesDir(activity).deleteRecursively() }
                 val release = client.fetchLatestRelease()
-                nextAutoCheckAtMs = SystemClock.elapsedRealtime() + AUTO_CHECK_INTERVAL_MS
                 val current = AppVersion.parse(BuildConfig.VERSION_NAME) ?: return@launch
-                val offer = release.version > current && release.apk != null && !activity.isFinishing && !activity.isDestroyed
+                val offer = release.version > current && release.apk != null && release.tag != declinedTag &&
+                    !activity.isFinishing && !activity.isDestroyed
                 Log.i(TAG, "자동 업데이트 확인: 현재 v${BuildConfig.VERSION_NAME}, 최신 ${release.tag} → ${if (offer) "알림" else "알림 없음"}")
-                if (offer) showUpdateOffer(release, fromStartup = true)
+                if (offer) {
+                    val notes = client.fetchReleaseNotes(release)
+                    if (!activity.isFinishing && !activity.isDestroyed) showUpdateOffer(release.copy(body = notes), fromStartup = true)
+                }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                Log.i(TAG, "자동 업데이트 확인 실패 (무시, ${AUTO_RETRY_MS / 60_000}분 뒤 다시): ${e.message}")
+                Log.i(TAG, "자동 업데이트 확인 실패 (무시, ${AUTO_CHECK_INTERVAL_MS / 60_000}분 뒤 다시): ${e.message}")
             }
         }
     }
@@ -132,7 +135,7 @@ class UpdateController(
             .setTitle("새 버전 ${release.tag}")
             .setMessage(message)
             .setPositiveButton("다운로드 및 설치") { _, _ -> download(release) }
-            .setNegativeButton("나중에", null)
+            .setNegativeButton("나중에") { _, _ -> if (fromStartup) declinedTag = release.tag }
             .apply {
                 if (fromStartup) {
                     setNeutralButton("자동 확인 안 함") { _, _ ->
@@ -273,11 +276,11 @@ class UpdateController(
         /** 다음 자동 확인 시각 (elapsedRealtime). 0 = 아직 안 함 — 프로세스 안에서 화면이 바뀌어도 유지된다 */
         private var nextAutoCheckAtMs = 0L
 
-        /** 자동 확인 간격 — 켜 둔 TV 도 하루에 몇 번은 새 버전을 알게 */
-        const val AUTO_CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000L
+        /** 자동 확인 간격 — 성공 · 실패와 상관없이. GitHub 비인증 한도(IP 당 시간 60회)에 TV 여러 대가 같은 공유기여도 넉넉하다 */
+        const val AUTO_CHECK_INTERVAL_MS = 10 * 60 * 1000L
 
-        /** 네트워크 오류 등으로 실패했을 때 다시 확인하기까지 */
-        const val AUTO_RETRY_MS = 10 * 60 * 1000L
+        /** 자동 알림에서 "나중에" 를 누른 릴리스 — 이 프로세스에서는 다시 자동으로 묻지 않는다(설정의 업데이트 확인은 그대로) */
+        private var declinedTag: String? = null
 
         /** 자동 확인할 때가 됐나. [nextAtMs] 0 은 아직 한 번도 안 함 */
         internal fun isAutoCheckDue(nextAtMs: Long, nowMs: Long): Boolean = nextAtMs == 0L || nowMs >= nextAtMs

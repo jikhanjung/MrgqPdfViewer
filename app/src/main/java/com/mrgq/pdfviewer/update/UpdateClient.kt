@@ -13,29 +13,54 @@ import java.security.MessageDigest
 class UpdateException(message: String, cause: Throwable? = null) : Exception(message, cause)
 
 /**
- * GitHub 릴리스 조회와 APK 다운로드 (#054). 요청이 둘뿐이라 [HttpURLConnection] 으로 충분하다.
- * 다운로드 URL 은 objects.githubusercontent.com 으로 https→https 리다이렉트되며 자동으로 따라간다.
+ * GitHub 릴리스 조회와 APK 다운로드 (#054). 요청이 몇 개뿐이라 [HttpURLConnection] 으로 충분하다.
+ *
+ * 최신 버전은 API 가 아니라 웹 주소 `…/releases/latest` 의 리다이렉트(Location 의 태그)로 안다 — API 의 비인증 한도
+ * (IP 당 시간 60회)를 쓰지 않아 10분마다 확인해도 된다. 변경 내용은 알릴 때만 그 태그의 `CHANGELOG.md` 에서 받는다.
+ * 다운로드 URL 은 GitHub 파일 서버로 https→https 리다이렉트되며 자동으로 따라간다.
  */
 class UpdateClient(
-    private val latestReleaseUrl: String = LATEST_RELEASE_URL
+    private val repoUrl: String = REPO_URL,
+    private val rawUrl: String = RAW_URL,
 ) {
 
     suspend fun fetchLatestRelease(): ReleaseInfo = withContext(Dispatchers.IO) {
-        val json = try {
-            open(latestReleaseUrl, accept = "application/vnd.github+json").use { it.readText() }
-        } catch (e: HttpStatusException) {
-            throw when (e.code) {
-                404 -> UpdateException("공개된 릴리스가 없습니다", e)
-                403, 429 -> UpdateException("GitHub 요청 한도를 넘었습니다. 잠시 후 다시 시도하세요", e)
-                else -> UpdateException("릴리스 정보를 가져오지 못했습니다 (HTTP ${e.code})", e)
+        val location = try {
+            val conn = URL("$repoUrl/releases/latest").openConnection() as HttpURLConnection
+            try {
+                conn.connectTimeout = 10_000
+                conn.readTimeout = 30_000
+                conn.instanceFollowRedirects = false
+                conn.requestMethod = "HEAD"
+                conn.setRequestProperty("User-Agent", USER_AGENT)
+                when (val code = conn.responseCode) {
+                    in 300..399 -> conn.getHeaderField("Location")
+                    404 -> null
+                    429 -> throw UpdateException("GitHub 요청 한도를 넘었습니다. 잠시 후 다시 시도하세요")
+                    else -> throw UpdateException("릴리스 정보를 가져오지 못했습니다 (HTTP $code)")
+                }
+            } finally {
+                conn.disconnect()
             }
         } catch (e: IOException) {
             throw UpdateException("네트워크에 연결할 수 없습니다", e)
         }
+        val tag = ReleaseInfo.tagFromLocation(location) ?: throw UpdateException("공개된 릴리스가 없습니다")
         try {
-            ReleaseInfo.parse(json)
-        } catch (e: Exception) {
+            ReleaseInfo.fromTag(repoUrl, tag)
+        } catch (e: IllegalArgumentException) {
             throw UpdateException("릴리스 정보를 해석하지 못했습니다", e)
+        }
+    }
+
+    /** [release] 의 변경 내용 — 그 태그의 CHANGELOG 섹션. 못 받으면 빈 문자열 (알림은 그대로 띄운다) */
+    suspend fun fetchReleaseNotes(release: ReleaseInfo): String = withContext(Dispatchers.IO) {
+        try {
+            open("$rawUrl/${release.tag}/CHANGELOG.md", accept = "text/plain").use {
+                ReleaseInfo.changelogSection(it.readText(), release.tag)
+            }
+        } catch (e: IOException) {
+            ""
         }
     }
 
@@ -134,7 +159,7 @@ class UpdateClient(
         conn.readTimeout = 30_000
         conn.instanceFollowRedirects = true
         conn.setRequestProperty("Accept", accept)
-        conn.setRequestProperty("User-Agent", "MrgqPdfViewer-updater")
+        conn.setRequestProperty("User-Agent", USER_AGENT)
         val code = conn.responseCode
         if (code !in 200..299) {
             conn.disconnect()
@@ -144,8 +169,9 @@ class UpdateClient(
     }
 
     companion object {
-        const val LATEST_RELEASE_URL =
-            "https://api.github.com/repos/jikhanjung/MrgqPdfViewer/releases/latest"
+        const val REPO_URL = "https://github.com/jikhanjung/MrgqPdfViewer"
+        const val RAW_URL = "https://raw.githubusercontent.com/jikhanjung/MrgqPdfViewer"
+        private const val USER_AGENT = "MrgqPdfViewer-updater"
 
         private fun ByteArray.toHex() = joinToString("") { "%02x".format(it) }
     }

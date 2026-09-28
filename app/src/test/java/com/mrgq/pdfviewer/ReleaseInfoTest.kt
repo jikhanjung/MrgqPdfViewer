@@ -10,72 +10,61 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/** GitHub `releases/latest` 응답 해석과 체크섬·본문 처리 (#054). */
+/** 최신 릴리스(웹 `releases/latest` 리다이렉트 · CHANGELOG) 해석과 체크섬·본문 처리 (#054). */
 class ReleaseInfoTest {
 
     private val sha = "631f30701eec5c00944d9665b3b36b0e780b18f4c002a0021220d1923b8195c5"
-
-    /** 실제 v0.2.2 응답에서 필요한 필드만 추린 것 */
-    private fun releaseJson(assets: String) = """
-        {
-          "tag_name": "v0.2.2",
-          "html_url": "https://github.com/jikhanjung/MrgqPdfViewer/releases/tag/v0.2.2",
-          "draft": false,
-          "prerelease": false,
-          "body": "> 메트로놈을 **연주하면서 쓰기 편하게**\n\n### 🥁 겹박자\n- 6/8 을 `점4분음표`로",
-          "assets": [$assets]
-        }
-    """.trimIndent()
-
-    private val debugAsset = """
-        {"name": "MrgqPdfViewer-v0.2.2-debug.apk", "size": 28029769,
-         "digest": "sha256:99552dc25c5995f2a2b46a68f8cfaf1b8ab824d74f72387f2435152399f0f49b",
-         "browser_download_url": "https://github.com/x/releases/download/v0.2.2/MrgqPdfViewer-v0.2.2-debug.apk"}
-    """
-    private val releaseAsset = """
-        {"name": "MrgqPdfViewer-v0.2.2-release.apk", "size": 5990786,
-         "digest": "sha256:${sha.uppercase()}",
-         "browser_download_url": "https://github.com/x/releases/download/v0.2.2/MrgqPdfViewer-v0.2.2-release.apk"}
-    """
-    private val sumsAsset = """
-        {"name": "SHA256SUMS.txt", "size": 196, "digest": null,
-         "browser_download_url": "https://github.com/x/releases/download/v0.2.2/SHA256SUMS.txt"}
-    """
+    private val repo = "https://github.com/jikhanjung/MrgqPdfViewer"
 
     @Test
-    fun debug_가_먼저_있어도_release_APK_를_고른다() {
-        val info = ReleaseInfo.parse(releaseJson("$debugAsset, $releaseAsset, $sumsAsset"))
-        assertEquals("v0.2.2", info.tag)
-        assertEquals(AppVersion(0, 2, 2), info.version)
-        assertEquals("MrgqPdfViewer-v0.2.2-release.apk", info.apk!!.name)
-        assertEquals(5990786L, info.apk!!.size)
-        assertEquals("SHA256SUMS.txt", info.checksums!!.name)
-    }
-
-    @Test
-    fun digest_는_소문자_16진으로() {
-        val info = ReleaseInfo.parse(releaseJson(releaseAsset))
-        assertEquals(sha, info.apk!!.sha256)
-    }
-
-    @Test
-    fun digest_가_없거나_null_이면_null() {
-        val info = ReleaseInfo.parse(releaseJson(sumsAsset))
-        assertNull(info.checksums!!.sha256)
-        val noDigest = releaseAsset.replace(Regex("\"digest\": \"[^\"]+\","), "")
-        assertNull(ReleaseInfo.parse(releaseJson(noDigest)).apk!!.sha256)
-    }
-
-    @Test
-    fun release_APK_가_없으면_apk_는_null() {
-        val info = ReleaseInfo.parse(releaseJson(debugAsset))
-        assertNull(info.apk)
-        assertNull(info.checksums)
+    fun 태그로_release_APK_와_SHA256SUMS_주소를_만든다() {
+        val info = ReleaseInfo.fromTag(repo, "v0.2.9")
+        assertEquals("v0.2.9", info.tag)
+        assertEquals(AppVersion(0, 2, 9), info.version)
+        assertEquals("MrgqPdfViewer-v0.2.9-release.apk", info.apk!!.name)
+        assertEquals("$repo/releases/download/v0.2.9/MrgqPdfViewer-v0.2.9-release.apk", info.apk!!.downloadUrl)
+        assertEquals("$repo/releases/download/v0.2.9/SHA256SUMS.txt", info.checksums!!.downloadUrl)
+        assertNull(info.apk!!.sha256)  // SHA256SUMS.txt 로 검증
+        assertEquals("$repo/releases/tag/v0.2.9", info.htmlUrl)
     }
 
     @Test(expected = IllegalArgumentException::class)
     fun 버전이_아닌_태그는_거부() {
-        ReleaseInfo.parse(releaseJson("").replace("v0.2.2\"", "nightly\""))
+        ReleaseInfo.fromTag(repo, "nightly")
+    }
+
+    @Test
+    fun latest_리다이렉트에서_태그() {
+        assertEquals("v0.2.9", ReleaseInfo.tagFromLocation("$repo/releases/tag/v0.2.9"))
+        assertEquals("v1.0.0-rc1", ReleaseInfo.tagFromLocation("$repo/releases/tag/v1.0.0-rc1?x=1"))
+        assertNull(ReleaseInfo.tagFromLocation("$repo/releases"))  // 릴리스 없음
+        assertNull(ReleaseInfo.tagFromLocation(null))
+    }
+
+    @Test
+    fun CHANGELOG_에서_그_버전_섹션만() {
+        val changelog = """
+            # 변경 이력
+
+            ## [Unreleased]
+
+            ---
+
+            ## [0.2.9] - 2026-09-28
+
+            > 요약
+
+            ### 🎼 세트리스트
+            - 항목
+
+            ---
+
+            ## [0.2.8] - 2026-09-28
+            - 이전
+        """.trimIndent()
+        assertEquals("> 요약\n\n### 🎼 세트리스트\n- 항목\n\n---", ReleaseInfo.changelogSection(changelog, "v0.2.9"))
+        assertEquals("- 이전", ReleaseInfo.changelogSection(changelog, "0.2.8"))
+        assertEquals("", ReleaseInfo.changelogSection(changelog, "v9.9.9"))
     }
 
     @Test

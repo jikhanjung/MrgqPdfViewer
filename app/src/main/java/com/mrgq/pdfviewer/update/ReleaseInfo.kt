@@ -1,64 +1,63 @@
 package com.mrgq.pdfviewer.update
 
-import com.google.gson.JsonObject
-import com.google.gson.JsonParser
-
-/** 릴리스에 올라간 파일 하나. [sha256] 은 GitHub 가 주는 digest(소문자 16진), 없으면 null. */
+/** 릴리스에 올라간 파일 하나. [size] 는 모르면 -1, [sha256] 은 모르면 null (`SHA256SUMS.txt` 로 검증). */
 data class ReleaseAsset(
     val name: String,
     val downloadUrl: String,
-    val size: Long,
-    val sha256: String?
+    val size: Long = -1L,
+    val sha256: String? = null
 )
 
-/** GitHub `releases/latest` 응답에서 업데이트에 필요한 것만. */
+/**
+ * 최신 릴리스에서 업데이트에 필요한 것만. API(`api.github.com`, 비인증 IP 당 시간 60회) 대신 웹 주소
+ * `github.com/<repo>/releases/latest` 가 넘겨 주는 태그만 읽고, 파일 주소는 릴리스 워크플로가 올리는 이름으로 만든다.
+ */
 data class ReleaseInfo(
     val tag: String,
     val version: AppVersion,
     val htmlUrl: String,
+    /** 변경 내용 — 릴리스 본문과 같은 `CHANGELOG.md` 의 그 버전 섹션. 알릴 때만 따로 받는다 */
     val body: String,
-    /** 설치할 APK — `-release.apk` 로 끝나는 에셋. debug APK 는 서명이 달라 업데이트할 수 없다 (#054 §1.3) */
+    /** 설치할 APK — `-release.apk`. debug APK 는 서명이 달라 업데이트할 수 없다 (#054 §1.3) */
     val apk: ReleaseAsset?,
-    /** `SHA256SUMS.txt` — [ReleaseAsset.sha256] 이 없을 때의 대안 */
+    /** `SHA256SUMS.txt` — APK 검증에 쓴다 */
     val checksums: ReleaseAsset?
 ) {
     companion object {
         const val APK_SUFFIX = "-release.apk"
         const val CHECKSUMS_NAME = "SHA256SUMS.txt"
 
-        /** 릴리스 JSON 해석. 태그가 버전 형식이 아니면 [IllegalArgumentException]. */
-        fun parse(json: String): ReleaseInfo {
-            val root = JsonParser.parseString(json).asJsonObject
-            val tag = root.string("tag_name") ?: throw IllegalArgumentException("tag_name 없음")
+        /** 태그로 릴리스 정보를 만든다 (`.github/workflows/build.yml` 의 APK 이름). 태그가 버전 형식이 아니면 [IllegalArgumentException] */
+        fun fromTag(repoUrl: String, tag: String, body: String = ""): ReleaseInfo {
             val version = AppVersion.parse(tag) ?: throw IllegalArgumentException("버전 형식이 아닌 태그: $tag")
-
-            val assets = root.getAsJsonArray("assets")?.mapNotNull { el ->
-                val a = el.asJsonObject
-                val name = a.string("name") ?: return@mapNotNull null
-                val url = a.string("browser_download_url") ?: return@mapNotNull null
-                ReleaseAsset(
-                    name = name,
-                    downloadUrl = url,
-                    size = a.get("size")?.takeUnless { it.isJsonNull }?.asLong ?: -1L,
-                    sha256 = a.string("digest")
-                        ?.takeIf { it.startsWith("sha256:", ignoreCase = true) }
-                        ?.substringAfter(':')
-                        ?.lowercase()
-                )
-            }.orEmpty()
-
+            val download = "$repoUrl/releases/download/$tag"
+            val apkName = "MrgqPdfViewer-$tag$APK_SUFFIX"
             return ReleaseInfo(
                 tag = tag,
                 version = version,
-                htmlUrl = root.string("html_url").orEmpty(),
-                body = root.string("body").orEmpty(),
-                apk = assets.firstOrNull { it.name.endsWith(APK_SUFFIX) },
-                checksums = assets.firstOrNull { it.name == CHECKSUMS_NAME }
+                htmlUrl = "$repoUrl/releases/tag/$tag",
+                body = body,
+                apk = ReleaseAsset(apkName, "$download/$apkName"),
+                checksums = ReleaseAsset(CHECKSUMS_NAME, "$download/$CHECKSUMS_NAME"),
             )
         }
 
-        private fun JsonObject.string(key: String): String? =
-            get(key)?.takeUnless { it.isJsonNull }?.asString
+        /** `releases/latest` 리다이렉트의 Location(`…/releases/tag/v0.2.9`)에서 태그. 릴리스가 없으면(`…/releases`) null */
+        fun tagFromLocation(location: String?): String? =
+            location?.substringAfter("/releases/tag/", "")
+                ?.substringBefore('?')?.substringBefore('#')
+                ?.let { java.net.URLDecoder.decode(it, "UTF-8") }
+                ?.takeIf { it.isNotBlank() }
+
+        /** `CHANGELOG.md` 에서 `## [0.2.9]` 섹션 본문 — 다음 `## ` 전까지. 없으면 빈 문자열 */
+        fun changelogSection(changelog: String, version: String): String {
+            val lines = changelog.replace("\r\n", "\n").lines()
+            val start = lines.indexOfFirst { it.startsWith("## [${version.removePrefix("v")}]") }
+            if (start < 0) return ""
+            val rest = lines.drop(start + 1)
+            val end = rest.indexOfFirst { it.startsWith("## ") }.let { if (it < 0) rest.size else it }
+            return rest.take(end).joinToString("\n").trim()
+        }
     }
 }
 

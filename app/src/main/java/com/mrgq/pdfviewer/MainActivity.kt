@@ -27,6 +27,8 @@ class MainActivity : AppCompatActivity() {
     private companion object {
         /** 파일 목록이 뜬 뒤 확인한다 — 시작 화면 전환과 겹치지 않게 */
         const val STARTUP_UPDATE_CHECK_DELAY_MS = 1500L
+        /** 파일 목록이 떠 있는 동안 자동 확인을 두드리는 간격 — 실제 확인은 UpdateController 가 10분마다 한 번 */
+        const val UPDATE_CHECK_TICK_MS = 60_000L
 
 
         /** 마지막으로 고른 세트리스트 id (#064). [ALL_SCORES] = 고른 적 없음(첫 세트리스트) */
@@ -76,8 +78,8 @@ class MainActivity : AppCompatActivity() {
     }
     
     /**
-     * 새 버전 자동 확인 — 앱 시작과 화면으로 돌아올 때, 마지막 확인 뒤 6시간이 지났으면 (UpdateController.checkIfDue).
-     * 화면이 뜬 뒤 조용히. 합주 중에는 방해하지 않는다
+     * 새 버전 자동 확인 — 파일 목록이 떠 있는 동안 10분마다 (UpdateController.checkIfDue). 화면이 뜬 뒤 조용히,
+     * 그 뒤로는 [UPDATE_CHECK_TICK_MS] 마다 두드리고 onPause 에서 멈춘다. 합주 중 · 대화상자가 떠 있을 때는 방해하지 않는다
      */
     private fun scheduleAutoUpdateCheck() {
         sendScoreMateHeartbeat()
@@ -151,9 +153,12 @@ class MainActivity : AppCompatActivity() {
         listOfNotNull(score.ensembleName ?: "내 악보", score.partName.takeIf { it.isNotBlank() }, "판 ${score.versionNumber}")
             .joinToString(" · ")
 
-    private val autoUpdateCheck = Runnable {
-        if (!isFinishing && hasWindowFocus() && GlobalCollaborationManager.getInstance().getCurrentMode() == CollaborationMode.NONE) {
-            updateController.checkIfDue()
+    private val autoUpdateCheck: Runnable = object : Runnable {
+        override fun run() {
+            if (!isFinishing && hasWindowFocus() && GlobalCollaborationManager.getInstance().getCurrentMode() == CollaborationMode.NONE) {
+                updateController.checkIfDue()
+            }
+            binding.root.postDelayed(this, UPDATE_CHECK_TICK_MS)
         }
     }
 
@@ -685,6 +690,7 @@ class MainActivity : AppCompatActivity() {
     override fun onPause() {
         super.onPause()
         com.mrgq.pdfviewer.ensemble.VersionNotice.detach()
+        binding.root.removeCallbacks(autoUpdateCheck)
         // Note: 웹서버 관리는 이제 설정 화면에서 담당
     }
     
