@@ -221,8 +221,11 @@ class CollaborationClientManager(
                 "connect_response" -> {
                     val status = json.get("status")?.asString
                     // 버전 확인 (#061): 새 지휘자는 app_version, 옛 지휘자(v0.2.5 이하)는 server_version 에 "v0.1.5" 고정
+                    // 지휘자는 connect_response 를 두 번 보낸다 — 연결 직후 확인(v0.3.3 까지 버전 없음)과 client_connect 답(버전 있음).
+                    // 버전 필드가 아예 없는 것으로는 판단하지 않는다 (옛 지휘자는 둘째 메시지의 server_version "v0.1.5" 로 알아본다)
+                    val hasVersion = json.has("app_version") || json.has("server_version")
                     val conductorVersion = json.get("app_version")?.asString ?: json.get("server_version")?.asString
-                    com.mrgq.pdfviewer.ensemble.EnsembleVersion.check(BuildConfig.VERSION_NAME, conductorVersion)?.let {
+                    if (hasVersion) com.mrgq.pdfviewer.ensemble.EnsembleVersion.check(BuildConfig.VERSION_NAME, conductorVersion)?.let {
                         Log.w(TAG, "지휘자와 버전이 다르다: $it")
                         onVersionMismatch?.invoke(com.mrgq.pdfviewer.ensemble.EnsembleVersion.performerMessage(it))
                     }

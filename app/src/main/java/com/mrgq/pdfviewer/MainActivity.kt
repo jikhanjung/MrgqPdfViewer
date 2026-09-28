@@ -23,6 +23,8 @@ import androidx.lifecycle.lifecycleScope
 import java.io.File
 
 class MainActivity : AppCompatActivity() {
+    /** 화면 문구의 기기 이름 (TV · 태블릿 · 휴대폰) */
+    private val device by lazy { com.mrgq.pdfviewer.utils.DeviceForm.noun(this) }
     
     private companion object {
         /** 파일 목록이 뜬 뒤 확인한다 — 시작 화면 전환과 겹치지 않게 */
@@ -52,6 +54,7 @@ class MainActivity : AppCompatActivity() {
     
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        com.mrgq.pdfviewer.utils.DeviceForm.applyOrientation(this) // TV 가 아니면 세로가 기본
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
         
@@ -318,7 +321,11 @@ class MainActivity : AppCompatActivity() {
         } else null
         renderSetlistTabs(current)
         binding.scoreMateSyncBtn.visibility = if (scoreMateLinked) View.VISIBLE else View.GONE
-        binding.scoreMateBadge.visibility = if (scoreMateLinked) View.VISIBLE else View.GONE
+        // "× ScoreMate ☁️" — 가로면 첫 줄 앱 이름 옆, 세로(태블릿)면 첫 줄이 좁아 제목 바로 아래 줄에 (사용자 요청 2026-09-28).
+        // 세트리스트 탭 · 동기화는 그다음 줄
+        val portrait = resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_PORTRAIT
+        binding.scoreMateBadge.visibility = if (scoreMateLinked && !portrait) View.VISIBLE else View.GONE
+        binding.scoreMateBadgeBelow.visibility = if (scoreMateLinked && portrait) View.VISIBLE else View.GONE
         // 연결된 TV 는 정렬(늘 곡 순서) · 파일관리(서버가 관리 — 웹에서 곡목 고르기)가 필요 없다 → 그 줄을 통째로 숨긴다.
         // 🔄 동기화는 세트리스트 줄 오른쪽 끝에 있다
         binding.controlStrip.visibility = if (scoreMateLinked) View.GONE else View.VISIBLE
@@ -347,7 +354,7 @@ class MainActivity : AppCompatActivity() {
             shown = emptyList()
             binding.librarySource.text = ""
             binding.emptyTitle.text = "받은 세트리스트가 없습니다"
-            binding.emptyHint.text = "웹에서 이 TV 로 보낼 세트리스트를 고른 뒤 🔄 동기화 를 누르세요"
+            binding.emptyHint.text = "웹에서 이 $device 로 보낼 세트리스트를 고른 뒤 🔄 동기화 를 누르세요"
         } else {
             shown = allPdfFiles
             binding.librarySource.text = "이 기기 파일 ${allPdfFiles.size}"

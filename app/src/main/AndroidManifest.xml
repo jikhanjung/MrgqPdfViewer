@@ -10,10 +10,10 @@
     <!-- 앱 안 업데이트: 받은 APK 로 시스템 설치 화면을 연다 (devlog #054) -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
     
-    <!-- TV features -->
+    <!-- TV 기능 — 필수가 아니다: 같은 APK 로 태블릿에도 깐다 (세로 태블릿 1단계, 2026-09-28) -->
     <uses-feature
         android:name="android.software.leanback"
-        android:required="true" />
+        android:required="false" />
     <uses-feature
         android:name="android.hardware.touchscreen"
         android:required="false" />
@@ -34,10 +34,12 @@
             android:exported="true"
             android:theme="@style/Theme.MrgqPdfViewer.SplashActivity"
             android:configChanges="keyboard|keyboardHidden|navigation"
-            android:screenOrientation="landscape">
+            android:screenOrientation="unspecified">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
+                <!-- 태블릿 · 휴대폰 홈 화면 -->
+                <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
         
@@ -45,17 +47,17 @@
             android:name=".MainActivity"
             android:exported="false"
             android:configChanges="keyboard|keyboardHidden|navigation"
-            android:screenOrientation="landscape" />
+            android:screenOrientation="unspecified" />
         
         <activity
             android:name=".PdfViewerActivity"
             android:configChanges="keyboard|keyboardHidden|navigation"
-            android:screenOrientation="landscape" />
+            android:screenOrientation="unspecified" />
             
         <activity
             android:name=".SettingsActivity"
             android:configChanges="keyboard|keyboardHidden|navigation"
-            android:screenOrientation="landscape" />
+            android:screenOrientation="unspecified" />
 
         <!-- 받은 업데이트 APK 를 content:// 로 설치 화면에 넘긴다 (devlog #054) -->
         <provider

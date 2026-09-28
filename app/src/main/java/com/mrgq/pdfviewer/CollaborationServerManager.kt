@@ -242,12 +242,14 @@ class CollaborationServerManager(
         Log.d(TAG, "Client connected: $clientId ($deviceName)")
         onClientConnected?.invoke(clientId, deviceName)
         
-        // Send connection confirmation
+        // Send connection confirmation — 버전도 싣는다: 연주자는 이 메시지로도 버전을 비교했고, 없으면 "v0.2.5 이하"로 오판했다
+        // (#061 뒤 v0.3.3 에서 발견: 샤오신패드 지휘자 · Z18TV 연주자)
         val response = JsonObject().apply {
             addProperty("action", "connect_response")
             addProperty("status", "success")
             addProperty("master_id", "master_device")
             addProperty("client_id", clientId)
+            addProperty("app_version", BuildConfig.VERSION_NAME)
         }
         
         webSocket.send(response.toString())

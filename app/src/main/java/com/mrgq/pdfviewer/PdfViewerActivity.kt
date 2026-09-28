@@ -62,6 +62,8 @@ import android.os.Looper
 class PdfViewerActivity : AppCompatActivity() {
     
     companion object {
+        /** 태블릿: 이만큼(dp) 넘게 가로로 밀면 쪽 넘김 */
+        private const val SWIPE_MIN_DP = 60f
         // Intent extra keys
         const val EXTRA_CURRENT_INDEX = "current_index"
         const val EXTRA_FILE_PATH_LIST = "file_path_list"
@@ -277,8 +279,14 @@ class PdfViewerActivity : AppCompatActivity() {
     
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        com.mrgq.pdfviewer.utils.DeviceForm.applyOrientation(this) // TV 가 아니면 세로가 기본
         binding = ActivityPdfViewerBinding.inflate(layoutInflater)
         setContentView(binding.root)
+        // 세로 화면(태블릿): 한 쪽이 폭에 맞고 위아래가 빈다 — 박 표시를 가운데 위로 옮겨 악보 왼쪽 위를 가리지 않게
+        if (resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_PORTRAIT) {
+            (binding.metronomeBeat.layoutParams as androidx.constraintlayout.widget.ConstraintLayout.LayoutParams).endToEnd =
+                androidx.constraintlayout.widget.ConstraintLayout.LayoutParams.PARENT_ID
+        }
         
         // Keep screen on while viewing PDF
         window.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
@@ -512,6 +520,15 @@ class PdfViewerActivity : AppCompatActivity() {
                     Log.d("PdfViewerActivity", "=== 설정 로드 후 캐시 클리어 완료 ===")
                 }
                 
+                // 세로 화면(태블릿)은 늘 한 쪽 — 저장된 두 쪽 설정은 건드리지 않는다(가로에서 열면 그대로) (사용자 요청 2026-09-28)
+                if (isPortraitScreen()) {
+                    withContext(Dispatchers.Main) {
+                        isTwoPageMode = false
+                        onComplete()
+                    }
+                    return@launch
+                }
+
                 // Use already loaded currentDisplayMode instead of querying database again
                 Log.d("PdfViewerActivity", "=== checkAndSetTwoPageMode: currentDisplayMode 사용 ===")
                 Log.d("PdfViewerActivity", "currentDisplayMode: $currentDisplayMode")
@@ -1427,6 +1444,8 @@ class PdfViewerActivity : AppCompatActivity() {
     }
     
     override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
+        // 블루투스 넘김 페달 · 키보드 (태블릿 1단계): 쪽 넘김 키를 리모컨 ← → 와 같게
+        pageTurnKeyAsDpad(keyCode)?.let { return onKeyDown(it, event) }
         // 메트로놈 악보 연동: 시작 마디 고르는 중에는 리모컨이 커서를 움직인다
         if (followState == FollowState.SELECTING) {
             when (keyCode) {
@@ -1549,6 +1568,98 @@ class PdfViewerActivity : AppCompatActivity() {
         return super.onKeyDown(keyCode, event)
     }
     
+    /**
+     * 넘김 페달이 보내는 키 → 리모컨 ← →. 페달은 보통 PageUp/PageDown · 미디어 이전/다음 중 하나를 보낸다 (←→ 를 보내는 것은 그대로 된다).
+     * ↑ ↓ 를 보내는 페달은 ↑ 이 메트로놈 메뉴라 맞지 않는다 — 페달 모드를 바꿔 쓴다
+     */
+    private fun pageTurnKeyAsDpad(keyCode: Int): Int? = when (keyCode) {
+        KeyEvent.KEYCODE_PAGE_DOWN, KeyEvent.KEYCODE_MEDIA_NEXT, KeyEvent.KEYCODE_MOVE_END -> KeyEvent.KEYCODE_DPAD_RIGHT
+        KeyEvent.KEYCODE_PAGE_UP, KeyEvent.KEYCODE_MEDIA_PREVIOUS, KeyEvent.KEYCODE_MOVE_HOME -> KeyEvent.KEYCODE_DPAD_LEFT
+        else -> null
+    }
+
+    /**
+     * 태블릿 터치 (1단계 — 리모컨 동작을 그대로 부른다, 2단계 — 밀기 · 마디 탭):
+     *  - 왼쪽 · 오른쪽 1/3 탭 = ← →(쪽 넘김, 마디 고르는 중이면 커서). 끝 · 처음 안내가 떠 있으면 다음 · 이전 파일
+     *  - 왼쪽으로 밀기 = 다음 쪽, 오른쪽으로 밀기 = 이전 쪽
+     *  - 시작 마디를 고르는 중에 **마디를 탭**하면 그 마디로, 이미 고른 마디를 다시 탭하면 시작
+     *  - 가운데 탭 = OK 짧게(쪽 정보 · 안내 닫기, 마디 고르는 중이면 시작)
+     *  - 가운데 두 번 탭 = ↑(메트로놈 메뉴)
+     *  - 길게 누르기 = OK 길게(PDF 표시 옵션, 악보 연동 중이면 일시정지)
+     * 대화상자는 다른 창이라 여기로 오지 않는다. TV 에는 터치가 없어 영향이 없다
+     */
+    private val touchGestures by lazy {
+        android.view.GestureDetector(this, object : android.view.GestureDetector.SimpleOnGestureListener() {
+            private fun zone(e: android.view.MotionEvent): Int {
+                val third = binding.root.width / 3f
+                return when {
+                    e.x < third -> -1
+                    e.x > third * 2 -> 1
+                    else -> 0
+                }
+            }
+            private fun press(keyCode: Int) {
+                onKeyDown(keyCode, KeyEvent(KeyEvent.ACTION_DOWN, keyCode))
+            }
+            /** 이번 탭을 마디 고르기가 처리했다 — 가운데 탭(OK)으로 또 처리하지 않게 */
+            private var tapTaken = false
+            override fun onDown(e: android.view.MotionEvent): Boolean {
+                tapTaken = false
+                return true
+            }
+            override fun onFling(e1: android.view.MotionEvent?, e2: android.view.MotionEvent, velocityX: Float, velocityY: Float): Boolean {
+                val start = e1 ?: return false
+                val dx = e2.x - start.x
+                val dy = e2.y - start.y
+                val minDistance = resources.displayMetrics.density * SWIPE_MIN_DP
+                if (kotlin.math.abs(dx) < minDistance || kotlin.math.abs(dx) < kotlin.math.abs(dy) * 1.5f) return false
+                press(if (dx < 0) KeyEvent.KEYCODE_DPAD_RIGHT else KeyEvent.KEYCODE_DPAD_LEFT)
+                return true
+            }
+            override fun onSingleTapUp(e: android.view.MotionEvent): Boolean {
+                if (followState == FollowState.SELECTING) {
+                    val index = followMeasureAt(e.x, e.y)
+                    if (index >= 0) {
+                        tapTaken = true
+                        if (index == cursorIndex) startFollowing() else moveCursor(index - cursorIndex)
+                        return true
+                    }
+                }
+                when (zone(e)) {
+                    -1 -> press(KeyEvent.KEYCODE_DPAD_LEFT)
+                    1 -> press(KeyEvent.KEYCODE_DPAD_RIGHT)
+                }
+                return true
+            }
+            override fun onSingleTapConfirmed(e: android.view.MotionEvent): Boolean {
+                if (zone(e) == 0 && !tapTaken) {
+                    // OK 짧게 — 누르고 떼기
+                    press(KeyEvent.KEYCODE_DPAD_CENTER)
+                    longPressHandler.removeCallbacks(longPressRunnable)
+                    onKeyUp(KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_DPAD_CENTER))
+                }
+                return true
+            }
+            override fun onDoubleTap(e: android.view.MotionEvent): Boolean {
+                if (zone(e) == 0) press(KeyEvent.KEYCODE_DPAD_UP)
+                return true
+            }
+            override fun onLongPress(e: android.view.MotionEvent) {
+                if (followState == FollowState.SELECTING) return
+                isLongPressing = true
+                longPressRunnable.run()
+                isLongPressing = false
+            }
+        })
+    }
+
+    override fun dispatchTouchEvent(ev: android.view.MotionEvent): Boolean {
+        // 악보 화면에는 눌리는 뷰가 없다 — 모든 터치를 몸짓으로 (안내 카드도 옆 탭 = ← → 가 다음 · 이전 파일로 간다)
+        super.dispatchTouchEvent(ev)
+        touchGestures.onTouchEvent(ev)
+        return true
+    }
+
     override fun onKeyUp(keyCode: Int, event: KeyEvent?): Boolean {
         if (followState == FollowState.SELECTING &&
             (keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER)
@@ -1755,8 +1866,9 @@ class PdfViewerActivity : AppCompatActivity() {
         // Update sync time for input blocking
         updateSyncTime()
         
-        // 0부터 — 파트 보기면 원본 쪽을 파트 쪽으로 (P07 4단계). 전체 악보면 전과 같이 범위 밖은 아래에서 무시
-        val targetIndex = if (partViewLayout != null) incomingPageIndex(page) else page - 1
+        // 0부터 — 파트 보기면 원본 쪽을 파트 쪽으로 (P07 4단계). 전체 악보면 전과 같이 범위 밖은 아래에서 무시.
+        // 두 쪽 모드면 짝의 시작(0 · 2 · 4 …)으로 — 지휘자가 3 → 2 쪽으로 오면 1-2 를 보여야 한다(2-3 이 아니라)
+        val targetIndex = pairStart(if (partViewLayout != null) incomingPageIndex(page) else page - 1)
         
         Log.d("PdfViewerActivity", "🎼 연주자 모드: 페이지 $page 변경 신호 수신됨 (current: ${pageIndex + 1}, target: $page, file: $pdfFileName)")
         
@@ -3449,17 +3561,7 @@ class PdfViewerActivity : AppCompatActivity() {
             loadScoreMeasures(fileId)
             return
         }
-        fun mapped(measures: List<ScoreMeasure>) = ScoreOverlayGeometry.boxes(
-            measures = measures,
-            leftPageIndex = pageIndex,
-            twoPageMode = isTwoPageMode,
-            pageCount = pageCount,
-            screenWidth = screenWidth,
-            screenHeight = screenHeight,
-            topClipping = currentTopClipping,
-            bottomClipping = currentBottomClipping,
-            centerPadding = currentCenterPadding,
-        )
+        fun mapped(measures: List<ScoreMeasure>) = overlayBoxes(measures)
         // 커서 모양: 고르는 중 · 예비박 · 일시정지(여기서 이어진다). 연주 중인 마디만 노란 표시
         val style = if (followState != FollowState.PLAYING || followInCountIn) {
             ScoreOverlayView.FocusStyle.CURSOR
@@ -3472,6 +3574,38 @@ class PdfViewerActivity : AppCompatActivity() {
             focus = focus?.let { mapped(listOf(it)).firstOrNull() },
             focusStyle = style,
         )
+    }
+
+    /** 마디 박스 — 지금 화면(쪽 · 두 쪽 모드 · 클리핑 · 여백)의 표시 비트맵 픽셀 좌표 */
+    private fun overlayBoxes(measures: List<ScoreMeasure>) = ScoreOverlayGeometry.boxes(
+        measures = measures,
+        leftPageIndex = pageIndex,
+        twoPageMode = isTwoPageMode,
+        pageCount = pageCount,
+        screenWidth = screenWidth,
+        screenHeight = screenHeight,
+        topClipping = currentTopClipping,
+        bottomClipping = currentBottomClipping,
+        centerPadding = currentCenterPadding,
+    )
+
+    /**
+     * 화면 좌표 ([x], [y] — 창 기준)에 있는 시작 가능한 마디 (태블릿: 마디를 탭해 시작 마디 고르기). 없으면 -1.
+     * 비트맵 → 화면은 ImageView 에 실제로 걸린 행렬 그대로 (오버레이와 같다)
+     */
+    private fun followMeasureAt(x: Float, y: Float): Int {
+        val view = binding.pdfView
+        val toView = android.graphics.Matrix(view.imageMatrix).apply {
+            postTranslate((view.left + view.paddingLeft).toFloat(), (view.top + view.paddingTop).toFloat())
+        }
+        val rect = android.graphics.RectF()
+        val boxes = overlayBoxes(followMeasures)
+        val hit = boxes.firstOrNull { box ->
+            rect.set(box.left, box.top, box.right, box.bottom)
+            toView.mapRect(rect)
+            rect.contains(x, y)
+        } ?: return -1
+        return followMeasures.indexOfFirst { it.measureNumber == hit.measureNumber }
     }
 
     private fun loadScoreMeasures(fileId: String) {
@@ -3498,11 +3632,15 @@ class PdfViewerActivity : AppCompatActivity() {
         }
     }
 
+    /** 세로 화면인가 (태블릿 · 휴대폰) — 늘 한 쪽 */
+    private fun isPortraitScreen(): Boolean =
+        resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_PORTRAIT
+
     private fun showPdfDisplayOptions() {
         Log.d("PdfViewerActivity", "PDF 표시 옵션 다이얼로그 표시")
         
         val options = arrayOf(
-            "두 페이지 모드 전환",
+            if (isPortraitScreen()) "두 페이지 모드 (세로 화면에서는 한 쪽만)" else "두 페이지 모드 전환",
             "위/아래 클리핑 설정",
             "마디 박스 표시 (악보 분석): ${if (isScoreOverlayEnabled()) "켜짐" else "꺼짐"}",
             "메트로놈${when {
@@ -3517,7 +3655,9 @@ class PdfViewerActivity : AppCompatActivity() {
             .setTitle("PDF 표시 옵션")
             .setItems(options) { dialog, which ->
                 when (which) {
-                    0 -> showTwoPageModeDialog {
+                    0 -> if (isPortraitScreen()) {
+                        Toast.makeText(this, "세로 화면에서는 한 쪽씩 봅니다 — 두 쪽은 가로에서", Toast.LENGTH_SHORT).show()
+                    } else showTwoPageModeDialog {
                         // 두 페이지 모드 변경 완료 후 현재 페이지 다시 렌더링
                         showPage(pageIndex)
                     }
@@ -3538,6 +3678,10 @@ class PdfViewerActivity : AppCompatActivity() {
      */
     private fun showPartViewDialog() {
         val fileId = currentPdfFileId ?: return
+        if (collaborationMode == CollaborationMode.CONDUCTOR) {
+            toast("지휘자는 총보만 봅니다 — 파트 보기는 연주자 · 혼자 연습에서")
+            return
+        }
         val source = File(pdfFilePath)
         Toast.makeText(this, "악보 분석 중…", Toast.LENGTH_SHORT).show()
         lifecycleScope.launch {
@@ -3621,10 +3765,14 @@ class PdfViewerActivity : AppCompatActivity() {
      * 파트 보기에 보일 이름 — PDF 에서 읽은 이름, 못 읽었으면(보표 n) **MusicXML 의 파트 이름**(보표 수가 같을 때만 — 순서로 맞춘다).
      * 서버 인식이 읽은 이름이라 웹에서 고칠 수 있다(서버 0.9.8)
      */
-    private fun partName(part: com.mrgq.pdfviewer.score.ScorePart, staffCount: Int): String {
+    private fun partName(part: com.mrgq.pdfviewer.score.ScorePart, staffCount: Int): String =
+        knownPartName(part, staffCount) ?: part.name
+
+    /** 아는 파트 이름 — PDF 에서 읽었거나 MusicXML 에 있으면. 둘 다 없으면(보표 n) null */
+    private fun knownPartName(part: com.mrgq.pdfviewer.score.ScorePart, staffCount: Int): String? {
         if (part.named) return part.name
-        val score = musicXml?.takeIf { musicXmlFileId == currentPdfFileId && it.staffCount == staffCount } ?: return part.name
-        return score.staffName(part.staffIndex) ?: part.name
+        val score = musicXml?.takeIf { musicXmlFileId == currentPdfFileId && it.staffCount == staffCount } ?: return null
+        return score.staffName(part.staffIndex)
     }
 
     /** 메뉴의 반주 줄 — MusicXML 이 있는 악보에서만 (없으면 null) */
@@ -3704,7 +3852,8 @@ class PdfViewerActivity : AppCompatActivity() {
      */
     private suspend fun applyPartViewSelection() {
         val fileId = currentPdfFileId
-        val staves = if (fileId != null) {
+        // 지휘자는 늘 총보 (사용자 결정 2026-09-28) — 저장된 파트 선택은 두고 이번에만 무시
+        val staves = if (fileId != null && collaborationMode != CollaborationMode.CONDUCTOR) {
             PartStaves.fromMask(musicRepository.getUserPreference(fileId)?.partStavesMask)
         } else {
             null
@@ -3768,12 +3917,15 @@ class PdfViewerActivity : AppCompatActivity() {
     private fun outgoingPage(pageIndex: Int): Int =
         (partViewLayout?.sourcePageFor(pageIndex) ?: pageIndex) + 1
 
-    /** 합주로 받은 쪽 번호(1부터, 원본 기준) → 이 화면의 쪽 순번(0부터). 파트 보기면 그 원본 쪽이 놓인 파트 쪽 */
+    /** 합주로 받은 쪽 번호(1부터, 원본 기준) → 이 화면의 쪽 순번(0부터). 파트 보기면 그 원본 쪽이 놓인 파트 쪽. 두 쪽 모드면 짝의 시작 */
     private fun incomingPageIndex(page: Int): Int {
         val source = page - 1
         val index = partViewLayout?.dstPageForSource(source.coerceAtLeast(0)) ?: source
-        return index.coerceIn(0, (pageCount - 1).coerceAtLeast(0))
+        return pairStart(index.coerceIn(0, (pageCount - 1).coerceAtLeast(0)))
     }
+
+    /** 두 쪽 모드면 [index] 가 든 짝의 첫 쪽 (1-2 · 3-4 … 의 왼쪽). 한 쪽 모드면 그대로 */
+    private fun pairStart(index: Int): Int = if (isTwoPageMode && index > 0) (index / 2) * 2 else index
 
     /** 마디 캐시를 비운다 — 파트 보기가 바뀌면 같은 파일이라도 마디 좌표가 다르다 */
     private fun clearMeasureCache() {
@@ -3790,7 +3942,9 @@ class PdfViewerActivity : AppCompatActivity() {
         if (parts.isEmpty()) return null
         val total = (ScoreParts.of(staves) as? ScoreParts.Result.Parts)?.parts?.size ?: parts.size
         val name = parts.joinToString(" + ") { partName(it, total) }
-        val out = PartPdfBuilder.cacheFile(cacheDir, fileId, source, selected)
+        // 악보 왼쪽 보표 앞에 쓸 이름 — 아는 것만 (모르면 Pt. n)
+        val staffNames = parts.mapNotNull { part -> knownPartName(part, total)?.let { part.staffIndex to it } }.toMap()
+        val out = PartPdfBuilder.cacheFile(cacheDir, fileId, source, selected, staffNames)
         val layoutFile = PartPdfBuilder.layoutFile(out)
         // 만들어 둔 것이 있으면 그 배치 그대로 (넓히기에 쪽 경로를 다시 읽지 않게)
         if (out.isFile && layoutFile.isFile) {
@@ -3801,7 +3955,7 @@ class PdfViewerActivity : AppCompatActivity() {
         // 가운데선을 걸친 슬러 · 빔 · 덧줄 음을 소속에 따라 넓혀 자르려고 쪽 경로를 읽는다 (PartClip)
         val boxes = com.mrgq.pdfviewer.score.ScoreLayoutAnalyzer.pathBoxes(source, measures.map { it.pageIndex }.toSet())
         val layout = PartLayout.build(staves, measures, selected, boxes) ?: return null
-        PartPdfBuilder.build(source, layout, out)
+        PartPdfBuilder.build(source, layout, out, staffNames)
         layoutFile.writeText(PartLayout.encode(layout))
         PartPdfBuilder.prune(out, fileId, selected)
         return Triple(out, name, layout)

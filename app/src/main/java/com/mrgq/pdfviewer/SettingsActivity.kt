@@ -34,6 +34,8 @@ import com.mrgq.pdfviewer.scoremate.ScoreMateStore
 import androidx.lifecycle.lifecycleScope
 
 class SettingsActivity : AppCompatActivity() {
+    /** 화면 문구의 기기 이름 (TV · 태블릿 · 휴대폰) */
+    private val device by lazy { com.mrgq.pdfviewer.utils.DeviceForm.noun(this) }
     
     private lateinit var binding: ActivitySettingsNewBinding
     private lateinit var preferences: SharedPreferences
@@ -68,6 +70,7 @@ class SettingsActivity : AppCompatActivity() {
     
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        com.mrgq.pdfviewer.utils.DeviceForm.applyOrientation(this) // TV 가 아니면 세로가 기본
         binding = ActivitySettingsNewBinding.inflate(layoutInflater)
         setContentView(binding.root)
         
@@ -377,7 +380,7 @@ class SettingsActivity : AppCompatActivity() {
     // ── ScoreMate (P05 C1) ──────────────────────────────────────────────────
 
     private fun scoreMateSummary(): String =
-        if (scoreMateClient.isLinked) "연결됨 — ${scoreMateStore.deviceName ?: "이 TV"}" else "연결 안 됨 — 악보 서버에 이 TV 연결"
+        if (scoreMateClient.isLinked) "연결됨 — ${scoreMateStore.deviceName ?: "이 $device"}" else "연결 안 됨 — 악보 서버에 이 $device 연결"
 
     private fun showScoreMatePanel() {
         val linked = scoreMateClient.isLinked
@@ -387,7 +390,7 @@ class SettingsActivity : AppCompatActivity() {
                 id = "scoremate_status",
                 icon = if (linked) "✅" else "⚪",
                 title = if (linked) "연결됨" else "연결 안 됨",
-                subtitle = if (linked) "${scoreMateStore.deviceName ?: "이 TV"} · $server" else "휴대폰으로 QR 을 찍어 ScoreMate 계정에 이 TV 를 연결합니다",
+                subtitle = if (linked) "${scoreMateStore.deviceName ?: "이 $device"} · $server" else "휴대폰으로 QR 을 찍어 ScoreMate 계정에 이 $device 를 연결합니다",
                 type = SettingsType.INFO
             )
         )
@@ -396,21 +399,21 @@ class SettingsActivity : AppCompatActivity() {
                 id = "scoremate_check",
                 icon = "🔍",
                 title = "연결 확인",
-                subtitle = "서버에서 이 TV 정보 받기",
+                subtitle = "서버에서 이 $device 정보 받기",
                 type = SettingsType.ACTION
             )
             items += SettingsItem(
                 id = "scoremate_unlink",
                 icon = "⛔",
                 title = "연결 해제",
-                subtitle = "이 TV 의 ScoreMate 연결을 끊습니다",
+                subtitle = "이 $device 의 ScoreMate 연결을 끊습니다",
                 type = SettingsType.ACTION
             )
         } else {
             items += SettingsItem(
                 id = "scoremate_link",
                 icon = "🔗",
-                title = "이 TV 연결",
+                title = "이 $device 연결",
                 subtitle = "화면의 QR 코드 · 연결 코드로 휴대폰에서 연결",
                 type = SettingsType.ACTION
             )
@@ -458,7 +461,7 @@ class SettingsActivity : AppCompatActivity() {
                 if (info.name.isNotBlank()) scoreMateStore.deviceName = info.name
                 AlertDialog.Builder(this@SettingsActivity)
                     .setTitle("ScoreMate 연결 확인")
-                    .setMessage("이 TV: ${info.name}\n서버: ${scoreMateStore.server}\n마지막 접속: ${info.lastSeenAt ?: "-"}")
+                    .setMessage("이 $device: ${info.name}\n서버: ${scoreMateStore.server}\n마지막 접속: ${info.lastSeenAt ?: "-"}")
                     .setPositiveButton("확인", null)
                     .show()
             } catch (e: ScoreMateException) {
@@ -501,7 +504,7 @@ class SettingsActivity : AppCompatActivity() {
         AlertDialog.Builder(this)
             .setTitle("ScoreMate 연결 해제")
             .setMessage(
-                "이 TV 의 ScoreMate 연결을 끊습니다. 다시 쓰려면 휴대폰으로 다시 연결해야 합니다.\n\n" +
+                "이 $device 의 ScoreMate 연결을 끊습니다. 다시 쓰려면 휴대폰으로 다시 연결해야 합니다.\n\n" +
                     "받아 둔 악보는 어떻게 할까요? 남기면 이 기기 파일로 옮겨져 연결 해제 뒤의 파일 목록에 보입니다."
             )
             .setPositiveButton("해제 · 악보 남기기") { _, _ -> unlinkScoreMate(deleteFiles = false) }
@@ -516,7 +519,7 @@ class SettingsActivity : AppCompatActivity() {
             val notified = scoreMateClient.unlink()
             Toast.makeText(
                 this@SettingsActivity,
-                if (notified) "ScoreMate 연결을 해제했습니다" else "이 TV 에서 연결을 해제했습니다 (서버에 닿지 못함 — 웹의 TV 화면에서도 해제하세요)",
+                if (notified) "ScoreMate 연결을 해제했습니다" else "이 $device 에서 연결을 해제했습니다 (서버에 닿지 못함 — 웹의 TV 화면에서도 해제하세요)",
                 Toast.LENGTH_LONG
             ).show()
             setupMainMenu()

@@ -40,6 +40,9 @@ class DeviceLinkDialog(
     private val store: ScoreMateStore,
     private val onLinked: () -> Unit,
 ) {
+    /** 화면 문구의 기기 이름 (TV · 태블릿 · 휴대폰) */
+    private val device by lazy { com.mrgq.pdfviewer.utils.DeviceForm.noun(activity) }
+
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private var job: Job? = null
     private lateinit var dialog: AlertDialog
@@ -81,7 +84,7 @@ class DeviceLinkDialog(
             addView(right)
         }
         dialog = AlertDialog.Builder(activity)
-            .setTitle("ScoreMate 에 이 TV 연결")
+            .setTitle("ScoreMate 에 이 $device 연결")
             .setView(content)
             .setNegativeButton("취소", null)
             .setNeutralButton("새 코드", null)

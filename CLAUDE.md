@@ -3,7 +3,7 @@
 ## 프로젝트 개요
 Android TV OS용 PDF 악보 리더 앱으로, 무선 파일 업로드와 리모컨을 이용한 탐색 기능을 제공합니다.
 
-**타깃 기기**: Google TV Streamer + UPerfect 23.8" 4K 모니터 (2026-07 전환) · **Z18TV Pro**(1080p, 2대 — 합주 · 일상 실기기 확인은 주로 이것, adb `192.168.55.75:5555`)  
+**타깃 기기**: Google TV Streamer + UPerfect 23.8" 4K 모니터 (2026-07 전환) · **Z18TV Pro**(1080p, 2대 — 합주 · 일상 실기기 확인은 주로 이것, adb `192.168.55.75:5555`) · **세로 태블릿** 샤오신패드 12.7(TB371FC, Android 13, 1840×2944 — adb 무선 디버깅, 포트는 켤 때마다 바뀜, #066)  
 > ⚠️ **이 기기의 앱 UI 는 물리적으로 1080p 를 넘을 수 없다.** `ro.surface_flinger.max_graphics_width/height`
 > 가 1920×1080 으로 빌드에 고정돼 있어(read-only, 루팅 없이 변경 불가) 앱은 1080p 로 그리고
 > SurfaceFlinger 가 4K 로 업스케일한다. 4K 관련 작업을 시작하기 전에
@@ -35,6 +35,7 @@ Android TV OS용 PDF 악보 리더 앱으로, 무선 파일 업로드와 리모�
 - **합주 메트로놈 동기화** (#055): 연주자가 `clock_ping/pong` 으로 지휘자와의 시계 차이(`ClockSync`, RTT 최소 표본)를 재고, 지휘자는 `metronome_run`(상태 전체: 시간표 `BeatTimeline` · 박자 · 시작 마디 · `focus_measure`)을 상태 변화 · 연결 시 · 5초마다 방송. 연주자는 `EnsembleSchedule` 로 자기 시계에 옮겨 `MetronomeEngine.startScheduled`(AudioTimestamp 로 박을 프레임에 맞춤) — 박 표시 · 현재 마디는 시간표를 따른다. 따라가는 동안 지휘자 `page_change` 무시(마디로 스스로 넘김). 연주자는 소리만 고름(`ensemble_metronome_sound`, 기본 끔). `ensemble/` 패키지. 실측 마디 전환 차이 중앙값 2.5ms. **연결 때 버전 확인**(#061): `client_connect` · `connect_response` 의 `app_version`(v0.2.5 이하는 "v0.1.5" 고정 → "v0.2.5 이하"), 다르면 양쪽 화면에 업데이트할 기기를 가리키는 안내(`EnsembleVersion`, `VersionNotice`)
 - **파트보 보기** (P07, v0.3.0~): PDF 표시 옵션 · ↑ 메뉴 "파트 보기" — 고른 보표(여러 개)만 잘라 세로 A4 로 이은 **벡터 PDF** 를 캐시에 만들어 뷰어가 연다(`PartLayout` · `PartPdfBuilder`). 이웃한 보표는 한 조각, 가운데선을 걸친 슬러 · 빔 · 덧줄 음은 소속에 따라 넓혀 자른다(`PartClip`). 줄마다 원본 마디 · 쪽 번호, 여러 파트면 보표 앞 `Pt. n`. 파트 화면에서도 마디 박스 · 악보 연동(`mapMeasures`), 합주 중에도(쪽 번호는 원본 기준). 파일별 선택 = 보표 비트 마스크(`partStaff`, v17). 이름은 PDF → 못 읽으면 MusicXML 파트 이름
 - **반주 연습** (P07 5 · 6단계, v0.3.1~): 악보 연동 메트로놈을 켜면 PDF 옆 `.musicxml` 의 다른 파트(파트 보기면 내 파트 빼고)를 단순 합성으로 — 음을 박 위치로 놓아 클릭과 같은 샘플 시계(`MusicXmlReader` · `MusicXmlMatch` · `Accompaniment` · `AccompanimentVoices`). 마디 수 · 박자가 악보와 같을 때만. 반주 크기는 클릭과 따로, 합주 중에는 끔
+- **세로 태블릿** (#066): 같은 APK — TV 가 아니면 세로(`DeviceForm`), 세로는 늘 한 쪽, 넘김 페달 키(PageUp/Down · 미디어 · Home/End), 터치(좌우 탭 · 밀기 = 넘김, 가운데 두 번 탭 = 메트로놈 메뉴, 길게 = PDF 표시 옵션, 마디 탭 = 시작 마디). 세로 목록은 제목 · "× ScoreMate ☁️" · 세트리스트 세 줄
 - **ScoreMate 서버 연결** (P05 C1, #058): 설정 → ☁️ ScoreMate → "이 TV 연결" — QR · 코드(RFC 8628) → 휴대폰에서 연결 → 토큰(앱 전용 prefs `scoremate`, **백업 제외** `backup_rules.xml`). 갱신은 `Mutex` 로 한 번에 하나(refresh 회전), 401 → 갱신 후 한 번 재시도, 갱신 401 → 해제로 보고 토큰 삭제. 앱 시작 시 heartbeat. `scoremate/` 패키지. **악보 동기화**(C2, #059): 앱 시작 · 설정 "지금 동기화" → `PDFs/ScoreMate/<앙상블 | 내 악보>/<제목>[ (파트)].pdf`(파일 목록 ☁️), 302 직접 · SHA-256 검증 · 옮길 때 `pdf_files` 경로 먼저 update · `ids` 밖은 묻지 않고 정리(서버 0.7.0: TV 는 웹에서 고른 세트리스트의 곡만 받음 — 곡목을 바꾸면 빠지는 게 정상, 파일별 설정은 남김) · TV 에서 지우면 숨김 · 모두 성공해야 커서 저장. `server_scores`(v14). **MusicXML**(서버 0.9.6, P06 §11): 응답의 `musicxml` 을 PDF 옆 `.musicxml` 로(sha 다를 때만, null 이면 지움, PDF 따라 옮김/지움), 앱 동기화 형식(`sync_format`)이 오르면 커서를 한 번 처음부터. **서버 분석**(P06 §12): `layout` 을 PDF 옆 `.layout.json` 으로 받고, 그 판의 것이면 앱이 분석하지 않고 쓴다(`ServerLayouts`, 파일이 캐시보다 새로우면 다시 읽음). 서버 요청: devlog P06
 - **앱 안 업데이트** (#054): 설정 → 앱 정보 → 업데이트 확인. 웹 `github.com/…/releases/latest` 의 302 Location 에서 태그(API 안 씀 — 비인증 IP 당 시간 60회 한도 회피) → 태그로 만든 `-release.apk` 주소로 다운로드(`cacheDir/updates`) → `SHA256SUMS.txt` 로 검증, 변경 내용은 알릴 때만 그 태그의 `CHANGELOG.md` 섹션(raw) → 설치 허용 확인 → `FileProvider` + `ACTION_VIEW`. `update/` 패키지. 자동 확인: 파일 목록이 떠 있는 동안 **10분마다**(성공 · 실패 무관, MainActivity 1분 틱 → `UpdateController.checkIfDue`, onPause 에서 멈춤), 오류는 조용히 무시(로그만), 새 버전이 있을 때만 알림 · "나중에" 누른 버전은 그 프로세스에서 다시 안 물음 · 합주 중 · 대화상자 위 제외 · 설정에서 끔
 - **페이지 전환 애니메이션**: 350ms 슬라이드 애니메이션으로 실제 악보 페이지 넘기기 구현
@@ -186,7 +187,7 @@ adb -s 192.168.55.75:5555 shell pm install -r /data/local/tmp/mrgq.apk
 v0.1.x 시절의 상세 이력(합주 모드 재구조화 · 스플래시 · 설정 화면 등)은 CHANGELOG 와 devlog #001~#039 에 있다.
 
 ### 🟡 확인이 남은 것
-- **합주 중 파트 보기** (v0.3.1, P07 4단계) — 두 대 실측 전 (지휘자 전체 악보 · 연주자 파트, 그 반대)
+- **합주 중 파트 보기** (v0.3.1, P07 4단계) — 태블릿(한 쪽) → TV(두 쪽) 넘김은 확인 · 짝 맞춤 고침(재확인 전). 파트보 연주자 조합은 아직. **두 쪽 지휘자 → 한 쪽 연주자는 쓰지 않는다**(P07 4단계 표). **지휘자는 늘 총보**(파트 보기는 연주자 · 혼자 연습)
 - **합주 Phase 0 동기 넘김** (기본 OFF, 접근법 보류 — 아래)
 
 ### 렌더링 (바꾸기 전에 읽을 것)

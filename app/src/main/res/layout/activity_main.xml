@@ -25,10 +25,16 @@
             android:src="@mipmap/ic_launcher_round"
             android:layout_marginEnd="16dp" />
 
+        <!-- 제목 칸: 가로면 [앱 이름 · 버전 · × ScoreMate] 한 줄, 세로(태블릿)면 그 아래 줄에 × ScoreMate -->
         <LinearLayout
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
+            android:orientation="vertical">
+
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
             android:orientation="horizontal"
             android:gravity="center_vertical">
 
@@ -59,6 +65,17 @@
                 android:textColor="#E6FFFFFF"
                 android:textSize="20sp"
                 android:layout_marginStart="14dp"
+                android:visibility="gone" />
+        </LinearLayout>
+
+            <!-- 세로 화면: 제목 바로 아래 줄 (사용자 요청 2026-09-28) -->
+            <TextView
+                android:id="@+id/scoreMateBadgeBelow"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="× ScoreMate ☁️"
+                android:textColor="#CCFFFFFF"
+                android:textSize="15sp"
                 android:visibility="gone" />
         </LinearLayout>
 

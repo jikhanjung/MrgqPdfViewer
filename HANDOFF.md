@@ -19,7 +19,7 @@
 
 ## 1. 다음 할 일 (우선순위)
 
-1. **합주 중 파트 보기 두 대 실측** — v0.3.1 에 들어갔지만 두 대로 확인 못 했다. 확인할 것:
+1. **합주 중 파트 보기 두 대 실측** — 태블릿(한 쪽) → TV(두 쪽) 넘김은 확인했고 뒤로 넘김의 짝 맞춤을 고쳤다(재확인 전). 두 쪽 지휘자 → 한 쪽 연주자는 쓰지 않는다(P07 4단계 표). 남은 확인:
    - 지휘자 전체 악보 · 연주자 파트보: 넘김(`page_change`) · 곡 바꾸기(`file_change` 목표 쪽) · 합주 메트로놈(시작 마디 · 현재 마디 · 일시정지 커서)
    - 반대(지휘자 파트보): 지휘자가 보내는 쪽 번호가 원본 쪽으로 바뀌는지(`outgoingPage`)
    - 쪽 번호 옮기기는 `PartLayout.sourcePageFor` · `dstPageForSource`, 뷰어 `outgoingPage` · `incomingPageIndex`
@@ -31,7 +31,7 @@
 ## 2. 일하는 방법 (이 환경)
 
 - **빌드 · 테스트는 WSL 에서 `powershell.exe` 로 Windows Gradle** — `--no-daemon` 필수, 로그 UTF-16. 명령은 CLAUDE.md "빌드 명령어"
-- **실기기**: Z18TV Pro `adb 192.168.55.75:5555`(Android 14). 와이파이가 느려 `adb install` 이 가끔 실패 → `adb push` + `pm install -r`. release 빌드는 덮어써도 데이터가 남는다
+- **실기기**: Z18TV Pro `adb 192.168.55.75:5555`(Android 14). **샤오신패드 12.7**(태블릿, #066) — 무선 디버깅: "페어링 코드로 기기 페어링" 창의 포트로 `adb pair <ip>:<포트> <코드>` 후 화면의 IP:포트로 `adb connect`(포트는 켤 때마다 바뀐다). 와이파이가 느려 `adb install` 이 가끔 실패 → `adb push` + `pm install -r`. release 빌드는 덮어써도 데이터가 남는다
   - 절전에서 깬 직후엔 adb 가 "device not found" — `adb disconnect` 후 다시 `connect`
   - 분석 · 파트 · 반주 로그: `adb logcat -d | grep -aE "ScoreLayout|ServerLayouts|PartPdfBuilder|파트 보기|반주|ScoreMate 동기화"`
   - 악보 분석은 **필요할 때만**(파트 보기 · 마디 박스 표시 · 악보 연동) — 파일을 열기만 해서는 돌지 않는다
