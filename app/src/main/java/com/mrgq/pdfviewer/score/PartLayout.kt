@@ -87,6 +87,17 @@ data class PartLayout(
         }
     }
 
+    /**
+     * 합주 (P07 4단계) — 지휘자가 보낸 **원본 쪽**(0부터)을 이 파트 PDF 의 쪽으로. 그 원본 쪽의 첫 줄이 놓인 가상 쪽,
+     * 줄이 없는 쪽(표지 등)이면 그 뒤 첫 줄의 쪽, 끝 너머면 마지막 쪽.
+     */
+    fun dstPageForSource(srcPage: Int): Int =
+        (strips.firstOrNull { it.srcPage >= srcPage } ?: strips.last()).dstPage
+
+    /** 합주 (P07 4단계) — 파트 PDF 의 쪽 [dstPage] 에 해당하는 **원본 쪽**(0부터): 그 쪽 첫 줄의 원본 쪽. 지휘자가 파트 보기로 볼 때 보낼 쪽 */
+    fun sourcePageFor(dstPage: Int): Int =
+        (strips.firstOrNull { it.dstPage == dstPage } ?: strips.lastOrNull { it.dstPage < dstPage } ?: strips.first()).srcPage
+
     /** 조각 [index] 에 원본 쪽 번호를 적을까 — 원본 쪽이 바뀌는 첫 조각과 가상 쪽마다 첫 조각 */
     fun showsSourcePage(index: Int): Boolean {
         val strip = strips[index]

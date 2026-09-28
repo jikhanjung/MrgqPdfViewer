@@ -74,6 +74,8 @@ class PdfViewerActivity : AppCompatActivity() {
         private const val PREF_METRONOME_COUNT_IN_BARS = "metronome_count_in_bars"
         /** 반주 (MusicXML, P07 6단계) 켜기 — 전역, 기본 켜짐 (MusicXML 이 있는 악보에서만 뜻이 있다) */
         private const val PREF_ACCOMPANIMENT = "metronome_accompaniment"
+        /** 반주 소리 크기 — 메트로놈 클릭과 따로 (사용자 요청 2026-09-28), 0~1 */
+        private const val PREF_ACCOMPANIMENT_VOLUME = "metronome_accompaniment_volume"
         private const val DEFAULT_COUNT_IN_BARS = 2
 
         /** 악보 연동 자동 넘김: 페이지 마지막 마디가 끝나기 몇 박 전에 넘길지 */
@@ -459,7 +461,7 @@ class PdfViewerActivity : AppCompatActivity() {
                             // Navigate to target page if specified, otherwise first page
                             val targetPage = intent.getIntExtra("target_page", -1)
                             val initialPageIndex = if (targetPage > 0) {
-                                (targetPage - 1).coerceIn(0, pageCount - 1) // Convert 1-based to 0-based
+                                incomingPageIndex(targetPage) // 1부터 → 0부터 (파트 보기면 원본 쪽 → 파트 쪽)
                             } else {
                                 0
                             }
@@ -1258,7 +1260,7 @@ class PdfViewerActivity : AppCompatActivity() {
                             pageCache?.updateSettings(isTwoPageMode, finalScale)
                             
                             // Navigate to target page (convert from 1-based to 0-based)
-                            val targetIndex = (targetPage - 1).coerceIn(0, pageCount - 1)
+                            val targetIndex = incomingPageIndex(targetPage)
                             showPage(targetIndex)
                             
                             // Restore collaboration mode
@@ -1396,7 +1398,7 @@ class PdfViewerActivity : AppCompatActivity() {
                                 // Add file to server first
                                 globalCollaborationManager.addFileToServer(pdfFileName, pdfFilePath)
                                 // Then broadcast the change with the target page number
-                                val actualPageNumber = targetPage + 1 // Convert to 1-based index
+                                val actualPageNumber = outgoingPage(targetPage) // 1부터 · 파트 보기면 원본 쪽으로
                                 globalCollaborationManager.broadcastFileChange(pdfFileName, actualPageNumber, sha256Of(pdfFilePath))
                             }
                         }
@@ -1672,7 +1674,7 @@ class PdfViewerActivity : AppCompatActivity() {
                 // Add file to server so performers can download if needed
                 globalCollaborationManager.addFileToServer(pdfFileName, pdfFilePath)
                 
-                val actualPageNumber = if (isTwoPageMode) pageIndex + 1 else pageIndex + 1
+                val actualPageNumber = outgoingPage(pageIndex)
                 globalCollaborationManager.broadcastFileChange(pdfFileName, actualPageNumber, sha256Of(pdfFilePath))
             }
         }
@@ -1747,8 +1749,8 @@ class PdfViewerActivity : AppCompatActivity() {
         // Update sync time for input blocking
         updateSyncTime()
         
-        // Convert to 0-based index
-        val targetIndex = page - 1
+        // 0부터 — 파트 보기면 원본 쪽을 파트 쪽으로 (P07 4단계). 전체 악보면 전과 같이 범위 밖은 아래에서 무시
+        val targetIndex = if (partViewLayout != null) incomingPageIndex(page) else page - 1
         
         Log.d("PdfViewerActivity", "🎼 연주자 모드: 페이지 $page 변경 신호 수신됨 (current: ${pageIndex + 1}, target: $page, file: $pdfFileName)")
         
@@ -2033,7 +2035,7 @@ class PdfViewerActivity : AppCompatActivity() {
                             pageCache?.updateSettings(isTwoPageMode, finalScale)
                             
                             // Navigate to target page
-                            val targetIndex = (targetPage - 1).coerceIn(0, pageCount - 1)
+                            val targetIndex = incomingPageIndex(targetPage)
                             showPage(targetIndex)
                             
                             Log.d("PdfViewerActivity", "🎼 다운로드된 파일 로드 완료, 페이지 $targetPage 로 이동")
@@ -3061,6 +3063,8 @@ class PdfViewerActivity : AppCompatActivity() {
             }
         }
         items += "메트로놈 설정… (소리)" to { showPerformerMetronomeSettings() }
+        // 합주 중에도 파트 보기 (P07 4단계) — 쪽 · 마디 신호는 파트 화면으로 옮겨진다. 반주는 합주 중에 쓰지 않는다
+        items += "파트 보기: ${partViewName ?: "전체 악보"}" to { showPartViewDialog() }
         val title = when {
             ensembleRole == EnsembleRole.FOLLOWING -> "메트로놈 — 지휘자를 따라가는 중"
             canRejoinEnsemble() -> "메트로놈 — 이 기기는 빠져 있음"
@@ -3228,6 +3232,8 @@ class PdfViewerActivity : AppCompatActivity() {
             else -> items += "시작 — 악보에서 마디 고르기" to { startMetronomeWithSavedSettings() }
         }
         items += "메트로놈 설정…" to { showMetronomeDialog() }
+        items += "파트 보기: ${partViewName ?: "전체 악보"}" to { showPartViewDialog() }
+        accompanimentMenuLabel()?.let { items += it to { showAccompanimentDialog() } }
 
         var chosen = false
         metronomeMenuShowing = true
@@ -3309,7 +3315,7 @@ class PdfViewerActivity : AppCompatActivity() {
         metronome.timeSignature = scoreFollower.startTimeSignature
         metronome.barPosition = { index -> scoreFollower.barPositionAt(index) }
         metronome.accompaniment = accompanimentFor(scoreFollower)
-        metronome.accompanimentVolume = preferences.getFloat(PREF_METRONOME_VOLUME, 0.6f)
+        metronome.accompanimentVolume = preferences.getFloat(PREF_ACCOMPANIMENT_VOLUME, 0.6f)
         followState = FollowState.PLAYING
         turnRequestedTo = -1
         startMetronome()
@@ -3499,11 +3505,7 @@ class PdfViewerActivity : AppCompatActivity() {
                 else -> ""
             }}",
             "파트 보기: ${partViewName ?: "전체 악보"}",
-        ) + if (musicXml != null && musicXmlFileId == currentPdfFileId) {
-            arrayOf("반주 (MusicXML): ${if (preferences.getBoolean(PREF_ACCOMPANIMENT, true)) "켜짐" else "꺼짐"}")
-        } else {
-            emptyArray()
-        }
+        ) + listOfNotNull(accompanimentMenuLabel()).toTypedArray()
 
         AlertDialog.Builder(this)
             .setTitle("PDF 표시 옵션")
@@ -3517,11 +3519,7 @@ class PdfViewerActivity : AppCompatActivity() {
                     2 -> toggleScoreOverlay()
                     3 -> showMetronomeDialog()
                     4 -> showPartViewDialog()
-                    5 -> {
-                        val on = !preferences.getBoolean(PREF_ACCOMPANIMENT, true)
-                        preferences.edit().putBoolean(PREF_ACCOMPANIMENT, on).apply()
-                        Toast.makeText(this, if (on) "반주 켜짐 — 악보 연동 메트로놈을 켜면 다른 파트가 함께 연주합니다" else "반주 꺼짐", Toast.LENGTH_LONG).show()
-                    }
+                    5 -> showAccompanimentDialog()
                 }
             }
             .setNegativeButton("닫기") { dialog, _ -> dialog.dismiss() }
@@ -3530,14 +3528,10 @@ class PdfViewerActivity : AppCompatActivity() {
 
     /**
      * 파트보 보기 (P07) — 이 파일에서 보여 줄 파트를 고른다. 고르면 저장하고 파일을 다시 연다(렌더러를 파트 PDF 로).
-     * 합주 중에는 쓰지 않는다 — 쪽 · 마디 신호를 파트 화면으로 옮기는 건 P07 4단계.
+     * 합주 중에도 쓴다 (P07 4단계) — 주고받는 쪽 번호는 원본 기준으로 옮긴다([outgoingPage] · [incomingPageIndex]), 마디 신호는 마디 번호라 그대로.
      */
     private fun showPartViewDialog() {
         val fileId = currentPdfFileId ?: return
-        if (collaborationMode != CollaborationMode.NONE) {
-            Toast.makeText(this, "합주 중에는 파트 보기를 쓸 수 없습니다 (준비 중)", Toast.LENGTH_LONG).show()
-            return
-        }
         val source = File(pdfFilePath)
         Toast.makeText(this, "악보 분석 중…", Toast.LENGTH_SHORT).show()
         lifecycleScope.launch {
@@ -3617,6 +3611,73 @@ class PdfViewerActivity : AppCompatActivity() {
         return accompaniment
     }
 
+    /** 메뉴의 반주 줄 — MusicXML 이 있는 악보에서만 (없으면 null) */
+    private fun accompanimentMenuLabel(): String? {
+        if (musicXml == null || musicXmlFileId != currentPdfFileId) return null
+        val on = preferences.getBoolean(PREF_ACCOMPANIMENT, true)
+        val volume = (preferences.getFloat(PREF_ACCOMPANIMENT_VOLUME, 0.6f) * 100).toInt()
+        return "반주 (MusicXML): ${if (on) "켜짐 · 크기 $volume%" else "꺼짐"}"
+    }
+
+    /**
+     * 반주 설정 — 켜기와 **소리 크기(메트로놈 클릭과 따로)**. 바꾸면 바로 들린다: 크기는 엔진에 곧장, 켜고 끄기는 악보 연동 중이면
+     * 지금 박 시간표로 반주를 다시 만들거나 뺀다 (P07 6단계, 사용자 요청 2026-09-28)
+     */
+    private fun showAccompanimentDialog() {
+        val score = musicXml?.takeIf { musicXmlFileId == currentPdfFileId } ?: return
+        val density = resources.displayMetrics.density
+        val layout = android.widget.LinearLayout(this).apply {
+            orientation = android.widget.LinearLayout.VERTICAL
+            setPadding((24 * density).toInt(), (12 * density).toInt(), (24 * density).toInt(), 0)
+        }
+        val mine = partViewStaves
+        val playing = score.parts.indices.filter { p -> mine == null || score.stavesOf(p).none { it in mine } }
+        val info = android.widget.TextView(this).apply {
+            text = if (playing.isEmpty()) "보고 있는 파트 말고는 들려줄 파트가 없습니다"
+            else "악보 연동 메트로놈을 켜면 함께 연주: ${playing.joinToString { score.parts[it].name }}" +
+                if (mine == null) "\n(파트 보기로 내 파트를 고르면 그 파트는 빼고 들려줍니다)" else ""
+            textSize = 15f
+        }
+        val toggle = android.widget.CheckBox(this).apply {
+            text = "반주 켜기"
+            textSize = 18f
+            isChecked = preferences.getBoolean(PREF_ACCOMPANIMENT, true)
+        }
+        val volumeLabel = android.widget.TextView(this).apply { textSize = 16f }
+        val seek = android.widget.SeekBar(this).apply {
+            max = 100
+            keyProgressIncrement = 5
+            progress = (preferences.getFloat(PREF_ACCOMPANIMENT_VOLUME, 0.6f) * 100).toInt()
+        }
+        fun showVolume() {
+            volumeLabel.text = "반주 소리 크기: ${seek.progress}%  (메트로놈 클릭과 따로)"
+        }
+        showVolume()
+        seek.setOnSeekBarChangeListener(object : android.widget.SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(bar: android.widget.SeekBar, progress: Int, fromUser: Boolean) {
+                showVolume()
+                preferences.edit().putFloat(PREF_ACCOMPANIMENT_VOLUME, progress / 100f).apply()
+                metronome.accompanimentVolume = progress / 100f
+            }
+            override fun onStartTrackingTouch(bar: android.widget.SeekBar) = Unit
+            override fun onStopTrackingTouch(bar: android.widget.SeekBar) = Unit
+        })
+        toggle.setOnCheckedChangeListener { _, on ->
+            preferences.edit().putBoolean(PREF_ACCOMPANIMENT, on).apply()
+            val current = follower
+            metronome.accompaniment = if (on && current != null && followState == FollowState.PLAYING) accompanimentFor(current) else null
+        }
+        layout.addView(info)
+        layout.addView(toggle)
+        layout.addView(volumeLabel)
+        layout.addView(seek)
+        AlertDialog.Builder(this)
+            .setTitle("반주 (MusicXML)")
+            .setView(layout)
+            .setPositiveButton("닫기", null)
+            .show()
+    }
+
     private fun toast(message: String) {
         Toast.makeText(this, message, Toast.LENGTH_LONG).show()
     }
@@ -3627,7 +3688,7 @@ class PdfViewerActivity : AppCompatActivity() {
      */
     private suspend fun applyPartViewSelection() {
         val fileId = currentPdfFileId
-        val staves = if (fileId != null && collaborationMode == CollaborationMode.NONE) {
+        val staves = if (fileId != null) {
             PartStaves.fromMask(musicRepository.getUserPreference(fileId)?.partStavesMask)
         } else {
             null
@@ -3682,6 +3743,20 @@ class PdfViewerActivity : AppCompatActivity() {
             currentBottomClipping = 0f
             Log.i("PdfViewerActivity", "파트 보기: ${source.name} — $name, ${pageCount}쪽")
         }
+    }
+
+    /**
+     * 합주로 보낼 쪽 번호 (1부터) — 파트 보기면 파트 쪽 [pageIndex] 의 **원본 쪽**으로 (P07 4단계). 총보를 보는 연주자와 섞여도 맞게,
+     * 합주 신호는 늘 원본 쪽 기준이다
+     */
+    private fun outgoingPage(pageIndex: Int): Int =
+        (partViewLayout?.sourcePageFor(pageIndex) ?: pageIndex) + 1
+
+    /** 합주로 받은 쪽 번호(1부터, 원본 기준) → 이 화면의 쪽 순번(0부터). 파트 보기면 그 원본 쪽이 놓인 파트 쪽 */
+    private fun incomingPageIndex(page: Int): Int {
+        val source = page - 1
+        val index = partViewLayout?.dstPageForSource(source.coerceAtLeast(0)) ?: source
+        return index.coerceIn(0, (pageCount - 1).coerceAtLeast(0))
     }
 
     /** 마디 캐시를 비운다 — 파트 보기가 바뀌면 같은 파일이라도 마디 좌표가 다르다 */
@@ -4807,7 +4882,7 @@ class PdfViewerActivity : AppCompatActivity() {
             return
         }
         if (collaborationMode == CollaborationMode.CONDUCTOR && !isHandlingRemotePageChange) {
-            val actualPageNumber = if (isTwoPageMode) pageIndex + 1 else pageIndex + 1
+            val actualPageNumber = outgoingPage(pageIndex)
             Log.d("PdfViewerActivity", "🎵 지휘자 모드: 페이지 $actualPageNumber 브로드캐스트 중...")
             globalCollaborationManager.broadcastPageChange(actualPageNumber, pdfFileName)
         }
@@ -4824,7 +4899,7 @@ class PdfViewerActivity : AppCompatActivity() {
         val turnAt = System.currentTimeMillis() + lead
         Log.d("PdfViewerActivity", "🎵 지휘자 동기 넘김 예약: page ${targetIndex + 1}, ${lead}ms 후 (turn_at=$turnAt)")
         // 1) 연주자에게 목표 시각 즉시 브로드캐스트
-        globalCollaborationManager.broadcastPageChange(targetIndex + 1, pdfFileName, turnAt)
+        globalCollaborationManager.broadcastPageChange(outgoingPage(targetIndex), pdfFileName, turnAt)
         // 2) 지휘자 자신도 같은 시각에 넘김 (이미 브로드캐스트했으므로 실행 시 재브로드캐스트 억제)
         pendingSyncTurn?.let { syncTurnHandler.removeCallbacks(it) }
         val runnable = Runnable {

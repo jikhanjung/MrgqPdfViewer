@@ -141,6 +141,20 @@ class PartLayoutTest {
     }
 
     @Test
+    fun 합주_쪽_번호를_원본과_파트_사이로_옮긴다() {
+        val part = layout(7, 1)!! // 가상 1쪽 = 원본 1~6쪽 첫 시스템(조각 0~10), 가상 2쪽 = 원본 6쪽 둘째 시스템 ~ 7쪽
+        // 받기: 원본 쪽 → 그 쪽 첫 줄이 놓인 파트 쪽
+        assertEquals(0, part.dstPageForSource(0))
+        assertEquals(0, part.dstPageForSource(5)) // 원본 6쪽 첫 줄은 가상 1쪽
+        assertEquals(1, part.dstPageForSource(6))
+        assertEquals(1, part.dstPageForSource(40)) // 끝 너머 → 마지막 쪽
+        // 보내기: 파트 쪽 → 그 쪽 첫 줄의 원본 쪽
+        assertEquals(0, part.sourcePageFor(0))
+        assertEquals(5, part.sourcePageFor(1))
+        assertEquals(6, part.sourcePageFor(9)) // 없는 쪽 → 그 앞 마지막 줄(원본 7쪽) 기준
+    }
+
+    @Test
     fun 없는_보표나_마디가_없으면_null() {
         assertNull(layout(1, 5))
         assertNull(PartLayout.build(score(1).toStaves("f"), emptyList(), setOf(0)))
