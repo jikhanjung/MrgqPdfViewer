@@ -1,7 +1,7 @@
 # P07 — 파트보 보기와 반주 연습 (계획)
 
 작성일: 2026-09-28
-상태: 🚧 진행 중 — **v0.3.0 부터**(파트보 기능이 들어간 첫 버전, 사용자 결정). 1단계(분석) 구현
+상태: 🚧 진행 중 — **v0.3.0 부터**(파트보 기능이 들어간 첫 버전, 사용자 결정). 1단계(분석) · 2단계(배치 · 렌더) 구현, Z18TV Pro 확인
 관련: [`046`](20260913_046_score_layout_in_app.md) 악보 구조 분석 · [`050`](20260913_050_time_signature_and_score_follow.md) 악보 연동 · [`055`](20260926_055_ensemble_metronome_sync.md) 합주 메트로놈 · [`063`](20260927_063_one_library_and_ensemble_cache.md) 합주 파일 내용 해시 ·
 ScoreMateServer `devlog/20260928_P01_악보인식_MusicXML_및_곡단위_합주.md` §2(파트보와 저작권) · 앱 밖 원형 `data/build_parts.py`(Moldau → `data/parts/`)
 
@@ -134,6 +134,16 @@ ScoreMateServer `devlog/20260928_P01_악보인식_MusicXML_및_곡단위_합주.
   | Clair de Lune (MuseScore) | 4 · 21 · 72 | 2 | "G u i t a r" → 글자마다 찍힌 조각을 붙여 읽게 고침 |
 - 같이 고친 것: **C · ¢ 박자표**(Sibelius Opus 글꼴의 `c` · `C`, SMuFL `U+E08A` · `U+E08B`) — Arpeggione 가 박자표 없음 → `[4/4]`(실기기 확인)
 - ⚠️ Sibelius → Microsoft Print to PDF 악보는 파트 이름이 글자로 읽히지 않는다 → "보표 n" 으로 둔다. **파트 이름 붙이기(파일별)는 나중에**(사용자 결정 2026-09-28)
+
+### 2단계 결과 (2026-09-28)
+- **렌더를 "파트 PDF" 로 바꿨다** (§2.3 의 조각별 Matrix 렌더 대신): `PartPdfBuilder` 가 원본 쪽을 PdfBox 폼(`LayerUtility.importPageAsForm`)으로
+  한 번씩 가져와 조각마다 clip + translate 로 가상 쪽에 그린 **벡터 PDF** 를 앱 캐시(`cacheDir/parts/`)에 만든다. 뷰어는 원본 대신 그 PDF 를 연다 →
+  한 쪽 / 두 쪽 모드 · `PageCache` · 넘김 애니메이션 · 효과음이 **바뀌지 않는다**. 선명도는 원본과 같다(벡터). 캐시 이름에 원본 크기 · 수정 시각 · 형식 번호
+- `PartLayout`(JVM): 띠 = 이웃 보표와의 가운데까지, 가로 = 첫 마디선 −8pt ~ 끝 마디선 +4pt, 원본 쪽 크기에 1:1 로 위에서부터(위 36 · 아래 28 · 간격 4pt). 줄마다 첫 마디 번호
+- 파일별 선택: `user_preferences.partStaff`(**DB v16**), PDF 표시 옵션 맨 아래 "파트 보기: …". 뷰어의 `pdfFilePath` · 파일 ID 는 원본 그대로 — 설정 · 분석 · 합주는 원본 기준
+- 아직(3 · 4단계): 파트 보기에서는 마디 박스 · 악보 연동 끔(일반 메트로놈), 합주 중 파트 보기 불가, 마지막 쪽 저장 안 함(파트 쪽 번호라서)
+- **실기기** (Z18TV Pro): Moldau 보표 2 — 84줄 → 8쪽 **2.2초**(원본 42쪽), Arpeggione 보표 3 — 82줄 → 9쪽 1.2초. 잘림 · 선명도 문제 없음(사용자 확인)
+- 테스트: `PartLayoutTest` 5, 마이그레이션 v15→v16
 
 ## 4. 열린 질문
 

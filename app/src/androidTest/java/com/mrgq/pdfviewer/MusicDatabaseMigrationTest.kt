@@ -361,6 +361,29 @@ class MusicDatabaseMigrationTest {
     }
 
     @Test
+    fun v15_에서_v16_은_파트_컬럼을_더하고_설정을_보존한다() {
+        helper.createDatabase(TEST_DB, 15).apply {
+            execSQL(INSERT_FILE)
+            execSQL(
+                "INSERT INTO user_preferences (pdfFileId, displayMode, lastPageNumber, bookmarkedPages, " +
+                    "topClippingPercent, bottomClippingPercent, centerPadding, updatedAt, metronomeBpm) " +
+                    "VALUES ('file-1', 'DOUBLE', 7, '', 0.05, 0.03, 0.1, 1000, 72)"
+            )
+            close()
+        }
+
+        val db = helper.runMigrationsAndValidate(TEST_DB, 16, true, *MusicDatabase.ALL_MIGRATIONS)
+
+        db.query("SELECT metronomeBpm, displayMode, partStaff FROM user_preferences").use { c ->
+            assertEquals("v15→v16 에서 파일별 설정이 사라졌다", 1, c.count)
+            c.moveToFirst()
+            assertEquals(72, c.getInt(0))
+            assertEquals("DOUBLE", c.getString(1))
+            assertTrue("파트는 비어 있어야 한다 (전체 악보)", c.isNull(2))
+        }
+    }
+
+    @Test
     fun v2_to_v3_중앙여백_픽셀이_비율로_변환된다() {
         val db = createDbAt(2, V2_USER_PREFERENCES) {
             it.execSQL(INSERT_FILE)

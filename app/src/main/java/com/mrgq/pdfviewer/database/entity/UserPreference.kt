@@ -28,6 +28,8 @@ data class UserPreference(
     // 구간별 빠르기 (v13, #057) — 악보 박자가 바뀌는 둘째 구간부터의 설정 JSON (TempoSections). 첫 구간은 위의 템포 · 점음표 박.
     // null = 모두 기본 (음표 길이 그대로 · 분모 음표로 세기)
     val metronomeSections: String? = null,
+    // 파트보 보기 (v16, P07) — 보여 줄 보표 순번(위부터 0). null = 전체 악보
+    val partStaff: Int? = null,
     val updatedAt: Long = System.currentTimeMillis()
 )
 

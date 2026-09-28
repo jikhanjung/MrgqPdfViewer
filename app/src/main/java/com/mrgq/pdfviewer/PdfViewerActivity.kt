@@ -35,6 +35,9 @@ import com.mrgq.pdfviewer.repository.MusicRepository
 import com.mrgq.pdfviewer.utils.PdfAnalyzer
 import com.mrgq.pdfviewer.database.entity.ScoreMeasure
 import com.mrgq.pdfviewer.score.ScoreOverlayGeometry
+import com.mrgq.pdfviewer.score.PartLayout
+import com.mrgq.pdfviewer.score.PartPdfBuilder
+import com.mrgq.pdfviewer.score.ScoreParts
 import com.mrgq.pdfviewer.metronome.Accent
 import com.mrgq.pdfviewer.metronome.MetronomeClock
 import com.mrgq.pdfviewer.metronome.MetronomeEngine
@@ -135,6 +138,11 @@ class PdfViewerActivity : AppCompatActivity() {
     private var pageTurnSoundId: Int = 0
     private var soundsLoaded = false
     private var currentPdfFileId: String? = null
+
+    // 파트보 보기 (P07): 보여 주는 보표 순번 · 이름 — null 이면 전체 악보. 이때 렌더러는 파트 PDF(앱 캐시)를 연다.
+    // pdfFilePath · currentPdfFileId 는 원본 그대로다 (설정 · 합주 · 분석은 원본 기준)
+    private var partViewStaff: Int? = null
+    private var partViewName: String? = null
 
     // 악보 분석 확인용 마디 박스 오버레이 (PDF 표시 옵션에서 켬, 전역 설정)
     private var scoreMeasures: List<ScoreMeasure> = emptyList()
@@ -477,6 +485,9 @@ class PdfViewerActivity : AppCompatActivity() {
                 
                 // Load display settings after ensuring file is in database
                 loadDisplaySettingsSync()
+
+                // 파트보 보기를 고른 파일이면 렌더러를 파트 PDF 로 바꾼다 (P07) — 쪽 비율로 정하는 아래 두 쪽 모드 판단도 파트 쪽 기준
+                applyPartViewSelection()
                 
                 Log.d("PdfViewerActivity", "=== checkAndSetTwoPageMode: 설정 로드 완료 ===")
                 Log.d("PdfViewerActivity", "로드된 설정: 위 ${currentTopClipping * 100}%, 아래 ${currentBottomClipping * 100}%, 여백 ${currentCenterPadding}px")
@@ -620,6 +631,7 @@ class PdfViewerActivity : AppCompatActivity() {
     }
     
     private fun saveLastPageNumber(pageNumber: Int) {
+        if (partViewStaff != null) return // 파트 PDF 의 쪽 번호는 원본 쪽 번호가 아니다
         currentPdfFileId?.let { fileId ->
             CoroutineScope(Dispatchers.IO).launch {
                 try {
@@ -3081,6 +3093,12 @@ class PdfViewerActivity : AppCompatActivity() {
      */
     private fun startMetronomeFromDialog() {
         val fileId = currentPdfFileId
+        if (partViewStaff != null) {
+            // 악보 연동(현재 마디 · 자동 넘김)을 파트 화면에 옮기는 건 P07 3단계 — 지금은 일반 메트로놈
+            Toast.makeText(this, "파트 보기에서는 악보 연동 없이 메트로놈만 켭니다", Toast.LENGTH_SHORT).show()
+            startMetronome()
+            return
+        }
         if (fileId == null) {
             startMetronome()
             return
@@ -3385,6 +3403,11 @@ class PdfViewerActivity : AppCompatActivity() {
     /** 현재 화면(페이지·두 페이지 모드·클리핑·여백)에 맞춰 마디 박스를 다시 그린다. */
     private fun refreshScoreOverlay() {
         val overlay = binding.scoreOverlay
+        if (partViewStaff != null) {
+            // 마디 좌표는 원본 쪽 기준 — 파트 화면으로 옮기는 건 P07 3단계
+            overlay.clear()
+            return
+        }
         val fileId = currentPdfFileId
         val focus = when (followState) {
             FollowState.SELECTING -> followMeasures.getOrNull(cursorIndex)
@@ -3461,7 +3484,8 @@ class PdfViewerActivity : AppCompatActivity() {
                 followState == FollowState.PAUSED -> " (일시정지)"
                 metronome.isRunning -> " (실행 중)"
                 else -> ""
-            }}"
+            }}",
+            "파트 보기: ${partViewName ?: "전체 악보"}",
         )
 
         AlertDialog.Builder(this)
@@ -3475,10 +3499,126 @@ class PdfViewerActivity : AppCompatActivity() {
                     1 -> showClippingDialog()
                     2 -> toggleScoreOverlay()
                     3 -> showMetronomeDialog()
+                    4 -> showPartViewDialog()
                 }
             }
             .setNegativeButton("닫기") { dialog, _ -> dialog.dismiss() }
             .show()
+    }
+
+    /**
+     * 파트보 보기 (P07) — 이 파일에서 보여 줄 파트를 고른다. 고르면 저장하고 파일을 다시 연다(렌더러를 파트 PDF 로).
+     * 합주 중에는 쓰지 않는다 — 쪽 · 마디 신호를 파트 화면으로 옮기는 건 P07 4단계.
+     */
+    private fun showPartViewDialog() {
+        val fileId = currentPdfFileId ?: return
+        if (collaborationMode != CollaborationMode.NONE) {
+            Toast.makeText(this, "합주 중에는 파트 보기를 쓸 수 없습니다 (준비 중)", Toast.LENGTH_LONG).show()
+            return
+        }
+        val source = File(pdfFilePath)
+        Toast.makeText(this, "악보 분석 중…", Toast.LENGTH_SHORT).show()
+        lifecycleScope.launch {
+            val staves = withContext(Dispatchers.IO) { musicRepository.getOrAnalyzeScoreStaves(fileId, source) }
+            if (currentPdfFileId != fileId) return@launch
+            val result = staves?.let { ScoreParts.of(it) } ?: ScoreParts.Result.NoStaves
+            val parts = when (result) {
+                is ScoreParts.Result.Parts -> result.parts
+                ScoreParts.Result.NoStaves -> return@launch toast("악보 구조를 찾지 못했습니다 (벡터 악보 PDF 만 지원)")
+                ScoreParts.Result.SingleStaff -> return@launch toast("보표가 하나라 이미 파트보입니다")
+                is ScoreParts.Result.VaryingStaves -> return@launch toast("시스템마다 보표 수가 달라 아직 파트 보기를 지원하지 않습니다")
+            }
+            val labels = arrayOf("전체 악보") + parts.map { it.name }
+            AlertDialog.Builder(this@PdfViewerActivity)
+                .setTitle("파트 보기")
+                .setSingleChoiceItems(labels, partViewStaff?.let { staff -> parts.indexOfFirst { it.staffIndex == staff } + 1 } ?: 0) { dialog, which ->
+                    dialog.dismiss()
+                    val staff = if (which == 0) null else parts[which - 1].staffIndex
+                    if (staff == partViewStaff) return@setSingleChoiceItems
+                    if (metronome.isRunning || followState != FollowState.OFF) stopMetronome()
+                    lifecycleScope.launch {
+                        withContext(Dispatchers.IO) { musicRepository.setPartStaffForFile(fileId, staff) }
+                        if (currentPdfFileId == fileId) loadFile(pdfFilePath, pdfFileName)
+                    }
+                }
+                .setNegativeButton("닫기", null)
+                .show()
+        }
+    }
+
+    private fun toast(message: String) {
+        Toast.makeText(this, message, Toast.LENGTH_LONG).show()
+    }
+
+    /**
+     * 파일을 열 때 (checkAndSetTwoPageMode, IO): 이 파일에 파트를 골라 두었으면 파트 PDF 를 준비해 렌더러를 바꾼다 (P07).
+     * 고르지 않았거나 합주 중이거나 만들 수 없으면 원본 그대로 — [partViewStaff] 는 null.
+     */
+    private suspend fun applyPartViewSelection() {
+        val fileId = currentPdfFileId
+        val staff = if (fileId != null && collaborationMode == CollaborationMode.NONE) {
+            musicRepository.getUserPreference(fileId)?.partStaff
+        } else {
+            null
+        }
+        if (fileId == null || staff == null) {
+            partViewStaff = null
+            partViewName = null
+            return
+        }
+        val source = File(pdfFilePath)
+        val prepared = try {
+            preparePartPdf(fileId, source, staff)
+        } catch (e: Exception) {
+            Log.w("PdfViewerActivity", "파트보 만들기 실패: ${source.name} 보표 ${staff + 1}", e)
+            null
+        }
+        withContext(Dispatchers.Main) {
+            if (prepared == null) {
+                partViewStaff = null
+                partViewName = null
+                toast("파트보를 만들지 못해 전체 악보로 봅니다")
+                return@withContext
+            }
+            val (file, name) = prepared
+            pageCache?.destroy()
+            try {
+                currentPage?.close()
+            } catch (e: Exception) {
+                Log.w("PdfViewerActivity", "Current page already closed: ${e.message}")
+            }
+            currentPage = null
+            try {
+                pdfRenderer?.close()
+            } catch (e: Exception) {
+                Log.w("PdfViewerActivity", "PdfRenderer already closed: ${e.message}")
+            }
+            pdfRenderer = PdfRenderer(ParcelFileDescriptor.open(file, ParcelFileDescriptor.MODE_READ_ONLY))
+            pageCount = pdfRenderer?.pageCount ?: 0
+            pageCache = PageCache(pdfRenderer!!, screenWidth, screenHeight)
+            registerSettingsCallback()
+            partViewStaff = staff
+            partViewName = name
+            // 조각은 이미 잘려 있다 — 위/아래 클리핑은 쓰지 않는다 (저장된 값은 전체 악보용으로 그대로 둔다)
+            currentTopClipping = 0f
+            currentBottomClipping = 0f
+            Log.i("PdfViewerActivity", "파트 보기: ${source.name} — $name, ${pageCount}쪽")
+        }
+    }
+
+    /** 파트 PDF (캐시에 없으면 만든다)와 파트 이름. 파트를 가를 수 없는 악보면 null */
+    private suspend fun preparePartPdf(fileId: String, source: File, staff: Int): Pair<File, String>? {
+        val staves = musicRepository.getOrAnalyzeScoreStaves(fileId, source) ?: return null
+        val part = (ScoreParts.of(staves) as? ScoreParts.Result.Parts)?.parts?.firstOrNull { it.staffIndex == staff } ?: return null
+        val out = PartPdfBuilder.cacheFile(cacheDir, fileId, source, staff)
+        if (!out.isFile) {
+            val measures = musicRepository.getOrAnalyzeScoreMeasures(fileId, source) ?: return null
+            val layout = PartLayout.build(staves, measures, staff) ?: return null
+            withContext(Dispatchers.Main) { Toast.makeText(this@PdfViewerActivity, "파트보 만드는 중…", Toast.LENGTH_SHORT).show() }
+            PartPdfBuilder.build(source, layout, out)
+            PartPdfBuilder.prune(out, fileId, staff)
+        }
+        return out to part.name
     }
 
     /**

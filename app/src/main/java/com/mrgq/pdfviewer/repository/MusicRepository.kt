@@ -118,6 +118,12 @@ class MusicRepository(context: Context) {
         userPreferenceDao.updateMetronome(pdfFileId, bpm, beatsPerBar, beatUnit, dottedBeat)
     }
 
+    /** 이 파일의 파트보 보기 보표 (P07). null = 전체 악보. 설정 행이 없으면 먼저 만든다. */
+    suspend fun setPartStaffForFile(pdfFileId: String, staffIndex: Int?) {
+        getOrCreateUserPreference(pdfFileId)
+        userPreferenceDao.updatePartStaff(pdfFileId, staffIndex)
+    }
+
     /** 이 파일의 구간별 빠르기 (둘째 구간부터, #057). 설정 행이 없으면 먼저 만든다. */
     suspend fun setMetronomeSectionsForFile(pdfFileId: String, sections: List<TempoSectionSetting>) {
         getOrCreateUserPreference(pdfFileId)
