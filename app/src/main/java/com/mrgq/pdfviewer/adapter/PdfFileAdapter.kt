@@ -88,10 +88,10 @@ class PdfFileAdapter(
             currentItem = pdfFile
             currentPosition = position
             // 세트리스트로 볼 때는 곡 순서를 앞에 (#064)
-            fileNameText.text = pdfFile.setlistPosition?.let { "$it. ${pdfFile.name}" } ?: pdfFile.name
+            fileNameText.text = pdfFile.setlistPosition?.let { "$it. ${pdfFile.shownName}" } ?: pdfFile.shownName
 
             // PDF 문서 정보 (제목 · 작성자). 없거나 제목이 파일명과 같으면 줄을 숨긴다
-            val subtitle = PdfDocumentInfo.subtitle(pdfFile.name, pdfFile.title, pdfFile.author)
+            val subtitle = PdfDocumentInfo.subtitle(pdfFile.shownName, pdfFile.title, pdfFile.author)
             docInfoText.text = subtitle ?: ""
             docInfoText.visibility = if (subtitle != null) View.VISIBLE else View.GONE
             

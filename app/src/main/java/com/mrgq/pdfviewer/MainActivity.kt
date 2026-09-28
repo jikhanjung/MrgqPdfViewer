@@ -657,7 +657,8 @@ class MainActivity : AppCompatActivity() {
                     author = record?.author,
                     cloudLabel = synced[file.path]?.let { cloudLabel(it) }
                         ?: PdfLibrary.scoreMateGroupOf(appPdfDir, file),
-                    sha256 = synced[file.path]?.sha256
+                    sha256 = synced[file.path]?.sha256,
+                    serverTitle = synced[file.path]?.title,
                 ))
             }
         }

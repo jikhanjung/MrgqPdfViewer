@@ -292,6 +292,8 @@ class PdfViewerActivity : AppCompatActivity() {
             syncedScores = withContext(Dispatchers.IO) {
                 com.mrgq.pdfviewer.repository.ScoreMateLocal(this@PdfViewerActivity).all()
             }
+            // 쪽 정보의 제목(서버 제목)이 이것을 쓴다 — 첫 쪽이 먼저 그려졌으면 다시
+            if (pageCount > 0) updatePageInfo()
         }
 
 
@@ -1148,10 +1150,13 @@ class PdfViewerActivity : AppCompatActivity() {
     }
     
     private fun updatePageInfo() {
+        // ScoreMate 악보면 파일 이름(제목 + " (파트)" + .pdf) 대신 서버 제목 — 목록과 같게 (사용자 요청 2026-09-28)
+        val shownName = syncedScores.firstOrNull { it.filePath == pdfFilePath }?.title?.takeIf { it.isNotBlank() }
+            ?: fileNameList.getOrNull(currentFileIndex) ?: pdfFileName
         val fileInfo = if (fileNameList.isNotEmpty()) {
-            "[${currentFileIndex + 1}/${filePathList.size}] ${fileNameList[currentFileIndex]} - "
+            "[${currentFileIndex + 1}/${filePathList.size}] $shownName - "
         } else {
-            "$pdfFileName - "
+            "$shownName - "
         }
         
         val twoPages = isTwoPageMode && pageIndex + 1 < pageCount
