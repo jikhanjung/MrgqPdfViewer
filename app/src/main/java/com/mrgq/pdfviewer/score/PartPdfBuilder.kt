@@ -132,8 +132,11 @@ object PartPdfBuilder {
      * 캐시 자리 — 원본이 바뀌면(크기 · 수정 시각) 다른 이름이 된다. [FORMAT] 은 배치 규칙이 바뀌면 올린다.
      * 같은 원본 · 보표의 옛 파일은 [prune] 이 지운다.
      */
-    fun cacheFile(cacheDir: File, pdfFileId: String, source: File, staves: Set<Int>): File =
-        File(File(cacheDir, "parts"), "${pdfFileId}_${source.length()}_${source.lastModified()}_s${key(staves)}_f$FORMAT.pdf")
+    fun cacheFile(cacheDir: File, pdfFileId: String, source: File, staves: Set<Int>): File {
+        // 서버 분석 파일(P06 §12)이 새로 오면 보표 위치가 바뀔 수 있다 — 그 시각도 이름에
+        val layoutStamp = ServerLayouts.fileFor(source).takeIf { it.isFile }?.lastModified() ?: 0L
+        return File(File(cacheDir, "parts"), "${pdfFileId}_${source.length()}_${source.lastModified()}_${layoutStamp}_s${key(staves)}_f$FORMAT.pdf")
+    }
 
     /** 캐시 이름의 보표 부분 — "1-3" */
     private fun key(staves: Set<Int>) = staves.sorted().joinToString("-")

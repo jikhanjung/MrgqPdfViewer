@@ -278,6 +278,14 @@ ScoreLayout)를 **그대로** 파이썬으로 옮겨(서버 `scores/score_layout
 - 0마디(악보가 아닌 PDF)도 파일이 있다 — 그대로 "분석 마침"으로 표시하면 된다
 - 서버에 결과가 없거나(`layout: null`) 서버에 연결하지 않은 TV 는 지금처럼 앱에서 분석한다. 파트보 배치(cacheDir/parts)는 여기서 만드는 파생 캐시
 
+### 앱 반영 (2026-09-28, TV 쪽 — 서버 배포 전 구현, 가짜 서버로 테스트)
+- 동기화: `layout` 을 `musicxml` 과 같은 곁 파일로 — PDF 옆 **`<같은 이름>.layout.json`**, 파일 sha256 이 다를 때만 받고(analyzer_version 이 오르면
+  파일이 바뀐다), `null` 이면 지우고, PDF 를 옮기거나 지울 때 함께(`ScoreMateSync.sidecarsOf`). 요약에 "분석 n개 받음"
+- 쓰기: `ScoreLayoutStore` 의 기본 분석이 `ServerLayouts.readOrAnalyze` — 곁 파일의 `pdf_sha256` 이 이 PDF 의 sha256 과 같으면 `pages` 를
+  `ScoreLayout` 으로 읽어 기존 `toMeasures()` · `toStaves()` 로, 아니면 앱이 분석. **곁 파일이 캐시(`scoreAnalyzedAt`)보다 새로우면 다시 읽는다**
+  (DB 마이그레이션으로 캐시를 비우던 것을 대신). `measures` · `staves` 펼친 행은 쓰지 않는다(같은 내용)
+- 파트보 캐시 이름에 곁 파일 시각을 넣어, 서버 분석이 바뀌면 파트 PDF 도 다시 만든다
+
 ### 언제 생기나
 - 서버 호스트 cron 이 5분마다 분석 없는 판(또는 옛 `analyzer_version`)을 채운다 — 올린 뒤 몇 분 안
 - 운영 결과(2026-09-28): K488 27 시스템 · 99마디(6/8) · Arpeggione 82 · 278(C → 4/4) · Clair de Lune 21 · 72(9/8) ·

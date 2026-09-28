@@ -16,6 +16,9 @@ import java.io.File
  * "분석했음"은 `PdfFile.scoreAnalyzedAt` 으로 표시한다 — 마디가 0개인 결과(악보가 아님, 열 수 없음)도
  * 표시해서 다시 분석하지 않는다. 파일이 바뀌면 PdfFileSync 가 레코드를 새로 쓰면서 이 값이 비워지고,
  * 다음 조회에서 이전 마디를 지우고 다시 분석한다.
+ *
+ * **서버 분석** (P06 §12): 기본 분석은 [ServerLayouts.readOrAnalyze] — PDF 옆 `.layout.json`(ScoreMate 동기화)이 이 판의 것이면 그것을 쓰고,
+ * 없으면 앱이 분석한다. 그 파일이 캐시(`scoreAnalyzedAt`)보다 새로우면(서버가 분석기를 고쳐 다시 받음 · 처음 받음) 다시 읽는다.
  */
 object ScoreLayoutStore {
 
@@ -32,14 +35,17 @@ object ScoreLayoutStore {
         db: MusicDatabase,
         pdfFileId: String,
         file: File,
-        analyze: (File) -> ScoreLayout? = ScoreLayoutAnalyzer::analyze,
+        analyze: (File) -> ScoreLayout? = ServerLayouts::readOrAnalyze,
     ): List<ScoreMeasure>? = mutex.withLock {
         val record = db.pdfFileDao().getPdfFileById(pdfFileId) ?: return@withLock null
         if (record.filePath != file.absolutePath) {
             Log.w(TAG, "레코드와 파일이 다름 — 분석하지 않음: ${record.filePath} ≠ ${file.absolutePath}")
             return@withLock null
         }
-        if (record.scoreAnalyzedAt != null) {
+        val analyzedAt = record.scoreAnalyzedAt
+        val serverFile = ServerLayouts.fileFor(file)
+        val newerServerLayout = analyzedAt != null && serverFile.isFile && serverFile.lastModified() > analyzedAt
+        if (analyzedAt != null && !newerServerLayout) {
             return@withLock db.scoreMeasureDao().getMeasures(pdfFileId)
         }
 
@@ -62,7 +68,7 @@ object ScoreLayoutStore {
         db: MusicDatabase,
         pdfFileId: String,
         file: File,
-        analyze: (File) -> ScoreLayout? = ScoreLayoutAnalyzer::analyze,
+        analyze: (File) -> ScoreLayout? = ServerLayouts::readOrAnalyze,
     ): List<com.mrgq.pdfviewer.database.entity.ScoreStaff>? {
         getOrAnalyze(db, pdfFileId, file, analyze) ?: return null
         return db.scoreStaffDao().getStaves(pdfFileId)
