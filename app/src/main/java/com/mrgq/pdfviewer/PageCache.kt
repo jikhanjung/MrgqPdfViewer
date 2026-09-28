@@ -17,11 +17,17 @@ class PageCache(
     private val pdfRenderer: PdfRenderer,
     private val screenWidth: Int,
     private val screenHeight: Int,
-    maxCacheSize: Int = 6 // 최대 6페이지 캐시 (현재 + 앞뒤 2페이지씩)
+    /** 처음 캐시 크기 (쪽 수) — [updateSettings] 가 화면 모드에 맞춰 바꾼다 */
+    maxCacheSize: Int = SCREENS_CACHED
 ) {
     companion object {
         private const val TAG = "PageCache"
-        private const val PRERENDER_DISTANCE = 2 // 현재 페이지 앞뒤로 몇 페이지까지 프리렌더링
+        /**
+         * 캐시하는 화면 수 = 지금 화면 + 다음 화면 (사용자 결정 2026-09-28). 한 쪽 모드 2장, 두 쪽 모드 4장.
+         * 세로 태블릿(1840×2944)은 한 쪽이 ≈ 19MB 라 예전 6장 고정이면 ≈ 115MB(앱 한도 256MB) — 그래서 줄였다.
+         * 앞으로 넘기는 것만 미리 그리고, 뒤로는 그 자리에서 그린다. (예전 두 쪽 모드는 앞뒤 4쪽씩 9쪽을 그려 6장 캐시에서 서로 밀어냈다)
+         */
+        private const val SCREENS_CACHED = 2
         // PDF vector를 화면 최종 픽셀의 N배로 래스터화한 뒤 즉시 화면 크기로 다운스케일.
         //
         // ## 2026-08-15: 기본값 4.0 → 1.0 (supersampling 제거)
@@ -103,6 +109,7 @@ class PageCache(
     fun updateSettings(twoPageMode: Boolean, scale: Float) {
         isTwoPageMode = twoPageMode
         renderScale = scale
+        bitmapCache.resize(SCREENS_CACHED * pagesPerScreen)
         Log.d(TAG, "Settings updated - TwoPageMode: $twoPageMode, Scale: $scale")
     }
     
@@ -182,10 +189,9 @@ class PageCache(
             currentPageIndex
         }
         
-        // 프리렌더링할 페이지 범위 계산
-        val distance = if (isTwoPageMode) PRERENDER_DISTANCE * 2 else PRERENDER_DISTANCE
-        val startPage = maxOf(0, adjustedIndex - distance)
-        val endPage = minOf(pageCount - 1, adjustedIndex + distance)
+        // 프리렌더링할 페이지 범위 — 지금 화면과 다음 화면 (뒤로는 그리지 않는다)
+        val startPage = adjustedIndex
+        val endPage = minOf(pageCount - 1, adjustedIndex + SCREENS_CACHED * pagesPerScreen - 1)
         
         Log.d(TAG, "프리렌더링 시작: 현재=$currentPageIndex (조정된=$adjustedIndex), 범위=$startPage-$endPage, 두페이지모드=$isTwoPageMode")
         
@@ -330,6 +336,9 @@ class PageCache(
         return cached != null && !cached.isRecycled
     }
     
+    /** 한 화면의 쪽 수 */
+    private val pagesPerScreen: Int get() = if (isTwoPageMode) 2 else 1
+
     /**
      * 캐시 상태 정보
      */
