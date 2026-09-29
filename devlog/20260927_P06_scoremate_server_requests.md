@@ -311,6 +311,17 @@ ScoreLayout)를 **그대로** 파이썬으로 옮겨(서버 `scores/score_layout
 - 운영: 지금 네 곡은 모두 벡터 PDF 라 `source` 는 `"pdf"` 다. 모델 위치는 서버에서 검산으로만 쓰인다
   - 검산 결과는 서버 웹 상세에 "위치(모델): … PDF 분석과 N/M쪽 같음, 평균 오차 x pt" 로 보인다
 
+## 14. 서버 0.12.2 — layout 의 보표 이름 = 파트 이름 (2026-09-29, 알림)
+
+- 기기에 내리는 layout(§12 · §13)의 `staffLabels` 와 `staves[].label` 을 서버가 **악보 인식의 파트 이름**으로 채운다
+  - 사람이 웹에서 고친 이름이 들어간다(K488 "예완")
+  - 파트를 순서대로, 파트마다 보표 수만큼 넣는다. 보표 수가 맞는 시스템만 넣는다
+  - 자리표시("Staff 1")는 넣지 않는다
+- 파일에 `"labels_from": "musicxml-parts"` 가 붙는다. 이름을 고치면 layout 의 `sha256` 이 바뀐다 → 기기가 다시 받는다
+- 지금: K488 하진 · 예완 / Clair de Lune Guitar 1 · Guitar 2 / Moldau 진호 · 예진 · 하진 · 예완 · 은석 /
+  Arpeggione 는 아직 이름이 없다(Staff 1~3 — 사람이 붙일 차례)
+- 앱 변경 필요 없음 — 파트 보기 이름을 `staffLabels` 에서 읽으면 MusicXML 과 같은 이름이 된다
+
 ## 변경 이력
 - 2026-09-27: 처음 작성 (C2 구현 중 발견). 같은 날 서버 작업용으로 보강 — 이름 변경 경로가 API · 웹 둘인 것, 제안 코드 · 테스트 · 완료 기준, TV 가 의존하는 필드 표
 - 2026-09-27: 서버 처리 결과(§6) — 0.6.2 · 0.6.3 운영 배포
@@ -322,3 +333,4 @@ ScoreLayout)를 **그대로** 파이썬으로 옮겨(서버 `scores/score_layout
 - 2026-09-28: §11 — 서버 0.9.6 동기화 응답에 `musicxml` + `GET /scores/{id}/musicxml/` (앱이 받아야 쓰인다)
 - 2026-09-28: §12 — 서버 0.10.x 보표 · 마디 분석 파일(`layout`, 앱 ScoreLayout 모양 · analyzer_version · pdf_sha256)
 - 2026-09-29: §13 — 서버 0.11.0 `layout.source`(pdf | model — 스캔 악보는 모델이 읽은 위치, 파일 모양 같음)
+- 2026-09-29: §14 — 서버 0.12.2 layout staffLabels = 파트 이름(고친 것 포함), labels_from
