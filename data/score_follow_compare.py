@@ -31,6 +31,7 @@ def main():
     ap.add_argument("--start-s", type=float, default=None, help="연주 시작 시각 — 없으면 오프라인 경로에서")
     ap.add_argument("--plot")
     ap.add_argument("--debug", action="store_true")
+    ap.add_argument("--dpi", type=int, default=70)
     ap.add_argument("--reloc-every", type=float, default=1.0)
     ap.add_argument("--reloc-window", type=float, default=30.0)
     ap.add_argument("--reloc-range", type=float, default=40.0)
@@ -159,7 +160,7 @@ def main():
         ax[0].set_xlabel("measure"); ax[0].set_ylabel("recording (s)"); ax[0].legend(loc="upper left")
         ax[1].plot(d, t, lw=0.8); ax[1].axvline(0, color="k", lw=0.5)
         ax[1].set_xlim(-10, 10); ax[1].set_ylim(0, n * s.HOP / s.SR); ax[1].set_xlabel("online - offline (measures)")
-        plt.tight_layout(); plt.savefig(args.plot, dpi=70)
+        plt.tight_layout(); plt.savefig(args.plot, dpi=args.dpi)
 
 
 if __name__ == "__main__":
