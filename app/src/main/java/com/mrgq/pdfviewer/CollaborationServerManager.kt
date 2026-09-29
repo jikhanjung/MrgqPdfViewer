@@ -171,9 +171,9 @@ class CollaborationServerManager(
         }
     }
     
-    fun broadcastPageChange(pageNumber: Int, fileName: String, turnAt: Long? = null) {
+    fun broadcastPageChange(pageNumber: Int, fileName: String, turnAt: Long? = null, roll: Boolean = false) {
         // 와이어 포맷은 CollaborationProtocol 이 단일 출처다 (키가 클라이언트와 갈라지지 않도록).
-        val message = CollaborationProtocol.buildPageChange(pageNumber, fileName, turnAt)
+        val message = CollaborationProtocol.buildPageChange(pageNumber, fileName, turnAt, roll = roll)
 
         broadcastToClients(message.toString())
         Log.d(TAG, "Broadcasted page change: page=$pageNumber, file=$fileName" + (turnAt?.let { ", turn_at=$it" } ?: ""))

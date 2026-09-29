@@ -32,6 +32,9 @@ class ScoreChroma private constructor(
     /** 칸 → 연속 마디 위치 (마디 순서 0부터 + 마디 안 비율) */
     fun measurePosOf(col: Int): Double = measurePosOfQuarter(quarterOf(col))
 
+    /** 실수 칸(거른 위치) → 연속 마디 위치 */
+    fun measurePosOf(col: Double): Double = measurePosOfQuarter(col * frameSec / secPerQuarter)
+
     fun measurePosOfQuarter(q: Double): Double {
         var lo = 0
         var hi = measureCount - 1

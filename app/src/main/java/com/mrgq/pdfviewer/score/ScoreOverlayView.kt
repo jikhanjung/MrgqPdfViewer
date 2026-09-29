@@ -34,6 +34,21 @@ class ScoreOverlayView @JvmOverloads constructor(
     private var boxes: List<OverlayBox> = emptyList()
     private var focus: OverlayBox? = null
     private var focusStyle = FocusStyle.CURRENT
+    /** 연주 중인 쪽 전체 (표시 비트맵 픽셀) — 두 쪽 연주자가 지휘자의 지금 쪽을 본다 (P10). 테두리만 */
+    private var pageFrame: RectF? = null
+    /** 지금 연주 중인 시스템 (표시 비트맵 픽셀) — 지휘자 마이크 추적, 현재 마디보다 연하게 (P10 §9) */
+    private var systemFrame: RectF? = null
+    private val systemFill = Paint().apply { style = Paint.Style.FILL; color = SYSTEM_FILL }
+    private val systemStroke = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.STROKE
+        strokeWidth = 2f
+        color = SYSTEM_STROKE
+    }
+    private val framePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.STROKE
+        strokeWidth = PAGE_FRAME_WIDTH
+        color = PAGE_FRAME_COLOR
+    }
     private val bitmapToView = Matrix()
     private val rect = RectF()
 
@@ -64,23 +79,42 @@ class ScoreOverlayView @JvmOverloads constructor(
         imageMatrix: Matrix,
         focus: OverlayBox? = null,
         focusStyle: FocusStyle = FocusStyle.CURRENT,
+        pageFrame: RectF? = null,
+        systemFrame: RectF? = null,
     ) {
         this.boxes = boxes
         this.focus = focus
         this.focusStyle = focusStyle
+        this.pageFrame = pageFrame
+        this.systemFrame = systemFrame
         bitmapToView.set(imageMatrix)
-        visibility = if (boxes.isEmpty() && focus == null) GONE else VISIBLE
+        visibility = if (boxes.isEmpty() && focus == null && pageFrame == null && systemFrame == null) GONE else VISIBLE
         invalidate()
     }
 
     fun clear() {
         boxes = emptyList()
         focus = null
+        pageFrame = null
+        systemFrame = null
         visibility = GONE
     }
 
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
+        pageFrame?.let { frame ->
+            rect.set(frame)
+            bitmapToView.mapRect(rect)
+            rect.inset(PAGE_FRAME_WIDTH / 2, PAGE_FRAME_WIDTH / 2)
+            canvas.drawRect(rect, framePaint)
+        }
+        systemFrame?.let { frame ->
+            rect.set(frame)
+            bitmapToView.mapRect(rect)
+            rect.inset(-6f, -6f) // 마디 테두리보다 조금 밖으로
+            canvas.drawRect(rect, systemFill)
+            canvas.drawRect(rect, systemStroke)
+        }
         for (box in boxes) {
             mapToView(box)
             val color = SYSTEM_COLORS[box.systemIndex % SYSTEM_COLORS.size]
@@ -134,6 +168,12 @@ class ScoreOverlayView @JvmOverloads constructor(
         val CURRENT_FILL = 0x4DFFC107
         /** 연주 중 마디 테두리 — 악보를 가리지 않게 가늘고 반투명하게 (사용자 요청, #057) */
         val CURRENT_STROKE = 0x99FF9800.toInt()
+        /** 연주 중인 쪽 테두리 — 노랑, 채우지 않음 */
+        const val PAGE_FRAME_COLOR = 0xE6FFC107.toInt()
+        const val PAGE_FRAME_WIDTH = 8f
+        /** 지금 시스템 — 현재 마디(노랑)보다 연하게 */
+        const val SYSTEM_FILL = 0x1FFFC107
+        const val SYSTEM_STROKE = 0x66FFC107
         const val CURRENT_STROKE_WIDTH = 3f
         const val CURSOR_STROKE_WIDTH = 6f
     }

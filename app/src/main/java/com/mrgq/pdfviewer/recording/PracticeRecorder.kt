@@ -8,7 +8,6 @@ import android.util.Log
 import com.google.gson.JsonArray
 import com.google.gson.JsonObject
 import java.io.File
-import java.io.RandomAccessFile
 
 /**
  * 연습 녹음 (P08 A단계 — 마이크 악보 추적 실험용 자료). 태블릿 마이크를 **WAV(16비트 모노 44.1kHz)** 로 받고,
@@ -49,15 +48,11 @@ class PracticeRecorder(
             ?: open(MediaRecorder.AudioSource.MIC, minBuffer)?.also { sourceName = "MIC" }
             ?: return false
 
-        wavFile.parentFile?.mkdirs()
-        val out = RandomAccessFile(wavFile, "rw")
-        out.setLength(0)
-        out.write(ByteArray(WAV_HEADER_BYTES)) // 머리는 끝에 채운다 (길이를 알 때)
+        val out = WavWriter(wavFile, SAMPLE_RATE)
         running = true
         record.startRecording()
         thread = Thread({
             val buffer = ShortArray(minBuffer)
-            val bytes = ByteArray(minBuffer * 2)
             var first = true
             try {
                 while (running) {
@@ -76,11 +71,7 @@ class PracticeRecorder(
                         mark("start", "", mapOf("first_buffer_ms" to (arrived - startNanos) / 1_000_000.0), atNanos = startNanos)
                         first = false
                     }
-                    for (i in 0 until n) {
-                        bytes[i * 2] = (buffer[i].toInt() and 0xFF).toByte()
-                        bytes[i * 2 + 1] = (buffer[i].toInt() shr 8 and 0xFF).toByte()
-                    }
-                    out.write(bytes, 0, n * 2)
+                    out.write(buffer, n)
                     dataBytes += n * 2
                 }
             } catch (e: Exception) {
@@ -92,7 +83,6 @@ class PracticeRecorder(
                     // 이미 멈춤
                 }
                 record.release()
-                writeHeader(out, dataBytes)
                 out.close()
             }
         }, "PracticeRecorder").apply { start() }
@@ -147,19 +137,8 @@ class PracticeRecorder(
         return json
     }
 
-    private fun writeHeader(out: RandomAccessFile, data: Long) {
-        fun le32(v: Long) = byteArrayOf((v and 0xFF).toByte(), (v shr 8 and 0xFF).toByte(), (v shr 16 and 0xFF).toByte(), (v shr 24 and 0xFF).toByte())
-        fun le16(v: Int) = byteArrayOf((v and 0xFF).toByte(), (v shr 8 and 0xFF).toByte())
-        out.seek(0)
-        out.write("RIFF".toByteArray()); out.write(le32(36 + data)); out.write("WAVE".toByteArray())
-        out.write("fmt ".toByteArray()); out.write(le32(16)); out.write(le16(1)); out.write(le16(1))
-        out.write(le32(SAMPLE_RATE.toLong())); out.write(le32(SAMPLE_RATE * 2L)); out.write(le16(2)); out.write(le16(16))
-        out.write("data".toByteArray()); out.write(le32(data))
-    }
-
     companion object {
         private const val TAG = "PracticeRecorder"
         const val SAMPLE_RATE = 44100
-        private const val WAV_HEADER_BYTES = 44
     }
 }

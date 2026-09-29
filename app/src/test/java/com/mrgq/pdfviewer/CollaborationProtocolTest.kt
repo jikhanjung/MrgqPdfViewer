@@ -3,6 +3,7 @@ package com.mrgq.pdfviewer
 import com.google.gson.Gson
 import com.google.gson.JsonObject
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -32,6 +33,16 @@ class CollaborationProtocolTest {
         assertEquals(7, r.page)
         assertEquals("악보1.pdf", r.file)
         assertEquals(1_700_000_000_123L, r.turnAt)
+    }
+
+    @Test
+    fun `page_change 의 roll 은 있을 때만 싣고 옛 메시지는 false`() {
+        val rolled = CollaborationProtocol.buildPageChange(3, "a.pdf", roll = true)
+        assertEquals(true, rolled.get("roll").asBoolean)
+        assertEquals(true, CollaborationProtocol.parsePageChange(parse(rolled.toString())).roll)
+        val plain = CollaborationProtocol.buildPageChange(3, "a.pdf")
+        assertFalse(plain.has("roll"))
+        assertFalse(CollaborationProtocol.parsePageChange(parse(plain.toString())).roll)
     }
 
     @Test

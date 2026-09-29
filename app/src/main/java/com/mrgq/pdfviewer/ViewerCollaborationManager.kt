@@ -138,7 +138,7 @@ class ViewerCollaborationManager(
     private fun setupPerformerMode() {
         Log.d("ViewerCollabManager", "Setting up performer mode callbacks")
         
-        globalCollaborationManager.setOnPageChangeReceived { page, file, _ ->
+        globalCollaborationManager.setOnPageChangeReceived { page, file, _, _ ->
             Log.d("ViewerCollabManager", "🎼 Received page change: $page in $file")
             // Update sync time for input blocking
             lastSyncTime = System.currentTimeMillis()

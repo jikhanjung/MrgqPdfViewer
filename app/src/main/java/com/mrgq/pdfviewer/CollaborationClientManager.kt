@@ -17,7 +17,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 
 class CollaborationClientManager(
-    private val onPageChangeReceived: (Int, String, Long?) -> Unit,
+    private val onPageChangeReceived: (Int, String, Long?, Boolean) -> Unit,
     /** (파일 이름, 페이지, 파일 내용 SHA-256 — #063) */
     private val onFileChangeReceived: (String, Int, String?) -> Unit,
     private val onConnectionStatusChanged: (Boolean) -> Unit,
@@ -211,7 +211,7 @@ class CollaborationClientManager(
                 CollaborationProtocol.ACTION_PAGE_CHANGE -> {
                     // turn_at 이 없거나 null 이면 turnAt == null → 즉시 넘김 (Phase 0 하위호환).
                     val m = CollaborationProtocol.parsePageChange(json)
-                    onPageChangeReceived(m.page, m.file, m.turnAt)
+                    onPageChangeReceived(m.page, m.file, m.turnAt, m.roll)
                 }
                 CollaborationProtocol.ACTION_FILE_CHANGE -> {
                     val m = CollaborationProtocol.parseFileChange(json)

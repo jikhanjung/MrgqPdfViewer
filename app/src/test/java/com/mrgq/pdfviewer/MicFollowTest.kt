@@ -4,6 +4,7 @@ import com.mrgq.pdfviewer.follow.ChromaExtractor
 import com.mrgq.pdfviewer.follow.Fft
 import com.mrgq.pdfviewer.follow.OnlineAligner
 import com.mrgq.pdfviewer.follow.PageTurnDecider
+import com.mrgq.pdfviewer.follow.RollingTurns
 import com.mrgq.pdfviewer.follow.ScoreChroma
 import com.mrgq.pdfviewer.follow.normalized
 import com.mrgq.pdfviewer.score.MusicXmlScore
@@ -178,5 +179,91 @@ class MicFollowTest {
         }.array())
         println("Python 과 같은 칸 ${same * 100 / n}%, 1초 안 ${near * 100 / n}%, 재위치 ${aligner.jumps.size}번 (Python ${num("jumps")})")
         assertTrue("1초 안 ${near * 100.0 / n}%", near >= n * 0.98)
+    }
+}
+
+/** 두 쪽 연주자의 차례 넘김 (P10 §3.3) — 쪽은 순번(0부터): 1쪽 = 0 */
+class RollingTurnsTest {
+    private val n = 10
+
+    @Test
+    fun `지휘자가 오른쪽 쪽에 들어서면 왼쪽을 다음 쪽으로, 그다음엔 오른쪽을`() {
+        val s12 = RollingTurns.Spread.pairOf(0, n)
+        assertEquals(RollingTurns.Spread(0, 1), s12)
+        // 1쪽(0)을 치는 중 — 바꿀 것 없음
+        assertEquals(RollingTurns.Action.None, RollingTurns.onPage(s12, 0, n))
+        // 2쪽(1)에 들어섬 → 왼쪽을 3쪽(2)으로: 3 | 2
+        val a = RollingTurns.onPage(s12, 1, n) as RollingTurns.Action.Delayed
+        assertEquals(RollingTurns.Spread(2, 1), a.spread)
+        // 3쪽(2)에 들어섬 → 오른쪽을 4쪽(3)으로: 3 | 4
+        val b = RollingTurns.onPage(a.spread, 2, n) as RollingTurns.Action.Delayed
+        assertEquals(RollingTurns.Spread(2, 3), b.spread)
+        assertTrue(b.spread.isPair)
+        // 4쪽(3) → 5 | 4
+        assertEquals(RollingTurns.Spread(4, 3), (RollingTurns.onPage(b.spread, 3, n) as RollingTurns.Action.Delayed).spread)
+    }
+
+    @Test
+    fun `화면에 없는 쪽은 바로 그 짝으로, 되돌아가면 그대로`() {
+        val s32 = RollingTurns.Spread(2, 1)
+        assertEquals(RollingTurns.Action.Immediate(RollingTurns.Spread(6, 7)), RollingTurns.onPage(s32, 6, n))
+        assertEquals(RollingTurns.Action.Immediate(RollingTurns.Spread(0, 1)), RollingTurns.onPage(s32, 0, n))
+        // 3 | 4 에서 3쪽으로 되돌아옴 — 4쪽은 아직 칠 쪽이라 그대로
+        assertEquals(RollingTurns.Action.None, RollingTurns.onPage(RollingTurns.Spread(2, 3), 2, n))
+    }
+
+    @Test
+    fun `마지막 쪽 근처`() {
+        // 9 | 10 (8, 9) 에서 10쪽(9) — 다음 쪽 없음
+        assertEquals(RollingTurns.Action.None, RollingTurns.onPage(RollingTurns.Spread(8, 9), 9, n))
+        // 쪽이 홀수 개(9쪽): 8 | 9 → 9쪽(8)에 들어섬, 오른쪽 자리에 둘 쪽 없음
+        assertEquals(RollingTurns.Action.None, RollingTurns.onPage(RollingTurns.Spread(8, 7), 8, 9))
+        assertEquals(RollingTurns.Spread(8, null), RollingTurns.Spread.pairOf(8, 9))
+    }
+}
+
+/** 관성 항법 거르개 (P10 §9) */
+class InertialTrackerTest {
+    @Test
+    fun `짧게 헤매는 추정은 무시하고 고른 빠르기로 간다`() {
+        val t = com.mrgq.pdfviewer.follow.InertialTracker(0.0, frameSec = 0.05)
+        var z = 0.0
+        for (i in 1..200) { z += 1.0; t.feed(z) }
+        assertEquals(200.0, t.position, 1.0)
+        // 1초(20칸) 동안 +100칸 튄 추정 — 관성으로 계속
+        for (i in 1..20) { z += 1.0; t.feed(z + 100) }
+        assertEquals(220.0, t.position, 2.0)
+        for (i in 1..20) { z += 1.0; t.feed(z) }
+        assertEquals(240.0, t.position, 2.0)
+        assertEquals(0, t.switches)
+    }
+
+    @Test
+    fun `다른 곳에서 고르게 이어지면 3초 뒤 옮긴다`() {
+        val t = com.mrgq.pdfviewer.follow.InertialTracker(0.0, frameSec = 0.05)
+        var z = 0.0
+        for (i in 1..100) { z += 1.0; t.feed(z) }
+        z += 400.0 // 진짜로 다른 곳 (재위치)
+        for (i in 1..70) { z += 1.0; t.feed(z) }
+        assertEquals(1, t.switches)
+        assertEquals(z, t.position, 3.0)
+    }
+
+    @Test
+    fun `거른 경로가 Python inertia_eval 과 같다 (아르페지오네)`() {
+        val dir = File("../data/recordings/fixtures")
+        assumeTrue(File(dir, "arp_inertia.f64").exists())
+        val zb = ByteBuffer.wrap(File(dir, "arp_path.i32").readBytes()).order(ByteOrder.LITTLE_ENDIAN).asIntBuffer()
+        val z = IntArray(zb.remaining()).also { zb.get(it) }
+        val xb = ByteBuffer.wrap(File(dir, "arp_inertia.f64").readBytes()).order(ByteOrder.LITTLE_ENDIAN).asDoubleBuffer()
+        val expected = DoubleArray(xb.remaining()).also { xb.get(it) }
+        val t = com.mrgq.pdfviewer.follow.InertialTracker(z[0].toDouble(), frameSec = 1024.0 / 22050)
+        var near = 0
+        for (i in 1 until z.size) {
+            val x = t.feed(z[i].toDouble())
+            if (abs(x - expected[i]) <= 0.5) near++
+        }
+        println("Python 과 0.5칸 안 ${near * 100 / (z.size - 1)}%, 옮김 ${t.switches}번")
+        assertTrue(near >= (z.size - 1) * 0.99)
     }
 }

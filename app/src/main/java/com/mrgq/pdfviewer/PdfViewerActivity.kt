@@ -65,6 +65,9 @@ class PdfViewerActivity : AppCompatActivity() {
         /** 태블릿: 이만큼(dp) 넘게 가로로 밀면 쪽 넘김 */
         private const val SWIPE_MIN_DP = 60f
         private const val REQUEST_RECORD_AUDIO = 7301
+        private const val REQUEST_MIC_FOLLOW = 7302
+        /** 차례 넘김: 지휘자가 쪽에 들어선 뒤 다 친 쪽을 바꾸기까지 — 지휘자 넘김은 최악 3.7초 일찍이었다(P08 §7-2) */
+        private const val ROLL_DELAY_MS = 5000L
         // Intent extra keys
         const val EXTRA_CURRENT_INDEX = "current_index"
         const val EXTRA_FILE_PATH_LIST = "file_path_list"
@@ -740,6 +743,8 @@ class PdfViewerActivity : AppCompatActivity() {
     
     private fun showPage(index: Int) {
         recorder?.mark("page", (index + 1).toString())
+        rollSpread = null
+        cancelPendingRoll()
         if (index < 0 || index >= pageCount) return
         
         // Throttle rapid page changes to reduce rendering load
@@ -1226,6 +1231,8 @@ class PdfViewerActivity : AppCompatActivity() {
     }
     
     private fun loadFileWithTargetPage(filePath: String, fileName: String, targetPage: Int, originalMode: CollaborationMode) {
+        stopMicFollow()
+        conductorPage = (targetPage - 1).takeIf { it >= 0 }
         // Close current PDF
         Log.d("PdfViewerActivity", "Closing current PDF resources for collaboration file change...")
         try {
@@ -1318,6 +1325,8 @@ class PdfViewerActivity : AppCompatActivity() {
     }
     
     private fun loadFile(filePath: String, fileName: String, goToLastPage: Boolean = false) {
+        stopMicFollow() // 곡이 바뀌면 추적도 끝 (P10)
+        conductorPage = null
         // Close current PDF
         Log.d("PdfViewerActivity", "Closing current PDF resources...")
         try {
@@ -1508,6 +1517,7 @@ class PdfViewerActivity : AppCompatActivity() {
                     } else {
                         showPageWithAnimation(target, -1)
                     }
+                    anchorMicFollow(target)
                     return true
                 } else {
                     // 첫 페이지에서 안내 표시
@@ -1539,6 +1549,7 @@ class PdfViewerActivity : AppCompatActivity() {
                         } else {
                             showPageWithAnimation(nextPageIndex, 1)
                         }
+                        anchorMicFollow(nextPageIndex)
                         return true
                     } else {
                         // 마지막 페이지에서 안내 표시
@@ -1703,6 +1714,11 @@ class PdfViewerActivity : AppCompatActivity() {
     @Deprecated("Deprecated in Java")
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == REQUEST_MIC_FOLLOW) {
+            if (grantResults.firstOrNull() == android.content.pm.PackageManager.PERMISSION_GRANTED) startMicFollow()
+            else Toast.makeText(this, "마이크 권한이 없어 들을 수 없습니다", Toast.LENGTH_LONG).show()
+            return
+        }
         if (requestCode != REQUEST_RECORD_AUDIO) return
         if (grantResults.firstOrNull() == android.content.pm.PackageManager.PERMISSION_GRANTED) {
             startRecording()
@@ -1753,6 +1769,184 @@ class PdfViewerActivity : AppCompatActivity() {
         binding.recordTime.visibility = View.GONE
         binding.recordButton.setBackgroundResource(R.drawable.record_button_idle)
         Toast.makeText(this, "녹음 저장: ${json.nameWithoutExtension}.wav", Toast.LENGTH_LONG).show()
+    }
+
+    // ── 마이크로 연주를 듣고 넘기기 — 태블릿 지휘자 (P10) ─────────────────────────────────
+    private var micFollower: com.mrgq.pdfviewer.follow.MicScoreFollower? = null
+    /** MusicXML 마디 순서 → 악보(PDF) 마디 — 추적을 시작할 때 만든다 */
+    private var micMeasures: List<ScoreMeasure?> = emptyList()
+    /** 추정한 지금 마디 — 노란 테두리 */
+    private var micFocus: ScoreMeasure? = null
+    /** 다음 page_change 는 마이크 추적이 넘긴 것 — 연주자는 차례 넘김 (P10 §3.2) */
+    private var micRollBroadcast = false
+
+    /** 이 기기에서 마이크 추적을 쓸 수 있나 — 태블릿(TV 아님)에 마이크 */
+    /** 마이크 추적의 지금 시스템 — 그 시스템 마디 박스들을 합친 사각형 (표시 비트맵 픽셀) */
+    private fun micSystemFrame(): android.graphics.RectF? {
+        val focus = micFocus ?: return null
+        val boxes = overlayBoxes(micMeasures.filter { it != null && it.pageIndex == focus.pageIndex && it.systemIndex == focus.systemIndex }.filterNotNull())
+        if (boxes.isEmpty()) return null
+        return android.graphics.RectF(boxes.minOf { it.left }, boxes.minOf { it.top }, boxes.maxOf { it.right }, boxes.maxOf { it.bottom })
+    }
+
+    private fun micFollowCapable(): Boolean =
+        !com.mrgq.pdfviewer.utils.DeviceForm.isTv(this) &&
+            packageManager.hasSystemFeature(android.content.pm.PackageManager.FEATURE_MICROPHONE)
+
+    private fun toggleMicFollow() {
+        if (micFollower != null) return stopMicFollow(announce = true)
+        if (androidx.core.content.ContextCompat.checkSelfPermission(this, android.Manifest.permission.RECORD_AUDIO) !=
+            android.content.pm.PackageManager.PERMISSION_GRANTED
+        ) {
+            requestPermissions(arrayOf(android.Manifest.permission.RECORD_AUDIO), REQUEST_MIC_FOLLOW)
+            return
+        }
+        startMicFollow()
+    }
+
+    /** 지금 쪽 첫 마디부터 듣기 시작. 조건: 전체 악보 · 맞는 MusicXML · 악보 분석 마디 (P10 §3.1) */
+    private fun startMicFollow() {
+        val fileId = currentPdfFileId ?: return
+        if (collaborationMode == CollaborationMode.PERFORMER) return toast("연주자 기기에서는 쓸 수 없습니다 — 지휘자가 넘깁니다")
+        if (partViewLayout != null) return toast("전체 악보에서만 쓸 수 있습니다 (파트 보기를 끄세요)")
+        val score = musicXml?.takeIf { musicXmlFileId == fileId } ?: return toast("이 곡의 MusicXML 이 없어 들을 수 없습니다")
+        stopMetronome()
+        stopRecording()
+        val file = File(pdfFilePath)
+        lifecycleScope.launch {
+            val measures = withContext(Dispatchers.IO) { musicRepository.getOrAnalyzeScoreMeasures(fileId, file) }
+            if (measures.isNullOrEmpty() || currentPdfFileId != fileId) return@launch toast("악보에서 마디를 찾지 못해 들을 수 없습니다")
+            val match = com.mrgq.pdfviewer.metronome.MusicXmlMatch.check(score, measures)
+            if (!match.ok) return@launch toast("MusicXML 이 악보와 맞지 않습니다: ${match.reason}")
+            val byNumber = measures.associateBy { it.measureNumber }
+            val mapped = score.measures.indices.map { byNumber[match.measureNumberOf(it)] }
+            var lastPage = 0
+            val pageOf = IntArray(mapped.size) { i -> (mapped[i]?.pageIndex ?: lastPage).also { lastPage = it } }
+            val lowerHalf = BooleanArray(mapped.size) { i -> mapped[i]?.let { it.topPt >= it.pageHeightPt / 2 } ?: false }
+            val here = if (isTwoPageMode) pairStart(pageIndex) else pageIndex
+            val startMeasure = pageOf.indexOfFirst { it >= here }.takeIf { it >= 0 } ?: return@launch toast("이 쪽에 마디가 없습니다")
+            // 기준 빠르기 = 이 곡 메트로놈 템포 (박 → 4분음표)
+            val meter = metronome.timeSignature
+            val beatQ = 4.0 / meter.denominator * (if (metronome.dottedBeat) 3 else 1)
+            val quarterBpm = metronome.bpm * beatQ
+            val chroma = withContext(Dispatchers.Default) {
+                com.mrgq.pdfviewer.follow.ScoreChroma.build(score, quarterBpm, com.mrgq.pdfviewer.follow.MicScoreFollower.FRAME_SEC)
+            }
+            val stamp = java.text.SimpleDateFormat("yyyyMMdd_HHmmss", java.util.Locale.US).format(java.util.Date())
+            val base = pdfFileName.substringBeforeLast('.').replace(Regex("[\\\\/:*?\"<>|]"), "_")
+            val wav = File(File(getExternalFilesDir(null), "recordings"), "${base}_${stamp}_follow.wav")
+            val info = mapOf(
+                "pdf" to pdfFileName,
+                "quarter_bpm" to "%.1f".format(java.util.Locale.US, quarterBpm),
+                "start_measure" to (mapped[startMeasure]?.measureNumber ?: 0).toString(),
+                "start_page" to (pageOf[startMeasure] + 1).toString(),
+                "ensemble" to collaborationMode.name,
+                "device" to android.os.Build.MODEL,
+                "app_version" to BuildConfig.VERSION_NAME,
+            )
+            val follower = com.mrgq.pdfviewer.follow.MicScoreFollower(
+                chroma, pageOf, lowerHalf, startMeasure, pageOf[startMeasure], wav, info, micListener,
+            )
+            if (!follower.start()) return@launch toast("마이크를 열지 못했습니다")
+            micFollower = follower
+            micMeasures = mapped
+            binding.recordButton.visibility = View.INVISIBLE // 추적이 녹음도 함께 한다
+            binding.recordTime.text = "🎤 대기"
+            binding.recordTime.visibility = View.VISIBLE
+            Toast.makeText(this@PdfViewerActivity, "🎤 ${mapped[startMeasure]?.measureNumber}번 마디부터 듣습니다 — 연주를 시작하세요", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    private fun stopMicFollow(announce: Boolean = false) {
+        val f = micFollower ?: return
+        micFollower = null
+        f.stop()
+        micFocus = null
+        binding.recordTime.visibility = View.GONE
+        if (micFollowCapable()) binding.recordButton.visibility = View.VISIBLE
+        refreshScoreOverlay()
+        if (announce) Toast.makeText(this, "🎤 듣기 멈춤 — 기록은 recordings 에", Toast.LENGTH_SHORT).show()
+    }
+
+    private val micListener = object : com.mrgq.pdfviewer.follow.MicScoreFollower.Listener {
+        override fun onListening() {
+            if (micFollower == null) return
+            binding.recordTime.text = "🎤 듣는 중"
+        }
+
+        override fun onPosition(measurePos: Double) {
+            if (micFollower == null) return
+            val m = micMeasures.getOrNull(measurePos.toInt())
+            micFocus = m
+            binding.recordTime.text = "🎤 ${m?.measureNumber ?: "?"}"
+            refreshScoreOverlay()
+        }
+
+        override fun onTurn(turn: com.mrgq.pdfviewer.follow.PageTurnDecider.Turn) {
+            if (micFollower == null) return
+            when (turn) {
+                is com.mrgq.pdfviewer.follow.PageTurnDecider.Turn.Half -> showHalfPage(turn.page, turn.nextPage)
+                is com.mrgq.pdfviewer.follow.PageTurnDecider.Turn.Page -> {
+                    val target = if (isTwoPageMode) pairStart(turn.page) else turn.page
+                    if (target == pageIndex || target !in 0 until pageCount) return
+                    micRollBroadcast = true
+                    showPageWithAnimation(target, if (target > pageIndex) 1 else -1)
+                }
+            }
+        }
+
+        override fun onError(message: String) {
+            toast("🎤 $message")
+            stopMicFollow()
+        }
+    }
+
+    /** 손으로 [page] 쪽으로 넘겼다 — 추적도 그 쪽 첫 마디에서 다시 (P10 §2) */
+    private fun anchorMicFollow(page: Int) {
+        val f = micFollower ?: return
+        val first = micMeasures.indexOfFirst { it != null && it.pageIndex >= page }
+        if (first >= 0) f.anchor(page, first)
+    }
+
+    /**
+     * 반 쪽 넘김 (P10 §3.3.1) — 위는 다음 쪽 [next] 의 위 절반, 아래는 지금 쪽 [page] 의 아래 절반(치는 중). 자르는 선은
+     * 지금 쪽의 위 · 아래 절반 시스템 사이, 다음 쪽은 그 선 위에서 시스템이 잘리지 않는 가장 아래 틈까지만(남는 곳은 비움)
+     */
+    private fun showHalfPage(page: Int, next: Int) {
+        if (isTwoPageMode || pageIndex != page || next >= pageCount || isAnimating) return
+        val bottom = pageCache?.getPageImmediate(page) ?: return
+        val top = pageCache?.getPageImmediate(next) ?: return
+        if (top.width != bottom.width || top.height != bottom.height) return
+        val measures = micMeasures.filterNotNull()
+        fun systems(p: Int) = ScoreOverlayGeometry.boxes(
+            measures = measures.filter { it.pageIndex == p },
+            leftPageIndex = p, twoPageMode = false, pageCount = pageCount,
+            screenWidth = screenWidth, screenHeight = screenHeight,
+            topClipping = currentTopClipping, bottomClipping = currentBottomClipping, centerPadding = currentCenterPadding,
+        ).groupBy { it.systemIndex }.map { (_, b) -> b.minOf { it.top } to b.maxOf { it.bottom } }.sortedBy { it.first }
+        val lowerSystems = measures.filter { it.pageIndex == page && it.topPt >= it.pageHeightPt / 2 }.map { it.systemIndex }.toSet()
+        val here = ScoreOverlayGeometry.boxes(
+            measures = measures.filter { it.pageIndex == page },
+            leftPageIndex = page, twoPageMode = false, pageCount = pageCount,
+            screenWidth = screenWidth, screenHeight = screenHeight,
+            topClipping = currentTopClipping, bottomClipping = currentBottomClipping, centerPadding = currentCenterPadding,
+        )
+        val upperBottom = here.filter { it.systemIndex !in lowerSystems }.maxOfOrNull { it.bottom } ?: return
+        val lowerTop = here.filter { it.systemIndex in lowerSystems }.minOfOrNull { it.top } ?: return
+        val split = ((upperBottom + lowerTop) / 2).toInt().coerceIn(1, bottom.height - 1)
+        val nextSystems = systems(next)
+        val gaps = nextSystems.zipWithNext { a, b -> ((a.second + b.first) / 2).toInt() }
+        val cut = (gaps.filter { it <= split }.maxOrNull() ?: nextSystems.firstOrNull()?.second?.toInt()?.takeIf { it <= split } ?: split)
+            .coerceIn(1, split)
+        val out = bottom.copy(Bitmap.Config.ARGB_8888, true)
+        val canvas = android.graphics.Canvas(out)
+        canvas.drawRect(0f, 0f, out.width.toFloat(), split.toFloat(), android.graphics.Paint().apply { color = android.graphics.Color.WHITE })
+        canvas.drawBitmap(top, android.graphics.Rect(0, 0, top.width, cut), android.graphics.Rect(0, 0, top.width, cut), null)
+        canvas.drawRect(0f, split - 2f, out.width.toFloat(), split + 2f, android.graphics.Paint().apply { color = 0xFF9E9E9E.toInt() })
+        binding.pdfView.setImageBitmap(out)
+        setImageViewMatrix(out)
+        refreshScoreOverlay()
+        Log.i("PdfViewerActivity", "🎤 반 쪽 넘김: 위 = ${next + 1}쪽(0 ~ $cut), 아래 = ${page + 1}쪽($split ~)")
     }
 
     override fun onKeyUp(keyCode: Int, event: KeyEvent?): Boolean {
@@ -1900,9 +2094,18 @@ class PdfViewerActivity : AppCompatActivity() {
     }
     
     private fun setupPerformerCallbacks() {
-        globalCollaborationManager.setOnPageChangeReceived { page, file, turnAt ->
+        globalCollaborationManager.setOnPageChangeReceived { page, file, turnAt, roll ->
             runOnUiThread {
                 if (file != pdfFileName) return@runOnUiThread
+                conductorPage = if (partViewLayout == null) page - 1 else null
+                refreshScoreOverlay()
+                // 지휘자가 마이크로 듣고 넘긴 쪽 — 두 쪽 · 전체 악보면 차례 넘김 (P10 §3.3). 한 쪽 · 파트 보기는 지금처럼
+                if (roll && turnAt == null && isTwoPageMode && partViewLayout == null &&
+                    !(ensembleRole == EnsembleRole.FOLLOWING && metronome.isRunning)
+                ) {
+                    handleRollPageChange(page)
+                    return@runOnUiThread
+                }
                 // 합주 메트로놈을 따라가는 중에는 마디로 스스로 넘긴다 — 지휘자와 표시 모드가 달라도 맞게 (#055).
                 // 지휘자가 일시정지한 동안에는 지휘자의 넘김을 따른다
                 if (ensembleRole == EnsembleRole.FOLLOWING &&
@@ -1957,6 +2160,84 @@ class PdfViewerActivity : AppCompatActivity() {
         }
     }
     
+    // ── 두 쪽 연주자의 차례 넘김 (P10 §3.3) ────────────────────────────────────────────
+    /** 보통의 짝(1-2 · 3-4)이 아닌 화면(3 | 2 …). null 이면 보통 — [showPage] 가 비운다 */
+    private var rollSpread: com.mrgq.pdfviewer.follow.RollingTurns.Spread? = null
+    private var pendingRoll: Runnable? = null
+
+    private fun cancelPendingRoll() {
+        pendingRoll?.let { binding.pdfView.removeCallbacks(it) }
+        pendingRoll = null
+    }
+
+    /** 지휘자가 [page](1부터) 쪽에 들어섰다 — 화면에 없으면 바로 그 짝, 있으면 [ROLL_DELAY_MS] 뒤 다 친 쪽 자리만 +2 */
+    private fun handleRollPageChange(page: Int) {
+        val p = page - 1
+        if (p !in 0 until pageCount) return
+        cancelPendingRoll()
+        val current = rollSpread ?: com.mrgq.pdfviewer.follow.RollingTurns.Spread.pairOf(pairStart(pageIndex), pageCount)
+        when (val action = com.mrgq.pdfviewer.follow.RollingTurns.onPage(current, p, pageCount)) {
+            is com.mrgq.pdfviewer.follow.RollingTurns.Action.Immediate -> handleRemotePageChange(page)
+            is com.mrgq.pdfviewer.follow.RollingTurns.Action.Delayed -> {
+                Log.d("PdfViewerActivity", "🎼 차례 넘김 예약: 지휘자 ${page}쪽 → ${ROLL_DELAY_MS}ms 뒤 ${action.spread.left + 1} | ${action.spread.right?.plus(1)}")
+                val r = Runnable {
+                    pendingRoll = null
+                    showSpread(action.spread, conductorPage = p)
+                }
+                pendingRoll = r
+                binding.pdfView.postDelayed(r, ROLL_DELAY_MS)
+            }
+            com.mrgq.pdfviewer.follow.RollingTurns.Action.None -> Unit
+        }
+    }
+
+    /** 두 쪽 화면에 [spread] 의 왼 · 오 쪽을 그린다. 보통의 짝이면 [showPage] 로 */
+    private fun showSpread(spread: com.mrgq.pdfviewer.follow.RollingTurns.Spread, conductorPage: Int) {
+        if (!isTwoPageMode || isAnimating) return
+        if (spread.isPair) {
+            isHandlingRemotePageChange = true
+            showPage(spread.left)
+            isHandlingRemotePageChange = false
+            return
+        }
+        val left = pageCache?.getPageImmediate(spread.left) ?: return
+        val right = spread.right?.let { pageCache?.getPageImmediate(it) }
+        val combined = combineTwoPagesUnified(left, right)
+        binding.pdfView.setImageBitmap(combined)
+        setImageViewMatrix(combined)
+        rollSpread = spread
+        pageIndex = pairStart(conductorPage)
+        updatePageInfo()
+        pageCache?.prerenderAround(pairStart(conductorPage) + 2)
+        Log.d("PdfViewerActivity", "🎼 차례 넘김: ${spread.left + 1} | ${spread.right?.plus(1)}")
+    }
+
+    /** 연주자: 지휘자가 지금 치는 쪽 (순번, 0부터). 두 쪽 화면이면 그 쪽에 노란 테두리 (P10) */
+    private var conductorPage: Int? = null
+
+    /** 지휘자의 지금 쪽이 두 쪽 화면에 보이면 그 쪽의 자리 (표시 비트맵 픽셀) — [combineTwoPagesUnified] 와 같은 배치 */
+    private fun conductorPageFrame(): android.graphics.RectF? {
+        val p = conductorPage ?: return null
+        if (collaborationMode != CollaborationMode.PERFORMER || !isTwoPageMode || partViewLayout != null) return null
+        val spread = rollSpread ?: com.mrgq.pdfviewer.follow.RollingTurns.Spread.pairOf(pairStart(pageIndex), pageCount)
+        if (!spread.shows(p)) return null
+        val left = pageCache?.getPageImmediate(spread.left) ?: return null
+        val right = spread.right?.let { pageCache?.getPageImmediate(it) }
+        val offsets = TwoPageOffsets.compute(
+            canvasWidth = screenWidth.coerceAtLeast(1),
+            canvasHeight = maxOf(left.height, right?.height ?: 0).coerceAtLeast(1),
+            centerPadding = currentCenterPadding,
+            leftWidth = left.width, leftHeight = left.height,
+            rightWidth = right?.width ?: 0, rightHeight = right?.height ?: 0,
+        )
+        return if (p == spread.left) {
+            android.graphics.RectF(offsets.leftX.toFloat(), offsets.leftY.toFloat(), (offsets.leftX + left.width).toFloat(), (offsets.leftY + left.height).toFloat())
+        } else {
+            val r = right ?: return null
+            android.graphics.RectF(offsets.rightX.toFloat(), offsets.rightY.toFloat(), (offsets.rightX + r.width).toFloat(), (offsets.rightY + r.height).toFloat())
+        }
+    }
+
     private fun handleRemotePageChange(page: Int) {
         // Update sync time for input blocking
         updateSyncTime()
@@ -3449,6 +3730,9 @@ class PdfViewerActivity : AppCompatActivity() {
         items += "메트로놈 설정…" to { showMetronomeDialog() }
         items += "파트 보기: ${partViewName ?: "전체 악보"}" to { showPartViewDialog() }
         accompanimentMenuLabel()?.let { items += it to { showAccompanimentDialog() } }
+        if (micFollowCapable()) {
+            items.add(0, (if (micFollower != null) "🎤 듣기 멈춤" else "🎤 연주 듣고 넘기기") to { toggleMicFollow() })
+        }
 
         var chosen = false
         metronomeMenuShowing = true
@@ -3661,10 +3945,11 @@ class PdfViewerActivity : AppCompatActivity() {
         val focus = when (followState) {
             FollowState.SELECTING -> followMeasures.getOrNull(cursorIndex)
             FollowState.PLAYING, FollowState.PAUSED -> followMeasure
-            FollowState.OFF -> null
+            FollowState.OFF -> micFocus // 마이크 추적의 지금 마디 (P10)
         }
         val showAll = isScoreOverlayEnabled()
-        if (fileId == null || isAnimating || (!showAll && focus == null)) {
+        val frame = conductorPageFrame()
+        if (fileId == null || isAnimating || (!showAll && focus == null && frame == null)) {
             overlay.clear()
             return
         }
@@ -3675,7 +3960,9 @@ class PdfViewerActivity : AppCompatActivity() {
         }
         fun mapped(measures: List<ScoreMeasure>) = overlayBoxes(measures)
         // 커서 모양: 고르는 중 · 예비박 · 일시정지(여기서 이어진다). 연주 중인 마디만 노란 표시
-        val style = if (followState != FollowState.PLAYING || followInCountIn) {
+        val style = if (followState == FollowState.OFF && micFocus != null) {
+            ScoreOverlayView.FocusStyle.CURRENT
+        } else if (followState != FollowState.PLAYING || followInCountIn) {
             ScoreOverlayView.FocusStyle.CURSOR
         } else {
             ScoreOverlayView.FocusStyle.CURRENT
@@ -3685,6 +3972,8 @@ class PdfViewerActivity : AppCompatActivity() {
             imageMatrix = binding.pdfView.imageMatrix,
             focus = focus?.let { mapped(listOf(it)).firstOrNull() },
             focusStyle = style,
+            pageFrame = frame,
+            systemFrame = micSystemFrame(),
         )
     }
 
@@ -4741,6 +5030,7 @@ class PdfViewerActivity : AppCompatActivity() {
         // 연주 화면을 벗어나면 메트로놈을 멈춘다 (홈·다른 앱으로 가도 계속 울리지 않게). 녹음도 마무리
         stopMetronome()
         stopRecording()
+        stopMicFollow()
     }
 
     override fun onResume() {
@@ -4862,6 +5152,8 @@ class PdfViewerActivity : AppCompatActivity() {
      * @param direction 애니메이션 방향 (1: 오른쪽으로 이동, -1: 왼쪽으로 이동)
      */
     private fun showPageWithAnimation(index: Int, direction: Int) {
+        rollSpread = null
+        cancelPendingRoll()
         if (index < 0 || index >= pageCount || isAnimating) return
         
         Log.d("PdfViewerActivity", "showPageWithAnimation: index=$index, direction=$direction")
@@ -5160,6 +5452,8 @@ class PdfViewerActivity : AppCompatActivity() {
      * 중복 코드를 제거하고 일관된 로직을 제공합니다.
      */
     private fun broadcastCollaborationPageChange(pageIndex: Int) {
+        val roll = micRollBroadcast // 마이크 추적이 넘긴 것 (P10 §3.2) — 한 번만
+        micRollBroadcast = false
         // Phase 0: 동기 예약 넘김이 실행되는 중에는 이미 turn_at 과 함께 브로드캐스트했으므로 재전송 억제
         if (System.currentTimeMillis() < suppressBroadcastUntil) {
             Log.d("PdfViewerActivity", "🎵 동기 예약 넘김 실행 중 - 재브로드캐스트 억제")
@@ -5167,8 +5461,8 @@ class PdfViewerActivity : AppCompatActivity() {
         }
         if (collaborationMode == CollaborationMode.CONDUCTOR && !isHandlingRemotePageChange) {
             val actualPageNumber = outgoingPage(pageIndex)
-            Log.d("PdfViewerActivity", "🎵 지휘자 모드: 페이지 $actualPageNumber 브로드캐스트 중...")
-            globalCollaborationManager.broadcastPageChange(actualPageNumber, pdfFileName)
+            Log.d("PdfViewerActivity", "🎵 지휘자 모드: 페이지 $actualPageNumber 브로드캐스트 중..." + if (roll) " (roll)" else "")
+            globalCollaborationManager.broadcastPageChange(actualPageNumber, pdfFileName, roll = roll)
         }
     }
 

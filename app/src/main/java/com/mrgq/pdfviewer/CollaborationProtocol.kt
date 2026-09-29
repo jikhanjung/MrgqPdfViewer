@@ -32,6 +32,8 @@ object CollaborationProtocol {
     const val KEY_FILE = "file"
     const val KEY_TIMESTAMP = "timestamp"
     const val KEY_TURN_AT = "turn_at"
+    /** page_change: 마이크 추적이 넘긴 것 — 두 쪽 연주자는 다 친 쪽 자리만 바꾼다 (P10 §3.2). 옛 앱은 무시 */
+    const val KEY_ROLL = "roll"
     const val KEY_FILE_SERVER_URL = "file_server_url"
 
     // 합주 메트로놈 (#055)
@@ -77,12 +79,14 @@ object CollaborationProtocol {
         fileName: String,
         turnAt: Long? = null,
         timestamp: Long = System.currentTimeMillis(),
+        roll: Boolean = false,
     ): JsonObject = JsonObject().apply {
         addProperty(KEY_ACTION, ACTION_PAGE_CHANGE)
         addProperty(KEY_PAGE, pageNumber)
         addProperty(KEY_FILE, fileName)
         addProperty(KEY_TIMESTAMP, timestamp)
         turnAt?.let { addProperty(KEY_TURN_AT, it) }
+        if (roll) addProperty(KEY_ROLL, true)
     }
 
     fun buildFileChange(
@@ -180,7 +184,7 @@ object CollaborationProtocol {
 
     // ── 파싱 (연주자) ───────────────────────────────────────────────────────
 
-    data class PageChange(val page: Int, val file: String, val turnAt: Long?)
+    data class PageChange(val page: Int, val file: String, val turnAt: Long?, val roll: Boolean = false)
 
     /** [sha256] = 파일 내용 해시(소문자 hex, #063). 옛 지휘자(v0.2.6 이하)는 없다 → 이름으로 찾는다 */
     data class FileChange(val file: String, val page: Int, val fileServerUrl: String?, val sha256: String? = null)
@@ -189,6 +193,7 @@ object CollaborationProtocol {
         page = json.optInt(KEY_PAGE, 1),
         file = json.optStringOrNull(KEY_FILE) ?: "",
         turnAt = json.optLong(KEY_TURN_AT),
+        roll = json.get(KEY_ROLL)?.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isBoolean }?.asBoolean ?: false,
     )
 
     fun parseFileChange(json: JsonObject) = FileChange(
