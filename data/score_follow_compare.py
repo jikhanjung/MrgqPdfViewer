@@ -93,6 +93,13 @@ def main():
     ap.add_argument("--quiet", action="store_true", help="쪽 넘김 표를 줄마다 찍지 않는다")
     ap.add_argument("--hold", type=float, default=0.0, help="온라인 추정이 넘김 점 뒤에 이 초만큼 머물러야 넘긴다")
     ap.add_argument("--dpi", type=int, default=70)
+    ap.add_argument("--ref-save", help="기준 경로를 .npz 로 저장")
+    ap.add_argument("--ref-load", help="저장한 기준 경로를 쓴다 (조각 맞춤은 그대로 돌지만 결과는 덮어씀)")
+    ap.add_argument("--feature", choices=["cqt", "stft"], default="cqt", help="온라인 추적의 크로마 (기준 경로는 늘 CQT)")
+    ap.add_argument("--hop", type=int, default=512, help="칸 걸음 (22050Hz 기준 — 512 = 23ms, 1024 = 46ms)")
+    ap.add_argument("--n-fft", type=int, default=2048)
+    ap.add_argument("--fmin", type=float, default=60.0)
+    ap.add_argument("--weight", choices=["power", "mag", "log"], default="power")
     ap.add_argument("--reloc-every", type=float, default=1.0)
     ap.add_argument("--reloc-window", type=float, default=30.0)
     ap.add_argument("--reloc-range", type=float, default=40.0)
@@ -100,19 +107,25 @@ def main():
     ap.add_argument("--struct", type=float, default=0.5)
     args = ap.parse_args()
 
+    s.HOP = args.hop  # 칸 크기 (score_follow_dtw 전역 — 악보 크로마 · OLTW · 넘김 모두 이 칸으로)
     sec_per_q = 60.0 / args.bpm
     notes, mstarts = s.read_musicxml(args.musicxml)
     Y = s.normalize(s.score_chroma(notes, mstarts[-1], sec_per_q))
     y, _ = librosa.load(args.wav, sr=s.SR, mono=True)
-    X = s.normalize(librosa.feature.chroma_cqt(y=y, sr=s.SR, hop_length=s.HOP))
-    C = 1 - X.T @ Y
+    X = s.normalize(librosa.feature.chroma_cqt(y=y, sr=s.SR, hop_length=s.HOP))  # 기준 경로는 늘 CQT 로
+    if args.feature == "stft":  # 온라인 추적만 앱과 같은 STFT 크로마로
+        Xf = s.normalize(s.stft_chroma(y, hop=s.HOP, n_fft=args.n_fft, fmin=args.fmin, weight=args.weight))
+        Xf = np.pad(Xf, ((0, 0), (0, max(0, X.shape[1] - Xf.shape[1]))))[:, : X.shape[1]]
+    else:
+        Xf = X
+    C = 1 - Xf.T @ Y
     n = C.shape[0]
     print(f"녹음 {n * s.HOP / s.SR:.0f}s, 악보 {len(mstarts) - 1}마디 ({mstarts[-1] * sec_per_q:.0f}s @ {args.bpm:g})")
 
     # 기준 경로: 전체 DTW 는 실제 녹음에서 기준 빠르기에 끌려갔다(빠르기를 바꾸면 경로가 바뀜) — 대신
     # 20초 조각을 5초마다 곡 전체에서 찾고(부분 DTW, 0.25초 칸), 후보(최선의 +0.01 안 국소 최소 = 풀어 쓴 반복의 쌍둥이 포함) 중
     # 앞으로만 가며 빠르기가 고른 열을 동적 계획법으로 고른다 → 사이는 선형 보간
-    k = 11
+    k = max(1, round(0.25 * s.SR / s.HOP))  # 약 0.25초 칸
     hs = k * s.HOP / s.SR
     def pool(A):
         m = A.shape[1] // k
@@ -169,6 +182,19 @@ def main():
     # 시작: 기준 경로가 정의된 첫 칸 (첫 조각 끝 = 20초). 앱은 시작 마디를 알므로 거기서 넘겨준다
     first_i = int(args.start_s * s.SR / s.HOP) if args.start_s is not None else int(np.argmax(valid))
     off_m = measure_of(np.maximum(off, 0), mstarts, sec_per_q)
+    t_all = np.arange(n) * s.HOP / s.SR
+    if args.ref_save:  # 기준 경로(시각 → 연속 마디)를 저장 — 다른 칸 크기 · 특징의 실행이 같은 잣대로 재게
+        np.savez(args.ref_save, t=t_all[valid], m=off_m[valid])
+    if args.ref_load:
+        ref = np.load(args.ref_load)
+        off_m = np.interp(t_all, ref["t"], ref["m"], left=np.nan, right=np.nan)
+        valid = ~np.isnan(off_m)
+        off_m = np.where(valid, off_m, 0.0)
+        # 연속 마디(0부터 + 비율) → 4분음표 → 악보 칸
+        i0 = np.clip(np.floor(off_m).astype(int), 0, len(mstarts) - 2)
+        q = mstarts[i0] + (off_m - i0) * (mstarts[i0 + 1] - mstarts[i0])
+        off = np.minimum(np.round(q * sec_per_q * s.SR / s.HOP).astype(int), C.shape[1] - 1)
+        first_i = int(args.start_s * s.SR / s.HOP) if args.start_s is not None else int(np.argmax(valid))
     print(f"오프라인: 시작 {first_i * s.HOP / s.SR:.1f}s = {off_m[first_i]:.1f}마디 → 끝 {off_m[-1]:.1f}마디")
 
     jumps = []

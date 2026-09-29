@@ -79,6 +79,29 @@ def score_chroma(notes, total_q, sec_per_q):
     return c
 
 
+def stft_chroma(y, sr=SR, hop=None, n_fft=2048, fmin=60.0, fmax=4000.0, weight="power"):
+    """앱(P10 `follow/Chroma`)과 같은 계산의 STFT 크로마 — Hann 창 [n_fft], 걸음 [hop], [fmin, fmax] 빈을 12음으로.
+    빈의 음높이 p = 69 + 12·log2(f/440), 가장 가까운 반음 n 에 무게 max(0, 1 − 2|p − n|) × (세기² | 세기 | log(1+100·세기))"""
+    hop = hop or HOP
+    win = np.hanning(n_fft + 1)[:-1]
+    n = 1 + max(0, (len(y) - n_fft) // hop)
+    frames = np.lib.stride_tricks.as_strided(y, shape=(n, n_fft), strides=(y.strides[0] * hop, y.strides[0]))
+    mag = np.abs(np.fft.rfft(frames * win, axis=1))  # (n, n_fft/2+1)
+    f = np.fft.rfftfreq(n_fft, 1 / sr)
+    sel = (f >= fmin) & (f <= fmax)
+    p = 69 + 12 * np.log2(f[sel] / 440.0)
+    near = np.round(p)
+    w = np.maximum(0, 1 - 2 * np.abs(p - near))
+    pc = (near.astype(int) % 12)
+    m = mag[:, sel]
+    v = m * m if weight == "power" else (m if weight == "mag" else np.log1p(100 * m))
+    out = np.zeros((12, n))
+    for k in range(12):
+        idx = pc == k
+        out[k] = (v[:, idx] * w[idx]).sum(1)
+    return out
+
+
 def normalize(c):
     return c / (np.linalg.norm(c, axis=0, keepdims=True) + 1e-9)
 
