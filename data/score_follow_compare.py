@@ -9,6 +9,7 @@
 놓침(|차이| > 1마디) 구간들의 시작 · 길이(= 회복까지 걸린 시간), 처음 놓친 곳.
 """
 import argparse
+import json
 
 import librosa
 import numpy as np
@@ -23,6 +24,62 @@ def measure_of(cols, mstarts, sec_per_q):
     return idx + np.clip(frac, 0, 1) - 1  # 연속 마디 번호(1.0 = 1마디 처음)
 
 
+def page_turns(args, layout, mstarts, sec_per_q, on, off, valid, first_i, n):
+    """쪽 넘김 시점 오차 — 쪽마다 마지막 마디가 끝나기 [lead] 박 전(앱 악보 연동 규칙 TURN_LEAD_BEATS = 2)을 넘김 점으로,
+    온라인이 처음 그 점을 넘는 시각 vs 기준 경로가 넘는 시각. 일찍 넘기면(−) 그 순간 기준 위치로 **아직 안 친 마디 수**(가려지는 마디)도.
+    --hold 초: 온라인 추정이 넘김 점 뒤에 그만큼 머물러야 넘긴다(일찍 넘김 줄이기 실험)"""
+    to_q = lambda cols: np.asarray(cols) * s.HOP / s.SR / sec_per_q
+    q_on, q_off = to_q(on), to_q(off)
+    t = np.arange(n) * s.HOP / s.SR
+    page_of = {m["measureNumber"]: m["pageIndex"] for m in layout["measures"]}
+    beat_q = 4.0 / 4  # 4분음표 박 (아르페지오네 4/4). 박자가 바뀌는 곡은 마디 박자로 바꿀 것
+    rows = []
+    hold = int(args.hold * s.SR / s.HOP)
+    for page in range(layout["page_count"] - 1):
+        last = max(mn for mn, pg in page_of.items() if pg == page)
+        end_q = mstarts[last]  # 마지막 마디 끝 (= 다음 마디 시작)
+        turn_q = end_q - args.lead * beat_q
+        idx = np.arange(first_i, n)
+        ref_hit = idx[(q_off[idx] >= turn_q) & valid[idx]]
+        if len(ref_hit) == 0 or ref_hit[0] <= first_i + 1:
+            continue
+        past = q_on[idx] >= turn_q
+        if hold > 0:  # hold 칸 연속으로 넘은 첫 끝
+            run = np.convolve(past.astype(int), np.ones(hold, dtype=int), mode="full")[: len(past)]
+            hit = idx[run >= hold]
+        else:
+            hit = idx[past]
+        if len(hit) == 0:
+            continue
+        ti, tr = hit[0], ref_hit[0]
+        err = t[ti] - t[tr]
+        # 넘긴 순간 기준 위치에서 이 쪽에 남은 박(넘김 점까지가 아니라 쪽 끝까지) → 마디 수로
+        left_q = end_q - q_off[ti]
+        rows.append((page + 1, last, t[tr], err, left_q / 4.0))
+    if not rows:
+        print("쪽 넘김: 비교할 넘김 없음")
+        return
+    # 반 쪽 넘김(아래 절반은 이 쪽 그대로, 위 절반에 다음 쪽 윗부분): 넘긴 순간 남은 마디가 아래 절반 시스템 마디 수 안이면 안 가려진다
+    lower = {}
+    for m in layout["measures"]:
+        if m["topPt"] >= m["pageHeightPt"] / 2 - 1:
+            lower[m["pageIndex"]] = lower.get(m["pageIndex"], 0) + 1
+    half_hidden = sum(1 for pg, last, _, _, lm in rows if lm > lower.get(pg - 1, 0))
+    e = np.array([r[3] for r in rows])
+    left = np.array([r[4] for r in rows])
+    early = e < -1.0
+    hidden = left > 1.0  # 넘긴 순간 이 쪽에 한 마디 넘게 남음 = 치고 있는 마디가 가려짐
+    print(f"\n쪽 넘김 {len(rows)}번 (마지막 마디 끝 {args.lead:g}박 전, 머무름 {args.hold:g}초): 오차(온라인 − 기준) 중앙값 {np.median(e):+.1f}초, "
+          f"|오차| ≤ 2초 {np.mean(np.abs(e) <= 2) * 100:.0f}%, ≤ 5초 {np.mean(np.abs(e) <= 5) * 100:.0f}%, 최악 이름 {e.min():+.1f}초 · 늦음 {e.max():+.1f}초")
+    print(f"  1초 넘게 일찍 {early.sum()}번, 넘긴 순간 이 쪽에 1마디 넘게 남음(가려짐) {hidden.sum()}번, 반 쪽 넘김이면 가려짐 {half_hidden}번"
+          f", 5초 넘게 늦음 {int(np.sum(e > 5))}번")
+    if args.quiet:
+        return
+    for pg, last, tref, err, lm in rows:
+        flag = " ← 가려짐" if lm > 1.0 else (" ← 늦음" if err > 5 else "")
+        print(f"  쪽 {pg:2d}→{pg + 1:2d} (마지막 {last:3d}마디, 기준 {tref:5.0f}초): {err:+6.1f}초, 넘긴 순간 남은 {lm:+5.2f}마디{flag}")
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("wav")
@@ -31,6 +88,10 @@ def main():
     ap.add_argument("--start-s", type=float, default=None, help="연주 시작 시각 — 없으면 오프라인 경로에서")
     ap.add_argument("--plot")
     ap.add_argument("--debug", action="store_true")
+    ap.add_argument("--layout", help="앱 · 서버 분석 .layout.json — 쪽 넘김 시점 오차")
+    ap.add_argument("--lead", type=float, default=2.0, help="넘김 점: 쪽 마지막 마디 끝 몇 박 전 (앱 TURN_LEAD_BEATS)")
+    ap.add_argument("--quiet", action="store_true", help="쪽 넘김 표를 줄마다 찍지 않는다")
+    ap.add_argument("--hold", type=float, default=0.0, help="온라인 추정이 넘김 점 뒤에 이 초만큼 머물러야 넘긴다")
     ap.add_argument("--dpi", type=int, default=70)
     ap.add_argument("--reloc-every", type=float, default=1.0)
     ap.add_argument("--reloc-window", type=float, default=30.0)
@@ -137,6 +198,9 @@ def main():
     for st, du, m, lo, hi in spans[:15]:
         print(f"  {st:6.0f}s ({m:5.1f}마디 부근) {du:4.0f}s 동안, 차이 {lo:+.1f} ~ {hi:+.1f}마디")
     print(f"재위치 {len(jumps)}번")
+
+    if args.layout:
+        page_turns(args, json.load(open(args.layout, encoding="utf-8")), mstarts, sec_per_q, on, off, valid, first_i, n)
 
     if args.plot:
         import matplotlib
