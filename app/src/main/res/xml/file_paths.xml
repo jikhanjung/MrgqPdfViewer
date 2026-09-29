@@ -3,4 +3,6 @@
      UpdateController.updatesDir() 와 맞춘다. -->
 <paths>
     <cache-path name="updates" path="updates/" />
+    <!-- 설정 → 녹음 기록 → 공유 (P10): 마이크 추적 기록 WAV · JSON. RecordingLibrary.dir() 와 맞춘다 -->
+    <external-files-path name="recordings" path="recordings/" />
 </paths>

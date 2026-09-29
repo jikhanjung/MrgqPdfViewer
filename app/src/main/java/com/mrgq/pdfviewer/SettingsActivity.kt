@@ -175,6 +175,20 @@ class SettingsActivity : AppCompatActivity() {
             arrow = "▶"
         ))
         
+        // 🎤 녹음 기록 (P10) — 태블릿에서만 (TV 는 녹음하지 않는다 — 연주 듣고 넘기기도 태블릿 전용)
+        if (!com.mrgq.pdfviewer.utils.DeviceForm.isTv(this) &&
+            packageManager.hasSystemFeature(android.content.pm.PackageManager.FEATURE_MICROPHONE)
+        ) {
+            val (recCount, recBytes) = recordingsSummary()
+            currentItems.add(SettingsItem(
+                id = "recordings",
+                icon = "🎤",
+                title = "녹음 기록",
+                subtitle = if (recCount == 0) "없음" else "${recCount}개 · ${megabytes(recBytes)}",
+                arrow = "▶"
+            ))
+        }
+
         // 표시 모드 섹션 (비동기로 카운트 로드)
         CoroutineScope(Dispatchers.IO).launch {
             val displayModeCount = try {
@@ -232,6 +246,7 @@ class SettingsActivity : AppCompatActivity() {
                     "collaboration" -> showCollaborationPanel()
                     "scoremate" -> showScoreMatePanel()
                     "animation_sound" -> showAnimationSoundPanel()
+                    "recordings" -> showRecordingsPanel()
                     "display_mode" -> showDisplayModePanel()
                     "info" -> showInfoPanel()
                 }
@@ -243,6 +258,7 @@ class SettingsActivity : AppCompatActivity() {
                 "collaboration" -> showCollaborationPanel()
                 "scoremate" -> showScoreMatePanel()
                 "animation_sound" -> showAnimationSoundPanel()
+                "recordings" -> showRecordingsPanel()
                 "display_mode" -> showDisplayModePanel()
                 "info" -> showInfoPanel()
             }
@@ -647,6 +663,198 @@ class SettingsActivity : AppCompatActivity() {
         showDetailPanel("앱 정보", items)
     }
     
+    // ── 🎤 녹음 기록 (P10 — 마이크 추적 기록 · 예전 연습 녹음) ─────────────────────────
+    private var recordingEntries: List<com.mrgq.pdfviewer.recording.RecordingLibrary.Entry> = emptyList()
+    private var recordingPlayer: android.media.MediaPlayer? = null
+
+    private fun recordingsSummary(): Pair<Int, Long> {
+        val list = com.mrgq.pdfviewer.recording.RecordingLibrary.dir(this).listFiles()?.filter { it.isFile } ?: emptyList()
+        return list.count { it.name.endsWith(".wav") } to list.sumOf { it.length() }
+    }
+
+    private fun megabytes(bytes: Long) = String.format(java.util.Locale.US, "%.1f MB", bytes / 1_048_576.0)
+
+    private fun clock(sec: Double): String {
+        val s = sec.toInt()
+        return if (s >= 3600) String.format(java.util.Locale.US, "%d:%02d:%02d", s / 3600, s / 60 % 60, s % 60)
+        else String.format(java.util.Locale.US, "%d:%02d", s / 60, s % 60)
+    }
+
+    private fun showRecordingsPanel() {
+        stopRecordingPlayback()
+        val dir = com.mrgq.pdfviewer.recording.RecordingLibrary.dir(this)
+        recordingEntries = com.mrgq.pdfviewer.recording.RecordingLibrary.list(dir)
+        val items = mutableListOf(
+            SettingsItem(
+                id = "rec_folder",
+                icon = "📁",
+                title = "저장 위치",
+                subtitle = "내부 저장소/Android/data/$packageName/files/recordings · ${recordingEntries.size}개 · ${megabytes(recordingEntries.sumOf { it.bytes })}",
+                type = SettingsType.INFO
+            )
+        )
+        if (recordingEntries.isEmpty()) {
+            items += SettingsItem(
+                id = "rec_empty",
+                icon = "ℹ️",
+                title = "녹음이 없습니다",
+                subtitle = "악보 화면 ↑ 메뉴의 🎤 연주 듣고 넘기기가 소리와 추적 기록을 남깁니다",
+                type = SettingsType.INFO
+            )
+        }
+        val dateFormat = java.text.SimpleDateFormat("M/d HH:mm", java.util.Locale.KOREA)
+        recordingEntries.forEachIndexed { i, e ->
+            val when_ = e.recordedAt?.let { dateFormat.format(it) } ?: ""
+            val s = e.summary
+            val detail = buildList {
+                add(clock(e.durationSec))
+                add(megabytes(e.bytes))
+                if (s != null && e.isFollow) {
+                    s.startMeasurePos?.let { add("${it.toInt() + 1}마디부터") }
+                    if (s.pageTurns > 0) add("넘김 ${s.pageTurns}번")
+                    s.lastPage?.let { add("${it + 1}쪽까지") }
+                }
+                if (!e.isFollow) add("연습 녹음")
+            }.joinToString(" · ")
+            items += SettingsItem(
+                id = "rec:$i",
+                icon = if (e.isFollow) "🎤" else "🎙️",
+                title = "${e.title}  $when_",
+                subtitle = detail,
+                arrow = "▶",
+                type = SettingsType.ACTION
+            )
+        }
+        if (recordingEntries.isNotEmpty()) {
+            items += SettingsItem(
+                id = "rec_delete_all",
+                icon = "🗑️",
+                title = "모두 지우기",
+                subtitle = "녹음 ${recordingEntries.size}개 (${megabytes(recordingEntries.sumOf { it.bytes })}) 를 지웁니다",
+                type = SettingsType.ACTION
+            )
+        }
+        showDetailPanel("녹음 기록", items)
+    }
+
+    private fun showRecordingDialog(entry: com.mrgq.pdfviewer.recording.RecordingLibrary.Entry) {
+        val s = entry.summary
+        val lines = buildList {
+            entry.recordedAt?.let { add("녹음: " + java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.KOREA).format(it)) }
+            add("길이: ${clock(entry.durationSec)} · ${megabytes(entry.bytes)}")
+            if (s != null && entry.isFollow) {
+                s.quarterBpm?.let { add("기준 빠르기: ♩=$it") }
+                if (s.startSec != null) add("연주 시작: ${clock(s.startSec)} — ${s.startMeasurePos?.let { "${it.toInt() + 1}마디" } ?: "?"}")
+                add("쪽 넘김 ${s.pageTurns}번 · 반 쪽 ${s.halfTurns}번" + (s.lastPage?.let { " · ${it + 1}쪽까지" } ?: ""))
+                s.lastMeasurePos?.let { add("마지막 위치: ${it.toInt() + 1}마디") }
+                add("재위치 ${s.relocations}번" + if (s.manualAnchors > 0) " · 손으로 넘김 ${s.manualAnchors}번" else "")
+            }
+            add("")
+            add(entry.wav.name)
+        }
+        val dialog = AlertDialog.Builder(this)
+            .setTitle(entry.title)
+            .setMessage(lines.joinToString("\n"))
+            .setPositiveButton("▶ 재생", null)
+            .setNeutralButton("📤 공유", null)
+            .setNegativeButton("🗑️ 지우기", null)
+            .setOnDismissListener { stopRecordingPlayback() }
+            .create()
+        dialog.setOnShowListener {
+            val play = dialog.getButton(AlertDialog.BUTTON_POSITIVE)
+            play.setOnClickListener {
+                if (recordingPlayer != null) {
+                    stopRecordingPlayback()
+                    play.text = "▶ 재생"
+                } else if (startRecordingPlayback(entry) { play.text = "▶ 재생" }) {
+                    play.text = "■ 정지"
+                }
+            }
+            dialog.getButton(AlertDialog.BUTTON_NEUTRAL).setOnClickListener { shareRecording(entry) }
+            dialog.getButton(AlertDialog.BUTTON_NEGATIVE).setOnClickListener {
+                AlertDialog.Builder(this)
+                    .setMessage("이 녹음을 지울까요?\n${entry.wav.name}")
+                    .setPositiveButton("지우기") { _, _ ->
+                        dialog.dismiss()
+                        com.mrgq.pdfviewer.recording.RecordingLibrary.delete(entry)
+                        Toast.makeText(this, "지웠습니다", Toast.LENGTH_SHORT).show()
+                        showRecordingsPanel()
+                    }
+                    .setNegativeButton("취소", null)
+                    .show()
+            }
+        }
+        dialog.show()
+    }
+
+    private fun startRecordingPlayback(entry: com.mrgq.pdfviewer.recording.RecordingLibrary.Entry, onEnd: () -> Unit): Boolean {
+        stopRecordingPlayback()
+        return try {
+            recordingPlayer = android.media.MediaPlayer().apply {
+                setDataSource(entry.wav.path)
+                setOnCompletionListener {
+                    stopRecordingPlayback()
+                    onEnd()
+                }
+                prepare()
+                start()
+            }
+            true
+        } catch (e: Exception) {
+            Log.w("SettingsActivity", "녹음 재생 실패", e)
+            Toast.makeText(this, "재생할 수 없습니다", Toast.LENGTH_SHORT).show()
+            stopRecordingPlayback()
+            false
+        }
+    }
+
+    private fun stopRecordingPlayback() {
+        recordingPlayer?.let {
+            try {
+                it.stop()
+            } catch (e: IllegalStateException) {
+                // 이미 멈춤
+            }
+            it.release()
+        }
+        recordingPlayer = null
+    }
+
+    /** 안드로이드 공유 창으로 WAV (+ JSON) — 휴대폰 · PC 로 옮길 때 */
+    private fun shareRecording(entry: com.mrgq.pdfviewer.recording.RecordingLibrary.Entry) {
+        try {
+            val authority = "$packageName.fileprovider"
+            val uris = ArrayList<android.net.Uri>()
+            uris += androidx.core.content.FileProvider.getUriForFile(this, authority, entry.wav)
+            entry.json?.let { uris += androidx.core.content.FileProvider.getUriForFile(this, authority, it) }
+            val intent = android.content.Intent(android.content.Intent.ACTION_SEND_MULTIPLE).apply {
+                type = "*/*"
+                putParcelableArrayListExtra(android.content.Intent.EXTRA_STREAM, uris)
+                putExtra(android.content.Intent.EXTRA_SUBJECT, entry.wav.nameWithoutExtension)
+                addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+            startActivity(android.content.Intent.createChooser(intent, "녹음 보내기"))
+        } catch (e: Exception) {
+            Log.w("SettingsActivity", "녹음 공유 실패", e)
+            Toast.makeText(this, "공유할 수 없습니다: ${e.message}", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    private fun confirmDeleteAllRecordings() {
+        val total = recordingEntries.sumOf { it.bytes }
+        AlertDialog.Builder(this)
+            .setTitle("녹음 모두 지우기")
+            .setMessage("녹음 ${recordingEntries.size}개 (${megabytes(total)}) 를 모두 지웁니다. 되돌릴 수 없습니다.")
+            .setPositiveButton("모두 지우기") { _, _ ->
+                stopRecordingPlayback()
+                recordingEntries.forEach { com.mrgq.pdfviewer.recording.RecordingLibrary.delete(it) }
+                Toast.makeText(this, "모두 지웠습니다", Toast.LENGTH_SHORT).show()
+                showRecordingsPanel()
+            }
+            .setNegativeButton("취소", null)
+            .show()
+    }
+
     private fun showDetailPanel(title: String, items: List<SettingsItem>) {
         binding.detailTitle.text = title
         
@@ -673,7 +881,12 @@ class SettingsActivity : AppCompatActivity() {
     }
     
     private fun handleDetailItemClick(item: SettingsItem) {
+        if (item.id.startsWith("rec:")) {
+            recordingEntries.getOrNull(item.id.removePrefix("rec:").toIntOrNull() ?: -1)?.let { showRecordingDialog(it) }
+            return
+        }
         when (item.id) {
+            "rec_delete_all" -> confirmDeleteAllRecordings()
             "delete_all_pdf" -> showDeleteAllPdfDialog()
             "web_server_toggle" -> toggleWebServer()
             "web_server_port" -> showPortSettingDialog()
@@ -1099,6 +1312,7 @@ class SettingsActivity : AppCompatActivity() {
     }
     
     override fun onPause() {
+        stopRecordingPlayback()
         super.onPause()
         com.mrgq.pdfviewer.ensemble.VersionNotice.detach()
     }
