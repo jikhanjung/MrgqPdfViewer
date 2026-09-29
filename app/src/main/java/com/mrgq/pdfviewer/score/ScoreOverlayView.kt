@@ -81,12 +81,16 @@ class ScoreOverlayView @JvmOverloads constructor(
         focusStyle: FocusStyle = FocusStyle.CURRENT,
         pageFrame: RectF? = null,
         systemFrame: RectF? = null,
+        /** 연주자 화면 — 시스템을 조금 더 진하게 (사용자 요청) */
+        systemStrong: Boolean = false,
     ) {
         this.boxes = boxes
         this.focus = focus
         this.focusStyle = focusStyle
         this.pageFrame = pageFrame
         this.systemFrame = systemFrame
+        systemFill.color = if (systemStrong) SYSTEM_FILL_STRONG else SYSTEM_FILL
+        systemStroke.color = if (systemStrong) SYSTEM_STROKE_STRONG else SYSTEM_STROKE
         bitmapToView.set(imageMatrix)
         visibility = if (boxes.isEmpty() && focus == null && pageFrame == null && systemFrame == null) GONE else VISIBLE
         invalidate()
@@ -174,6 +178,9 @@ class ScoreOverlayView @JvmOverloads constructor(
         /** 지금 시스템 — 현재 마디(노랑)보다 연하게 */
         const val SYSTEM_FILL = 0x1FFFC107
         const val SYSTEM_STROKE = 0x66FFC107
+        /** 연주자 화면의 지금 시스템 — 조금 더 진하게 */
+        const val SYSTEM_FILL_STRONG = 0x33FFC107
+        const val SYSTEM_STROKE_STRONG = 0x8CFFC107.toInt()
         const val CURRENT_STROKE_WIDTH = 3f
         const val CURSOR_STROKE_WIDTH = 6f
     }

@@ -19,8 +19,8 @@ import kotlin.math.sqrt
  * 태블릿 지휘자의 **마이크 악보 추적** (P10 §3.1). 스레드 하나에서 마이크 → [ChromaExtractor] → [OnlineAligner] → [PageTurnDecider].
  *
  * 0. 위치는 정렬기의 날것이 아니라 [InertialTracker] 로 거른 것 — 짧게 헤매도 고른 빠르기로 이어 간다 (P10 §9)
- * 1. **첫 소리를 기다린다** — 청크(≈ 46ms) 음량이 배경(느린 평균)의 [ONSET_RATIO] 배를 넘고 [ONSET_MIN_RMS] 보다 크면 연주 시작.
- *    그 칸이 정렬의 첫 칸 = 시작 마디 첫머리
+ * 1. **연주 시작을 기다린다** — [StartDetector]: 최근 4초가 시작 마디부터의 악보 첫머리와, 곡 곳곳보다 뚜렷이 잘 맞을 때(P10 §11).
+ *    정렬은 그 맞은 자리에서 시작한다. (처음엔 첫 소리로 시작했는데 연주 전 소리에 끌려 헤맸다)
  * 2. 칸마다 위치 → [Listener.onPosition](마디 순서가 바뀔 때) · [Listener.onTurn](넘김) — 모두 메인 스레드에서
  * 3. 손으로 넘기면 [anchor] — 다음 칸부터 그 쪽 첫 마디에서 다시 시작(첫 소리 기다림 없이)
  * 4. [recordTo] 가 있으면 소리(WAV)와 사건(JSON: 시작 · 위치 · 넘김 · 재위치 · 다시 맞춤)을 남긴다 — 실제 성적을 P08 스크립트로 재는 자료.
@@ -102,7 +102,9 @@ class MicScoreFollower(
         val chunk = ShortArray(HOP)
         var aligner: OnlineAligner? = null
         var tracker: InertialTracker? = null
-        var noise = -1.0
+        // 연주 시작 찾기 (P10 §11) — 악보 첫머리와 맞는 소리에서 시작
+        var starter: StartDetector? = StartDetector(score.frames, score.colOfMeasure(startMeasure), score.frameSec)
+        var lastRatioLogged = Double.NaN
         var lastMeasure = -1
         var chunkRms = 0.0
         var lastPosLog = 0L
@@ -115,22 +117,25 @@ class MicScoreFollower(
                 val measure = a % 100000
                 aligner = OnlineAligner(score.frames, score.colOfMeasure(measure), score.frameSec)
                 tracker = null
+                starter = null // 손으로 짚은 곳이 곧 시작
                 decider.moveTo(page)
                 lastMeasure = -1
                 mark(now, "anchor", "${page + 1}", mapOf("measure_index" to measure))
             }
             var al = aligner
             if (al == null) {
-                // 첫 소리 기다리기
-                if (noise < 0) noise = chunkRms
-                val onset = chunkRms > noise * ONSET_RATIO && chunkRms > ONSET_MIN_RMS
-                if (!onset) {
-                    noise = noise * 0.95 + chunkRms * 0.05
-                    return@ChromaExtractor
+                // 악보 첫머리와 맞는 소리를 기다린다 — 이번 칸부터 정렬
+                val st = starter ?: return@ChromaExtractor
+                val found = st.feed(raw.normalized())
+                if (!st.lastRatio.isNaN() && st.lastRatio != lastRatioLogged) {
+                    lastRatioLogged = st.lastRatio
+                    mark(now, "start_check", "%.3f".format(java.util.Locale.US, st.lastRatio), mapOf("rms" to chunkRms))
                 }
-                al = OnlineAligner(score.frames, score.colOfMeasure(startMeasure), score.frameSec)
+                if (found == null) return@ChromaExtractor
+                al = OnlineAligner(score.frames, found.second, score.frameSec)
                 aligner = al
-                mark(now, "onset", "", mapOf("rms" to chunkRms, "noise" to noise))
+                starter = null
+                mark(now, "start", "", mapOf("ratio" to st.lastRatio, "measure_pos" to score.measurePosOf(found.second)))
                 main.post { listener.onListening() }
             }
             val jumpsBefore = al.jumps.size
@@ -219,10 +224,6 @@ class MicScoreFollower(
         const val SAMPLE_RATE = 44100
         const val N_FFT = 4096
         const val HOP = 2048
-        /** 첫 소리: 배경의 몇 배 (≈ 12dB) */
-        const val ONSET_RATIO = 4.0
-        /** 첫 소리: 최소 음량 (≈ −54 dBFS) */
-        const val ONSET_MIN_RMS = 0.002
         val FRAME_SEC: Double get() = HOP.toDouble() / SAMPLE_RATE
     }
 }

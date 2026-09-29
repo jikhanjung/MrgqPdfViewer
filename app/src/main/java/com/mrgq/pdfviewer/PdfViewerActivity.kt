@@ -4017,7 +4017,8 @@ class PdfViewerActivity : AppCompatActivity() {
         }
         val showAll = isScoreOverlayEnabled()
         val frame = conductorPageFrame()
-        val systemFrame = micSystemFrame() ?: conductorSystemFrame()
+        val micSystem = micSystemFrame()
+        val systemFrame = micSystem ?: conductorSystemFrame()
         if (fileId == null || isAnimating || (!showAll && focus == null && frame == null && systemFrame == null)) {
             overlay.clear()
             return
@@ -4043,6 +4044,7 @@ class PdfViewerActivity : AppCompatActivity() {
             focusStyle = style,
             pageFrame = frame,
             systemFrame = systemFrame,
+            systemStrong = micSystem == null, // 연주자 화면이면 조금 더 진하게
         )
     }
 

@@ -19,7 +19,7 @@ import score_follow_dtw as s
 F = "recordings/fixtures/"
 
 
-def smooth(z, fps, gate_s=1.5, alpha=0.1, beta=0.002, switch_s=3.0, vmin=0.5, vmax=2.0):
+def smooth(z, fps, gate_s=1.5, alpha=0.1, beta=0.002, switch_s=3.0, vmin=0.5, vmax=2.0, lock_s=0.0, quiet=None):
     """z: 칸별 날것 추정(악보 칸). 반환: 거른 위치(실수), 옮김 기록"""
     n = len(z)
     gate = gate_s * fps  # 악보 칸 (기준 빠르기에서 초 × fps)
@@ -30,7 +30,19 @@ def smooth(z, fps, gate_s=1.5, alpha=0.1, beta=0.002, switch_s=3.0, vmin=0.5, vm
     out[0] = x
     outside = 0
     switches = []
+    lock = lock_s * fps
+    locked = lock <= 0
+    z0 = float(z[0])
     for i in range(1, n):
+        if not locked:  # 붙잡기 전: 날것을 그대로 (연주가 실제로 시작해 추정이 나아갈 때까지 관성을 믿지 않는다)
+            if z[i] - z0 >= lock:
+                locked = True
+            x = float(z[i])
+            out[i] = x
+            continue
+        if quiet is not None and quiet[i]:  # 조용하면 제자리
+            out[i] = x
+            continue
         pred = x + v
         r = z[i] - pred
         if abs(r) <= gate:

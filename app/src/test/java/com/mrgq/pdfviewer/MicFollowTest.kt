@@ -267,3 +267,39 @@ class InertialTrackerTest {
         assertTrue(near >= (z.size - 1) * 0.99)
     }
 }
+
+/** 연주 시작 찾기 (P10 §11) */
+class StartDetectorTest {
+    @Test
+    fun `시작 칸 · 악보 칸이 Python start_detect 와 같다 (태블릿 기록, 연주 전 11초)`() {
+        val dir = File("../data/recordings/fixtures")
+        assumeTrue(File(dir, "start_meta.json").exists())
+        fun floats(name: String): FloatArray {
+            val fb = ByteBuffer.wrap(File(dir, name).readBytes()).order(ByteOrder.LITTLE_ENDIAN).asFloatBuffer()
+            return FloatArray(fb.remaining()).also { fb.get(it) }
+        }
+        val meta = File(dir, "start_meta.json").readText()
+        fun num(key: String) = Regex("\"$key\":\\s*([0-9.eE+-]+)").find(meta)!!.groupValues[1]
+        val rec = floats("start_rec.f32")
+        val sc = floats("start_score.f32")
+        val score = Array(sc.size / 12) { j -> FloatArray(12) { sc[j * 12 + it] } }
+        val d = com.mrgq.pdfviewer.follow.StartDetector(score, 0, num("frameSec").toDouble())
+        var found: Pair<Int, Int>? = null
+        for (i in 0 until rec.size / 12) {
+            found = d.feed(FloatArray(12) { rec[i * 12 + it] })
+            if (found != null) break
+        }
+        assertEquals(num("frame").toInt(), found!!.first)
+        assertEquals(num("col").toInt(), found.second)
+    }
+
+    @Test
+    fun `소리가 악보와 안 맞으면 시작하지 않는다`() {
+        val rnd = Random(3)
+        val score = Array(3000) { FloatArray(12) { rnd.nextFloat() }.normalized() }
+        val d = com.mrgq.pdfviewer.follow.StartDetector(score, 0, 0.05)
+        var found: Pair<Int, Int>? = null
+        for (i in 0 until 400) found = found ?: d.feed(FloatArray(12) { rnd.nextFloat() }.normalized())
+        assertNull(found)
+    }
+}
