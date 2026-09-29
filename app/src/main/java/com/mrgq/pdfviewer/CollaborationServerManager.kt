@@ -192,10 +192,21 @@ class CollaborationServerManager(
     }
     
     /** 합주 메트로놈 상태 (#055) — 전체 상태를 보낸다 */
+    /** 지휘자 마이크 추적의 지금 마디 (P10) */
+    fun broadcastFollowPosition(fileName: String, measure: Int) {
+        broadcastToClients(CollaborationProtocol.buildFollowPosition(fileName, measure).toString())
+    }
+
     fun broadcastMetronomeRun(run: com.mrgq.pdfviewer.ensemble.EnsembleRun) {
         val message = CollaborationProtocol.buildMetronomeRun(run)
         broadcastToClients(message.toString())
         Log.d(TAG, "Broadcasted metronome run: ${run.runId} ${run.state} bpm=${run.timeline.bpm} file=${run.file}")
+    }
+
+    /** 합주 끝 — 연주자들도 합주 모드를 끝낸다 */
+    fun broadcastEnsembleEnd() {
+        broadcastToClients(CollaborationProtocol.buildEnsembleEnd().toString())
+        Log.d(TAG, "Broadcasted ensemble end")
     }
 
     fun broadcastBackToList() {

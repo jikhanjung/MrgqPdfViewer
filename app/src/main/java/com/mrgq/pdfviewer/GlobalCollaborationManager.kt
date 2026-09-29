@@ -41,6 +41,9 @@ class GlobalCollaborationManager private constructor() {
     private var onFileChangeReceived: ((String, Int, String?) -> Unit)? = null
     private var onBackToListReceived: (() -> Unit)? = null
     private var onMetronomeRunReceived: ((com.mrgq.pdfviewer.ensemble.EnsembleRun) -> Unit)? = null
+    private var onFollowPositionReceived: ((String, Int) -> Unit)? = null
+    /** 연주자: 지휘자가 합주를 끝내 이 기기도 합주 모드를 끝냈다 (메인 스레드) */
+    private var onEnsembleEnded: (() -> Unit)? = null
     private var onClockSynced: (() -> Unit)? = null
     private var onConductorDiscovered: ((ConductorDiscovery.ConductorInfo) -> Unit)? = null
     private var onDiscoveryTimeout: (() -> Unit)? = null
@@ -128,6 +131,15 @@ class GlobalCollaborationManager private constructor() {
     
     fun deactivateCollaborationMode() {
         Log.d(TAG, "Deactivating collaboration mode - Force cleanup initiated")
+        // 지휘자가 끝내면 연주자들에게 먼저 알린다 — 연주자도 합주 모드를 끝낸다
+        if (currentMode == CollaborationMode.CONDUCTOR) {
+            try {
+                collaborationServerManager?.broadcastEnsembleEnd()
+                Thread.sleep(200) // 보낼 틈
+            } catch (e: Exception) {
+                Log.w(TAG, "합주 끝 알림 실패", e)
+            }
+        }
         
         currentMode = CollaborationMode.NONE
         preferences?.edit()?.putString("collaboration_mode", "none")?.apply()
@@ -281,6 +293,15 @@ class GlobalCollaborationManager private constructor() {
                 onMetronomeRunReceived = { run -> onMetronomeRunReceived?.invoke(run) },
                 onClockSynced = { onClockSynced?.invoke() },
                 onVersionMismatch = { message -> notifyVersionMismatch(message) },
+                onFollowPositionReceived = { file, measure -> onFollowPositionReceived?.invoke(file, measure) },
+                onEnsembleEndReceived = {
+                    // 받는 스레드가 곧 정리될 클라이언트의 것이라 따로 끝낸다
+                    Thread({
+                        Log.d(TAG, "Conductor ended the ensemble — deactivating performer mode")
+                        deactivateCollaborationMode()
+                        android.os.Handler(android.os.Looper.getMainLooper()).post { onEnsembleEnded?.invoke() }
+                    }, "EnsembleEnd").start()
+                },
             )
             
             // Initialize conductor discovery for performer mode
@@ -319,6 +340,19 @@ class GlobalCollaborationManager private constructor() {
     }
     
     /** 합주 메트로놈 상태를 연주자들에게 (#055) */
+    /** 지휘자 마이크 추적의 지금 마디 → 연주자 (P10). [measure] 0 = 끝 */
+    fun broadcastFollowPosition(fileName: String, measure: Int) {
+        collaborationServerManager?.broadcastFollowPosition(fileName, measure)
+    }
+
+    fun setOnEnsembleEnded(callback: (() -> Unit)?) {
+        onEnsembleEnded = callback
+    }
+
+    fun setOnFollowPositionReceived(callback: ((String, Int) -> Unit)?) {
+        onFollowPositionReceived = callback
+    }
+
     fun broadcastMetronomeRun(run: com.mrgq.pdfviewer.ensemble.EnsembleRun) {
         collaborationServerManager?.broadcastMetronomeRun(run)
     }
@@ -510,6 +544,7 @@ class GlobalCollaborationManager private constructor() {
         onFileChangeReceived = null
         onBackToListReceived = null
         onMetronomeRunReceived = null
+        onFollowPositionReceived = null
         onClockSynced = null
         onConductorDiscovered = null
         onDiscoveryTimeout = null

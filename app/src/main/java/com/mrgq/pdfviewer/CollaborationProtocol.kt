@@ -64,9 +64,14 @@ object CollaborationProtocol {
     const val ACTION_PAGE_CHANGE = "page_change"
     const val ACTION_FILE_CHANGE = "file_change"
     const val ACTION_BACK_TO_LIST = "back_to_list"
+    /** 지휘자가 합주를 끝냈다 — 연주자도 합주 모드를 끝낸다. 옛 앱은 무시 */
+    const val ACTION_ENSEMBLE_END = "ensemble_end"
     const val ACTION_CLOCK_PING = "clock_ping"
     const val ACTION_CLOCK_PONG = "clock_pong"
     const val ACTION_METRONOME_RUN = "metronome_run"
+    /** 지휘자 마이크 추적의 지금 마디 (P10) — 시스템이 바뀔 때만. 연주자는 그 시스템을 연하게 표시. 옛 앱은 무시 */
+    const val ACTION_FOLLOW_POSITION = "follow_position"
+    const val KEY_MEASURE = "measure"
 
     // ── 빌드 (지휘자) ───────────────────────────────────────────────────────
 
@@ -104,6 +109,11 @@ object CollaborationProtocol {
         sha256?.let { addProperty(KEY_SHA256, it) }
     }
 
+    fun buildEnsembleEnd(timestamp: Long = System.currentTimeMillis()): JsonObject = JsonObject().apply {
+        addProperty(KEY_ACTION, ACTION_ENSEMBLE_END)
+        addProperty(KEY_TIMESTAMP, timestamp)
+    }
+
     fun buildBackToList(timestamp: Long = System.currentTimeMillis()): JsonObject =
         JsonObject().apply {
             addProperty(KEY_ACTION, ACTION_BACK_TO_LIST)
@@ -135,6 +145,20 @@ object CollaborationProtocol {
         val serverNs = json.optLong(KEY_SERVER_NS) ?: return null
         return ClockPong(t0, serverNs)
     }
+
+    /** [measure] = 악보(PDF) 마디 번호, 0 = 추적 끝(표시 지움) */
+    fun buildFollowPosition(fileName: String, measure: Int): JsonObject = JsonObject().apply {
+        addProperty(KEY_ACTION, ACTION_FOLLOW_POSITION)
+        addProperty(KEY_FILE, fileName)
+        addProperty(KEY_MEASURE, measure)
+    }
+
+    data class FollowPosition(val file: String, val measure: Int)
+
+    fun parseFollowPosition(json: JsonObject) = FollowPosition(
+        file = json.optStringOrNull(KEY_FILE) ?: "",
+        measure = json.optInt(KEY_MEASURE, 0),
+    )
 
     fun buildMetronomeRun(run: EnsembleRun): JsonObject = JsonObject().apply {
         addProperty(KEY_ACTION, ACTION_METRONOME_RUN)

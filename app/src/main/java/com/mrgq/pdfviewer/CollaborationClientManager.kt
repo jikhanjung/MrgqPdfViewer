@@ -28,6 +28,10 @@ class CollaborationClientManager(
     private val onClockSynced: (() -> Unit)? = null,
     /** 지휘자와 앱 버전이 다르다 (#061) — 보일 안내문 */
     private val onVersionMismatch: ((String) -> Unit)? = null,
+    /** 지휘자 마이크 추적의 지금 마디 (파일, 마디 번호 — 0 = 끝) (P10) */
+    private val onFollowPositionReceived: ((String, Int) -> Unit)? = null,
+    /** 지휘자가 합주를 끝냈다 */
+    private val onEnsembleEndReceived: (() -> Unit)? = null,
 ) {
 
     /** 지휘자 시계와의 차이 (#055) */
@@ -208,6 +212,10 @@ class CollaborationClientManager(
                     val run = CollaborationProtocol.parseMetronomeRun(json)
                     if (run == null) Log.w(TAG, "Invalid metronome_run: $message") else onMetronomeRunReceived?.invoke(run)
                 }
+                CollaborationProtocol.ACTION_FOLLOW_POSITION -> {
+                    val m = CollaborationProtocol.parseFollowPosition(json)
+                    onFollowPositionReceived?.invoke(m.file, m.measure)
+                }
                 CollaborationProtocol.ACTION_PAGE_CHANGE -> {
                     // turn_at 이 없거나 null 이면 turnAt == null → 즉시 넘김 (Phase 0 하위호환).
                     val m = CollaborationProtocol.parsePageChange(json)
@@ -237,6 +245,10 @@ class CollaborationClientManager(
                         startClockSync()
                         Log.d(TAG, "Successfully connected to conductor")
                     }
+                }
+                CollaborationProtocol.ACTION_ENSEMBLE_END -> {
+                    Log.d(TAG, "Received ensemble end")
+                    onEnsembleEndReceived?.invoke()
                 }
                 CollaborationProtocol.ACTION_BACK_TO_LIST -> {
                     Log.d(TAG, "Received back to list command")

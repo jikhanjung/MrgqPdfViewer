@@ -1233,6 +1233,7 @@ class PdfViewerActivity : AppCompatActivity() {
     private fun loadFileWithTargetPage(filePath: String, fileName: String, targetPage: Int, originalMode: CollaborationMode) {
         stopMicFollow()
         conductorPage = (targetPage - 1).takeIf { it >= 0 }
+        conductorMeasure = null
         // Close current PDF
         Log.d("PdfViewerActivity", "Closing current PDF resources for collaboration file change...")
         try {
@@ -1327,6 +1328,7 @@ class PdfViewerActivity : AppCompatActivity() {
     private fun loadFile(filePath: String, fileName: String, goToLastPage: Boolean = false) {
         stopMicFollow() // 곡이 바뀌면 추적도 끝 (P10)
         conductorPage = null
+        conductorMeasure = null
         // Close current PDF
         Log.d("PdfViewerActivity", "Closing current PDF resources...")
         try {
@@ -1779,6 +1781,8 @@ class PdfViewerActivity : AppCompatActivity() {
     private var micFocus: ScoreMeasure? = null
     /** 다음 page_change 는 마이크 추적이 넘긴 것 — 연주자는 차례 넘김 (P10 §3.2) */
     private var micRollBroadcast = false
+    /** 연주자에게 마지막으로 알린 시스템 (쪽 × 1000 + 시스템) */
+    private var micSentSystem: Int? = null
 
     /** 이 기기에서 마이크 추적을 쓸 수 있나 — 태블릿(TV 아님)에 마이크 */
     /** 마이크 추적의 지금 시스템 — 그 시스템 마디 박스들을 합친 사각형 (표시 비트맵 픽셀) */
@@ -1862,6 +1866,10 @@ class PdfViewerActivity : AppCompatActivity() {
         micFollower = null
         f.stop()
         micFocus = null
+        if (micSentSystem != null && collaborationMode == CollaborationMode.CONDUCTOR) {
+            globalCollaborationManager.broadcastFollowPosition(pdfFileName, 0) // 연주자 표시 지움
+        }
+        micSentSystem = null
         binding.recordTime.visibility = View.GONE
         if (micFollowCapable()) binding.recordButton.visibility = View.VISIBLE
         refreshScoreOverlay()
@@ -1878,6 +1886,12 @@ class PdfViewerActivity : AppCompatActivity() {
             if (micFollower == null) return
             val m = micMeasures.getOrNull(measurePos.toInt())
             micFocus = m
+            // 합주 지휘자면 시스템이 바뀔 때 연주자에게 (P10) — 연주자도 지금 시스템을 연하게 표시
+            val system = m?.let { it.pageIndex * 1000 + it.systemIndex }
+            if (m != null && system != micSentSystem && collaborationMode == CollaborationMode.CONDUCTOR) {
+                micSentSystem = system
+                globalCollaborationManager.broadcastFollowPosition(pdfFileName, m.measureNumber)
+            }
             binding.recordTime.text = "🎤 ${m?.measureNumber ?: "?"}"
             refreshScoreOverlay()
         }
@@ -2129,6 +2143,26 @@ class PdfViewerActivity : AppCompatActivity() {
             }
         }
         
+        globalCollaborationManager.setOnEnsembleEnded {
+            if (isDestroyed) return@setOnEnsembleEnded
+            collaborationMode = CollaborationMode.NONE
+            conductorPage = null
+            conductorMeasure = null
+            cancelPendingRoll()
+            if (metronome.isRunning || followState != FollowState.OFF) stopMetronome()
+            updateCollaborationStatus()
+            refreshScoreOverlay()
+            Toast.makeText(this, "지휘자가 합주를 끝냈습니다 — 합주 모드 종료", Toast.LENGTH_LONG).show()
+        }
+
+        globalCollaborationManager.setOnFollowPositionReceived { file, measure ->
+            runOnUiThread {
+                if (isDestroyed || file != pdfFileName) return@runOnUiThread
+                conductorMeasure = measure.takeIf { it > 0 }
+                refreshScoreOverlay()
+            }
+        }
+
         globalCollaborationManager.setOnFileChangeReceived { file, page, sha256 ->
             runOnUiThread {
                 handleRemoteFileChange(file, page, sha256)
@@ -2214,6 +2248,40 @@ class PdfViewerActivity : AppCompatActivity() {
 
     /** 연주자: 지휘자가 지금 치는 쪽 (순번, 0부터). 두 쪽 화면이면 그 쪽에 노란 테두리 (P10) */
     private var conductorPage: Int? = null
+    /** 연주자: 지휘자 마이크 추적의 지금 마디 번호 — 그 시스템을 연하게 (P10) */
+    private var conductorMeasure: Int? = null
+
+    /**
+     * 연주자 화면에서 지휘자의 지금 시스템 (표시 비트맵 픽셀). 이 기기의 악보 분석 마디로 찾는다(같은 PDF → 같은 마디 번호).
+     * 두 쪽 차례 넘김(3 | 2)이어도 맞게 — 그 쪽이 놓인 자리(왼 · 오)로 옮겨 계산
+     */
+    private fun conductorSystemFrame(): android.graphics.RectF? {
+        val number = conductorMeasure ?: return null
+        if (collaborationMode != CollaborationMode.PERFORMER || partViewLayout != null) return null
+        val fileId = currentPdfFileId ?: return null
+        if (scoreMeasuresFileId != fileId) {
+            loadScoreMeasures(fileId, announce = false) // 끝나면 다시 그린다
+            return null
+        }
+        val m = scoreMeasures.firstOrNull { it.measureNumber == number } ?: return null
+        val system = scoreMeasures.filter { it.pageIndex == m.pageIndex && it.systemIndex == m.systemIndex }
+        val boxes = if (!isTwoPageMode) {
+            if (m.pageIndex != pageIndex) return null
+            overlayBoxes(system)
+        } else {
+            val spread = rollSpread ?: com.mrgq.pdfviewer.follow.RollingTurns.Spread.pairOf(pairStart(pageIndex), pageCount)
+            if (!spread.shows(m.pageIndex)) return null
+            val slot = if (m.pageIndex == spread.left) 0 else 1
+            ScoreOverlayGeometry.boxes(
+                measures = system.map { it.copy(pageIndex = slot) },
+                leftPageIndex = 0, twoPageMode = true, pageCount = if (spread.right != null) 2 else 1,
+                screenWidth = screenWidth, screenHeight = screenHeight,
+                topClipping = currentTopClipping, bottomClipping = currentBottomClipping, centerPadding = currentCenterPadding,
+            )
+        }
+        if (boxes.isEmpty()) return null
+        return android.graphics.RectF(boxes.minOf { it.left }, boxes.minOf { it.top }, boxes.maxOf { it.right }, boxes.maxOf { it.bottom })
+    }
 
     /** 지휘자의 지금 쪽이 두 쪽 화면에 보이면 그 쪽의 자리 (표시 비트맵 픽셀) — [combineTwoPagesUnified] 와 같은 배치 */
     private fun conductorPageFrame(): android.graphics.RectF? {
@@ -3949,7 +4017,8 @@ class PdfViewerActivity : AppCompatActivity() {
         }
         val showAll = isScoreOverlayEnabled()
         val frame = conductorPageFrame()
-        if (fileId == null || isAnimating || (!showAll && focus == null && frame == null)) {
+        val systemFrame = micSystemFrame() ?: conductorSystemFrame()
+        if (fileId == null || isAnimating || (!showAll && focus == null && frame == null && systemFrame == null)) {
             overlay.clear()
             return
         }
@@ -3973,7 +4042,7 @@ class PdfViewerActivity : AppCompatActivity() {
             focus = focus?.let { mapped(listOf(it)).firstOrNull() },
             focusStyle = style,
             pageFrame = frame,
-            systemFrame = micSystemFrame(),
+            systemFrame = systemFrame,
         )
     }
 
@@ -4009,7 +4078,8 @@ class PdfViewerActivity : AppCompatActivity() {
         return followMeasures.indexOfFirst { it.measureNumber == hit.measureNumber }
     }
 
-    private fun loadScoreMeasures(fileId: String) {
+    /** [announce] = 마디 수 · 못 찾음 안내 (연주자 시스템 표시처럼 뒤에서 읽을 때는 조용히) */
+    private fun loadScoreMeasures(fileId: String, announce: Boolean = true) {
         if (scoreLoadingFileId == fileId) return
         scoreLoadingFileId = fileId
         val file = File(pdfFilePath)
@@ -4020,7 +4090,9 @@ class PdfViewerActivity : AppCompatActivity() {
             if (measures == null || currentPdfFileId != fileId) return@launch
             scoreMeasures = measures
             scoreMeasuresFileId = fileId
-            if (measures.isEmpty()) {
+            if (!announce) {
+                // 조용히
+            } else if (measures.isEmpty()) {
                 Toast.makeText(
                     this@PdfViewerActivity,
                     "마디를 찾지 못했습니다 (지원: Sibelius 에서 PDF 로 인쇄한 벡터 악보)",

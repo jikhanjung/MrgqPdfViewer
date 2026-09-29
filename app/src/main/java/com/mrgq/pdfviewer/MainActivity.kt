@@ -742,6 +742,13 @@ class MainActivity : AppCompatActivity() {
     
     private fun setupCollaborationCallbacks() {
         val globalCollaborationManager = GlobalCollaborationManager.getInstance()
+
+        // 지휘자가 합주를 끝냈다 — 이 기기도 끝났다
+        globalCollaborationManager.setOnEnsembleEnded {
+            if (isDestroyed) return@setOnEnsembleEnded
+            Toast.makeText(this, "지휘자가 합주를 끝냈습니다 — 합주 모드 종료", Toast.LENGTH_LONG).show()
+            updateCollaborationStatus()
+        }
         
         // Set up file change callback for performer mode
         globalCollaborationManager.setOnFileChangeReceived { fileName, page, sha256 ->

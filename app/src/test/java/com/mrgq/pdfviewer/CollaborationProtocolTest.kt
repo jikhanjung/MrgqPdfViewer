@@ -46,6 +46,19 @@ class CollaborationProtocolTest {
     }
 
     @Test
+    fun `follow_position 왕복 — 마디 번호, 0 은 끝`() {
+        val m = CollaborationProtocol.parseFollowPosition(parse(CollaborationProtocol.buildFollowPosition("곡.pdf", 37).toString()))
+        assertEquals("곡.pdf", m.file)
+        assertEquals(37, m.measure)
+        assertEquals("follow_position", CollaborationProtocol.buildFollowPosition("a.pdf", 0).get("action").asString)
+    }
+
+    @Test
+    fun `ensemble_end 액션 이름`() {
+        assertEquals("ensemble_end", CollaborationProtocol.buildEnsembleEnd().get("action").asString)
+    }
+
+    @Test
     fun `file_change 는 왕복해도 값이 보존된다`() {
         val built = CollaborationProtocol.buildFileChange(
             "바흐 파르티타.pdf", pageNumber = 3, fileServerUrl = "http://192.168.0.5:8090", timestamp = 1L
