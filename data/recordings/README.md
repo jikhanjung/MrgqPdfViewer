@@ -26,11 +26,22 @@
 | `…_195355` | 51초 | 태블릿 메트로놈 + 반주(총보 전체), 1 ~ 14마디, 예비박 두 마디 | 있음 (박 94 · 마디 14) | **timestamp** | 시각 맞춤 확인: 예비박 클릭이 기록보다 **약 60ms** 늦음(출력 지연), 박 기록 흔들림 0.4ms. 첫 DTW 실험 |
 | `…_200858` | 177초 | 태블릿 **반주만**(클릭 끔, 총보 전체), 1 ~ 57마디, 쪽 1 → 10 | 있음 (박 349 · 마디 57) | **timestamp** | **주 실험 자료**(P08 §7). 똑같은 반복 40 ~ 47 = 48 ~ 55 포함. 클릭이 없어 지연은 재지 않음(60ms 가정) |
 
-모두 **합성음**(같은 MusicXML 을 앱 합성기로 낸 반주)이다 — 가장 쉬운 경우. 실제 기타 녹음은 P08 §8.
+위 다섯은 모두 **합성음**(같은 MusicXML 을 앱 합성기로 낸 반주) — 가장 쉬운 경우.
+
+### 실제 연주
+
+| 녹음 | 길이 | 내용 | 정답 | 쓰임 · 주의 |
+|---|---|---|---|---|
+| `아르페지오네260906.m4a` (+ 변환한 `.wav`, 44.1kHz 모노) | 915초 | **실제 연주** (2026-09-06, 휴대폰 녹음, 앱 녹음 아님) — 슈베르트 아르페지오네 소나타 1악장 전체. 악보 `scores/Sonate für Pianoforte und Arpeggione (Full score).musicxml`(278마디, 4/4, 보표 3, **제시부 반복을 풀어 쓴 악보** — 1 ~ 77 ≈ 78 ~ 145) | 없음 → 20초 조각 맞춤을 이어 만든 기준(`data/score_follow_compare.py`) | 처음 쓴 실제 녹음. 대략 ♩≈77 고른 빠르기(마디당 약 3.1초), 조율 약 −24 cent. 방 소리로 크로마 대비가 약하다(음 성분 분포가 평평) |
+
+`.wav` 는 `ffmpeg -i 아르페지오네260906.m4a -ac 1 -ar 44100 아르페지오네260906.wav` 로 만든다(librosa 가 m4a 를 못 읽음).
 
 ## 다시 돌리기
 
 ```bash
+# 정답 없는 실제 녹음: 기준 경로를 만들어 온라인과 비교 + 그림
+python data/score_follow_compare.py "data/recordings/아르페지오네260906.wav" "data/recordings/scores/Sonate für Pianoforte und Arpeggione (Full score).musicxml" --bpm 77 --plot arp.png
+
 R=data/recordings; X="$R/scores/Die Moldau (Vltava) (Full Score).musicxml"
 python data/recording_align.py "$R/Die Moldau (Vltava) (Full Score)_20260928_195355"          # 출력 지연 (예비박 클릭)
 python data/score_follow_dtw.py "$R/Die Moldau (Vltava) (Full Score)_20260928_200858" "$X"          # 오프라인
