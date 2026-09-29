@@ -1,8 +1,8 @@
 # HANDOFF — 현재 작업 인계 노트
 
-마지막 갱신: 2026-09-28
+마지막 갱신: 2026-09-29
 브랜치: `main` (origin/main 과 동기화, 미푸시 커밋 0개)
-버전: **v0.3.5** (versionCode 31) — 릴리스 완료, 실기기(Z18TV Pro)는 앱 안 업데이트로 받는다
+버전: **v0.4.0** (versionCode 32) — 태블릿 마이크 자동 넘김(P10). 실기기는 앱 안 업데이트로 받는다
 관련 문서: [CLAUDE.md](CLAUDE.md) (가이드 · 알아 둘 결정) · [TODOs.md](TODOs.md) · [CHANGELOG.md](CHANGELOG.md) · [devlog 인덱스](devlog/README.md)
 
 ---
@@ -27,10 +27,10 @@
 3. **빈 보표 숨긴 총보** — 시스템마다 보표 수가 다르면 지금은 파트 보기를 막는다(`ScoreParts.Result.VaryingStaves`). 지금 쓰는 기타 앙상블 악보에는 없었다
 4. **곡 단위 합주** (`work_id + 마디`, 서버 P01) — 각자 다른 PDF 로 같은 곡 합주. TV 요청 문서(P09)부터
 5. 합주 Phase 0 동기 넘김 — 기본 OFF · 보류(CLAUDE.md "합주")
-6. **마이크 악보 추적 (P08) — ⏸ 실제 기타 녹음부터 재개**. 녹음 도구 · 합성 총보 실험까지 끝(P08 §6 · §7). 재개 순서는 P08 §8:
-   녹음 조건(파트 보기 + 내 파트 뺀 반주 + 기타, 평소처럼), 볼 지표, 결정(−0.5박 보정 보류, 반복 멈춤 재현 시 작은 다중 가설)
-   - 녹음: `data/recordings/` (git 에서 빠짐, 목록 · 설명은 추적되는 [`data/recordings/README.md`](data/recordings/README.md)). 새 녹음은 `adb pull /sdcard/Android/data/com.mrgq.pdfviewer/files/recordings/ data/recordings/` 후 목록에 한 줄
-   - 실행: `python data/score_follow_dtw.py <녹음 base> <곡.musicxml> --online [--stretch 0.85]` (venv 에 librosa), 지연 확인 `data/recording_align.py`
+6. **마이크로 듣고 쪽 넘기기 (P10)** — 태블릿 지휘자 🎤 연주 듣고 넘기기 · 연주자 차례 넘김 · 시스템 표시 구현, **아르페지오네 실기기 확인 끝**(devlog #067 ~ #071). **다음: 여러 곡 시험**(P10 §12 — 몰다우 반복 · K488 · Clair de Lune 루바토 · 실제 기타 앙상블). 그 뒤: 태블릿 "악장" + TV 지휘자(P10 §10)
+   - 기록: 태블릿 `files/recordings/<곡>_<시각>_follow.wav/.json` → `data/recordings/`(git 밖, 목록 [`README`](data/recordings/README.md)). **`ü` 든 이름은 받을 곳을 ASCII 이름으로**
+   - 분석: 소리 맞춤으로 원래 녹음과 시각 차이 → 기준 경로(`data/score_follow_compare.py --ref-save`)와 비교, 쪽 넘김 표. 실험 스크립트 `score_follow_dtw.py` · `inertia_eval.py` · `start_detect.py` (venv 에 librosa · matplotlib)
+   - 시험 전 메트로놈 템포를 실제 빠르기 근처로(기준 빠르기)
 
 ## 2. 일하는 방법 (이 환경)
 

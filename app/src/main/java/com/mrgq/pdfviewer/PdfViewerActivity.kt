@@ -64,7 +64,6 @@ class PdfViewerActivity : AppCompatActivity() {
     companion object {
         /** 태블릿: 이만큼(dp) 넘게 가로로 밀면 쪽 넘김 */
         private const val SWIPE_MIN_DP = 60f
-        private const val REQUEST_RECORD_AUDIO = 7301
         private const val REQUEST_MIC_FOLLOW = 7302
         /** 차례 넘김: 지휘자가 쪽에 들어선 뒤 다 친 쪽을 바꾸기까지 — 지휘자 넘김은 최악 3.7초 일찍이었다(P08 §7-2) */
         private const val ROLL_DELAY_MS = 5000L
@@ -290,13 +289,6 @@ class PdfViewerActivity : AppCompatActivity() {
         if (resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_PORTRAIT) {
             (binding.metronomeBeat.layoutParams as androidx.constraintlayout.widget.ConstraintLayout.LayoutParams).endToEnd =
                 androidx.constraintlayout.widget.ConstraintLayout.LayoutParams.PARENT_ID
-        }
-        // 연습 녹음 버튼 (P08 A단계) — 태블릿에서만 (TV 가 아니고 마이크가 있을 때)
-        if (!com.mrgq.pdfviewer.utils.DeviceForm.isTv(this) &&
-            packageManager.hasSystemFeature(android.content.pm.PackageManager.FEATURE_MICROPHONE)
-        ) {
-            binding.recordButton.visibility = View.VISIBLE
-            binding.recordButton.setOnClickListener { toggleRecording() }
         }
         
         // Keep screen on while viewing PDF
@@ -742,7 +734,6 @@ class PdfViewerActivity : AppCompatActivity() {
     }
     
     private fun showPage(index: Int) {
-        recorder?.mark("page", (index + 1).toString())
         rollSpread = null
         cancelPendingRoll()
         if (index < 0 || index >= pageCount) return
@@ -1673,102 +1664,19 @@ class PdfViewerActivity : AppCompatActivity() {
         })
     }
 
-    /** 이번 터치가 녹음 버튼에서 시작했다 — 몸짓(쪽 넘김)으로 보내지 않는다 */
-    private var touchOnButton = false
-
     override fun dispatchTouchEvent(ev: android.view.MotionEvent): Boolean {
-        // 악보 화면의 눌리는 뷰는 녹음 버튼(태블릿)뿐 — 나머지 터치는 모두 몸짓으로 (안내 카드도 옆 탭 = ← → 가 다음 · 이전 파일로 간다)
-        if (ev.actionMasked == android.view.MotionEvent.ACTION_DOWN) {
-            val button = binding.recordButton
-            touchOnButton = button.visibility == View.VISIBLE &&
-                ev.x >= button.left && ev.x <= button.right && ev.y >= button.top && ev.y <= button.bottom
-        }
+        // 악보 화면에는 눌리는 뷰가 없다 — 모든 터치를 몸짓으로 (안내 카드도 옆 탭 = ← → 가 다음 · 이전 파일로 간다)
         super.dispatchTouchEvent(ev)
-        if (!touchOnButton) touchGestures.onTouchEvent(ev)
+        touchGestures.onTouchEvent(ev)
         return true
-    }
-
-    // ── 연습 녹음 (P08 A단계) ─────────────────────────────────────────────
-    private var recorder: com.mrgq.pdfviewer.recording.PracticeRecorder? = null
-    private var recordedBeatIndex = Long.MIN_VALUE
-    private val recordTicker = object : Runnable {
-        override fun run() {
-            val r = recorder ?: return
-            val s = r.elapsedMs / 1000
-            binding.recordTime.text = String.format(java.util.Locale.US, "%d:%02d", s / 60, s % 60)
-            binding.recordButton.postDelayed(this, 500)
-        }
-    }
-
-    private fun toggleRecording() {
-        if (recorder != null) return stopRecording()
-        if (androidx.core.content.ContextCompat.checkSelfPermission(this, android.Manifest.permission.RECORD_AUDIO) !=
-            android.content.pm.PackageManager.PERMISSION_GRANTED
-        ) {
-            requestPermissions(arrayOf(android.Manifest.permission.RECORD_AUDIO), REQUEST_RECORD_AUDIO)
-            return
-        }
-        startRecording()
     }
 
     @Deprecated("Deprecated in Java")
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-        if (requestCode == REQUEST_MIC_FOLLOW) {
-            if (grantResults.firstOrNull() == android.content.pm.PackageManager.PERMISSION_GRANTED) startMicFollow()
-            else Toast.makeText(this, "마이크 권한이 없어 들을 수 없습니다", Toast.LENGTH_LONG).show()
-            return
-        }
-        if (requestCode != REQUEST_RECORD_AUDIO) return
-        if (grantResults.firstOrNull() == android.content.pm.PackageManager.PERMISSION_GRANTED) {
-            startRecording()
-        } else {
-            Toast.makeText(this, "마이크 권한이 없어 녹음할 수 없습니다", Toast.LENGTH_LONG).show()
-        }
-    }
-
-    /**
-     * 녹음 시작 — `files/recordings/<악보>_<시각>.wav` + 사건 `.json` (P08 A단계).
-     * 악보 연동 메트로놈을 켜고 연주하면 박 · 마디 기록이 "몇 초에 몇 마디"라는 정답이 된다
-     */
-    private fun startRecording() {
-        val stamp = java.text.SimpleDateFormat("yyyyMMdd_HHmmss", java.util.Locale.US).format(java.util.Date())
-        val base = pdfFileName.substringBeforeLast('.').replace(Regex("[\\\\/:*?\"<>|]"), "_")
-        val wav = File(File(getExternalFilesDir(null), "recordings"), "${base}_$stamp.wav")
-        val info = mapOf(
-            "pdf" to pdfFileName,
-            "part_view" to (partViewName ?: "전체 악보"),
-            "bpm" to metronome.bpm.toString(),
-            "time_signature" to "${metronome.timeSignature.numerator}/${metronome.timeSignature.denominator}",
-            "dotted" to metronome.dottedBeat.toString(),
-            "count_in_bars" to countInBarsSetting().toString(),
-            "device" to android.os.Build.MODEL,
-            "app_version" to BuildConfig.VERSION_NAME,
-        )
-        val r = com.mrgq.pdfviewer.recording.PracticeRecorder(wav, info)
-        if (!r.start()) {
-            Toast.makeText(this, "마이크를 열지 못했습니다", Toast.LENGTH_LONG).show()
-            return
-        }
-        recorder = r
-        recordedBeatIndex = Long.MIN_VALUE
-        binding.recordButton.setBackgroundResource(R.drawable.record_button_recording)
-        binding.recordTime.text = "0:00"
-        binding.recordTime.visibility = View.VISIBLE
-        binding.recordButton.post(recordTicker)
-        // 시각 0(첫 버퍼)이 정해진 뒤 지금 쪽을 적는다
-        binding.recordButton.postDelayed({ recorder?.mark("page", (pageIndex + 1).toString()) }, 300)
-        Toast.makeText(this, "녹음 시작 — 악보 연동 메트로놈을 켜고 연주하면 마디 기록이 함께 남습니다", Toast.LENGTH_LONG).show()
-    }
-
-    private fun stopRecording() {
-        val r = recorder ?: return
-        recorder = null
-        binding.recordButton.removeCallbacks(recordTicker)
-        val json = r.stop()
-        binding.recordTime.visibility = View.GONE
-        binding.recordButton.setBackgroundResource(R.drawable.record_button_idle)
-        Toast.makeText(this, "녹음 저장: ${json.nameWithoutExtension}.wav", Toast.LENGTH_LONG).show()
+        if (requestCode != REQUEST_MIC_FOLLOW) return
+        if (grantResults.firstOrNull() == android.content.pm.PackageManager.PERMISSION_GRANTED) startMicFollow()
+        else Toast.makeText(this, "마이크 권한이 없어 들을 수 없습니다", Toast.LENGTH_LONG).show()
     }
 
     // ── 마이크로 연주를 듣고 넘기기 — 태블릿 지휘자 (P10) ─────────────────────────────────
@@ -1813,7 +1721,6 @@ class PdfViewerActivity : AppCompatActivity() {
         if (partViewLayout != null) return toast("전체 악보에서만 쓸 수 있습니다 (파트 보기를 끄세요)")
         val score = musicXml?.takeIf { musicXmlFileId == fileId } ?: return toast("이 곡의 MusicXML 이 없어 들을 수 없습니다")
         stopMetronome()
-        stopRecording()
         val file = File(pdfFilePath)
         lifecycleScope.launch {
             val measures = withContext(Dispatchers.IO) { musicRepository.getOrAnalyzeScoreMeasures(fileId, file) }
@@ -1852,9 +1759,8 @@ class PdfViewerActivity : AppCompatActivity() {
             if (!follower.start()) return@launch toast("마이크를 열지 못했습니다")
             micFollower = follower
             micMeasures = mapped
-            binding.recordButton.visibility = View.INVISIBLE // 추적이 녹음도 함께 한다
-            binding.recordTime.text = "🎤 대기"
-            binding.recordTime.visibility = View.VISIBLE
+            binding.micStatus.text = "🎤 대기"
+            binding.micStatus.visibility = View.VISIBLE
             Toast.makeText(this@PdfViewerActivity, "🎤 ${mapped[startMeasure]?.measureNumber}번 마디부터 듣습니다 — 연주를 시작하세요", Toast.LENGTH_LONG).show()
         }
     }
@@ -1868,8 +1774,7 @@ class PdfViewerActivity : AppCompatActivity() {
             globalCollaborationManager.broadcastFollowPosition(pdfFileName, 0) // 연주자 표시 지움
         }
         micSentSystem = null
-        binding.recordTime.visibility = View.GONE
-        if (micFollowCapable()) binding.recordButton.visibility = View.VISIBLE
+        binding.micStatus.visibility = View.GONE
         refreshScoreOverlay()
         if (announce) Toast.makeText(this, "🎤 듣기 멈춤 — 기록은 recordings 에", Toast.LENGTH_SHORT).show()
     }
@@ -1877,7 +1782,7 @@ class PdfViewerActivity : AppCompatActivity() {
     private val micListener = object : com.mrgq.pdfviewer.follow.MicScoreFollower.Listener {
         override fun onListening() {
             if (micFollower == null) return
-            binding.recordTime.text = "🎤 듣는 중"
+            binding.micStatus.text = "🎤 듣는 중"
         }
 
         override fun onPosition(measurePos: Double) {
@@ -1890,7 +1795,7 @@ class PdfViewerActivity : AppCompatActivity() {
                 micSentSystem = system
                 globalCollaborationManager.broadcastFollowPosition(pdfFileName, m.measureNumber)
             }
-            binding.recordTime.text = "🎤 ${m?.measureNumber ?: "?"}"
+            binding.micStatus.text = "🎤 ${m?.measureNumber ?: "?"}"
             refreshScoreOverlay()
         }
 
@@ -3211,7 +3116,6 @@ class PdfViewerActivity : AppCompatActivity() {
     }
 
     private fun startMetronome() {
-        recorder?.mark("metronome", "start", mapOf("bpm" to metronome.bpm))
         // 합주 지휘자면 시간표를 만들어 연주자들에게 알리고 자신도 그 시간표로 돈다 (#055)
         val withSound = if (isConductingEnsemble()) startConductorRun() else metronome.start()
         metronomeFileId = currentPdfFileId
@@ -3224,7 +3128,6 @@ class PdfViewerActivity : AppCompatActivity() {
     }
 
     private fun stopMetronome() {
-        if (metronome.isRunning) recorder?.mark("metronome", "stop")
         endEnsembleRun()
         metronome.stop()
         metronome.barPosition = null
@@ -3906,19 +3809,6 @@ class PdfViewerActivity : AppCompatActivity() {
         val scoreFollower = follower ?: return
         if (beat == null) return
         val position = scoreFollower.positionAt(beat.index)
-        // 녹음 중이면 박마다 적는다 — 마디 · 마디 안 박 (P08 정답 자료)
-        val r = recorder
-        if (r != null && beat.index != recordedBeatIndex) {
-            recordedBeatIndex = beat.index
-            // 시각은 화면 틱이 아니라 그 박이 스피커에서 난 시각 (모르면 지금)
-            val at = metronome.playTimeNanos(beat)
-            when (position) {
-                is ScoreFollower.Position.InMeasure -> r.mark("beat", beat.index.toString(),
-                    mapOf("measure" to position.measure.measureNumber, "beat_in_measure" to position.beatInMeasure, "bpm" to beat.bpm), at)
-                is ScoreFollower.Position.CountIn -> r.mark("beat", beat.index.toString(), mapOf("count_in" to position.beatInBar), at)
-                else -> Unit
-            }
-        }
         when (position) {
             is ScoreFollower.Position.CountIn -> showCountIn(position.barsLeft)
             is ScoreFollower.Position.InMeasure -> {
@@ -3927,7 +3817,6 @@ class PdfViewerActivity : AppCompatActivity() {
                 if (followInCountIn || followMeasure?.measureNumber != position.measure.measureNumber) {
                     followInCountIn = false
                     followMeasure = position.measure
-                    recorder?.mark("measure", position.measure.measureNumber.toString(), atNanos = metronome.playTimeNanos(beat))
                     refreshScoreOverlay()
                     logEnsembleMeasure(beat, position.measure.measureNumber)
                 }
@@ -5069,9 +4958,8 @@ class PdfViewerActivity : AppCompatActivity() {
         // This allows MainActivity to properly register its callbacks when it resumes
         Log.d("PdfViewerActivity", "onPause - 협업 콜백 정리")
 
-        // 연주 화면을 벗어나면 메트로놈을 멈춘다 (홈·다른 앱으로 가도 계속 울리지 않게). 녹음도 마무리
+        // 연주 화면을 벗어나면 메트로놈을 멈춘다 (홈·다른 앱으로 가도 계속 울리지 않게). 마이크 추적도 마무리
         stopMetronome()
-        stopRecording()
         stopMicFollow()
     }
 

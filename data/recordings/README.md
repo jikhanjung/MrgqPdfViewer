@@ -1,6 +1,8 @@
 # 연습 녹음 (P08 A단계)
 
-태블릿 앱의 **연습 녹음**(뷰어 오른쪽 위 빨간 동그라미, P08 §6)으로 만든 녹음. 마이크 악보 추적 실험(`data/score_follow_dtw.py`)의 자료다.
+태블릿 앱의 **연습 녹음**(뷰어 오른쪽 위 빨간 동그라미, P08 §6 — 2026-09-29 에 뺐다)과 **마이크 추적 기록**(`*_follow.wav/.json`, P10 — 🎤 연주 듣고 넘기기가 남김)으로 만든 녹음. 마이크 악보 추적 실험(`data/score_follow_dtw.py` · `score_follow_compare.py` · `inertia_eval.py` · `start_detect.py`)의 자료다.
+
+> ⚠️ 이름에 `ü` 같은 글자가 든 파일을 PowerShell `adb pull` 로 받으면 이름 끝이 잘린다(`.jso`, `.wa`) — 받을 곳을 ASCII 파일 이름으로 주고 받은 뒤 옮긴다.
 
 > **이 목록(README.md)만 저장소에 있다.** WAV · JSON · 악보 사본은 `data/.gitignore` 로 빠진다(크기 · 저작권 — P07 §0).
 > 원본은 태블릿 `/sdcard/Android/data/com.mrgq.pdfviewer/files/recordings/`, 받기: `adb pull <그 경로> data/recordings/`
