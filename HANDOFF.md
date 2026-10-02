@@ -1,6 +1,6 @@
 # HANDOFF — 현재 작업 인계 노트
 
-마지막 갱신: 2026-09-29
+마지막 갱신: 2026-10-03
 브랜치: `main` (origin/main 과 동기화, 미푸시 커밋 0개)
 버전: **v0.4.1** (versionCode 33) — 태블릿 마이크 자동 넘김(P10). 실기기는 앱 안 업데이트로 받는다
 관련 문서: [CLAUDE.md](CLAUDE.md) (가이드 · 알아 둘 결정) · [TODOs.md](TODOs.md) · [CHANGELOG.md](CHANGELOG.md) · [devlog 인덱스](devlog/README.md)
@@ -9,13 +9,14 @@
 
 ## 0. 지금 상태 한눈에
 
-2026-09-26 ~ 28 사흘 동안 v0.2.4 → v0.3.3. 큰 줄기 셋:
+2026-09-26 ~ 29 나흘 동안 v0.2.4 → v0.4.1. 큰 줄기 넷:
 
 1. **ScoreMate 클라이언트** (P05 · P06, devlog #058 ~ #064): TV 연결(QR · 토큰), 악보 동기화, 한 번에 한 서재, 합주 파일을 내용 해시로, 세트리스트
 2. **파트보 보기 · 반주 연습** (P07, devlog #065): 총보에서 고른 보표만 잘라 이은 벡터 PDF, 파트 화면 악보 연동 · 합주, MusicXML 로 다른 파트 반주
-3. **서버와 나눈 일** (P06 §10 ~ §12): 서버가 PDF → MusicXML 인식, 앱 `score/` 를 파이썬으로 옮겨 서버에서 분석 → TV 는 곁 파일(`.musicxml` · `.layout.json`)로 받아 쓴다
+3. **서버와 나눈 일** (P06 §10 ~ §14): 서버가 PDF → MusicXML 인식, 앱 `score/` 를 파이썬으로 옮겨 서버에서 분석 → TV 는 곁 파일(`.musicxml` · `.layout.json`)로 받아 쓴다
+4. **세로 태블릿 · 마이크로 듣고 쪽 넘기기** (#066 ~ #071, P10): 같은 APK 로 태블릿(세로 · 터치 · 페달, v0.3.4 ~ v0.3.5), 태블릿 지휘자 🎤 연주 듣고 넘기기 · 연주자 차례 넘김 · 시스템 표시(v0.4.0), 설정 🎤 녹음 기록(v0.4.1)
 
-오늘 작업 요약: [`devlog/20260928_065_...`](devlog/20260928_065_part_view_accompaniment_server_analysis.md). 단계별 결정 · 측정: [`P07`](devlog/20260928_P07_part_view_plan.md).
+요약: P07 까지는 [`devlog/20260928_065_...`](devlog/20260928_065_part_view_accompaniment_server_analysis.md), 마이크 넘김은 [`P10`](devlog/20260929_P10_mic_conductor_autoturn_plan.md) · #067 ~ #071. 파트보 단계별 결정 · 측정: [`P07`](devlog/20260928_P07_part_view_plan.md).
 
 ## 1. 다음 할 일 (우선순위)
 
