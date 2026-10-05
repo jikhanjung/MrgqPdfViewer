@@ -116,6 +116,16 @@ class PdfViewerActivity : AppCompatActivity() {
     
     // Two-page mode
     private var isTwoPageMode = false
+    /**
+     * 휴대폰 반 쪽 보기 (사용자 요청 2026-10-06): 가로 화면에 한 쪽의 위 절반 · 아래 절반을 차례로.
+     * 렌더는 "화면 높이 × 2" 에 맞춰(반 쪽 = 화면 높이) 한 장으로 하고, 보이는 절반은 행렬 translate 로 고른다 —
+     * 쪽 캐시 · 마디 박스 좌표는 그대로 쓴다. → 는 위 → 아래 → 다음 쪽 위, ← 는 거꾸로
+     */
+    private val phoneHalf by lazy { com.mrgq.pdfviewer.utils.DeviceForm.isPhone(this) }
+    /** 지금 보이는 절반 — 0 = 위, 1 = 아래 (휴대폰만) */
+    private var halfIndex = 0
+    /** 다음 showPage 가 보일 절반 — ← 로 앞 쪽에 가면 그 쪽의 아래 절반 */
+    private var pendingHalf: Int? = null
     private var screenWidth = 0
     private var screenHeight = 0
     private lateinit var preferences: SharedPreferences
@@ -282,7 +292,9 @@ class PdfViewerActivity : AppCompatActivity() {
     
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        com.mrgq.pdfviewer.utils.DeviceForm.applyOrientation(this) // TV 가 아니면 세로가 기본
+        // TV 가 아니면 세로가 기본. 휴대폰은 가로로 — 한 쪽을 위 · 아래 절반씩 본다 (사용자 요청 2026-10-06)
+        if (phoneHalf) requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+        else com.mrgq.pdfviewer.utils.DeviceForm.applyOrientation(this)
         binding = ActivityPdfViewerBinding.inflate(layoutInflater)
         setContentView(binding.root)
         // 세로 화면(태블릿): 한 쪽이 폭에 맞고 위아래가 빈다 — 박 표시를 가운데 위로 옮겨 악보 왼쪽 위를 가리지 않게
@@ -321,6 +333,13 @@ class PdfViewerActivity : AppCompatActivity() {
         windowManager.defaultDisplay.getRealMetrics(displayMetrics)
         screenWidth = displayMetrics.widthPixels
         screenHeight = displayMetrics.heightPixels
+        // 감마 기본값은 실제 화면 높이로 (아래에서 휴대폰은 렌더 높이를 두 배로 바꾼다)
+        val physicalHeight = if (phoneHalf) minOf(screenWidth, screenHeight) else screenHeight
+        if (phoneHalf) {
+            // 가로로 돌기 전 첫 onCreate 일 수도 있다 — 늘 가로 기준, 렌더 높이 = 화면 높이 × 2 (반 쪽이 화면을 채운다)
+            screenWidth = maxOf(displayMetrics.widthPixels, displayMetrics.heightPixels)
+            screenHeight = physicalHeight * 2
+        }
 
         if (android.os.Build.VERSION.SDK_INT >= 23) {
             val display = windowManager.defaultDisplay
@@ -341,7 +360,7 @@ class PdfViewerActivity : AppCompatActivity() {
         // 예전에 메뉴로 저장한 값이 남아 있으면 되돌릴 방법이 없으니 지운다.
         preferences.edit().remove(PageCache.PREF_OVERSAMPLE).remove(InkGamma.PREF_KEY).apply()
         PageCache.oversampleFactor = PageCache.DEFAULT_OVERSAMPLE_FACTOR
-        InkGamma.gamma = InkGamma.defaultFor(screenHeight, PageCache.oversampleFactor)
+        InkGamma.gamma = InkGamma.defaultFor(physicalHeight, PageCache.oversampleFactor)
         Log.i("PdfViewerActivity",
             "렌더 선명도: oversample=${PageCache.oversampleFactor}×, 감마=${InkGamma.gamma} (${screenHeight}p 기본값)")
 
@@ -524,7 +543,7 @@ class PdfViewerActivity : AppCompatActivity() {
                 }
                 
                 // 세로 화면(태블릿)은 늘 한 쪽 — 저장된 두 쪽 설정은 건드리지 않는다(가로에서 열면 그대로) (사용자 요청 2026-09-28)
-                if (isPortraitScreen()) {
+                if (isPortraitScreen() || phoneHalf) { // 휴대폰(가로)도 한 쪽 — 반 쪽씩 본다
                     withContext(Dispatchers.Main) {
                         isTwoPageMode = false
                         onComplete()
@@ -747,6 +766,11 @@ class PdfViewerActivity : AppCompatActivity() {
         
         Log.d("PdfViewerActivity", "showPage called: index=$index, isTwoPageMode=$isTwoPageMode, pageCount=$pageCount")
         lastRenderTime = currentTime
+        if (phoneHalf) {
+            // 같은 쪽을 다시 그리면(설정 변경 등) 보던 절반 그대로, 다른 쪽이면 위 절반부터
+            halfIndex = pendingHalf ?: if (index == pageIndex) halfIndex else 0
+            pendingHalf = null
+        }
         
         // Check cache first for instant display
         val cachedBitmap = if (isTwoPageMode) {
@@ -1143,7 +1167,8 @@ class PdfViewerActivity : AppCompatActivity() {
         // Use the smaller scale to ensure the whole image fits
         // 1.0 에 극히 가까우면 정확히 1.0 으로 스냅한다. 0.999… 스케일은 비트맵 전체를
         // 재샘플링시켜 device-pixel 에 스냅된 오선을 뭉갠다 (oversample 1× 정책의 전제).
-        val rawScale = minOf(scaleX, scaleY)
+        // 휴대폰 반 쪽: 높이는 화면 두 배까지 허용하고 보이는 절반만 화면에 둔다
+        val rawScale = if (phoneHalf) minOf(scaleX, scaleY * 2) else minOf(scaleX, scaleY)
         val scale = if (kotlin.math.abs(rawScale - 1f) < 0.005f) 1f else rawScale
 
         // Calculate translation to center the image
@@ -1151,7 +1176,9 @@ class PdfViewerActivity : AppCompatActivity() {
         val scaledHeight = bitmapHeight * scale
         // 정수 좌표로 반올림 — 소수점 translate 도 재샘플링을 유발한다.
         val dx = ((viewWidth - scaledWidth) / 2f).toInt().toFloat()
-        val dy = ((viewHeight - scaledHeight) / 2f).toInt().toFloat()
+        val dy = if (phoneHalf && scaledHeight > viewHeight) {
+            if (halfIndex == 0) 0f else (viewHeight - scaledHeight).toInt().toFloat()
+        } else ((viewHeight - scaledHeight) / 2f).toInt().toFloat()
         
         // Calculate final displayed aspect ratio
         val finalAspectRatio = scaledWidth / scaledHeight
@@ -1187,7 +1214,7 @@ class PdfViewerActivity : AppCompatActivity() {
             "${pageIndex + 1}-${pageIndex + 2} / $pageCount"
         } else {
             // Single page mode: show "1 / 10" format
-            "${pageIndex + 1} / $pageCount"
+            "${pageIndex + 1}${if (phoneHalf) (if (halfIndex == 0) " 위" else " 아래") else ""} / $pageCount"
         } + partSourceInfo(if (twoPages) pageIndex..pageIndex + 1 else pageIndex..pageIndex)
         
         // Add cache info for debugging (only show if cache exists)
@@ -1500,7 +1527,11 @@ class PdfViewerActivity : AppCompatActivity() {
                     }
                     // 안내가 표시된 상태에서는 일반 페이지 이동 차단
                     return true
+                } else if (phoneHalf && halfIndex == 1) {
+                    showHalf(0) // 휴대폰: 아래 절반 → 같은 쪽 위 절반
+                    return true
                 } else if (pageIndex > 0) {
+                    if (phoneHalf) pendingHalf = 1 // 앞 쪽의 아래 절반으로
                     val nextPageIndex = if (isTwoPageMode) pageIndex - 2 else pageIndex - 1
                     val target = maxOf(0, nextPageIndex)
                     if (collaborationMode == CollaborationMode.CONDUCTOR && isSyncTurnEnabled()) {
@@ -1531,6 +1562,9 @@ class PdfViewerActivity : AppCompatActivity() {
                         return true
                     }
                     // 안내가 표시된 상태에서는 일반 페이지 이동 차단
+                    return true
+                } else if (phoneHalf && halfIndex == 0) {
+                    showHalf(1) // 휴대폰: 위 절반 → 같은 쪽 아래 절반
                     return true
                 } else {
                     val nextPageIndex = if (isTwoPageMode) pageIndex + 2 else pageIndex + 1
@@ -3866,6 +3900,23 @@ class PdfViewerActivity : AppCompatActivity() {
     }
 
     /** 현재 화면(페이지·두 페이지 모드·클리핑·여백)에 맞춰 마디 박스를 다시 그린다. */
+    /** 휴대폰 반 쪽 보기: 같은 쪽의 다른 절반으로 (다시 그리지 않고 행렬만) */
+    private fun showHalf(half: Int) {
+        if (!phoneHalf || half == halfIndex) return
+        halfIndex = half
+        val bitmap = (binding.pdfView.drawable as? android.graphics.drawable.BitmapDrawable)?.bitmap ?: return
+        setImageViewMatrix(bitmap)
+        updatePageInfo()
+    }
+
+    /** 휴대폰 반 쪽 보기: 따라가는 마디(악보 연동 · 마이크 · 시작 마디 커서)가 있는 절반을 보인다 */
+    private fun followHalf(focus: ScoreMeasure?) {
+        if (!phoneHalf || focus == null || focus.pageIndex != pageIndex) return
+        val bitmap = (binding.pdfView.drawable as? android.graphics.drawable.BitmapDrawable)?.bitmap ?: return
+        val box = overlayBoxes(listOf(focus)).firstOrNull() ?: return
+        showHalf(if (box.centerY() > bitmap.height / 2f) 1 else 0)
+    }
+
     private fun refreshScoreOverlay() {
         val overlay = binding.scoreOverlay
         val fileId = currentPdfFileId
@@ -3874,6 +3925,7 @@ class PdfViewerActivity : AppCompatActivity() {
             FollowState.PLAYING, FollowState.PAUSED -> followMeasure
             FollowState.OFF -> micFocus // 마이크 추적의 지금 마디 (P10)
         }
+        followHalf(focus) // 휴대폰: 절반을 바꾸면 행렬을 다시 잡고 이 함수가 다시 불린다
         val showAll = isScoreOverlayEnabled()
         val micSystem = micSystemFrame()
         val systemFrame = micSystem ?: conductorSystemFrame()
@@ -5088,8 +5140,8 @@ class PdfViewerActivity : AppCompatActivity() {
         
         Log.d("PdfViewerActivity", "showPageWithAnimation: index=$index, direction=$direction")
         
-        // 애니메이션이 비활성화된 경우 기본 showPage 호출
-        if (!isPageTurnAnimationEnabled()) {
+        // 애니메이션이 비활성화된 경우 기본 showPage 호출. 휴대폰 반 쪽 보기도 — 넘김 그림이 화면 높이 기준이다
+        if (!isPageTurnAnimationEnabled() || phoneHalf) {
             showPage(index)
             return
         }
