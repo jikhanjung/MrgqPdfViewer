@@ -302,7 +302,7 @@ class PdfViewerActivity : AppCompatActivity() {
         binding = ActivityPdfViewerBinding.inflate(layoutInflater)
         setContentView(binding.root)
         // 세로 화면(태블릿): 한 쪽이 폭에 맞고 위아래가 빈다 — 박 표시를 가운데 위로 옮겨 악보 왼쪽 위를 가리지 않게
-        if (resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_PORTRAIT) {
+        if (isPortraitScreen()) {
             (binding.metronomeBeat.layoutParams as androidx.constraintlayout.widget.ConstraintLayout.LayoutParams).endToEnd =
                 androidx.constraintlayout.widget.ConstraintLayout.LayoutParams.PARENT_ID
         }
@@ -337,7 +337,15 @@ class PdfViewerActivity : AppCompatActivity() {
         windowManager.defaultDisplay.getRealMetrics(displayMetrics)
         screenWidth = displayMetrics.widthPixels
         screenHeight = displayMetrics.heightPixels
-        // 감마 기본값은 실제 화면 높이로 (아래에서 휴대폰은 렌더 높이를 두 배로 바꾼다)
+        // 감마 기본값은 실제 화면 높이로 (아래에서 휴대폰은 렌더 높이를 넉넉히 바꾼다)
+        // 화면을 돌려도 액티비티를 다시 만들지 않는다(매니페스트 configChanges) — 돌기 전 첫 onCreate 에서 읽은 크기일 수
+        // 있으니 기기 방향으로 정한다: 태블릿 = 세로, 휴대폰 = 가로. 다시 만들면 앞 인스턴스가 PDF 를 읽다가 닫혀
+        // "Document already closed" 로 뷰어가 닫혔다 (휴대폰, 2026-10-06)
+        val tv = com.mrgq.pdfviewer.utils.DeviceForm.isTv(this)
+        if (!tv && !phoneView) {
+            screenWidth = minOf(displayMetrics.widthPixels, displayMetrics.heightPixels)
+            screenHeight = maxOf(displayMetrics.widthPixels, displayMetrics.heightPixels)
+        }
         val physicalHeight = if (phoneView) minOf(screenWidth, screenHeight) else screenHeight
         if (phoneView) {
             // 가로로 돌기 전 첫 onCreate 일 수도 있다 — 늘 가로 기준. 렌더 높이는 넉넉히(폭 × 3) 잡아 쪽이 화면 폭에 맞게
@@ -4078,13 +4086,26 @@ class PdfViewerActivity : AppCompatActivity() {
 
     /** 세로 화면인가 (태블릿 · 휴대폰) — 늘 한 쪽 */
     private fun isPortraitScreen(): Boolean =
-        resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_PORTRAIT
+        // 지금 방향이 아니라 기기 종류로 — 화면이 아직 돌기 전일 수 있다. 태블릿은 늘 세로, 휴대폰은 가로, TV 는 가로
+        !phoneView && !com.mrgq.pdfviewer.utils.DeviceForm.isTv(this)
+
+    /** 방향이 바뀌어도(태블릿 · 휴대폰이 열자마자 돈다) 다시 만들지 않는다 — 새 뷰 크기로 행렬만 다시 잡는다 */
+    override fun onConfigurationChanged(newConfig: android.content.res.Configuration) {
+        super.onConfigurationChanged(newConfig)
+        binding.pdfView.post {
+            (binding.pdfView.drawable as? android.graphics.drawable.BitmapDrawable)?.bitmap?.let { setImageViewMatrix(it) }
+        }
+    }
 
     private fun showPdfDisplayOptions() {
         Log.d("PdfViewerActivity", "PDF 표시 옵션 다이얼로그 표시")
         
         val options = arrayOf(
-            if (isPortraitScreen()) "두 페이지 모드 (세로 화면에서는 한 쪽만)" else "두 페이지 모드 전환",
+            when {
+                phoneView -> "두 페이지 모드 (휴대폰은 시스템 · 반 쪽씩)"
+                isPortraitScreen() -> "두 페이지 모드 (세로 화면에서는 한 쪽만)"
+                else -> "두 페이지 모드 전환"
+            },
             "위/아래 클리핑 설정",
             "마디 박스 표시 (악보 분석): ${if (isScoreOverlayEnabled()) "켜짐" else "꺼짐"}",
             "메트로놈${when {
@@ -4099,7 +4120,9 @@ class PdfViewerActivity : AppCompatActivity() {
             .setTitle("PDF 표시 옵션")
             .setItems(options) { dialog, which ->
                 when (which) {
-                    0 -> if (isPortraitScreen()) {
+                    0 -> if (phoneView) {
+                        Toast.makeText(this, "휴대폰에서는 시스템 · 반 쪽씩 봅니다", Toast.LENGTH_SHORT).show()
+                    } else if (isPortraitScreen()) {
                         Toast.makeText(this, "세로 화면에서는 한 쪽씩 봅니다 — 두 쪽은 가로에서", Toast.LENGTH_SHORT).show()
                     } else showTwoPageModeDialog {
                         // 두 페이지 모드 변경 완료 후 현재 페이지 다시 렌더링
