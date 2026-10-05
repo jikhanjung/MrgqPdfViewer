@@ -43,13 +43,21 @@ class DeviceLinkDialog(
     /** 화면 문구의 기기 이름 (TV · 태블릿 · 휴대폰) */
     private val device by lazy { com.mrgq.pdfviewer.utils.DeviceForm.noun(activity) }
 
+    /** 휴대폰 — 폭이 좁아 QR 위 · 글 아래로 쌓는다 (코드가 줄바꿈되지 않게, 2026-10-06) */
+    private val phone by lazy { com.mrgq.pdfviewer.utils.DeviceForm.isPhone(activity) }
+    private val qrSizePx by lazy {
+        if (phone) (220 * activity.resources.displayMetrics.density).toInt() else QR_SIZE_PX
+    }
+
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private var job: Job? = null
     private lateinit var dialog: AlertDialog
 
-    private val qrView = ImageView(activity).apply {
-        layoutParams = LinearLayout.LayoutParams(QR_SIZE_PX, QR_SIZE_PX)
-        setBackgroundColor(Color.WHITE)
+    private val qrView by lazy {
+        ImageView(activity).apply {
+            layoutParams = LinearLayout.LayoutParams(qrSizePx, qrSizePx).apply { gravity = Gravity.CENTER_HORIZONTAL }
+            setBackgroundColor(Color.WHITE)
+        }
     }
     private val stepsView = TextView(activity).apply {
         textSize = 18f
@@ -62,6 +70,7 @@ class DeviceLinkDialog(
         letterSpacing = 0.08f
         setTextColor(0xFF90CAF9.toInt())
         setPadding(0, 24, 0, 24)
+        maxLines = 1
     }
     private val statusView = TextView(activity).apply {
         textSize = 15f
@@ -69,17 +78,27 @@ class DeviceLinkDialog(
     }
 
     fun show() {
+        if (phone) {
+            codeView.textSize = 34f
+            codeView.gravity = Gravity.CENTER_HORIZONTAL
+            stepsView.textSize = 15f
+            statusView.textSize = 13f
+        }
         val right = LinearLayout(activity).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(40, 0, 0, 0)
+            if (phone) setPadding(0, 32, 0, 0) else setPadding(40, 0, 0, 0)
             addView(stepsView)
-            addView(codeView)
+            addView(codeView, LinearLayout.LayoutParams(
+                if (phone) LinearLayout.LayoutParams.MATCH_PARENT else LinearLayout.LayoutParams.WRAP_CONTENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+            ))
             addView(statusView)
         }
         val content = LinearLayout(activity).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            setPadding(50, 30, 50, 10)
+            // 휴대폰: QR 위, 안내 · 코드 · 상태 아래 / TV · 태블릿: QR 왼쪽, 글 오른쪽
+            orientation = if (phone) LinearLayout.VERTICAL else LinearLayout.HORIZONTAL
+            gravity = if (phone) Gravity.CENTER_HORIZONTAL else Gravity.CENTER_VERTICAL
+            if (phone) setPadding(40, 30, 40, 10) else setPadding(50, 30, 50, 10)
             addView(qrView)
             addView(right)
         }
@@ -113,7 +132,7 @@ class DeviceLinkDialog(
                     statusView.text = "\"새 코드\" 로 다시 시도하세요 (${store.server})"
                     return@launch
                 }
-                qrView.setImageBitmap(qrBitmap(code.verificationUriComplete, QR_SIZE_PX))
+                qrView.setImageBitmap(qrBitmap(code.verificationUriComplete, qrSizePx))
                 stepsView.text = "1. 휴대폰으로 QR 코드를 찍거나\n    ${code.verificationUri.removePrefix("https://")} 에 들어가\n" +
                     "2. 로그인한 뒤 이 코드를 확인하고 \"연결\" 을 누르세요"
                 codeView.text = code.userCode
