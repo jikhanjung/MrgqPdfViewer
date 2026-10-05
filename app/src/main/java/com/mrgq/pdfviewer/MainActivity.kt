@@ -1118,7 +1118,10 @@ class MainActivity : AppCompatActivity() {
         val dp = resources.displayMetrics.density
         binding.root.setPadding((12 * dp).toInt(), (16 * dp).toInt(), (12 * dp).toInt(), (12 * dp).toInt())
         binding.titleText.textSize = 20f
-        binding.titleText.maxLines = 1
+        // 앱 이름이 한 줄에 다 안 들어가 "MRGQ PDF" 뒤가 잘렸다 (2026-10-06) — 제목 줄을 칸 폭에 맞추고 이름은 두 줄까지 감는다
+        (binding.titleText.parent as android.view.View).layoutParams.width = android.view.ViewGroup.LayoutParams.MATCH_PARENT
+        binding.titleText.layoutParams = android.widget.LinearLayout.LayoutParams(0, android.view.ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+        binding.titleText.maxLines = 2
         // 합주 상태 → 제목 칸(세로) 맨 아래
         val status = binding.collaborationStatus
         (status.parent as? android.view.ViewGroup)?.removeView(status)
