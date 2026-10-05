@@ -72,6 +72,17 @@ class MainActivity : AppCompatActivity() {
         
         // Set version number
         binding.versionText.text = "v${BuildConfig.VERSION_NAME}"
+        if (com.mrgq.pdfviewer.utils.DeviceForm.isPhone(this)) {
+            // 휴대폰: 앱 이름이 두 줄로 감기면 따로 둔 버전이 이름 칸 오른쪽 위에 떠 버린다 — 이름 끝("Viewer" 뒤)에 작게 붙인다 (2026-10-06)
+            binding.versionText.visibility = View.GONE
+            val name = getString(R.string.app_name)
+            val version = "  v${BuildConfig.VERSION_NAME}"
+            binding.titleText.text = android.text.SpannableString(name + version).apply {
+                val start = name.length
+                setSpan(android.text.style.RelativeSizeSpan(0.55f), start, length, android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                setSpan(android.text.style.ForegroundColorSpan(0x80FFFFFF.toInt()), start, length, android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+            }
+        }
         
         // Add fade-in animation for UI elements
         addFadeInAnimations()
