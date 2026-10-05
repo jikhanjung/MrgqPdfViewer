@@ -3914,7 +3914,7 @@ class PdfViewerActivity : AppCompatActivity() {
         if (!phoneHalf || focus == null || focus.pageIndex != pageIndex) return
         val bitmap = (binding.pdfView.drawable as? android.graphics.drawable.BitmapDrawable)?.bitmap ?: return
         val box = overlayBoxes(listOf(focus)).firstOrNull() ?: return
-        showHalf(if (box.centerY() > bitmap.height / 2f) 1 else 0)
+        showHalf(if ((box.top + box.bottom) / 2f > bitmap.height / 2f) 1 else 0)
     }
 
     private fun refreshScoreOverlay() {
