@@ -1224,7 +1224,7 @@ class PdfViewerActivity : AppCompatActivity() {
             "${pageIndex + 1}-${pageIndex + 2} / $pageCount"
         } else {
             // Single page mode: show "1 / 10" format
-            "${pageIndex + 1}${if (phoneView && phoneChunks.size > 1) " (${chunkIndex + 1}/${phoneChunks.size})" else ""} / $pageCount"
+            "${pageIndex + 1}${if (phoneView && phoneChunks.size > 1) " (${if (phoneWindowEnd > chunkIndex) "${chunkIndex + 1}-${phoneWindowEnd + 1}" else "${chunkIndex + 1}"}/${phoneChunks.size})" else ""} / $pageCount"
         } + partSourceInfo(if (twoPages) pageIndex..pageIndex + 1 else pageIndex..pageIndex)
         
         // Add cache info for debugging (only show if cache exists)
@@ -1538,7 +1538,7 @@ class PdfViewerActivity : AppCompatActivity() {
                     // 안내가 표시된 상태에서는 일반 페이지 이동 차단
                     return true
                 } else if (phoneView && chunkIndex > 0) {
-                    showChunk(chunkIndex - 1) // 휴대폰: 같은 쪽 앞 조각
+                    showChunk(phoneStartEndingAt(chunkIndex - 1)) // 휴대폰: 같은 쪽 앞 화면
                     return true
                 } else if (pageIndex > 0) {
                     if (phoneView) pendingChunk = LAST_CHUNK // 앞 쪽의 마지막 조각으로
@@ -1573,8 +1573,8 @@ class PdfViewerActivity : AppCompatActivity() {
                     }
                     // 안내가 표시된 상태에서는 일반 페이지 이동 차단
                     return true
-                } else if (phoneView && chunkIndex < phoneChunks.lastIndex) {
-                    showChunk(chunkIndex + 1) // 휴대폰: 같은 쪽 다음 조각
+                } else if (phoneView && phoneWindowEnd < phoneChunks.lastIndex) {
+                    showChunk(phoneWindowEnd + 1) // 휴대폰: 같은 쪽 다음 화면
                     return true
                 } else {
                     val nextPageIndex = if (isTwoPageMode) pageIndex + 2 else pageIndex + 1
@@ -1662,8 +1662,17 @@ class PdfViewerActivity : AppCompatActivity() {
                 tapTaken = false
                 return true
             }
+            override fun onScroll(e1: android.view.MotionEvent?, e2: android.view.MotionEvent, distanceX: Float, distanceY: Float): Boolean {
+                // 휴대폰: 세로로 끌면 악보가 따라 움직이고, 손을 떼면(dispatchTouchEvent) 가까운 시스템에 맞춘다
+                if (!phoneView) return false
+                val start = e1 ?: return false
+                if (phoneDrag == null && kotlin.math.abs(e2.y - start.y) < kotlin.math.abs(e2.x - start.x) * 1.5f) return false
+                phoneDragBy(-distanceY)
+                return true
+            }
             override fun onFling(e1: android.view.MotionEvent?, e2: android.view.MotionEvent, velocityX: Float, velocityY: Float): Boolean {
                 val start = e1 ?: return false
+                if (phoneDrag != null) return false // 세로 끌기는 손을 뗄 때 맞춘다
                 val dx = e2.x - start.x
                 val dy = e2.y - start.y
                 val minDistance = resources.displayMetrics.density * SWIPE_MIN_DP
@@ -1712,6 +1721,7 @@ class PdfViewerActivity : AppCompatActivity() {
         // 악보 화면에는 눌리는 뷰가 없다 — 모든 터치를 몸짓으로 (안내 카드도 옆 탭 = ← → 가 다음 · 이전 파일로 간다)
         super.dispatchTouchEvent(ev)
         touchGestures.onTouchEvent(ev)
+        if (ev.actionMasked == android.view.MotionEvent.ACTION_UP || ev.actionMasked == android.view.MotionEvent.ACTION_CANCEL) phoneDragEnd()
         return true
     }
 
@@ -3912,15 +3922,15 @@ class PdfViewerActivity : AppCompatActivity() {
 
     /** 현재 화면(페이지·두 페이지 모드·클리핑·여백)에 맞춰 마디 박스를 다시 그린다. */
     /**
-     * 휴대폰: 지금 쪽의 조각 — 마디 분석이 있으면 시스템을 위에서부터 묶는다(화면 높이에 들어가는 만큼, 보통 1 ~ 2개).
-     * 시스템 경계는 이웃 시스템과의 빈칸 가운데(오선 밖 음표 · 셈여림 · 가사 몫). 분석이 없으면 위 · 아래 절반
+     * 휴대폰: 지금 쪽의 칸 — 마디 분석이 있으면 시스템마다 한 칸(이웃 시스템과의 빈칸 가운데까지 — 오선 밖 음표 · 셈여림 · 가사 몫),
+     * 없으면 위 · 아래 절반. 화면에는 [chunkIndex] 칸부터 화면 높이에 들어가는 만큼 이어 보인다(보통 시스템 1 ~ 2개)
      */
-    private fun computePhoneChunks(bitmapW: Int, bitmapH: Int, viewW: Int, viewH: Int): List<ClosedFloatingPointRange<Float>> {
+    private fun computePhoneSpans(bitmapH: Int): List<ClosedFloatingPointRange<Float>> {
         val h = bitmapH.toFloat()
         val halves = listOf(0f..h / 2f, h / 2f..h)
         val fileId = currentPdfFileId ?: return halves
         if (scoreMeasuresFileId != fileId) {
-            loadScoreMeasures(fileId, announce = false) // 오면 refreshScoreOverlay → 행렬을 다시 잡는다
+            loadScoreMeasures(fileId, announce = false) // 오면 행렬을 다시 잡는다
             return halves
         }
         val systems = overlayBoxes(scoreMeasures.filter { it.pageIndex == pageIndex })
@@ -3928,59 +3938,126 @@ class PdfViewerActivity : AppCompatActivity() {
             .map { b -> b.minOf { it.top } to b.maxOf { it.bottom } }
             .sortedBy { it.first }
         if (systems.isEmpty()) return halves
-        val spans = systems.mapIndexed { i, (top, bottom) ->
+        return systems.mapIndexed { i, (top, bottom) ->
             val above = if (i > 0) (top - systems[i - 1].second) / 2f else null
             val below = if (i < systems.lastIndex) (systems[i + 1].first - bottom) / 2f else null
             val pad = (bottom - top) * 0.25f // 시스템이 하나뿐인 쪽 · 맨 위 · 맨 아래
             (top - (above ?: below ?: pad).coerceAtLeast(0f)).coerceAtLeast(0f)..
                 (bottom + (below ?: above ?: pad).coerceAtLeast(0f)).coerceAtMost(h)
         }
-        val fitW = minOf(1f, viewW.toFloat() / bitmapW)
-        val room = viewH / fitW // 폭에 맞춘 배율에서 화면에 들어가는 비트맵 높이
-        val chunks = mutableListOf<ClosedFloatingPointRange<Float>>()
-        for (span in spans) {
-            val last = chunks.lastOrNull()
-            if (last != null && span.endInclusive - last.start <= room) {
-                chunks[chunks.lastIndex] = last.start..span.endInclusive
-            } else chunks += span
-        }
-        return chunks
     }
 
-    /** 휴대폰: 지금 조각을 화면 가운데에 — 폭에 맞추되 조각이 화면보다 높으면 줄인다. 정수 translate (#042) */
+    /** 휴대폰: 폭에 맞춘 배율에서 화면에 들어가는 비트맵 높이 */
+    private var phoneRoom = 0f
+    /** 지금 화면의 마지막 칸 */
+    private var phoneWindowEnd = 0
+    /** 지금 행렬 — 세로로 끌 때 여기서 옮긴다 */
+    private var phoneScale = 1f
+    private var phoneDx = 0f
+    private var phoneDy = 0f
+
+    /** [start] 칸부터 화면에 들어가는 마지막 칸 */
+    private fun phoneEndFrom(start: Int): Int {
+        var end = start
+        while (end + 1 <= phoneChunks.lastIndex && phoneChunks[end + 1].endInclusive - phoneChunks[start].start <= phoneRoom) end++
+        return end
+    }
+
+    /** [end] 칸에서 끝나는 화면의 첫 칸 — ← 로 앞 화면 */
+    private fun phoneStartEndingAt(end: Int): Int {
+        var start = end
+        while (start - 1 >= 0 && phoneChunks[end].endInclusive - phoneChunks[start - 1].start <= phoneRoom) start--
+        return start
+    }
+
+    /** 휴대폰: 지금 화면(칸 [chunkIndex] ~)을 화면 가운데에 — 폭에 맞추되 화면보다 높으면 줄인다. 정수 translate (#042) */
     private fun setPhoneChunkMatrix(bitmap: Bitmap, viewW: Int, viewH: Int) {
-        phoneChunks = computePhoneChunks(bitmap.width, bitmap.height, viewW, viewH)
-        if (chunkIndex == LAST_CHUNK || chunkIndex > phoneChunks.lastIndex) chunkIndex = phoneChunks.lastIndex
-        if (chunkIndex < 0) chunkIndex = 0
-        val chunk = phoneChunks[chunkIndex]
-        val spanH = chunk.endInclusive - chunk.start
+        phoneChunks = computePhoneSpans(bitmap.height)
+        phoneRoom = viewH / minOf(1f, viewW.toFloat() / bitmap.width)
+        if (chunkIndex == LAST_CHUNK) chunkIndex = phoneStartEndingAt(phoneChunks.lastIndex)
+        chunkIndex = chunkIndex.coerceIn(0, phoneChunks.lastIndex)
+        phoneWindowEnd = phoneEndFrom(chunkIndex)
+        val top = phoneChunks[chunkIndex].start
+        val spanH = phoneChunks[phoneWindowEnd].endInclusive - top
         val raw = minOf(viewW.toFloat() / bitmap.width, viewH / spanH)
-        val scale = if (kotlin.math.abs(raw - 1f) < 0.005f) 1f else raw
-        val dx = ((viewW - bitmap.width * scale) / 2f).toInt().toFloat()
-        val dy = ((viewH - spanH * scale) / 2f - chunk.start * scale).toInt().toFloat()
-        binding.pdfView.imageMatrix = android.graphics.Matrix().apply {
-            setScale(scale, scale)
-            postTranslate(dx, dy)
-        }
+        phoneScale = if (kotlin.math.abs(raw - 1f) < 0.005f) 1f else raw
+        phoneDx = ((viewW - bitmap.width * phoneScale) / 2f).toInt().toFloat()
+        phoneDy = ((viewH - spanH * phoneScale) / 2f - top * phoneScale).toInt().toFloat()
+        applyPhoneMatrix(0f)
         updatePageInfo()
         binding.pdfView.post { refreshScoreOverlay() }
     }
 
-    /** 휴대폰: 같은 쪽의 다른 조각으로 (다시 그리지 않고 행렬만) */
-    private fun showChunk(index: Int) {
-        if (!phoneView || index == chunkIndex) return
-        chunkIndex = index
+    private fun applyPhoneMatrix(drag: Float) {
+        binding.pdfView.imageMatrix = android.graphics.Matrix().apply {
+            setScale(phoneScale, phoneScale)
+            postTranslate(phoneDx, (phoneDy + drag).toInt().toFloat())
+        }
+    }
+
+    /** 휴대폰: 같은 쪽의 [start] 칸부터 (다시 그리지 않고 행렬만) */
+    private fun showChunk(start: Int) {
+        if (!phoneView) return
+        chunkIndex = start
         val bitmap = (binding.pdfView.drawable as? android.graphics.drawable.BitmapDrawable)?.bitmap ?: return
         setImageViewMatrix(bitmap)
     }
 
-    /** 휴대폰: 따라가는 마디(악보 연동 · 마이크 · 시작 마디 커서)가 든 조각을 보인다 */
+    /** 휴대폰: 따라가는 마디(악보 연동 · 마이크 · 시작 마디 커서)가 화면 밖이면 그 시스템이 맨 위에 오게 — 아래를 미리 본다 */
     private fun followChunk(focus: ScoreMeasure?) {
-        if (!phoneView || focus == null || focus.pageIndex != pageIndex || phoneChunks.isEmpty()) return
+        if (!phoneView || phoneDrag != null || focus == null || focus.pageIndex != pageIndex || phoneChunks.isEmpty()) return
         val box = overlayBoxes(listOf(focus)).firstOrNull() ?: return
         val y = (box.top + box.bottom) / 2f
         val target = phoneChunks.indexOfFirst { y <= it.endInclusive }.takeIf { it >= 0 } ?: phoneChunks.lastIndex
-        showChunk(target)
+        if (target < chunkIndex || target > phoneWindowEnd) showChunk(target)
+    }
+
+    // ── 휴대폰: 세로로 끌기 — 손을 떼면 가까운 시스템에 맞춘다 (사용자 요청 2026-10-06) ──
+    /** 끄는 중이면 지금까지 옮긴 거리(px, 아래로 +). null = 끌지 않음 */
+    private var phoneDrag: Float? = null
+
+    private fun phoneDragBy(dy: Float) {
+        val drag = (phoneDrag ?: 0f) + dy
+        phoneDrag = drag
+        applyPhoneMatrix(drag)
+        refreshScoreOverlay()
+    }
+
+    /** 손을 뗐다 — 화면 맨 위에 가장 가까운 시스템으로. 쪽 끝을 넘어 화면 1/4 넘게 끌었으면 다음 · 앞 쪽 */
+    private fun phoneDragEnd() {
+        val drag = phoneDrag ?: return
+        phoneDrag = null
+        val pull = binding.pdfView.height * 0.25f
+        val over = phoneOverscroll(drag)
+        if (over < -pull || over > pull) {
+            // 쪽 끝 화면에 맞춰 두고 → · ← 와 같게 넘긴다 (끝 · 처음 안내, 합주 · 마이크도 같은 길)
+            showChunk(if (over < 0) phoneStartEndingAt(phoneChunks.lastIndex) else 0)
+            pressKey(if (over < 0) KeyEvent.KEYCODE_DPAD_RIGHT else KeyEvent.KEYCODE_DPAD_LEFT)
+            return
+        }
+        val topY = phoneDragTopY(drag)
+        val nearest = phoneChunks.indices.minByOrNull { kotlin.math.abs(phoneChunks[it].start - topY) } ?: 0
+        // 마지막 화면보다 아래로는 가지 않는다 — 마지막 시스템이 화면 아래쪽에 남게
+        showChunk(minOf(nearest, phoneStartEndingAt(phoneChunks.lastIndex)))
+    }
+
+    /** 끈 뒤 화면 맨 위의 비트맵 y */
+    private fun phoneDragTopY(drag: Float) = -(phoneDy + drag) / phoneScale
+
+    /** 쪽 끝을 넘어 끈 만큼(px) — 위로 넘으면 −, 아래로 넘으면 + */
+    private fun phoneOverscroll(drag: Float): Float {
+        val viewH = binding.pdfView.height
+        val pageTop = phoneDy + drag + phoneChunks.first().start * phoneScale
+        val pageBottom = phoneDy + drag + phoneChunks.last().endInclusive * phoneScale
+        return when {
+            pageTop > 0f -> pageTop
+            pageBottom < viewH -> pageBottom - viewH
+            else -> 0f
+        }
+    }
+
+    private fun pressKey(keyCode: Int) {
+        onKeyDown(keyCode, KeyEvent(KeyEvent.ACTION_DOWN, keyCode))
     }
 
     private fun refreshScoreOverlay() {
