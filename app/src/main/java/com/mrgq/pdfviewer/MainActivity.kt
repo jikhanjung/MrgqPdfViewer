@@ -57,6 +57,7 @@ class MainActivity : AppCompatActivity() {
         com.mrgq.pdfviewer.utils.DeviceForm.applyOrientation(this) // TV 가 아니면 세로가 기본
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
+        if (com.mrgq.pdfviewer.utils.DeviceForm.isPhone(this)) compactForPhone()
         
         // Note: Global collaboration manager는 Application에서 이미 초기화됨
         
@@ -1108,6 +1109,32 @@ class MainActivity : AppCompatActivity() {
         Log.d("MainActivity", "협업 상태 업데이트: $currentMode")
     }
     
+    /**
+     * 휴대폰(짧은 변 600dp 미만) — 첫 줄 [아이콘 · 앱 이름 · 합주 상태 · 합주 · 설정] 이 한 줄에 다 안 들어가
+     * 앱 이름 칸이 0 으로 눌려 글자가 세로로 쌓이고(머리줄이 화면 가운데까지 길어짐) 설정 버튼이 잘렸다 (사용자 요청 2026-10-05).
+     * 합주 상태는 앱 이름 아래 줄로, 버튼은 기본 최소 폭(88dp)을 풀고, 바깥 여백 · 글자를 줄인다. TV · 태블릿은 그대로
+     */
+    private fun compactForPhone() {
+        val dp = resources.displayMetrics.density
+        binding.root.setPadding((12 * dp).toInt(), (16 * dp).toInt(), (12 * dp).toInt(), (12 * dp).toInt())
+        binding.titleText.textSize = 20f
+        binding.titleText.maxLines = 1
+        // 합주 상태 → 제목 칸(세로) 맨 아래
+        val status = binding.collaborationStatus
+        (status.parent as? android.view.ViewGroup)?.removeView(status)
+        val titleColumn = binding.scoreMateBadgeBelow.parent as android.view.ViewGroup
+        titleColumn.addView(status, android.widget.LinearLayout.LayoutParams(
+            android.view.ViewGroup.LayoutParams.WRAP_CONTENT, android.view.ViewGroup.LayoutParams.WRAP_CONTENT
+        ).apply { topMargin = (2 * dp).toInt() })
+        status.maxLines = 2
+        listOf(binding.collaborationButton, binding.settingsButton, binding.scoreMateSyncBtn,
+            binding.sortByNameBtn, binding.sortByTimeBtn, binding.fileManageBtn).forEach {
+            it.minWidth = 0
+            it.minimumWidth = 0
+        }
+        binding.recyclerView.setPadding(0, (4 * dp).toInt(), 0, (4 * dp).toInt())
+    }
+
     private fun addFadeInAnimations() {
         // Initially hide all animated elements
         binding.headerSection.alpha = 0f

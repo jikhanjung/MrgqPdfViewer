@@ -36,9 +36,23 @@ class PdfFileAdapter(
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): PdfViewHolder {
         val view = LayoutInflater.from(parent.context)
             .inflate(R.layout.item_pdf_file, parent, false)
+        if (com.mrgq.pdfviewer.utils.DeviceForm.isPhone(parent.context)) compactForPhone(view)
         return PdfViewHolder(view, onItemClick, onDeleteClick)
     }
     
+    /** 휴대폰: 오른쪽 크기 · 쪽 수 · 날짜가 이름 칸을 좁혀 → 이름 아래 줄로 옮기고 카드 바깥 여백을 줄인다 (2026-10-05) */
+    private fun compactForPhone(card: View) {
+        val dp = card.resources.displayMetrics.density
+        (card.layoutParams as? ViewGroup.MarginLayoutParams)?.let { it.marginStart = (4 * dp).toInt(); it.marginEnd = (4 * dp).toInt() }
+        card.setPadding((14 * dp).toInt(), card.paddingTop, (10 * dp).toInt(), card.paddingBottom)
+        val info = card.findViewById<View>(R.id.fileInfoText)
+        val column = card.findViewById<View>(R.id.fileNameText).parent as ViewGroup
+        (info.parent as ViewGroup).removeView(info)
+        column.addView(info, android.widget.LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT
+        ).apply { topMargin = (2 * dp).toInt() })
+    }
+
     override fun onBindViewHolder(holder: PdfViewHolder, position: Int) {
         holder.bind(getItem(position), position, isFileManagementMode)
     }

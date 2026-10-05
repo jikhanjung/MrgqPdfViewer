@@ -18,6 +18,10 @@ object DeviceForm {
         return uiMode?.currentModeType == Configuration.UI_MODE_TYPE_TELEVISION
     }
 
+    /** 휴대폰 — TV 도 태블릿도 아닌 좁은 화면(짧은 변 600dp 미만). 첫 화면 머리줄 · 목록 카드를 좁게 다시 놓는다 */
+    fun isPhone(context: Context): Boolean =
+        !isTv(context) && context.resources.configuration.smallestScreenWidthDp < 600
+
     /** 화면 문구의 기기 이름 — "이 TV 연결" · "이 태블릿 연결" */
     fun noun(context: Context): String = when {
         isTv(context) -> "TV"
