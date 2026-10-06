@@ -1131,7 +1131,8 @@ class MainActivity : AppCompatActivity() {
     private fun showPhoneTitle(linked: Boolean) {
         val name = getString(R.string.app_name)
         val cut = name.indexOf(' ').takeIf { it > 0 } ?: name.length
-        val badge = if (linked) "  × ScoreMate ☁️" else ""
+        // × 와 ScoreMate 사이는 좁은 공백, 구름 앞은 줄바꿈 없는 공백 — 구름만 다음 줄로 넘어가지 않게 (2026-10-06)
+        val badge = if (linked) " ×\u202FScoreMate\u00A0☁️" else ""
         val version = " v${BuildConfig.VERSION_NAME}"
         val first = name.substring(0, cut)
         val rest = name.substring(cut).trimStart()
@@ -1140,7 +1141,7 @@ class MainActivity : AppCompatActivity() {
             val flags = android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
             if (badge.isNotEmpty()) {
                 val b = first.length
-                setSpan(android.text.style.RelativeSizeSpan(0.7f), b, b + badge.length, flags)
+                setSpan(android.text.style.RelativeSizeSpan(0.6f), b, b + badge.length, flags)
                 setSpan(android.text.style.ForegroundColorSpan(0xFF90CAF9.toInt()), b, b + badge.length, flags)
             }
             val v = text.length - version.length
