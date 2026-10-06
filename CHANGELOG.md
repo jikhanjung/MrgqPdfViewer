@@ -6,6 +6,15 @@
 
 ## [Unreleased]
 
+---
+
+## [0.5.4] - 2026-10-06
+
+> 휴대폰 첫 화면: ScoreMate 표시를 앱 이름 옆에. (v0.5.3 태그는 CHANGELOG 섹션이 빠져 릴리스되지 않았다 — 같은 내용을 이 판으로 낸다)
+
+### 📱 휴대폰
+- ScoreMate 에 연결되면 "× ScoreMate ☁️" 를 MRGQ 옆에 작게 다른 색으로 붙인다 — 따로 줄을 두지 않아 머리줄이 한 줄 낮아진다
+
 ### 🔧 빌드 · 릴리스
 - 릴리스 워크플로가 정식 릴리스(릴리스 키 서명) APK 를 ScoreMate 서버의 앱 다운로드(`scoremate.noematica.kr/download/`)에도 올린다 — secret `APP_RELEASE_TOKEN` 이 없으면 건너뛴다
 
