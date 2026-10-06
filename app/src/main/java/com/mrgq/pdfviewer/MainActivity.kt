@@ -76,15 +76,8 @@ class MainActivity : AppCompatActivity() {
         if (com.mrgq.pdfviewer.utils.DeviceForm.isPhone(this)) {
             // 휴대폰: 앱 이름이 두 줄로 감기면 따로 둔 버전이 이름 칸 오른쪽 위에 떠 버린다 — 이름 끝("Viewer" 뒤)에 작게 붙인다 (2026-10-06)
             binding.versionText.visibility = View.GONE
-            // "MRGQ" / "PDF Viewer v0.5.1" — 첫 낱말 뒤에서 줄을 바꾼다 (사용자 요청 2026-10-06). 폭이 모자라면 버전만 셋째 줄로
-            val name = getString(R.string.app_name).replaceFirst(" ", "\n")
-            val version = " v${BuildConfig.VERSION_NAME}"
             binding.titleText.maxLines = 3
-            binding.titleText.text = android.text.SpannableString(name + version).apply {
-                val start = name.length
-                setSpan(android.text.style.RelativeSizeSpan(0.55f), start, length, android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
-                setSpan(android.text.style.ForegroundColorSpan(0x80FFFFFF.toInt()), start, length, android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
-            }
+            showPhoneTitle(linked = false)
         }
         
         // Add fade-in animation for UI elements
@@ -340,7 +333,10 @@ class MainActivity : AppCompatActivity() {
         // 세트리스트 탭 · 동기화는 그다음 줄
         val portrait = resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_PORTRAIT
         binding.scoreMateBadge.visibility = if (scoreMateLinked && !portrait) View.VISIBLE else View.GONE
-        binding.scoreMateBadgeBelow.visibility = if (scoreMateLinked && portrait) View.VISIBLE else View.GONE
+        // 휴대폰은 "× ScoreMate ☁️" 를 MRGQ 옆에 색을 달리해 붙인다 — 따로 줄을 두지 않는다 (사용자 요청 2026-10-06)
+        val phone = com.mrgq.pdfviewer.utils.DeviceForm.isPhone(this)
+        binding.scoreMateBadgeBelow.visibility = if (scoreMateLinked && portrait && !phone) View.VISIBLE else View.GONE
+        if (phone) showPhoneTitle(scoreMateLinked)
         // 연결된 TV 는 정렬(늘 곡 순서) · 파일관리(서버가 관리 — 웹에서 곡목 고르기)가 필요 없다 → 그 줄을 통째로 숨긴다.
         // 🔄 동기화는 세트리스트 줄 오른쪽 끝에 있다
         binding.controlStrip.visibility = if (scoreMateLinked) View.GONE else View.VISIBLE
@@ -1128,6 +1124,31 @@ class MainActivity : AppCompatActivity() {
      * 앱 이름 칸이 0 으로 눌려 글자가 세로로 쌓이고(머리줄이 화면 가운데까지 길어짐) 설정 버튼이 잘렸다 (사용자 요청 2026-10-05).
      * 합주 상태는 앱 이름 아래 줄로, 버튼은 기본 최소 폭(88dp)을 풀고, 바깥 여백 · 글자를 줄인다. TV · 태블릿은 그대로
      */
+    /**
+     * 휴대폰 첫 화면 앱 이름: "MRGQ [× ScoreMate ☁️]" / "PDF Viewer v0.5.2" (사용자 요청 2026-10-06).
+     * 첫 낱말 뒤에서 줄을 바꾸고, ScoreMate 표시는 작게 다른 색, 버전은 작게 흐리게. 폭이 모자라면 버전만 셋째 줄로
+     */
+    private fun showPhoneTitle(linked: Boolean) {
+        val name = getString(R.string.app_name)
+        val cut = name.indexOf(' ').takeIf { it > 0 } ?: name.length
+        val badge = if (linked) "  × ScoreMate ☁️" else ""
+        val version = " v${BuildConfig.VERSION_NAME}"
+        val first = name.substring(0, cut)
+        val rest = name.substring(cut).trimStart()
+        val text = first + badge + "\n" + rest + version
+        binding.titleText.text = android.text.SpannableString(text).apply {
+            val flags = android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+            if (badge.isNotEmpty()) {
+                val b = first.length
+                setSpan(android.text.style.RelativeSizeSpan(0.7f), b, b + badge.length, flags)
+                setSpan(android.text.style.ForegroundColorSpan(0xFF90CAF9.toInt()), b, b + badge.length, flags)
+            }
+            val v = text.length - version.length
+            setSpan(android.text.style.RelativeSizeSpan(0.55f), v, text.length, flags)
+            setSpan(android.text.style.ForegroundColorSpan(0x80FFFFFF.toInt()), v, text.length, flags)
+        }
+    }
+
     /**
      * 휴대폰 · 태블릿(세로): 머리줄 아이콘을 제목 칸 전체("× ScoreMate ☁️" · 합주 상태 줄까지)가 아니라
      * 앱 이름 글자(두 줄)의 가운데에 맞춘다 (사용자 요청 2026-10-06). TV 는 한 줄이라 그대로
