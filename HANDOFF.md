@@ -44,7 +44,8 @@
 - **서버 세션이 따로 있다**: ScoreMateServer 작업을 하는 다른 Claude 세션이 이 저장소의 `devlog/*P06*` 을 고쳐 main 에 푸시한다
   - 푸시 · 릴리스 전에 **`git fetch` 후 rebase**. 태그는 main 푸시가 성공한 뒤에만(파이프로 푸시 실패를 가리지 말 것)
   - 서버 계약은 P06 에서 읽고, TV 반영을 같은 절에 "앱 반영"으로 적는다
-- **릴리스**: versionCode/Name → CHANGELOG 섹션 → 커밋 · 푸시 → **CI 초록 확인** → `v*` 태그 → Release 워크플로 → `releases/latest` 확인(앱 안 업데이트가 이것을 본다)
+- **릴리스**: versionCode/Name → CHANGELOG 섹션 → 커밋 · 푸시 → **CI 초록 확인** → **annotated 태그** `git tag -a vX.Y.Z -m "vX.Y.Z"` → Release 워크플로 → `releases/latest` 확인(앱 안 업데이트가 이것을 본다)
+  - Release verify 는 태그 == versionName · **versionCode > 직전 태그** · CHANGELOG `## [X.Y.Z]` 섹션을 검사한다. [Unreleased] 에 다른 세션이 적은 항목이 있으면 그 판 섹션으로 옮긴다(v0.5.3 은 섹션이 빠져 릴리스 실패 — 태그만 남김)
 
 ## 3. 자주 부딪힌 것
 

@@ -32,6 +32,7 @@ jobs:
       - uses: actions/checkout@v7
         with:
           ref: ${{ inputs.tag || github.ref }}
+          fetch-depth: 0 # 직전 릴리스 태그의 versionCode 를 읽으려고 (태그 · 커밋 전부)
 
       - name: Resolve & verify version
         id: v
@@ -62,6 +63,18 @@ jobs:
           if [[ "$VERSION" != "$GRADLE_VERSION" && "$VERSION" != *-test ]]; then
             echo "::error::태그($VERSION) 와 build.gradle.kts 의 versionName($GRADLE_VERSION) 이 다릅니다"
             exit 1
+          fi
+
+          # versionCode 는 직전 태그보다 커야 한다 — 같으면 기기가 업데이트로 보지 않는다(앱 안 업데이트 · 덮어쓰기 설치).
+          # 직전 태그 = 버전 순으로 이 태그 바로 아래 v* 태그(-test 제외). 없으면(첫 태그) 건너뛴다
+          PREV_TAG=$(git tag -l 'v*' --sort=-v:refname | grep -v -- '-test$' | awk -v cur="$TAG" 'found { print; exit } $0 == cur { found = 1 }')
+          if [[ -n "$PREV_TAG" && "$VERSION" != *-test ]]; then
+            PREV_CODE=$(git show "$PREV_TAG:app/build.gradle.kts" | grep -oP 'versionCode\s*=\s*\K\d+' || true)
+            echo "직전 태그: $PREV_TAG / versionCode: ${PREV_CODE:-?}"
+            if [[ -n "$PREV_CODE" ]] && (( VERSION_CODE <= PREV_CODE )); then
+              echo "::error::versionCode($VERSION_CODE) 가 직전 태그 $PREV_TAG 의 versionCode($PREV_CODE) 보다 커야 합니다"
+              exit 1
+            fi
           fi
 
           # CHANGELOG 섹션이 있어야 릴리스 노트가 빈 채로 나가지 않는다

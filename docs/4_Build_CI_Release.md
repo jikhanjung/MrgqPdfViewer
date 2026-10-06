@@ -16,7 +16,7 @@
 
 | 영역 | 상태 |
 |---|---|
-| 앱 빌드 | 🟢 CI 빌드·버전 단일 출처 확보. ⚠️ **릴리스 서명이 debug 키 폴백** |
+| 앱 빌드 | 🟢 CI 빌드·버전 단일 출처 확보. 릴리스 키 서명(2026-09-05 secrets 등록) |
 | CI | 🟡 단위 테스트 + Lint 게이트(08-15). 에뮬레이터 계측·release 스모크 API 21/30/34 초록불(09-06). 09-13 minSdk 30 으로 올리며 API 30/34 로 축소(#048). **여전히 순수 로직 커버리지는 렌더 튜닝·정렬·프로토콜뿐** |
 | 릴리스 | 🟢 2026-08-15 자동화 도입 (태그 → 검증 → 빌드 → 릴리스, 노트는 CHANGELOG) |
 
@@ -55,16 +55,16 @@
   한 릴리스 내내 아무도 몰랐음")를 막기 위한 것.
 - **체크섬** (§2) — `SHA256SUMS.txt` 를 릴리스에 첨부.
 
-### ⚠️ 실질적 문제 — 릴리스 서명
-`RELEASE_KEYSTORE_*` secrets 가 등록돼 있지 않으면 release 빌드가 **debug keystore 로 서명**된다.
-빌드는 성공하지만 그 APK 는:
-- Play 스토어에 올릴 수 없고,
-- **정식 서명된 기존 설치본 위에 덮어쓸 수 없다** (서명 불일치로 설치 거부).
-
-개인용 사이드로딩이라 당장 문제는 없다. 다만 가이드 §2 의 원칙("컴파일된 것과 검증된 것을
-혼동하지 말고 릴리스 노트에 명시하라")에 따라 **릴리스 본문에 서명 상태를 자동으로 표기**하도록 했다.
-정식 서명을 원하면 `RELEASE_KEYSTORE_BASE64` / `_PASSWORD` / `RELEASE_KEY_ALIAS` / `RELEASE_KEY_PASSWORD`
-4개를 repo secrets 에 등록하면 워크플로우 수정 없이 전환된다.
+### 릴리스 서명 — 릴리스 키 (2026-09-05~)
+`RELEASE_KEYSTORE_BASE64` / `RELEASE_KEYSTORE_PASSWORD` / `RELEASE_KEY_ALIAS` / `RELEASE_KEY_PASSWORD`
+4개가 2026-09-05 repo secrets 에 등록돼, CI 의 release APK 는 모두 **같은 릴리스 키**로 서명된다
+(`build.yml` 이 `signing.properties` 를 만들고 `signed-with-release-key` 출력으로 알린다).
+- release APK 끼리는 덮어쓰기 설치 · **앱 안 업데이트**(#054)가 데이터를 남긴 채 된다. 이것이 업데이트 경로의 전제다.
+- debug APK(와 secrets 가 없는 포크의 release APK)는 debug keystore 서명이라 release 설치본 위에 덮어쓸 수 없다 — 지우고 설치.
+- 릴리스 본문에 서명 상태를 자동으로 적고(가이드 §2 "컴파일된 것과 검증된 것을 혼동하지 말 것"),
+  secrets 가 빠져 debug 키로 폴백하면 경고를 단다. ScoreMate 서버 업로드(`APP_RELEASE_TOKEN`)는 릴리스 키일 때만 한다.
+- **keystore 백업**: 원본 keystore 파일과 두 비밀번호 · alias 를 저장소 · CI 밖에 따로 보관한다(잃으면 기존 설치본을 더는 업데이트할 수 없다 —
+  모든 기기에서 지우고 새 키로 다시 설치해야 한다). **보관 위치는 아직 이 문서에 적지 않았다 — TODO(사용자 확인)**.
 
 ### 미도입 (해도 되는 것)
 - **빌드 메타데이터 embed** (§5) — 커밋 SHA·빌드 날짜를 앱에 심어 About 화면에 표시.
@@ -145,7 +145,7 @@ Gradle dependency locking 도 버전 카탈로그도 없다. 가이드 §3 의 �
 ### 흐름
 ```
 v* 태그 푸시
-  → verify   : SemVer 형식 · 태그 == versionName · CHANGELOG 섹션 존재
+  → verify   : SemVer 형식 · 태그 == versionName · versionCode > 직전 태그 · CHANGELOG 섹션 존재
   → build    : build.yml 재사용 (개발 빌드와 동일 정의, 해당 태그의 코드로)
   → publish  : APK + SHA256SUMS.txt 첨부, 본문 = CHANGELOG 섹션 그대로
 ```
@@ -157,15 +157,18 @@ v* 태그 푸시
 - **빈 릴리스 노트 방지** (§6) — CHANGELOG 에 해당 버전 섹션이 없으면 **빌드 전에** 실패한다.
 - **SemVer + 사전 릴리스 자동 표시** (§5) — `-alpha` / `-beta` / `-rc` 는 pre-release 로 표시.
   pre-1.0 관례(MAJOR 는 0 유지, breaking change 는 MINOR 를 올림)를 따른다.
-- **annotated 태그** (§6) — `git tag -a`. 태그는 삭제·재사용·amend 하지 않는다.
+- **annotated 태그** (§6) — `git tag -a vX.Y.Z -m "vX.Y.Z"`. 태그는 삭제·재사용·amend 하지 않는다.
+  ⚠️ v0.2.3 ~ v0.5.6 은 경량 태그로 찍혔다(`git cat-file -t` = commit, 2026-10-06 점검). 다시 만들지 않고 두며, 그 뒤부터 다시 annotated.
   이미 푸시된 태그로 릴리스를 다시 만들어야 하면 `workflow_dispatch` 로 태그를 지정한다
   (태그를 지웠다 다시 만들지 않기 위해 이 입력이 존재한다).
 - **버전 불일치 차단** (§6) — `verify-version` 이 태그와 소스 버전이 다르면 릴리스를 막는다.
+- **versionCode 증가 검사** (2026-10-06) — 태그 커밋의 `versionCode` 가 직전 `v*` 태그(버전 순, `-test` 제외)의
+  `versionCode` 보다 크지 않으면 빌드 전에 실패한다. 같은 versionCode 는 기기가 업데이트로 보지 않는다.
 
 ### 미도입 (다음 후보)
 - **원커맨드 릴리스 스크립트** (§6) — `make release BUMP=patch` 에 해당. 더티 트리 거부,
   `versionCode`/`versionName` 갱신, CHANGELOG `[Unreleased]` 롤, 커밋, 태그, 푸시.
-  지금은 수동이라 **`versionCode` 를 안 올리는 실수가 가능**하다 (워크플로우가 검증하지 않는 유일한 항목).
+  `versionCode` 를 안 올리는 실수는 이제 verify 가 막는다(2026-10-06). 스크립트는 여전히 수동 단계를 줄이는 몫.
 - **테스트 태그로 릴리스 워크플로우 검증** (§6) — 도입 직후 `v0.0.0-rc.1-test` 로 전 구간을
   돌려보고 삭제하는 절차. 최초 도입 시 1회 수행.
 - **롤백 계획** (§6) — 문제 발견 시: 릴리스를 pre-release/draft 로 내리고, README 에 경고,
@@ -192,8 +195,8 @@ v* 태그 푸시
    단, release(minify) 빌드에 계측 테스트를 붙이면 R8 이 앱에서 `androidx.tracing` 을 걷어내 러너가
    `NoClassDefFoundError` 로 죽는다 (Z18TV Pro 실측 시도, devlog #049) — keep 규칙이 먼저 필요하다
 6. **빌드 메타데이터(커밋 SHA) 를 앱에 심고 About 에 표시** — APK 만 보고 어느 커밋인지 알 수 있게
-7. **릴리스 스크립트** — `versionCode` 누락 방지
-8. (선택) 정식 릴리스 키 등록 — 배포 계획이 생기면
+7. **릴리스 스크립트** — 수동 단계 줄이기 (`versionCode` 누락은 verify 가 막는다, 2026-10-06)
+8. [x] ~~정식 릴리스 키 등록~~ (2026-09-05) — 남은 것: keystore 백업 위치를 §1 에 적기
 
 ---
 
