@@ -200,4 +200,4 @@ v* 태그 푸시
 
 ---
 
-*기준 문서는 `devdocs/guides/desktop/` 의 living document 다. 이 점검 결과도 재점검 시 갱신한다.*
+*기준 문서는 `devdocs/guides/mobile/README.md`(Android — 이 저장소의 경험에서 일반화, 2026-10-06 신설)와 `devdocs/guides/desktop/`(공통 CI · 패키징 · 릴리스 원칙)의 living document 다. 이 점검 결과도 재점검 시 갱신한다.*
