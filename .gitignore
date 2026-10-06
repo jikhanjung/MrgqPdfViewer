@@ -106,3 +106,6 @@ ehthumbs.db
 
 # Claude Code settings
 .claude/
+
+# Private shared guides: local sibling checkout only (devdocs is private, this repo is public)
+/.guides

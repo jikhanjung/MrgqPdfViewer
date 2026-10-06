@@ -1,5 +1,9 @@
 # MrgqPdfViewer 프로젝트 가이드
 
+## 공통 가이드 (`.guides`)
+Android CI·릴리스·서명·사이드로드 배포 규약은 `.guides/mobile/README.md`(이 저장소의 경험에서 일반화), 공통 원칙은 `.guides/desktop/ci.md`·`packaging-release.md`, 브랜드는 `.guides/branding.md`. `.guides`는 `../devdocs/guides`를 가리키는 로컬 상대 심볼릭 링크다(`.gitignore` 처리).
+없거나 끊어져 있으면 형제 devdocs 체크아웃이 없는 것 — devdocs는 private이고 이 저장소는 public이므로 가이드를 여기에 **커밋하지 않는다.**
+
 ## 프로젝트 개요
 Android TV OS용 PDF 악보 리더 앱으로, 무선 파일 업로드와 리모컨을 이용한 탐색 기능을 제공합니다.
 
