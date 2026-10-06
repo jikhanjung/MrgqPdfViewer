@@ -6,6 +6,9 @@
 
 ## [Unreleased]
 
+### 🔧 빌드 · 릴리스
+- 릴리스 워크플로가 정식 릴리스(릴리스 키 서명) APK 를 ScoreMate 서버의 앱 다운로드(`scoremate.noematica.kr/download/`)에도 올린다 — secret `APP_RELEASE_TOKEN` 이 없으면 건너뛴다
+
 ---
 
 ## [0.5.2] - 2026-10-06

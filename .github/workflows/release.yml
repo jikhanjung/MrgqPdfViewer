@@ -181,3 +181,34 @@ jobs:
               "${FLAGS[@]}"
           fi
           echo "릴리스: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/releases/tag/${TAG}" >> "$GITHUB_STEP_SUMMARY"
+
+      # ScoreMate 서버의 앱 다운로드(https://scoremate.noematica.kr/download/)에도 올린다.
+      # 정식 릴리스 + 릴리스 키 서명일 때만 — debug keystore 폴백 APK 는 기존 설치본 위에 덮어 설치되지 않는다.
+      # 서버가 파일 이름을 정하고 SHA-256 · zip 을 확인하며, 더 새 버전일 때만 최신으로 바꾼다(재실행에 안전).
+      - name: Upload APK to ScoreMate
+        if: needs.verify.outputs.prerelease != 'true'
+        env:
+          APP_RELEASE_TOKEN: ${{ secrets.APP_RELEASE_TOKEN }}
+          SIGNED: ${{ needs.build.outputs.signed-with-release-key }}
+          TAG: ${{ needs.verify.outputs.tag }}
+          UPLOAD_URL: https://scoremate.noematica.kr/api/v1/app-releases/android/
+        run: |
+          set -euo pipefail
+          if [ -z "${APP_RELEASE_TOKEN:-}" ]; then
+            echo "::notice::APP_RELEASE_TOKEN secret 이 없어 ScoreMate 업로드를 건너뜁니다"; exit 0
+          fi
+          if [ "$SIGNED" != "true" ]; then
+            echo "::notice::릴리스 키로 서명되지 않아 ScoreMate 업로드를 건너뜁니다"; exit 0
+          fi
+          APK=$(ls dist/*-release.apk | head -n 1)
+          SHA=$(sha256sum "$APK" | cut -d' ' -f1)
+          code=$(curl -sS -o scoremate.json -w '%{http_code}' --retry 3 --retry-delay 10 \
+            -H "Authorization: Bearer ${APP_RELEASE_TOKEN}" \
+            -F "apk=@${APK}" -F "version=${TAG}" -F "sha256=${SHA}" \
+            -F "notes_url=${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/releases/tag/${TAG}" \
+            "$UPLOAD_URL")
+          cat scoremate.json; echo
+          if [ "$code" != "201" ]; then
+            echo "::error::ScoreMate 업로드 실패 (HTTP $code)"; exit 1
+          fi
+          echo "ScoreMate 다운로드: https://scoremate.noematica.kr/download/ ($(cat scoremate.json))" >> "$GITHUB_STEP_SUMMARY"
