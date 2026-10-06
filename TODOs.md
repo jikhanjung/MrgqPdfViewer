@@ -44,6 +44,10 @@
 
 ## 🧰 기술 부채 · 조사
 
+- [ ] **릴리스 keystore 백업** (2026-10-06) — 따로 백업한 기억이 없다. 예전 Windows PC `D:\projects\MrgqPdfViewer\` 에서
+  `signing.properties` + keystore 파일을 찾아 저장소 밖 두 곳에 보관하고, 위치를 `docs/4_Build_CI_Release.md` §1 에 적는다.
+  잃으면 모든 기기가 앱 안 업데이트를 못 받는다(지우고 새 키로 재설치 · 설정 · DB 초기화). 자세한 것은 docs/4 §1
+
 - [ ] 계측 테스트를 release 빌드로도 — R8 이 Room enum 저장 등을 깨는 회귀는 지금 "앱이 뜬다"까지만 본다
 - [ ] Google TV Streamer 4K 30Hz → 60Hz · HDMI 1080p60 A/B (앱 수정 없음, #040 §5)
 
