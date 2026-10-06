@@ -2,7 +2,7 @@
 
 마지막 갱신: 2026-10-06
 브랜치: `main` (origin/main 과 동기화, 미푸시 커밋 0개)
-버전: **v0.5.1** (versionCode 40) — 태블릿 마이크 자동 넘김(P10) · 휴대폰 화면. 실기기는 앱 안 업데이트로 받는다
+버전: **v0.5.2** (versionCode 41) — 태블릿 마이크 자동 넘김(P10) · 휴대폰 화면. 실기기는 앱 안 업데이트로 받는다
 관련 문서: [CLAUDE.md](CLAUDE.md) (가이드 · 알아 둘 결정) · [TODOs.md](TODOs.md) · [CHANGELOG.md](CHANGELOG.md) · [devlog 인덱스](devlog/README.md)
 
 ---
