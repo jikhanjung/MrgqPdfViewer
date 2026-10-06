@@ -58,6 +58,7 @@ class MainActivity : AppCompatActivity() {
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
         if (com.mrgq.pdfviewer.utils.DeviceForm.isPhone(this)) compactForPhone()
+        if (!com.mrgq.pdfviewer.utils.DeviceForm.isTv(this)) alignIconToTitle()
         
         // Note: Global collaboration manager는 Application에서 이미 초기화됨
         
@@ -1127,6 +1128,23 @@ class MainActivity : AppCompatActivity() {
      * 앱 이름 칸이 0 으로 눌려 글자가 세로로 쌓이고(머리줄이 화면 가운데까지 길어짐) 설정 버튼이 잘렸다 (사용자 요청 2026-10-05).
      * 합주 상태는 앱 이름 아래 줄로, 버튼은 기본 최소 폭(88dp)을 풀고, 바깥 여백 · 글자를 줄인다. TV · 태블릿은 그대로
      */
+    /**
+     * 휴대폰 · 태블릿(세로): 머리줄 아이콘을 제목 칸 전체("× ScoreMate ☁️" · 합주 상태 줄까지)가 아니라
+     * 앱 이름 글자(두 줄)의 가운데에 맞춘다 (사용자 요청 2026-10-06). TV 는 한 줄이라 그대로
+     */
+    private fun alignIconToTitle() {
+        val icon = binding.headerSection.getChildAt(0)
+        (icon.layoutParams as android.widget.LinearLayout.LayoutParams).gravity = android.view.Gravity.TOP
+        binding.titleText.addOnLayoutChangeListener { _, _, top, _, bottom, _, _, _, _ ->
+            val lp = icon.layoutParams as android.widget.LinearLayout.LayoutParams
+            val margin = maxOf(0, top + (bottom - top - icon.height) / 2)
+            if (lp.topMargin != margin) {
+                lp.topMargin = margin
+                icon.post { icon.requestLayout() }
+            }
+        }
+    }
+
     private fun compactForPhone() {
         val dp = resources.displayMetrics.density
         binding.root.setPadding((12 * dp).toInt(), (16 * dp).toInt(), (12 * dp).toInt(), (12 * dp).toInt())
