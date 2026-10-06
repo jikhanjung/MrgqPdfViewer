@@ -75,8 +75,10 @@ class MainActivity : AppCompatActivity() {
         if (com.mrgq.pdfviewer.utils.DeviceForm.isPhone(this)) {
             // 휴대폰: 앱 이름이 두 줄로 감기면 따로 둔 버전이 이름 칸 오른쪽 위에 떠 버린다 — 이름 끝("Viewer" 뒤)에 작게 붙인다 (2026-10-06)
             binding.versionText.visibility = View.GONE
-            val name = getString(R.string.app_name)
-            val version = "  v${BuildConfig.VERSION_NAME}"
+            // "MRGQ" / "PDF Viewer v0.5.1" — 첫 낱말 뒤에서 줄을 바꾼다 (사용자 요청 2026-10-06). 폭이 모자라면 버전만 셋째 줄로
+            val name = getString(R.string.app_name).replaceFirst(" ", "\n")
+            val version = " v${BuildConfig.VERSION_NAME}"
+            binding.titleText.maxLines = 3
             binding.titleText.text = android.text.SpannableString(name + version).apply {
                 val start = name.length
                 setSpan(android.text.style.RelativeSizeSpan(0.55f), start, length, android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
