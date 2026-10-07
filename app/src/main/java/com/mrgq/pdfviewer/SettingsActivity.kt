@@ -645,6 +645,14 @@ class SettingsActivity : AppCompatActivity() {
                 type = SettingsType.TOGGLE
             ),
             SettingsItem(
+                id = "update_prerelease_toggle",
+                icon = "🧪",
+                title = "사전 릴리스(beta) 받기",
+                subtitle = if (UpdateController.isPrereleaseEnabled(this)) "켜짐 — 시험 중인 판도 받습니다. 확인 전 기능이 포함될 수 있습니다"
+                    else "꺼짐 — 정식 릴리스만 받습니다",
+                type = SettingsType.TOGGLE
+            ),
+            SettingsItem(
                 id = "check_update",
                 icon = "🔄",
                 title = "업데이트 확인",
@@ -911,6 +919,12 @@ class SettingsActivity : AppCompatActivity() {
             "scoremate_server" -> showScoreMateServerDialog()
             "update_on_start_toggle" -> {
                 UpdateController.setCheckOnStartup(this, !UpdateController.isCheckOnStartup(this))
+                showInfoPanel()
+            }
+            "update_prerelease_toggle" -> {
+                val enable = !UpdateController.isPrereleaseEnabled(this)
+                UpdateController.setPrereleaseEnabled(this, enable)
+                if (enable) Toast.makeText(this, "사전 릴리스도 받습니다 — 확인 전 기능이 포함될 수 있습니다", Toast.LENGTH_LONG).show()
                 showInfoPanel()
             }
         }

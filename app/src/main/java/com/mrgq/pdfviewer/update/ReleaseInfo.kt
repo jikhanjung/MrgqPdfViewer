@@ -49,6 +49,27 @@ data class ReleaseInfo(
                 ?.let { java.net.URLDecoder.decode(it, "UTF-8") }
                 ?.takeIf { it.isNotBlank() }
 
+        /**
+         * 릴리스 피드(`github.com/<repo>/releases.atom`)의 태그들 — 피드에 오는 순서대로. 웹 피드라 API 한도와 무관하고
+         * 사전 릴리스도 들어 있다(neovim nightly 로 확인, 2026-10-07). ⚠️ **릴리스 없는 태그도 섞여 온다**(v0.5.3 처럼) —
+         * 고른 뒤 그 릴리스에 파일이 있는지 따로 확인한다([UpdateClient])
+         */
+        fun tagsFromAtom(xml: String): List<String> =
+            Regex("""href="[^"]*/releases/tag/([^"?#]+)"""").findAll(xml)
+                .map { java.net.URLDecoder.decode(it.groupValues[1], "UTF-8") }
+                .distinct()
+                .toList()
+
+        /**
+         * 업데이트 후보 태그를 높은 버전부터. 시험 태그(`-test`)는 빼고, [includePrerelease] 가 아니면 사전 릴리스(접미사)도 뺀다.
+         * 사전 릴리스를 켜도 정식이 더 높으면 정식이 먼저다
+         */
+        fun candidates(tags: List<String>, includePrerelease: Boolean): List<String> =
+            tags.mapNotNull { tag -> AppVersion.parse(tag)?.let { tag to it } }
+                .filter { (_, v) -> !v.isTest && (includePrerelease || !v.isPrerelease) }
+                .sortedByDescending { it.second }
+                .map { it.first }
+
         /** `CHANGELOG.md` 에서 `## [0.2.9]` 섹션 본문 — 다음 `## ` 전까지. 없으면 빈 문자열 */
         fun changelogSection(changelog: String, version: String): String {
             val lines = changelog.replace("\r\n", "\n").lines()

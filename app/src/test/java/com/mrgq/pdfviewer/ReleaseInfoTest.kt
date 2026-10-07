@@ -95,4 +95,30 @@ class ReleaseInfoTest {
         assertEquals(6, text.lines().size)
         assertFalse(text.contains("줄 6"))
     }
+
+    // ── 사전 릴리스 받기 — 릴리스 피드 ──
+
+    private val atom = """<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <link type="text/html" rel="alternate" href="https://github.com/jikhanjung/MrgqPdfViewer/releases"/>
+  <entry><link rel="alternate" type="text/html" href="https://github.com/jikhanjung/MrgqPdfViewer/releases/tag/v0.6.0-beta.1"/><title>v0.6.0-beta.1</title></entry>
+  <entry><link rel="alternate" type="text/html" href="https://github.com/jikhanjung/MrgqPdfViewer/releases/tag/v0.5.7"/><title>v0.5.7</title></entry>
+  <entry><link rel="alternate" type="text/html" href="https://github.com/jikhanjung/MrgqPdfViewer/releases/tag/v0.5.7-test"/></entry>
+  <entry><link rel="alternate" type="text/html" href="https://github.com/jikhanjung/MrgqPdfViewer/releases/tag/v0.5.6"/></entry>
+</feed>"""
+
+    @Test
+    fun 피드에서_태그를_읽는다() {
+        assertEquals(listOf("v0.6.0-beta.1", "v0.5.7", "v0.5.7-test", "v0.5.6"), ReleaseInfo.tagsFromAtom(atom))
+    }
+
+    @Test
+    fun 후보는_높은_버전부터_시험_태그는_빼고() {
+        val tags = ReleaseInfo.tagsFromAtom(atom)
+        assertEquals(listOf("v0.6.0-beta.1", "v0.5.7", "v0.5.6"), ReleaseInfo.candidates(tags, includePrerelease = true))
+        assertEquals(listOf("v0.5.7", "v0.5.6"), ReleaseInfo.candidates(tags, includePrerelease = false))
+        // 정식이 더 높으면 정식이 먼저
+        assertEquals("v0.6.0", ReleaseInfo.candidates(tags + "v0.6.0", includePrerelease = true).first())
+        assertEquals(emptyList<String>(), ReleaseInfo.candidates(listOf("nightly", "latest"), includePrerelease = true))
+    }
 }
