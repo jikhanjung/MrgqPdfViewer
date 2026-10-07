@@ -79,6 +79,8 @@ class PdfViewerActivity : AppCompatActivity() {
         private val NOTE_TEXT_SIZE_SP = floatArrayOf(13f, 18f, 24f)
         /** 획 줄이기 허용 오차 (pt) — 오선 두께(≈ 0.5pt)보다 작게 */
         private const val STROKE_TOLERANCE_PT = 0.25f
+        /** 메모 모드 확대 한도 — 쪽은 화면 크기로 렌더하므로 더 키우면 흐릿하다 */
+        private const val NOTE_ZOOM_MAX = 4f
         /** 다 그은 뒤 붙은 보표 표시를 남겨 두는 시간 */
         private const val STAFF_HINT_MS = 1200L
         // Intent extra keys
@@ -1748,6 +1750,8 @@ class PdfViewerActivity : AppCompatActivity() {
                 ev.x >= bar.left && ev.x <= bar.right && ev.y >= bar.top && ev.y <= bar.bottom
         }
         if (touchOnNoteToolbar) return super.dispatchTouchEvent(ev)
+        // 메모 모드의 두 손가락 = 확대 · 이동 (긋던 획은 버린다)
+        if (handleNotePinch(ev)) return true
         // 악보 메모 (P11): 펜은 늘, 손가락은 메모 모드에서 — 먹은 것은 넘김 몸짓으로 보내지 않는다
         if (notePen.handle(ev)) return true
         // 악보 화면에는 눌리는 뷰가 없다 — 모든 터치를 몸짓으로 (안내 카드도 옆 탭 = ← → 가 다음 · 이전 파일로 간다)
@@ -2244,6 +2248,113 @@ class PdfViewerActivity : AppCompatActivity() {
         commitPendingNote()
         notePen.editMode = false
         binding.noteToolbar.visibility = View.GONE
+        resetNoteZoom()
+    }
+
+    // ── 메모 모드 확대 · 이동 — 두 손가락으로 집기 · 끌기. 한 손가락 · 펜은 그대로 긋는다 ──
+    /** 화면(뷰) 좌표에서의 확대 · 이동 — 표시 행렬 = [noteZoomBase] 뒤에 이것 */
+    private val noteZoom = android.graphics.Matrix()
+    /** 확대하기 전의 표시 행렬 (쪽 맞춤) */
+    private var noteZoomBase: android.graphics.Matrix? = null
+    /** 마지막으로 놓은 확대 행렬 — 넘김 · 조각 이동이 행렬을 새로 놓았으면 이것과 달라 확대가 풀린 것으로 본다 */
+    private var noteZoomApplied: android.graphics.Matrix? = null
+    private var notePinching = false
+    private var pinchSpan = 0f
+    private var pinchX = 0f
+    private var pinchY = 0f
+
+    /** 두 손가락이면 확대 · 이동으로 먹는다 — 이 터치가 끝날 때까지 */
+    private fun handleNotePinch(ev: android.view.MotionEvent): Boolean {
+        if (!notePinching) {
+            if (ev.actionMasked != android.view.MotionEvent.ACTION_POINTER_DOWN || ev.pointerCount != 2 || !notePen.editMode) return false
+            if ((0 until 2).any { ev.getToolType(it) != android.view.MotionEvent.TOOL_TYPE_FINGER }) return false
+            if (isAnimating || pdfRenderer == null) return false
+            notePen.cancel()
+            // 첫 손가락이 넘김 몸짓으로 갔을 수 있다 — 탭 · 끌기로 끝나지 않게 거둔다
+            val cancel = android.view.MotionEvent.obtain(ev).apply { action = android.view.MotionEvent.ACTION_CANCEL }
+            touchGestures.onTouchEvent(cancel)
+            cancel.recycle()
+            phoneDragEnd()
+            val current = binding.pdfView.imageMatrix
+            if (noteZoomApplied == null || current != noteZoomApplied) {
+                noteZoomBase = android.graphics.Matrix(current)
+                noteZoom.reset()
+            }
+            notePinching = true
+            pinchFocus(ev)
+            return true
+        }
+        when (ev.actionMasked) {
+            android.view.MotionEvent.ACTION_MOVE -> if (ev.pointerCount >= 2) {
+                val lastSpan = pinchSpan
+                val lastX = pinchX
+                val lastY = pinchY
+                pinchFocus(ev)
+                val f = if (lastSpan > 0f) pinchSpan / lastSpan else 1f
+                noteZoom.postScale(f, f, pinchX, pinchY)
+                noteZoom.postTranslate(pinchX - lastX, pinchY - lastY)
+                applyNoteZoom()
+            }
+            // 손가락 수가 바뀌면 중심을 다시 잡는다 (튀지 않게)
+            android.view.MotionEvent.ACTION_POINTER_DOWN, android.view.MotionEvent.ACTION_POINTER_UP -> pinchFocus(ev, ev.actionIndex.takeIf { ev.actionMasked == android.view.MotionEvent.ACTION_POINTER_UP })
+            android.view.MotionEvent.ACTION_UP, android.view.MotionEvent.ACTION_CANCEL -> {
+                notePinching = false
+                notePen.handle(ev) // 펜 쪽 상태를 끝낸다 (버린 획)
+            }
+        }
+        return true
+    }
+
+    /** 손가락들의 가운데 · 퍼짐 (화면 좌표 그대로 — 뷰가 창을 꽉 채운다) */
+    private fun pinchFocus(ev: android.view.MotionEvent, skip: Int? = null) {
+        var sx = 0f
+        var sy = 0f
+        var n = 0
+        for (i in 0 until ev.pointerCount) if (i != skip) {
+            sx += ev.getX(i)
+            sy += ev.getY(i)
+            n++
+        }
+        if (n == 0) return
+        pinchX = sx / n
+        pinchY = sy / n
+        var d = 0f
+        for (i in 0 until ev.pointerCount) if (i != skip) d += kotlin.math.hypot(ev.getX(i) - pinchX, ev.getY(i) - pinchY)
+        pinchSpan = if (n >= 2) d / n else 0f
+    }
+
+    /** 확대를 [NOTE_ZOOM_MAX] 안으로, 화면에 빈 곳이 생기지 않게 가두고 표시 행렬에 놓는다. 1배 이하면 풀기 */
+    private fun applyNoteZoom() {
+        val base = noteZoomBase ?: return
+        val v = FloatArray(9)
+        noteZoom.getValues(v)
+        val scale = v[android.graphics.Matrix.MSCALE_X]
+        if (scale <= 1f) return resetNoteZoom()
+        if (scale > NOTE_ZOOM_MAX) noteZoom.postScale(NOTE_ZOOM_MAX / scale, NOTE_ZOOM_MAX / scale, pinchX, pinchY)
+        noteZoom.getValues(v)
+        val s = v[android.graphics.Matrix.MSCALE_X]
+        val w = binding.pdfView.width.toFloat()
+        val h = binding.pdfView.height.toFloat()
+        v[android.graphics.Matrix.MTRANS_X] = v[android.graphics.Matrix.MTRANS_X].coerceIn(w - w * s, 0f)
+        v[android.graphics.Matrix.MTRANS_Y] = v[android.graphics.Matrix.MTRANS_Y].coerceIn(h - h * s, 0f)
+        noteZoom.setValues(v)
+        val m = android.graphics.Matrix(base).apply { postConcat(noteZoom) }
+        binding.pdfView.imageMatrix = m
+        noteZoomApplied = android.graphics.Matrix(m)
+        refreshScoreOverlay()
+    }
+
+    /** 쪽 맞춤으로 — 확대가 아직 화면에 있을 때만 되돌린다 (넘김이 이미 새 행렬을 놓았으면 그대로) */
+    private fun resetNoteZoom() {
+        val base = noteZoomBase
+        val applied = noteZoomApplied
+        noteZoom.reset()
+        noteZoomBase = null
+        noteZoomApplied = null
+        if (base != null && applied != null && binding.pdfView.imageMatrix == applied) {
+            binding.pdfView.imageMatrix = base
+            refreshScoreOverlay()
+        }
     }
 
     private val noteToolButtons = mutableListOf<Pair<android.widget.TextView, () -> Boolean>>()
