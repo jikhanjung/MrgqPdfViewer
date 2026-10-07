@@ -849,4 +849,19 @@ class ScoreMateSyncTest {
         writeLocal()
         assertEquals("지운 것도 올려야 한다", com.mrgq.pdfviewer.scoremate.ScoreNotesSync.Companion.Badge(hasNotes = false, unsent = true), badge())
     }
+
+    @Test
+    fun 메모_동기화가_필요한지_미리_본다() = runBlocking {
+        setUpNotes()
+        assertFalse("맞춘 뒤", sync().notesNeedSync())
+        writeLocal("a")
+        assertTrue("올릴 것", sync().notesNeedSync())
+        sync().sync()
+        assertFalse("올린 뒤", sync().notesNeedSync())
+        val rev = server.notesDocs.getValue(1).first
+        server.notesDocs[1] = (rev + 1) to inkJson("a", "b")
+        assertTrue("다른 기기가 고침", sync().notesNeedSync())
+        sync().sync()
+        assertFalse("받은 뒤", sync().notesNeedSync())
+    }
 }

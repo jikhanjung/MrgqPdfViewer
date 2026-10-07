@@ -3,6 +3,7 @@ package com.mrgq.pdfviewer.scoremate
 import com.google.gson.JsonObject
 import com.google.gson.JsonParser
 import com.mrgq.pdfviewer.notes.ScoreNotesFile
+import kotlinx.coroutines.sync.withLock
 import java.io.File
 import java.security.MessageDigest
 
@@ -123,7 +124,15 @@ class ScoreMateSync(
 ) {
     val scoreMateRoot: File get() = File(pdfRoot, FOLDER)
 
-    suspend fun sync(): SyncReport {
+    /**
+     * 한 번에 하나 — 목록의 1분 확인 · 돌아올 때 자동 · 🔄 · 설정 "지금 동기화" 가 겹치면 앞 것이 끝난 뒤에 (곁 파일 · 커서를 함께 쓴다)
+     */
+    suspend fun sync(): SyncReport = RUNNING.withLock { syncOnce() }
+
+    /** 메모를 주고받을 것이 있나 — 목록에서 1분마다 (메모 목록 한 번만 받는다). [ScoreNotesSync.needsSync] */
+    suspend fun notesNeedSync(): Boolean = ScoreNotesSync(client).needsSync(store.all())
+
+    private suspend fun syncOnce(): SyncReport {
         // 0. 옛 형식으로 쌓은 커서면 한 번 처음부터 — 그 사이 지나간 변경의 새 필드(MusicXML)를 받으려고. sha 가 같은 PDF 는 다시 받지 않는다
         if (tokens.syncFormat < SYNC_FORMAT) tokens.syncCursor = null
         // 1. 쪽을 모두 받는다. 깨진 커서면 한 번 처음부터
@@ -491,6 +500,7 @@ class ScoreMateSync(
     }
 
     companion object {
+        private val RUNNING = kotlinx.coroutines.sync.Mutex()
         /** `PDFs/` 아래 서버 악보 폴더 */
         const val FOLDER = "ScoreMate"
 

@@ -64,6 +64,33 @@ class ScoreNotesSync(
         return Result(up, down, errors)
     }
 
+    /**
+     * 주고받을 것이 있나 — [sync] 가 무언가 할지를 같은 규칙으로 미리 본다(받지는 않는다): 올릴 것(받은 뒤와 다름),
+     * 서버 판이 다름, 지휘자 메모를 쓸 수 있는지가 바뀜. 메모를 모르는 서버면 false
+     */
+    suspend fun needsSync(scores: List<SyncedScore>): Boolean {
+        val list = parseList(client.fetchNotesList() ?: return false)
+        for (score in scores) {
+            if (score.hidden) continue
+            val pdf = File(score.filePath)
+            if (!pdf.isFile) continue
+            val layers = buildList {
+                add(Triple(LAYER, ScoreNotesFile.fileOf(pdf), true))
+                if (score.ensembleId != null) add(Triple(LAYER_CONDUCTOR, ScoreNotesFile.conductorFileOf(pdf), score.serverId in list.conductorWritable))
+            }
+            for ((layer, file, writable) in layers) {
+                val local = synchronized(ScoreNotesFile.lock) { ScoreNotesFile.read(file) }
+                val base = local?.sync ?: SyncState(0, emptySet())
+                if (layer == LAYER_CONDUCTOR && writable != base.writable && (local != null || writable)) return true
+                val dirty = writable && local != null && local.ids != base.baseIds
+                val remote = list.revisions[score.serverId to layer]
+                // 서버에 없으면 처음 만들 때만 (맞춘 적이 있는데 목록에 없으면 sync 도 건드리지 않는다)
+                if (if (remote == null) dirty && base.revision == 0 else remote != base.revision || dirty) return true
+            }
+        }
+        return false
+    }
+
     private enum class Outcome { NONE, UPLOADED, DOWNLOADED }
 
     /** [writable] 이 아니면 받기만 (지휘자 메모 — 멤버) */
