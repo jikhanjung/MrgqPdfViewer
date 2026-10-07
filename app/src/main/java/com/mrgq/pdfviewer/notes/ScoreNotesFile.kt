@@ -13,10 +13,12 @@ import java.security.MessageDigest
  *
  * ```json
  * {"format": 1, "pdf_sha256": "…",
- *  "notes": [{"id": "9f2c41d07ab35e88", "page": 0, "type": "ink", "color": "#FFE53935", "width": 1.5, "staff": 0, "points": [x, y, …]}]}
+ *  "notes": [{"id": "9f2c41d07ab35e88", "page": 0, "type": "ink", "color": "#FFE53935", "width": 1.5, "staff": 0, "points": [x, y, …]},
+ *            {"id": "…", "page": 0, "type": "text", "color": "#FF1E88E5", "size": 11, "x": 72, "y": 140, "text": "rit.", "staff": 1}]}
  * ```
+ * 글자: x, y = 상자 왼 위, size = 글자 크기(pt), 여러 줄은 \n, 첫 줄 기준선 y + 0.8 × size · 줄 간격 1.2 × size ([TextLayout]).
  * 좌표 · 굵기는 원본 PDF pt(소수 한 자리). `pdf_sha256` 은 쓴 때의 PDF 내용 — 다르면 새 판이라 자리가 어긋날 수 있다.
- * 모르는 `type`(뒤 판에서 더할 글자 등)은 읽을 때 [Loaded.unknown] 으로 그대로 들고 있다가 쓸 때 돌려 넣는다 — 옛 앱이 지우지 않게.
+ * 모르는 `type`(뒤 판에서 더할 것)은 읽을 때 [Loaded.unknown] 으로 그대로 들고 있다가 쓸 때 돌려 넣는다 — 옛 앱이 지우지 않게.
  * Android 에 의존하지 않는다 — JVM 단위 테스트 대상.
  */
 object ScoreNotesFile {
@@ -57,6 +59,16 @@ object ScoreNotesFile {
                     points = o.getAsJsonArray("points").map { it.asFloat },
                     staff = o.get("staff")?.takeIf { !it.isJsonNull }?.asInt,
                 )
+                "text" -> ScoreNote.Text(
+                    id = o.get("id").asString,
+                    page = o.get("page").asInt,
+                    color = parseColor(o.get("color").asString),
+                    sizePt = o.get("size").asFloat,
+                    x = o.get("x").asFloat,
+                    y = o.get("y").asFloat,
+                    text = o.get("text").asString,
+                    staff = o.get("staff")?.takeIf { !it.isJsonNull }?.asInt,
+                )
                 else -> null
             }
             if (note != null) notes += note else unknown += o
@@ -81,6 +93,15 @@ object ScoreNotesFile {
                     o.addProperty("width", round1(note.widthPt))
                     note.staff?.let { o.addProperty("staff", it) }
                     o.add("points", JsonArray().apply { note.points.forEach { add(round1(it)) } })
+                }
+                is ScoreNote.Text -> {
+                    o.addProperty("type", "text")
+                    o.addProperty("color", formatColor(note.color))
+                    o.addProperty("size", round1(note.sizePt))
+                    o.addProperty("x", round1(note.x))
+                    o.addProperty("y", round1(note.y))
+                    o.addProperty("text", note.text)
+                    note.staff?.let { o.addProperty("staff", it) }
                 }
             }
             array.add(o)

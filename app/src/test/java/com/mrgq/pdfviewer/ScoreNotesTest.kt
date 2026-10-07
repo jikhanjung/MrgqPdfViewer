@@ -6,6 +6,7 @@ import com.mrgq.pdfviewer.notes.NoteStaff
 import com.mrgq.pdfviewer.notes.ScoreNote
 import com.mrgq.pdfviewer.notes.ScoreNotes
 import com.mrgq.pdfviewer.notes.ScoreNotesFile
+import com.mrgq.pdfviewer.notes.TextLayout
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -164,12 +165,12 @@ class ScoreNotesTest {
     @Test
     fun 모르는_종류는_그대로_들고_있다가_돌려_쓴다() {
         val text = """{"format":1,"notes":[{"id":"a1","page":0,"type":"ink","color":"#FF000000","width":1,"points":[1,2]},""" +
-            """{"id":"b2","page":0,"type":"text","x":5,"y":6,"text":"rit."}]}"""
+            """{"id":"b2","page":0,"type":"stamp","x":5,"y":6,"glyph":"fermata"}]}"""
         val loaded = ScoreNotesFile.parse(text)
         assertEquals(1, loaded.notes.size)
         assertEquals(1, loaded.unknown.size)
         val again = ScoreNotesFile.parse(ScoreNotesFile.format(loaded))
-        assertEquals("rit.", again.unknown.single().get("text").asString)
+        assertEquals("fermata", again.unknown.single().get("glyph").asString)
     }
 
     @Test
@@ -187,5 +188,54 @@ class ScoreNotesTest {
         } finally {
             dir.deleteRecursively()
         }
+    }
+
+    // ── 2단계: 글자 · 옮기기 ──
+
+    private fun text(id: String, x: Float = 72f, y: Float = 140f, t: String = "rit.") =
+        ScoreNote.Text(id, 0, 0xFF1E88E5.toInt(), 11f, x, y, t, staff = 1)
+
+    @Test
+    fun 글자_곁_파일_왕복() {
+        val back = ScoreNotesFile.parse(ScoreNotesFile.format(ScoreNotesFile.Loaded(listOf(text("t1", t = "숨\n4")), null)))
+        val t = back.notes.single() as ScoreNote.Text
+        assertEquals("숨\n4", t.text)
+        assertEquals(72f, t.x)
+        assertEquals(11f, t.sizePt)
+        assertEquals(1, t.staff)
+        assertTrue(back.unknown.isEmpty())
+    }
+
+    @Test
+    fun 고치기_옮기기는_새_id_로_바꿔_끼우고_되돌리기_한_번() {
+        val old = text("t1")
+        val notes = ScoreNotes(listOf(old))
+        val moved = old.movedBy(10f, -5f, notes.nextId(), staff = 0) as ScoreNote.Text
+        assertTrue(notes.replace(old, moved))
+        assertEquals(listOf(moved.id), notes.notes.map { it.id })
+        assertEquals(82f, moved.x)
+        assertEquals(135f, moved.y)
+        assertEquals(0, moved.staff)
+        assertTrue(moved.id != old.id)
+        notes.undo()
+        assertEquals(listOf("t1"), notes.notes.map { it.id })
+        assertFalse("없는 것은 못 바꾼다", notes.replace(moved, old))
+    }
+
+    @Test
+    fun 획_옮기기는_모든_점을_옮긴다() {
+        val moved = ink("a", 0, 1f, 2f, 3f, 4f).movedBy(10f, 20f, "b", null) as ScoreNote.Ink
+        assertEquals(listOf(11f, 22f, 13f, 24f), moved.points)
+        assertEquals("b", moved.id)
+    }
+
+    @Test
+    fun 글자_상자_맞히기와_줄_배치() {
+        val t = text("t1", t = "a\nb")
+        assertEquals(26.4f, TextLayout.height(t), 0.001f)       // 11 × 1.2 × 2줄
+        assertEquals(140f + 11f * 2.0f, TextLayout.baseline(t, 1), 0.001f) // 0.8 + 1.2
+        assertTrue(NoteGeometry.hitsText(t, 20f, 80f, 150f, 0f))
+        assertFalse(NoteGeometry.hitsText(t, 20f, 95f, 150f, 0f))
+        assertTrue("반지름만큼 넓혀", NoteGeometry.hitsText(t, 20f, 95f, 150f, 4f))
     }
 }

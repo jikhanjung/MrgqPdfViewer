@@ -16,6 +16,9 @@ import android.view.MotionEvent
  */
 class NotePen(private val host: Host) {
 
+    /** 글자 크기 (pt) — [TEXT_SIZES] 중 */
+    var textSizePt = TEXT_SIZES[1]
+
     interface Host {
         /** 메모를 쓸 수 있는 화면인가 (파트 보기 · 반 쪽 넘김 · 애니메이션 중이면 아님) */
         fun canDraw(): Boolean
@@ -35,16 +38,30 @@ class NotePen(private val host: Host) {
         fun onLive(page: Int, points: List<Float>, color: Int, widthPx: Float, topPt: Float, bottomPt: Float)
         fun onLiveEnd()
         fun onEraserCursor(x: Float, y: Float, radiusPx: Float)
+        /** 글자 도구로 탭 (pt) — 있는 글자면 고치기, 빈 곳이면 새 글자 */
+        fun onTextTap(page: Int, x: Float, y: Float)
+        /** 옮기기 도구로 누름 (pt) — 잡을 메모가 있으면 true */
+        fun onMoveStart(page: Int, x: Float, y: Float): Boolean
+        /** 누른 곳에서 (pt) 만큼 끌었다 */
+        fun onMoveBy(page: Int, dx: Float, dy: Float)
+        /** 손을 뗌([commit]) · 취소 */
+        fun onMoveEnd(commit: Boolean)
     }
 
-    enum class Tool { PEN, ERASER }
+    /** 펜 · 지우개 · 글자(탭 = 넣기 · 고치기) · 옮기기(잡아 끌기) */
+    enum class Tool { PEN, ERASER, TEXT, MOVE }
 
     var editMode = false
     var tool = Tool.PEN
     var color = COLORS[0]
     var widthPt = WIDTHS[1]
 
-    private enum class Mode { NONE, PASS, IGNORE, DRAW, ERASE }
+    private enum class Mode { NONE, PASS, IGNORE, DRAW, ERASE, TEXT, MOVE }
+
+    private val active get() = mode == Mode.DRAW || mode == Mode.ERASE || mode == Mode.TEXT || mode == Mode.MOVE
+    private var downX = 0f
+    private var downY = 0f
+    private var downPt: Pair<Float, Float>? = null
 
     private var mode = Mode.NONE
     private var page = -1
@@ -52,20 +69,25 @@ class NotePen(private val host: Host) {
     private val points = ArrayList<Float>()
     private var lastStylusAt = 0L
 
+    private var lastX = 0f
+    private var lastY = 0f
+
     /** true = 메모가 먹었다 (몸짓으로 보내지 않는다) */
     fun handle(ev: MotionEvent): Boolean {
+        lastX = ev.x
+        lastY = ev.y
         when (ev.actionMasked) {
             MotionEvent.ACTION_DOWN -> mode = begin(ev)
-            MotionEvent.ACTION_POINTER_DOWN -> if (mode == Mode.DRAW && byFinger || mode == Mode.ERASE && byFinger) {
+            MotionEvent.ACTION_POINTER_DOWN -> if (active && byFinger) {
                 cancel()
                 mode = Mode.IGNORE
             }
-            MotionEvent.ACTION_MOVE -> if (mode == Mode.DRAW || mode == Mode.ERASE) {
+            MotionEvent.ACTION_MOVE -> if (active) {
                 for (h in 0 until ev.historySize) add(ev.getHistoricalX(0, h), ev.getHistoricalY(0, h))
                 add(ev.x, ev.y)
             }
             MotionEvent.ACTION_UP -> {
-                if (mode == Mode.DRAW || mode == Mode.ERASE) {
+                if (active) {
                     add(ev.x, ev.y)
                     finish()
                 }
@@ -100,16 +122,36 @@ class NotePen(private val host: Host) {
         page = p
         byFinger = !stylus
         points.clear()
+        downX = ev.x
+        downY = ev.y
+        downPt = host.toPage(p, ev.x, ev.y)
         val erase = ev.getToolType(0) == MotionEvent.TOOL_TYPE_ERASER ||
             (stylus && ev.buttonState and MotionEvent.BUTTON_STYLUS_PRIMARY != 0) ||
             (editMode && tool == Tool.ERASER)
-        val mode = if (erase) Mode.ERASE else Mode.DRAW
+        // 메모 모드 밖의 펜은 늘 펜 — 글자 · 옮기기는 메모 모드에서 고른 도구일 때만
+        val mode = when {
+            erase -> Mode.ERASE
+            editMode && tool == Tool.TEXT -> Mode.TEXT
+            editMode && tool == Tool.MOVE -> {
+                val (x, y) = downPt ?: return Mode.IGNORE
+                if (!host.onMoveStart(p, x, y)) return Mode.IGNORE
+                Mode.MOVE
+            }
+            else -> Mode.DRAW
+        }
         this.mode = mode
-        add(ev.x, ev.y)
+        if (mode == Mode.DRAW || mode == Mode.ERASE) add(ev.x, ev.y)
         return mode
     }
 
     private fun add(x: Float, y: Float) {
+        if (mode == Mode.TEXT) return // 손을 뗄 때 탭인지만 본다
+        if (mode == Mode.MOVE) {
+            val start = downPt ?: return
+            val (px, py) = host.toPage(page, x, y) ?: return
+            host.onMoveBy(page, px - start.first, py - start.second)
+            return
+        }
         if (mode == Mode.ERASE) {
             val scale = host.pxPerPt(page)
             val radiusPt = ERASER_PX / scale
@@ -149,6 +191,11 @@ class NotePen(private val host: Host) {
                 host.onEraserCursor(0f, 0f, 0f)
                 host.onEraseEnd()
             }
+            Mode.TEXT -> {
+                val start = downPt
+                if (start != null && kotlin.math.hypot(lastX - downX, lastY - downY) < TAP_SLOP_PX) host.onTextTap(page, start.first, start.second)
+            }
+            Mode.MOVE -> host.onMoveEnd(commit = true)
             else -> Unit
         }
         points.clear()
@@ -156,7 +203,11 @@ class NotePen(private val host: Host) {
 
     /** 화면이 바뀌기 직전 — 긋던 획은 지금 화면 기준으로 마저 저장하고, 이번 터치의 나머지는 버린다 */
     fun flush() {
-        if (mode != Mode.DRAW && mode != Mode.ERASE) return
+        if (mode == Mode.TEXT) {
+            mode = Mode.IGNORE
+            return
+        }
+        if (!active) return
         finish()
         mode = Mode.IGNORE
     }
@@ -164,6 +215,7 @@ class NotePen(private val host: Host) {
     /** 긋던 것을 버린다 (두 손가락 · 파일 바뀜) */
     fun cancel() {
         when (mode) {
+            Mode.MOVE -> host.onMoveEnd(commit = false)
             Mode.DRAW -> host.onLiveEnd()
             Mode.ERASE -> {
                 host.onEraserCursor(0f, 0f, 0f)
@@ -187,10 +239,16 @@ class NotePen(private val host: Host) {
         const val EDGE = 0.08f
         /** 지우개 반지름 (화면 px) */
         const val ERASER_PX = 24f
+        /** 이만큼(화면 px) 안에서 떼면 탭 — 글자 도구 */
+        const val TAP_SLOP_PX = 24f
+        /** 옮기기로 잡는 거리 (화면 px) */
+        const val PICK_PX = 28f
 
         /** 검정 · 빨강 · 파랑 */
         val COLORS = intArrayOf(0xFF212121.toInt(), 0xFFE53935.toInt(), 0xFF1E88E5.toInt())
         /** 가늘게 · 보통 · 굵게 (pt) — A4 악보의 오선 간격이 보통 6 ~ 8pt */
         val WIDTHS = floatArrayOf(0.8f, 1.5f, 3f)
+        /** 글자 크기 작게 · 보통 · 크게 (pt) — 굵기 단추가 글자 도구일 때 이것 */
+        val TEXT_SIZES = floatArrayOf(8f, 11f, 15f)
     }
 }

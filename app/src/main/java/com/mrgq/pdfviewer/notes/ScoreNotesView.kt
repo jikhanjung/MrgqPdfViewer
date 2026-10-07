@@ -24,7 +24,9 @@ class ScoreNotesView @JvmOverloads constructor(
     attrs: AttributeSet? = null,
 ) : View(context, attrs) {
 
-    private class Drawn(val path: Path, val paint: Paint)
+    private fun interface Drawn {
+        fun draw(canvas: Canvas)
+    }
     private class Placed(val placement: PagePlacement, val drawn: List<Drawn>)
 
     private var placed: List<Placed> = emptyList()
@@ -127,16 +129,47 @@ class ScoreNotesView @JvmOverloads constructor(
                 if (p.drawn.isEmpty()) continue
                 canvas.save()
                 canvas.clipRect(p.placement.left, p.placement.top, p.placement.right, p.placement.bottom)
-                for (d in p.drawn) canvas.drawPath(d.path, d.paint)
+                for (d in p.drawn) d.draw(canvas)
                 canvas.restore()
             }
             canvas.restore()
+        }
+        selected?.let { (_, box) ->
+            rect.set(box)
+            bitmapToView.mapRect(rect)
+            rect.inset(-8f, -8f)
+            canvas.drawRect(rect, selectPaint)
         }
         if (liveActive) canvas.drawPath(livePath, livePaint)
         if (eraserRadius > 0f) canvas.drawCircle(eraserX, eraserY, eraserRadius, eraserPaint)
     }
 
+    private var selected: Pair<PagePlacement, RectF>? = null
+    private val selectPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.STROKE
+        strokeWidth = 2f
+        color = 0xFF1E88E5.toInt()
+        pathEffect = android.graphics.DashPathEffect(floatArrayOf(10f, 6f), 0f)
+    }
+
+    /** 잡은 메모 (옮기기 · 고치기) — 점선 테두리. null 이면 지운다 */
+    fun select(placement: PagePlacement?, note: ScoreNote?) {
+        selected = if (placement != null && note != null) {
+            val b = boundsPt(note)
+            placement to RectF(placement.toBitmapX(b.left), placement.toBitmapY(b.top), placement.toBitmapX(b.right), placement.toBitmapY(b.bottom))
+        } else null
+        invalidate()
+    }
+
     private fun drawnOf(note: ScoreNote, p: PagePlacement): Drawn? = when (note) {
+        is ScoreNote.Text -> {
+            val paint = textPaint(note.sizePt * p.fitScale).apply { color = note.color }
+            val x = p.toBitmapX(note.x)
+            val lines = TextLayout.lines(note.text)
+            Drawn { canvas ->
+                lines.forEachIndexed { i, line -> canvas.drawText(line, x, p.toBitmapY(TextLayout.baseline(note, i)), paint) }
+            }
+        }
         is ScoreNote.Ink -> {
             val path = Path()
             val pts = note.points
@@ -146,10 +179,11 @@ class ScoreNotesView @JvmOverloads constructor(
                 mapped += p.toBitmapY(pts[i + 1])
             }
             smoothPath(path, mapped)
-            Drawn(path, strokePaint().apply {
+            val paint = strokePaint().apply {
                 color = note.color
                 strokeWidth = (note.widthPt * p.fitScale).coerceAtLeast(1f)
-            })
+            }
+            Drawn { canvas -> canvas.drawPath(path, paint) }
         }
     }
 
@@ -158,6 +192,28 @@ class ScoreNotesView @JvmOverloads constructor(
         private const val STAFF_UNSURE = 0x33FFA726
         private const val LABEL_SURE = 0xCC1E88E5.toInt()
         private const val LABEL_UNSURE = 0xCCEF6C00.toInt()
+
+        private fun textPaint(sizePx: Float) = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            textSize = sizePx
+            typeface = Typeface.DEFAULT_BOLD
+        }
+
+        /** 가장 긴 줄의 폭 (pt) — 글자 크기를 pt 로 재면 결과도 pt */
+        fun textWidthPt(note: ScoreNote.Text): Float {
+            val paint = textPaint(note.sizePt)
+            return TextLayout.lines(note.text).maxOf { paint.measureText(it) }
+        }
+
+        /** 메모가 차지하는 사각형 (pt) */
+        fun boundsPt(note: ScoreNote): RectF = when (note) {
+            is ScoreNote.Text -> RectF(note.x, note.y, note.x + textWidthPt(note), note.y + TextLayout.height(note))
+            is ScoreNote.Ink -> {
+                val xs = note.points.filterIndexed { i, _ -> i % 2 == 0 }
+                val ys = note.points.filterIndexed { i, _ -> i % 2 == 1 }
+                val h = note.widthPt / 2
+                RectF(xs.min() - h, ys.min() - h, xs.max() + h, ys.max() + h)
+            }
+        }
 
         private fun strokePaint() = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             style = Paint.Style.STROKE

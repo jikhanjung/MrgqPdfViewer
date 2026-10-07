@@ -73,6 +73,10 @@ class PdfViewerActivity : AppCompatActivity() {
         private const val PREF_SHOW_NOTES = "show_score_notes"
         private const val PREF_NOTE_COLOR = "note_pen_color"
         private const val PREF_NOTE_WIDTH = "note_pen_width"
+        private const val PREF_NOTE_TEXT_SIZE = "note_text_size"
+        private val NOTE_WIDTH_LABELS = listOf("╌", "─", "━")
+        private val NOTE_TEXT_SIZE_LABELS = listOf("가", "가", "가")
+        private val NOTE_TEXT_SIZE_SP = floatArrayOf(13f, 18f, 24f)
         /** 획 줄이기 허용 오차 (pt) — 오선 두께(≈ 0.5pt)보다 작게 */
         private const val STROKE_TOLERANCE_PT = 0.25f
         /** 다 그은 뒤 붙은 보표 표시를 남겨 두는 시간 */
@@ -1881,7 +1885,86 @@ class PdfViewerActivity : AppCompatActivity() {
             return
         }
         ensureNotesLoaded()
-        layer.show(notePlacements(), { page -> notes.onPage(page).filter { it.id !in notesErasing } }, binding.pdfView.imageMatrix)
+        layer.show(notePlacements(), { page ->
+            notes.onPage(page).filter { it.id !in notesErasing }.map { n ->
+                // 옮기는 중이면 그 메모 대신 옮긴 모습
+                if (n.id == noteMoving?.id) noteMovePreview ?: n else n
+            }
+        }, binding.pdfView.imageMatrix)
+    }
+
+    // ── 2단계: 글자 · 옮기기 ──
+    /** 옮기기로 잡은 메모와 지금 끈 모습 (아직 저장 전) */
+    private var noteMoving: com.mrgq.pdfviewer.notes.ScoreNote? = null
+    private var noteMovePreview: com.mrgq.pdfviewer.notes.ScoreNote? = null
+
+    /** 쪽 [page] 의 (x, y) pt 에서 [radiusPt] 안의 메모 — 나중에 그린 것(위에 보이는 것)부터 */
+    private fun noteAt(page: Int, x: Float, y: Float, radiusPt: Float, textOnly: Boolean = false): com.mrgq.pdfviewer.notes.ScoreNote? =
+        notes.onPage(page).asReversed().firstOrNull { n ->
+            when (n) {
+                is com.mrgq.pdfviewer.notes.ScoreNote.Text ->
+                    com.mrgq.pdfviewer.notes.NoteGeometry.hitsText(n, com.mrgq.pdfviewer.notes.ScoreNotesView.textWidthPt(n), x, y, radiusPt)
+                is com.mrgq.pdfviewer.notes.ScoreNote.Ink -> !textOnly && com.mrgq.pdfviewer.notes.NoteGeometry.hits(n, x, y, radiusPt)
+            }
+        }
+
+    /** 메모가 붙을 보표 — 차지하는 사각형의 위 · 아래로 (§3.6) */
+    private fun noteAttachment(note: com.mrgq.pdfviewer.notes.ScoreNote): com.mrgq.pdfviewer.notes.NoteStaff.Attachment? {
+        val b = com.mrgq.pdfviewer.notes.ScoreNotesView.boundsPt(note)
+        return com.mrgq.pdfviewer.notes.NoteStaff.of(noteStaves, note.page, b.top, b.bottom)
+    }
+
+    /** 글자 넣기 · 고치기 — [existing] 이 있으면 고치기(비우면 지우기). 새 글자는 탭한 곳이 첫 줄 가운데 높이에 오게 */
+    private fun showNoteTextDialog(page: Int, x: Float, y: Float, existing: com.mrgq.pdfviewer.notes.ScoreNote.Text?) {
+        ensureNoteStaves()
+        val input = android.widget.EditText(this).apply {
+            setText(existing?.text.orEmpty())
+            setSelection(text.length)
+            hint = "예: rit. · 숨 · 4 · 활 바꿈"
+            minLines = 1
+            maxLines = 4
+            inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_FLAG_MULTI_LINE
+        }
+        val pad = (resources.displayMetrics.density * 20).toInt()
+        val frame = android.widget.FrameLayout(this).apply {
+            setPadding(pad, pad / 2, pad, 0)
+            addView(input)
+        }
+        fun commit() {
+            val text = input.text.toString().trimEnd()
+            if (existing != null) {
+                if (text.isEmpty()) notes.remove(listOf(existing))
+                else if (text != existing.text) {
+                    val edited = existing.copy(id = notes.nextId(), text = text)
+                    notes.replace(existing, edited.copy(staff = noteAttachment(edited)?.staff?.staffIndex))
+                } else return
+            } else {
+                if (text.isEmpty()) return
+                val size = notePen.textSizePt
+                val note = com.mrgq.pdfviewer.notes.ScoreNote.Text(notes.nextId(), page, notePen.color, size, x, y - size * 0.6f, text)
+                notes.add(note.copy(staff = noteAttachment(note)?.staff?.staffIndex))
+            }
+            saveNotes()
+            refreshNotes()
+        }
+        val dialog = AlertDialog.Builder(this)
+            .setTitle(if (existing != null) "글자 고치기" else "글자 넣기")
+            .setView(frame)
+            .setPositiveButton("확인") { _, _ -> commit() }
+            .setNegativeButton("취소", null)
+            .apply {
+                if (existing != null) setNeutralButton("지우기") { _, _ ->
+                    notes.remove(listOf(existing))
+                    saveNotes()
+                    refreshNotes()
+                }
+            }
+            .create()
+        dialog.setOnShowListener {
+            input.requestFocus()
+            dialog.window?.setSoftInputMode(android.view.WindowManager.LayoutParams.SOFT_INPUT_STATE_VISIBLE)
+        }
+        dialog.show()
     }
 
     private fun saveNotes() {
@@ -1955,8 +2038,11 @@ class PdfViewerActivity : AppCompatActivity() {
 
             override fun onErase(page: Int, x: Float, y: Float, radiusPt: Float) {
                 val hit = notes.onPage(page).filter {
-                    it.id !in notesErasing && it is com.mrgq.pdfviewer.notes.ScoreNote.Ink &&
-                        com.mrgq.pdfviewer.notes.NoteGeometry.hits(it, x, y, radiusPt)
+                    it.id !in notesErasing && when (it) {
+                        is com.mrgq.pdfviewer.notes.ScoreNote.Ink -> com.mrgq.pdfviewer.notes.NoteGeometry.hits(it, x, y, radiusPt)
+                        is com.mrgq.pdfviewer.notes.ScoreNote.Text -> com.mrgq.pdfviewer.notes.NoteGeometry.hitsText(
+                            it, com.mrgq.pdfviewer.notes.ScoreNotesView.textWidthPt(it), x, y, radiusPt)
+                    }
                 }
                 if (hit.isEmpty()) return
                 hit.forEach { notesErasing[it.id] = it }
@@ -1980,6 +2066,45 @@ class PdfViewerActivity : AppCompatActivity() {
             override fun onLiveEnd() {
                 binding.noteLayer.endLiveStroke()
                 binding.noteLayer.postDelayed(noteHintClear, STAFF_HINT_MS)
+            }
+
+            override fun onTextTap(page: Int, x: Float, y: Float) {
+                val radius = com.mrgq.pdfviewer.notes.NotePen.TAP_SLOP_PX / pxPerPt(page)
+                val existing = noteAt(page, x, y, radius, textOnly = true) as? com.mrgq.pdfviewer.notes.ScoreNote.Text
+                showNoteTextDialog(page, x, y, existing)
+            }
+
+            override fun onMoveStart(page: Int, x: Float, y: Float): Boolean {
+                ensureNoteStaves()
+                val picked = noteAt(page, x, y, com.mrgq.pdfviewer.notes.NotePen.PICK_PX / pxPerPt(page)) ?: return false
+                noteMoving = picked
+                noteMovePreview = picked
+                binding.noteLayer.select(notePlacements().firstOrNull { it.pageIndex == page }, picked)
+                return true
+            }
+
+            override fun onMoveBy(page: Int, dx: Float, dy: Float) {
+                val picked = noteMoving ?: return
+                val preview = picked.movedBy(dx, dy, picked.id, picked.staff)
+                noteMovePreview = preview
+                binding.noteLayer.select(notePlacements().firstOrNull { it.pageIndex == page }, preview)
+                showStaffHint(page, noteAttachment(preview))
+                refreshNotes()
+            }
+
+            override fun onMoveEnd(commit: Boolean) {
+                val picked = noteMoving
+                val preview = noteMovePreview
+                noteMoving = null
+                noteMovePreview = null
+                binding.noteLayer.select(null, null)
+                binding.noteLayer.postDelayed(noteHintClear, STAFF_HINT_MS)
+                if (commit && picked != null && preview != null && preview != picked) {
+                    // 메모는 불변 — 옛 것을 지우고 새 id 로 (P11 §6)
+                    notes.replace(picked, preview.movedBy(0f, 0f, notes.nextId(), noteAttachment(preview)?.staff?.staffIndex))
+                    saveNotes()
+                }
+                refreshNotes()
             }
 
             override fun onEraserCursor(x: Float, y: Float, radiusPx: Float) {
@@ -2027,6 +2152,7 @@ class PdfViewerActivity : AppCompatActivity() {
         val pen = notePen
         pen.color = preferences.getInt(PREF_NOTE_COLOR, pen.color)
         pen.widthPt = preferences.getFloat(PREF_NOTE_WIDTH, pen.widthPt)
+        pen.textSizePt = preferences.getFloat(PREF_NOTE_TEXT_SIZE, pen.textSizePt)
         val size = (resources.displayMetrics.density * 44).toInt()
         fun button(label: String, color: Int = android.graphics.Color.WHITE, textSp: Float = 20f, selected: (() -> Boolean)? = null, onClick: () -> Unit): android.widget.TextView {
             val b = android.widget.TextView(this).apply {
@@ -2049,20 +2175,33 @@ class PdfViewerActivity : AppCompatActivity() {
         }
         button("✏️", selected = { pen.tool == com.mrgq.pdfviewer.notes.NotePen.Tool.PEN }) { pen.tool = com.mrgq.pdfviewer.notes.NotePen.Tool.PEN }
         button("🧽", selected = { pen.tool == com.mrgq.pdfviewer.notes.NotePen.Tool.ERASER }) { pen.tool = com.mrgq.pdfviewer.notes.NotePen.Tool.ERASER }
+        button("🅰", selected = { pen.tool == com.mrgq.pdfviewer.notes.NotePen.Tool.TEXT }) { pen.tool = com.mrgq.pdfviewer.notes.NotePen.Tool.TEXT }
+        button("✋", selected = { pen.tool == com.mrgq.pdfviewer.notes.NotePen.Tool.MOVE }) { pen.tool = com.mrgq.pdfviewer.notes.NotePen.Tool.MOVE }
         for (c in com.mrgq.pdfviewer.notes.NotePen.COLORS) {
             // 검정은 어두운 줄에서 안 보이니 테두리 색으로
             button("●", color = if (c == com.mrgq.pdfviewer.notes.NotePen.COLORS[0]) 0xFFBDBDBD.toInt() else c, textSp = 24f,
-                selected = { pen.color == c && pen.tool == com.mrgq.pdfviewer.notes.NotePen.Tool.PEN }) {
+                selected = { pen.color == c && (pen.tool == com.mrgq.pdfviewer.notes.NotePen.Tool.PEN || pen.tool == com.mrgq.pdfviewer.notes.NotePen.Tool.TEXT) }) {
                 pen.color = c
-                pen.tool = com.mrgq.pdfviewer.notes.NotePen.Tool.PEN
+                // 글자 도구면 글자 색, 아니면 펜으로
+                if (pen.tool != com.mrgq.pdfviewer.notes.NotePen.Tool.TEXT) pen.tool = com.mrgq.pdfviewer.notes.NotePen.Tool.PEN
                 preferences.edit().putInt(PREF_NOTE_COLOR, c).apply()
             }
         }
+        // 굵기 단추 — 글자 도구면 글자 크기(작게 · 보통 · 크게)
+        noteSizeButtons.clear()
         com.mrgq.pdfviewer.notes.NotePen.WIDTHS.forEachIndexed { i, w ->
-            button(listOf("╌", "─", "━")[i], textSp = 22f, selected = { pen.widthPt == w }) {
-                pen.widthPt = w
-                pen.tool = com.mrgq.pdfviewer.notes.NotePen.Tool.PEN
-                preferences.edit().putFloat(PREF_NOTE_WIDTH, w).apply()
+            val size = com.mrgq.pdfviewer.notes.NotePen.TEXT_SIZES[i]
+            noteSizeButtons += button(NOTE_WIDTH_LABELS[i], textSp = 22f, selected = {
+                if (pen.tool == com.mrgq.pdfviewer.notes.NotePen.Tool.TEXT) pen.textSizePt == size else pen.widthPt == w
+            }) {
+                if (pen.tool == com.mrgq.pdfviewer.notes.NotePen.Tool.TEXT) {
+                    pen.textSizePt = size
+                    preferences.edit().putFloat(PREF_NOTE_TEXT_SIZE, size).apply()
+                } else {
+                    pen.widthPt = w
+                    pen.tool = com.mrgq.pdfviewer.notes.NotePen.Tool.PEN
+                    preferences.edit().putFloat(PREF_NOTE_WIDTH, w).apply()
+                }
             }
         }
         noteUndoButton = button("↶") { if (notes.undo()) { saveNotes(); refreshNotes() } }
@@ -2071,7 +2210,14 @@ class PdfViewerActivity : AppCompatActivity() {
         updateNoteToolbar()
     }
 
+    private val noteSizeButtons = mutableListOf<android.widget.TextView>()
+
     private fun updateNoteToolbar() {
+        val text = notePen.tool == com.mrgq.pdfviewer.notes.NotePen.Tool.TEXT
+        noteSizeButtons.forEachIndexed { i, b ->
+            b.text = if (text) NOTE_TEXT_SIZE_LABELS[i] else NOTE_WIDTH_LABELS[i]
+            b.textSize = if (text) NOTE_TEXT_SIZE_SP[i] else 22f
+        }
         for ((b, selected) in noteToolButtons) b.setBackgroundColor(if (selected()) 0x5590CAF9 else 0)
         noteUndoButton?.alpha = if (notes.canUndo) 1f else 0.35f
         noteRedoButton?.alpha = if (notes.canRedo) 1f else 0.35f

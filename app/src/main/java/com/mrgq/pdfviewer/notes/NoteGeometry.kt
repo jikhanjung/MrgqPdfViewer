@@ -62,6 +62,11 @@ object NoteGeometry {
         return false
     }
 
+    /** 글자 상자 (pt) 가 점 (x, y) 에서 [radius] 안인가 — [widthPt] 는 가장 긴 줄 폭(재는 것은 그리는 쪽) */
+    fun hitsText(note: ScoreNote.Text, widthPt: Float, x: Float, y: Float, radius: Float): Boolean =
+        x >= note.x - radius && x <= note.x + widthPt + radius &&
+            y >= note.y - radius && y <= note.y + TextLayout.height(note) + radius
+
     /** 위 · 아래 끝 (pt) — 보표 소속을 정할 때 */
     fun verticalExtent(points: List<Float>): Pair<Float, Float>? {
         if (points.size < 2) return null

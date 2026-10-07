@@ -27,6 +27,41 @@ sealed class ScoreNote {
         val points: List<Float>,
         override val staff: Int? = null,
     ) : ScoreNote()
+
+    /**
+     * 글자 (2단계) — [x], [y] 는 글자 상자의 **왼 위**(pt), [sizePt] 는 글자 크기(pt). 여러 줄은 `\n`.
+     * 줄 배치는 기기 · 웹이 같게 그리도록 정해 둔다([TextLayout]): 첫 줄 기준선 = y + 0.8 × size, 줄 간격 1.2 × size
+     */
+    data class Text(
+        override val id: String,
+        override val page: Int,
+        override val color: Int,
+        val sizePt: Float,
+        val x: Float,
+        val y: Float,
+        val text: String,
+        override val staff: Int? = null,
+    ) : ScoreNote()
+
+    /** (dx, dy) pt 만큼 옮긴 **새 메모** — 메모는 불변이라 새 id ([id]), 붙는 보표도 새로 ([staff]) */
+    fun movedBy(dx: Float, dy: Float, id: String, staff: Int?): ScoreNote = when (this) {
+        is Ink -> copy(id = id, points = points.mapIndexed { i, v -> if (i % 2 == 0) v + dx else v + dy }, staff = staff)
+        is Text -> copy(id = id, x = x + dx, y = y + dy, staff = staff)
+    }
+}
+
+/** 글자 메모의 줄 배치 (pt) — 앱 · 서버 웹 겹쳐 보기가 같게 쓴다 */
+object TextLayout {
+    const val BASELINE = 0.8f
+    const val LINE_HEIGHT = 1.2f
+
+    fun lines(text: String): List<String> = text.split('\n')
+
+    /** [i] 번째 줄의 기준선 y */
+    fun baseline(note: ScoreNote.Text, i: Int): Float = note.y + note.sizePt * (BASELINE + LINE_HEIGHT * i)
+
+    /** 상자 높이 */
+    fun height(note: ScoreNote.Text): Float = note.sizePt * LINE_HEIGHT * lines(note.text).size
 }
 
 /**
@@ -59,6 +94,15 @@ class ScoreNotes(initial: List<ScoreNote> = emptyList()) {
     }
 
     fun add(note: ScoreNote) = push(Op(listOf(note), emptyList()))
+
+    /** 고치기 · 옮기기 — [old] 를 지우고 [new](새 id)를 더한다. 되돌리기 한 번 */
+    fun replace(old: ScoreNote, new: ScoreNote): Boolean {
+        if (list.none { it.id == old.id }) return false
+        push(Op(listOf(new), listOf(old)))
+        return true
+    }
+
+    fun byId(id: String): ScoreNote? = list.firstOrNull { it.id == id }
 
     /** 여러 개를 한 번에. 없는 것은 무시, 하나도 없으면 false */
     fun remove(notes: Collection<ScoreNote>): Boolean {
