@@ -102,6 +102,7 @@ data class SyncReport(
  *    - `.musicxml` — 악보 인식 결과 (서버 0.9.6, P06 §11). null = 인식 전 · 새 판 인식 중
  *    - `.layout.json` — 보표 · 마디 분석 (서버 0.10.x, P06 §12). 앱은 이것이 있으면 직접 분석하지 않는다(ScoreLayoutStore).
  *      `analyzer_version` 이 오르면 파일 sha 가 바뀌어 다시 받는다
+ *    - `.conductor.notes.json` — 앙상블의 지휘자 메모(P11 §6). 서버에 있으니 서버 것처럼(PDF 가 없어지면 지움, 다시 받음)
  *    - `.notes.json` — **사용자가 쓴 메모**(P11). 서버가 주는 것이 아니라 받거나 지우지 않고 PDF 를 따라 옮긴다. 다시 받을 수 없으므로
  *      곡목에서 빠져(3) · TV 에서 지워 PDF 가 없어질 때는 지우지 않고 보관함(`PDFs/.ScoreMateNotes/<서버 id>.notes.json`)에 두었다가
  *      그 악보를 다시 받으면 돌려 놓는다. 새 판이 오면 그대로 남는다(자리가 어긋날 수 있다는 안내는 뷰어가)
@@ -540,7 +541,7 @@ class ScoreMateSync(
         fun layoutFileOf(pdf: File): File = File(pdf.parentFile, pdf.nameWithoutExtension + ".layout.json")
 
         /** 서버가 주는 곁 파일 — PDF 가 없어지면 지운다 (다시 받을 수 있다) */
-        fun serverSidecarsOf(pdf: File): List<File> = listOf(musicXmlFileOf(pdf), layoutFileOf(pdf))
+        fun serverSidecarsOf(pdf: File): List<File> = listOf(musicXmlFileOf(pdf), layoutFileOf(pdf), ScoreNotesFile.conductorFileOf(pdf))
 
         /** PDF 를 옮길 때 따라 옮기는 곁 파일 — 서버 것 + 사용자 메모(P11) */
         fun sidecarsOf(pdf: File): List<File> = serverSidecarsOf(pdf) + ScoreNotesFile.fileOf(pdf)

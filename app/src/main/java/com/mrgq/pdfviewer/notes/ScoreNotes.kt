@@ -17,6 +17,8 @@ sealed class ScoreNote {
      * 파트보에서 이 메모를 그 파트 화면으로 옮기는 데 쓴다(P11 §3.6). 악보 분석이 없으면 null
      */
     abstract val staff: Int?
+    /** 쓴 사람 표시 이름 — 지휘자 메모에서 서버가 새 메모에 찍는다(앱이 보낸 것은 서버가 덮어씀). 개인 메모 · 동기화 전은 null */
+    abstract val author: String?
 
     /**
      * 펜 그림 — **한 번에 그린 획 여럿이 메모 하나**(사용자 요청: 선을 여러 개 긋고 확인을 누르면 전체가 한 오브젝트).
@@ -29,6 +31,7 @@ sealed class ScoreNote {
         val widthPt: Float,
         val strokes: List<List<Float>>,
         override val staff: Int? = null,
+        override val author: String? = null,
     ) : ScoreNote()
 
     /**
@@ -44,12 +47,13 @@ sealed class ScoreNote {
         val y: Float,
         val text: String,
         override val staff: Int? = null,
+        override val author: String? = null,
     ) : ScoreNote()
 
     /** (dx, dy) pt 만큼 옮긴 **새 메모** — 메모는 불변이라 새 id ([id]), 붙는 보표도 새로 ([staff]) */
     fun movedBy(dx: Float, dy: Float, id: String, staff: Int?): ScoreNote = when (this) {
-        is Ink -> copy(id = id, strokes = strokes.map { s -> s.mapIndexed { i, v -> if (i % 2 == 0) v + dx else v + dy } }, staff = staff)
-        is Text -> copy(id = id, x = x + dx, y = y + dy, staff = staff)
+        is Ink -> copy(id = id, strokes = strokes.map { s -> s.mapIndexed { i, v -> if (i % 2 == 0) v + dx else v + dy } }, staff = staff, author = null)
+        is Text -> copy(id = id, x = x + dx, y = y + dy, staff = staff, author = null)
     }
 }
 

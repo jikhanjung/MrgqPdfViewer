@@ -1766,13 +1766,41 @@ class PdfViewerActivity : AppCompatActivity() {
     }
 
     // ── 악보 메모 (P11) — 펜 · 손가락으로 선 긋기. PDF 옆 `.notes.json` 곁 파일 ─────────────────────────────
-    /** 지금 메모 — [notesPath] 의 것. 파일이 바뀌면 새로 연다 (되돌리기도 새로) */
-    private var notes = com.mrgq.pdfviewer.notes.ScoreNotes()
+    /**
+     * 메모 겹 하나 — 개인(`.notes.json`) · 지휘자(`.conductor.notes.json`, 앙상블 악보, P11 §6). 겹마다 메모 · 되돌리기 · 곁 파일.
+     * 지휘자 메모는 모두에게 보이고(개인 메모 아래, 다른 모양), 쓸 수 있는 사람(owner · leader)만 도구 줄에서 그 겹을 고른다
+     */
+    private class NoteLayer(val conductor: Boolean) {
+        var notes = com.mrgq.pdfviewer.notes.ScoreNotes()
+        var ready = false
+        /** 곁 파일을 읽지 못했다 — 덮어쓰지 않는다 */
+        var broken = false
+        var unknown: List<com.google.gson.JsonObject> = emptyList()
+        /** 지휘자 메모를 쓸 수 있나 (동기화가 곁 파일에 적은 것) */
+        var writable = false
+
+        fun reset() {
+            notes = com.mrgq.pdfviewer.notes.ScoreNotes()
+            ready = false
+            broken = false
+            unknown = emptyList()
+            writable = false
+        }
+
+        fun fileOf(pdf: File): File =
+            if (conductor) com.mrgq.pdfviewer.notes.ScoreNotesFile.conductorFileOf(pdf) else com.mrgq.pdfviewer.notes.ScoreNotesFile.fileOf(pdf)
+    }
+
+    private val personalNotes = NoteLayer(conductor = false)
+    private val conductorNotes = NoteLayer(conductor = true)
+    /** 지휘자 메모에 쓰는 중 (도구 줄에서 고름 — 쓸 수 있을 때만) */
+    private var conductorActive = false
+    /** 지금 쓰는 겹 */
+    private val activeLayer: NoteLayer get() = if (conductorActive && conductorNotes.writable) conductorNotes else personalNotes
+    /** 지금 쓰는 겹의 메모 — 편집은 늘 이 겹에만 */
+    private val notes: com.mrgq.pdfviewer.notes.ScoreNotes get() = activeLayer.notes
+    /** 어느 PDF 의 메모인가. 파일이 바뀌면 새로 연다 (되돌리기도 새로) */
     private var notesPath: String? = null
-    private var notesReady = false
-    /** 곁 파일을 읽지 못했다 — 덮어쓰지 않는다 */
-    private var notesBroken = false
-    private var notesUnknown: List<com.google.gson.JsonObject> = emptyList()
     /** 지우개로 문지르는 중인 것 — 화면에서 바로 빼고, 손을 떼면 한 번에 지운다(되돌리기 한 번) */
     private val notesErasing = LinkedHashMap<String, com.mrgq.pdfviewer.notes.ScoreNote>()
     /** 붙을 보표를 정하는 보표 띠 (P11 §3.6) — 악보 분석 */
@@ -1804,7 +1832,7 @@ class PdfViewerActivity : AppCompatActivity() {
     /** 메모를 이 화면에 그릴 수 없는 까닭 — null 이면 그릴 수 있다 */
     private fun notesBlockedReason(): String? = when {
         partViewLayout != null -> "파트 보기에서는 아직 메모를 쓸 수 없습니다 — 전체 악보에서"
-        notesBroken -> "메모 파일을 읽지 못해 쓰지 않습니다"
+        activeLayer.broken -> "메모 파일을 읽지 못해 쓰지 않습니다"
         else -> null
     }
 
@@ -1844,21 +1872,26 @@ class PdfViewerActivity : AppCompatActivity() {
         notePen.cancel()
         commitPendingNote(refresh = false) // 그리던 묶음은 앞 파일에 (다시 그리기는 이 함수를 부르므로 하지 않는다)
         notesPath = path
-        notes = com.mrgq.pdfviewer.notes.ScoreNotes()
-        notesReady = false
-        notesBroken = false
-        notesUnknown = emptyList()
+        conductorActive = false
         notesErasing.clear()
-        com.mrgq.pdfviewer.notes.ScoreNotesFile.openAsync(File(path)) { opened ->
-            runOnUiThread {
-                if (notesPath != path) return@runOnUiThread
-                notes = com.mrgq.pdfviewer.notes.ScoreNotes(opened.loaded.notes)
-                notesUnknown = opened.loaded.unknown
-                notesBroken = opened.broken
-                notesReady = true
-                if (opened.broken) toast("메모 파일을 읽지 못했습니다 — 이 악보에는 메모를 쓰지 않습니다")
-                if (opened.newEdition) toast("악보가 새 판입니다 — 메모 자리가 어긋날 수 있습니다")
-                refreshNotes()
+        val pdf = File(path)
+        for (layer in listOf(personalNotes, conductorNotes)) {
+            layer.reset()
+            com.mrgq.pdfviewer.notes.ScoreNotesFile.openAsync(layer.fileOf(pdf), pdf) { opened ->
+                runOnUiThread {
+                    if (notesPath != path) return@runOnUiThread
+                    layer.notes = com.mrgq.pdfviewer.notes.ScoreNotes(opened.loaded.notes)
+                    layer.unknown = opened.loaded.unknown
+                    layer.broken = opened.broken
+                    layer.writable = layer.conductor && opened.loaded.sync?.writable == true
+                    layer.ready = true
+                    if (!layer.conductor) {
+                        if (opened.broken) toast("메모 파일을 읽지 못했습니다 — 이 악보에는 메모를 쓰지 않습니다")
+                        if (opened.newEdition) toast("악보가 새 판입니다 — 메모 자리가 어긋날 수 있습니다")
+                    }
+                    updateNoteToolbar()
+                    refreshNotes()
+                }
             }
         }
     }
@@ -1886,12 +1919,25 @@ class PdfViewerActivity : AppCompatActivity() {
             return
         }
         ensureNotesLoaded()
-        layer.show(notePlacements(), { page ->
-            notes.onPage(page).filter { it.id !in notesErasing }.map { n ->
+        // 지금 쓰는 겹에만 지우는 중 · 옮기는 중 · 그리는 중 묶음이 있다
+        fun shown(l: NoteLayer, page: Int): List<com.mrgq.pdfviewer.notes.ScoreNote> =
+            if (l !== activeLayer) l.notes.onPage(page)
+            else l.notes.onPage(page).filter { it.id !in notesErasing }.map { n ->
                 // 옮기는 중이면 그 메모 대신 옮긴 모습
                 if (n.id == noteMoving?.id) noteMovePreview ?: n else n
             } + listOfNotNull(notePending?.takeIf { it.page == page && it.strokes.isNotEmpty() }) // 그리는 중인 묶음
-        }, binding.pdfView.imageMatrix)
+        layer.show(notePlacements(), { page -> shown(personalNotes, page) }, { page -> shown(conductorNotes, page) }, binding.pdfView.imageMatrix)
+    }
+
+    /** 개인 ↔ 지휘자 메모 (쓸 수 있을 때만) — 그리던 묶음은 앞 겹에 확정 */
+    private fun toggleConductorLayer() {
+        if (!conductorNotes.writable) return
+        commitPendingNote()
+        notePen.cancel()
+        conductorActive = !conductorActive
+        toast(if (conductorActive) "지휘자 메모에 씁니다 — 앙상블 모두에게 보입니다" else "내 메모에 씁니다")
+        refreshNotes()
+        updateNoteToolbar()
     }
 
     // ── 2단계: 글자 · 옮기기 ──
@@ -1936,7 +1982,7 @@ class PdfViewerActivity : AppCompatActivity() {
             if (existing != null) {
                 if (text.isEmpty()) notes.remove(listOf(existing))
                 else if (text != existing.text) {
-                    val edited = existing.copy(id = notes.nextId(), text = text)
+                    val edited = existing.copy(id = notes.nextId(), text = text, author = null) // 고친 사람이 새 작성자 (서버가 찍음)
                     notes.replace(existing, edited.copy(staff = noteAttachment(edited)?.staff?.staffIndex))
                 } else return
             } else {
@@ -1970,8 +2016,10 @@ class PdfViewerActivity : AppCompatActivity() {
 
     private fun saveNotes() {
         val path = notesPath ?: return
-        if (notesBroken) return
-        com.mrgq.pdfviewer.notes.ScoreNotesFile.saveAsync(File(path), notes.notes.toList(), notesUnknown) { e ->
+        val layer = activeLayer
+        if (layer.broken) return
+        val pdf = File(path)
+        com.mrgq.pdfviewer.notes.ScoreNotesFile.saveAsync(layer.fileOf(pdf), pdf, layer.notes.notes.toList(), layer.unknown) { e ->
             Log.e("PdfViewerActivity", "메모 저장 실패: $path", e)
             runOnUiThread { toast("메모를 저장하지 못했습니다") }
         }
@@ -2002,7 +2050,7 @@ class PdfViewerActivity : AppCompatActivity() {
 
     private val notePen: com.mrgq.pdfviewer.notes.NotePen by lazy {
         com.mrgq.pdfviewer.notes.NotePen(object : com.mrgq.pdfviewer.notes.NotePen.Host {
-            override fun canDraw() = notesWritable() && notesVisible() && notesReady && notesBlockedReason() == null &&
+            override fun canDraw() = notesWritable() && notesVisible() && activeLayer.ready && notesBlockedReason() == null &&
                 !halfPageShown && !isAnimating && ::pdfFilePath.isInitialized && notesPath == pdfFilePath
 
             override fun pageAt(x: Float, y: Float): Int? {
@@ -2090,6 +2138,7 @@ class PdfViewerActivity : AppCompatActivity() {
                 ensureNoteStaves()
                 commitPendingNote()
                 val picked = noteAt(page, x, y, com.mrgq.pdfviewer.notes.NotePen.PICK_PX / pxPerPt(page)) ?: return false
+                picked.author?.let { toast("$it 님 메모") } // 지휘자 메모 — 누가 썼는지
                 noteMoving = picked
                 noteMovePreview = picked
                 binding.noteLayer.select(notePlacements().firstOrNull { it.pageIndex == page }, picked)
@@ -2201,6 +2250,7 @@ class PdfViewerActivity : AppCompatActivity() {
     private var noteUndoButton: android.widget.TextView? = null
     private var noteRedoButton: android.widget.TextView? = null
     private var noteDoneButton: android.widget.TextView? = null
+    private var noteLayerButton: android.widget.TextView? = null
 
     private fun buildNoteToolbar() {
         val bar = binding.noteToolbar
@@ -2274,6 +2324,8 @@ class PdfViewerActivity : AppCompatActivity() {
                 }
             }
         }
+        // 지휘자 메모 겹 — 이 악보에 쓸 수 있을 때만 보인다 (updateNoteToolbar)
+        noteLayerButton = button("👤", textSp = 18f) { toggleConductorLayer() }
         noteUndoButton = button("↶") { undoNote() }
         noteRedoButton = button("↷") { redoNote() }
         // 그리는 중이면 "확인" = 묶음을 메모 하나로, 아니면 "끝" = 메모 모드 닫기
@@ -2293,6 +2345,9 @@ class PdfViewerActivity : AppCompatActivity() {
         noteUndoButton?.alpha = if (notes.canUndo || hasPendingNote()) 1f else 0.35f
         noteRedoButton?.alpha = if (notes.canRedo || notePendingRedo.isNotEmpty()) 1f else 0.35f
         noteDoneButton?.text = if (hasPendingNote()) "확인" else "끝"
+        noteLayerButton?.visibility = if (conductorNotes.writable) View.VISIBLE else View.GONE
+        noteLayerButton?.text = if (activeLayer.conductor) "🎼 지휘자" else "👤 내 메모"
+        noteLayerButton?.setBackgroundColor(if (activeLayer.conductor) 0x997E57C2.toInt() else 0)
         noteDoneButton?.setBackgroundColor(if (hasPendingNote()) 0xCC43A047.toInt() else 0)
     }
 

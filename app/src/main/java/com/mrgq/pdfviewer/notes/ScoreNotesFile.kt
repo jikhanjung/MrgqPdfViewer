@@ -28,6 +28,11 @@ object ScoreNotesFile {
 
     fun fileOf(pdf: File): File = File(pdf.parentFile, pdf.nameWithoutExtension + SUFFIX)
 
+    const val CONDUCTOR_SUFFIX = ".conductor.notes.json"
+
+    /** 지휘자 메모 (앙상블 악보, 서버 conductor 겹) — 개인 메모와 따로 */
+    fun conductorFileOf(pdf: File): File = File(pdf.parentFile, pdf.nameWithoutExtension + CONDUCTOR_SUFFIX)
+
     data class Loaded(
         val notes: List<ScoreNote>,
         val pdfSha256: String?,
@@ -43,7 +48,12 @@ object ScoreNotesFile {
      * ScoreMate 개인 메모 동기화 상태(P11 §6) — 서버 문서의 [revision] 과 그때 있던 메모 id([baseIds]).
      * 합치기 = 서버 ∪ (지금 − base: 내가 더한 것) − (base − 지금: 내가 지운 것). 메모는 불변이라 id 집합만으로 된다
      */
-    data class SyncState(val revision: Int, val baseIds: Set<String>)
+    data class SyncState(
+        val revision: Int,
+        val baseIds: Set<String>,
+        /** 지휘자 메모: 이 기기 사용자가 쓸 수 있나 (서버 `conductor_writable`, 동기화마다 갱신) */
+        val writable: Boolean = false,
+    )
 
     /** 없거나 읽지 못하면 null (깨진 파일은 덮어쓰지 않게 호출한 쪽이 판단) */
     fun read(file: File): Loaded? {
@@ -71,6 +81,7 @@ object ScoreNotesFile {
                     strokes = o.getAsJsonArray("strokes")?.map { s -> s.asJsonArray.map { it.asFloat } }
                         ?: listOf(o.getAsJsonArray("points").map { it.asFloat }),
                     staff = o.get("staff")?.takeIf { !it.isJsonNull }?.asInt,
+                    author = authorOf(o),
                 )
                 "text" -> ScoreNote.Text(
                     id = o.get("id").asString,
@@ -81,6 +92,7 @@ object ScoreNotesFile {
                     y = o.get("y").asFloat,
                     text = o.get("text").asString,
                     staff = o.get("staff")?.takeIf { !it.isJsonNull }?.asInt,
+                    author = authorOf(o),
                 )
                 else -> null
             }
@@ -88,7 +100,11 @@ object ScoreNotesFile {
         }
         val sha = root.get("pdf_sha256")?.takeIf { !it.isJsonNull }?.asString?.takeIf { it.isNotEmpty() }
         val sync = root.get("sync")?.takeIf { it.isJsonObject }?.asJsonObject?.let { o ->
-            SyncState(o.get("revision").asInt, o.getAsJsonArray("base_ids")?.map { it.asString }?.toSet().orEmpty())
+            SyncState(
+                o.get("revision").asInt,
+                o.getAsJsonArray("base_ids")?.map { it.asString }?.toSet().orEmpty(),
+                o.get("writable")?.asBoolean ?: false,
+            )
         }
         return Loaded(notes, sha, unknown, sync)
     }
@@ -125,6 +141,7 @@ object ScoreNotesFile {
                     note.staff?.let { o.addProperty("staff", it) }
                 }
             }
+            note.author?.let { name -> o.add("author", JsonObject().apply { addProperty("name", name) }) }
             array.add(o)
         }
         loaded.unknown.forEach { array.add(it) }
@@ -132,6 +149,7 @@ object ScoreNotesFile {
         if (withSync) loaded.sync?.let { st ->
             root.add("sync", JsonObject().apply {
                 addProperty("revision", st.revision)
+                if (st.writable) addProperty("writable", true)
                 add("base_ids", JsonArray().apply { st.baseIds.sorted().forEach { add(it) } })
             })
         }
@@ -182,10 +200,11 @@ object ScoreNotesFile {
     data class Opened(val loaded: Loaded, val newEdition: Boolean, val broken: Boolean)
 
     /** [done] 은 이 스레드에서 불린다 */
-    fun openAsync(pdf: File, done: (Opened) -> Unit) = io.execute { synchronized(lock) { open(pdf, done) } }
+    fun openAsync(pdf: File, done: (Opened) -> Unit) = openAsync(fileOf(pdf), pdf, done)
 
-    private fun open(pdf: File, done: (Opened) -> Unit) {
-        val file = fileOf(pdf)
+    fun openAsync(file: File, pdf: File, done: (Opened) -> Unit) = io.execute { synchronized(lock) { open(file, pdf, done) } }
+
+    private fun open(file: File, pdf: File, done: (Opened) -> Unit) {
         val loaded = read(file)
         if (loaded == null) {
             done(Opened(Loaded(emptyList(), null), newEdition = false, broken = file.exists()))
@@ -202,10 +221,13 @@ object ScoreNotesFile {
     }
 
     /** 뷰어의 저장 — 메모만 바꾸고 동기화 상태(이 파일에 있던 것)는 그대로 둔다 */
-    fun saveAsync(pdf: File, notes: List<ScoreNote>, unknown: List<JsonObject>, onError: (Exception) -> Unit) = io.execute {
+    fun saveAsync(pdf: File, notes: List<ScoreNote>, unknown: List<JsonObject>, onError: (Exception) -> Unit) =
+        saveAsync(fileOf(pdf), pdf, notes, unknown, onError)
+
+    /** [file] = 개인([fileOf]) 또는 지휘자([conductorFileOf]) 곁 파일 */
+    fun saveAsync(file: File, pdf: File, notes: List<ScoreNote>, unknown: List<JsonObject>, onError: (Exception) -> Unit) = io.execute {
         synchronized(lock) {
             try {
-                val file = fileOf(pdf)
                 write(file, Loaded(notes, currentSha(pdf), unknown, read(file)?.sync))
             } catch (e: Exception) {
                 onError(e)
@@ -232,6 +254,10 @@ object ScoreNotesFile {
         }
         return digest.digest().joinToString("") { "%02x".format(it) }
     }
+
+    /** 서버가 찍은 쓴 사람 `{"id", "name"}` 의 이름 */
+    private fun authorOf(o: JsonObject): String? =
+        o.get("author")?.takeIf { it.isJsonObject }?.asJsonObject?.get("name")?.takeIf { it.isJsonPrimitive }?.asString
 
     private fun round1(v: Float): Float = Math.round(v * 10f) / 10f
 

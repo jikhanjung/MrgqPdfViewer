@@ -62,10 +62,20 @@ class ScoreNotesView @JvmOverloads constructor(
         isClickable = false
     }
 
-    /** 지금 화면의 쪽들과 그 쪽 메모. [imageMatrix] = pdfView 에 실제로 걸린 행렬 */
-    fun show(placements: List<PagePlacement>, notesOf: (Int) -> List<ScoreNote>, imageMatrix: Matrix) {
+    /**
+     * 지금 화면의 쪽들과 그 쪽 메모. [conductorOf] = 지휘자 메모(앙상블, P11 §6) — 개인 메모 아래에, 연보라 빛 테두리를 둘러
+     * 누구 것인지 한눈에 다르게. [imageMatrix] = pdfView 에 실제로 걸린 행렬
+     */
+    fun show(
+        placements: List<PagePlacement>,
+        notesOf: (Int) -> List<ScoreNote>,
+        conductorOf: (Int) -> List<ScoreNote>,
+        imageMatrix: Matrix,
+    ) {
         bitmapToView.set(imageMatrix)
-        placed = placements.map { p -> Placed(p, notesOf(p.pageIndex).mapNotNull { drawnOf(it, p) }) }
+        placed = placements.map { p ->
+            Placed(p, conductorOf(p.pageIndex).mapNotNull { drawnOf(it, p, halo = true) } + notesOf(p.pageIndex).mapNotNull { drawnOf(it, p) })
+        }
         invalidate()
     }
 
@@ -161,13 +171,24 @@ class ScoreNotesView @JvmOverloads constructor(
         invalidate()
     }
 
-    private fun drawnOf(note: ScoreNote, p: PagePlacement): Drawn? = when (note) {
+    /** [halo] = 지휘자 메모 — 같은 모양을 굵은 연보라로 먼저 깔고 그 위에 */
+    private fun drawnOf(note: ScoreNote, p: PagePlacement, halo: Boolean = false): Drawn? = when (note) {
         is ScoreNote.Text -> {
             val paint = textPaint(note.sizePt * p.fitScale).apply { color = note.color }
+            val haloPaint = if (halo) textPaint(note.sizePt * p.fitScale).apply {
+                color = HALO
+                style = Paint.Style.STROKE
+                strokeWidth = HALO_PX
+                strokeJoin = Paint.Join.ROUND
+            } else null
             val x = p.toBitmapX(note.x)
             val lines = TextLayout.lines(note.text)
             Drawn { canvas ->
-                lines.forEachIndexed { i, line -> canvas.drawText(line, x, p.toBitmapY(TextLayout.baseline(note, i)), paint) }
+                lines.forEachIndexed { i, line ->
+                    val y = p.toBitmapY(TextLayout.baseline(note, i))
+                    haloPaint?.let { canvas.drawText(line, x, y, it) }
+                    canvas.drawText(line, x, y, paint)
+                }
             }
         }
         is ScoreNote.Ink -> {
@@ -184,11 +205,21 @@ class ScoreNotesView @JvmOverloads constructor(
                 color = note.color
                 strokeWidth = (note.widthPt * p.fitScale).coerceAtLeast(1f)
             }
-            Drawn { canvas -> canvas.drawPath(path, paint) }
+            val haloPaint = if (halo) strokePaint().apply {
+                color = HALO
+                strokeWidth = paint.strokeWidth + HALO_PX
+            } else null
+            Drawn { canvas ->
+                haloPaint?.let { canvas.drawPath(path, it) }
+                canvas.drawPath(path, paint)
+            }
         }
     }
 
     companion object {
+        /** 지휘자 메모 테두리 빛 — 연보라 반투명 (비트맵 px, 화면 배율로 함께 커진다) */
+        private const val HALO = 0x667E57C2
+        private const val HALO_PX = 5f
         private const val STAFF_SURE = 0x2242A5F5
         private const val STAFF_UNSURE = 0x33FFA726
         private const val LABEL_SURE = 0xCC1E88E5.toInt()
