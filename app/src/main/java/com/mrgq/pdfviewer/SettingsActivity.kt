@@ -663,7 +663,7 @@ class SettingsActivity : AppCompatActivity() {
                 id = "app_info",
                 icon = "ℹ️",
                 title = "앱 정보",
-                subtitle = "MRGQ PDF Viewer for Android TV",
+                subtitle = "MRGQ PDF Viewer — TV · 태블릿 · 휴대폰을 위한 스마트 악보 리더",
                 type = SettingsType.INFO
             )
         )

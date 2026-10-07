@@ -6,6 +6,9 @@
 
 ## [Unreleased]
 
+### ✨ 화면
+- 설정 → 앱 정보 문구 "MRGQ PDF Viewer for Android TV" → "MRGQ PDF Viewer — TV · 태블릿 · 휴대폰을 위한 스마트 악보 리더" (스플래시와 같게)
+
 ---
 
 ## [0.6.0-beta.1] - 2026-10-07
