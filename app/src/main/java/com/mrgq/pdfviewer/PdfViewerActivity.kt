@@ -2252,9 +2252,11 @@ class PdfViewerActivity : AppCompatActivity() {
     }
 
     // ── 메모 모드 확대 · 이동 — 두 손가락으로 집기 · 끌기. 한 손가락 · 펜은 그대로 긋는다 ──
-    /** 화면(뷰) 좌표에서의 확대 · 이동 — 표시 행렬 = [noteZoomBase] 뒤에 이것 */
+    // 범위는 쪽 단위: 태블릿은 쪽 맞춤 ~ 4배, 휴대폰은 조각이 아니라 쪽 전체 — 쪽이 다 들어가게 줄이기 ~ 폭 맞춤 4배,
+    // 쪽 어디로든 끌 수 있다 (사용자 요청 2026-10-08)
+    /** 확대 중인 표시 행렬 (비트맵 → 뷰) */
     private val noteZoom = android.graphics.Matrix()
-    /** 확대하기 전의 표시 행렬 (쪽 맞춤) */
+    /** 확대하기 전의 표시 행렬 (쪽 맞춤 · 휴대폰은 지금 조각) */
     private var noteZoomBase: android.graphics.Matrix? = null
     /** 마지막으로 놓은 확대 행렬 — 넘김 · 조각 이동이 행렬을 새로 놓았으면 이것과 달라 확대가 풀린 것으로 본다 */
     private var noteZoomApplied: android.graphics.Matrix? = null
@@ -2278,7 +2280,7 @@ class PdfViewerActivity : AppCompatActivity() {
             val current = binding.pdfView.imageMatrix
             if (noteZoomApplied == null || current != noteZoomApplied) {
                 noteZoomBase = android.graphics.Matrix(current)
-                noteZoom.reset()
+                noteZoom.set(current)
             }
             notePinching = true
             pinchFocus(ev)
@@ -2323,38 +2325,59 @@ class PdfViewerActivity : AppCompatActivity() {
         pinchSpan = if (n >= 2) d / n else 0f
     }
 
-    /** 확대를 [NOTE_ZOOM_MAX] 안으로, 화면에 빈 곳이 생기지 않게 가두고 표시 행렬에 놓는다. 1배 이하면 풀기 */
+    /**
+     * 확대를 쪽 범위로 가두고 표시 행렬에 놓는다 — 배율은 [NOTE_ZOOM_MAX] 까지, 쪽이 화면보다 작은 쪽(축)은 가운데,
+     * 크면 쪽 밖의 빈 곳이 보이지 않게. 태블릿은 쪽 맞춤보다 작아지면 확대를 푼다
+     */
     private fun applyNoteZoom() {
         val base = noteZoomBase ?: return
-        val v = FloatArray(9)
-        noteZoom.getValues(v)
-        val scale = v[android.graphics.Matrix.MSCALE_X]
-        if (scale <= 1f) return resetNoteZoom()
-        if (scale > NOTE_ZOOM_MAX) noteZoom.postScale(NOTE_ZOOM_MAX / scale, NOTE_ZOOM_MAX / scale, pinchX, pinchY)
-        noteZoom.getValues(v)
-        val s = v[android.graphics.Matrix.MSCALE_X]
+        val drawable = binding.pdfView.drawable ?: return
+        val bw = drawable.intrinsicWidth.toFloat()
+        val bh = drawable.intrinsicHeight.toFloat()
         val w = binding.pdfView.width.toFloat()
         val h = binding.pdfView.height.toFloat()
-        v[android.graphics.Matrix.MTRANS_X] = v[android.graphics.Matrix.MTRANS_X].coerceIn(w - w * s, 0f)
-        v[android.graphics.Matrix.MTRANS_Y] = v[android.graphics.Matrix.MTRANS_Y].coerceIn(h - h * s, 0f)
+        if (bw <= 0f || bh <= 0f || w <= 0f || h <= 0f) return
+        val v = FloatArray(9)
+        base.getValues(v)
+        val baseScale = v[android.graphics.Matrix.MSCALE_X]
+        val (minScale, maxScale) =
+            if (phoneView) minOf(w / bw, h / bh) to w / bw * NOTE_ZOOM_MAX
+            else baseScale to baseScale * NOTE_ZOOM_MAX
+        noteZoom.getValues(v)
+        val scale = v[android.graphics.Matrix.MSCALE_X]
+        if (!phoneView && scale <= minScale * 1.001f) return resetNoteZoom()
+        val target = scale.coerceIn(minScale, maxScale)
+        if (target != scale) noteZoom.postScale(target / scale, target / scale, pinchX, pinchY)
+        noteZoom.getValues(v)
+        fun fit(t: Float, content: Float, room: Float) = if (content <= room) (room - content) / 2f else t.coerceIn(room - content, 0f)
+        v[android.graphics.Matrix.MTRANS_X] = fit(v[android.graphics.Matrix.MTRANS_X], bw * target, w)
+        v[android.graphics.Matrix.MTRANS_Y] = fit(v[android.graphics.Matrix.MTRANS_Y], bh * target, h)
         noteZoom.setValues(v)
-        val m = android.graphics.Matrix(base).apply { postConcat(noteZoom) }
-        binding.pdfView.imageMatrix = m
-        noteZoomApplied = android.graphics.Matrix(m)
+        binding.pdfView.imageMatrix = noteZoom
+        noteZoomApplied = android.graphics.Matrix(noteZoom)
         refreshScoreOverlay()
     }
 
-    /** 쪽 맞춤으로 — 확대가 아직 화면에 있을 때만 되돌린다 (넘김이 이미 새 행렬을 놓았으면 그대로) */
+    /**
+     * 확대를 푼다 — 아직 화면에 있을 때만 (넘김이 이미 새 행렬을 놓았으면 그대로). 태블릿은 쪽 맞춤으로,
+     * 휴대폰은 지금 화면 맨 위에 가장 가까운 시스템 조각으로 (끌기를 놓을 때와 같게)
+     */
     private fun resetNoteZoom() {
         val base = noteZoomBase
         val applied = noteZoomApplied
-        noteZoom.reset()
         noteZoomBase = null
         noteZoomApplied = null
-        if (base != null && applied != null && binding.pdfView.imageMatrix == applied) {
-            binding.pdfView.imageMatrix = base
-            refreshScoreOverlay()
+        if (base == null || applied == null || binding.pdfView.imageMatrix != applied) return
+        if (phoneView && phoneChunks.isNotEmpty()) {
+            val v = FloatArray(9)
+            applied.getValues(v)
+            val topY = -v[android.graphics.Matrix.MTRANS_Y] / v[android.graphics.Matrix.MSCALE_Y]
+            val nearest = phoneChunks.indices.minByOrNull { kotlin.math.abs(phoneChunks[it].start - topY) } ?: 0
+            showChunk(minOf(nearest, phoneStartEndingAt(phoneChunks.lastIndex)))
+            return
         }
+        binding.pdfView.imageMatrix = base
+        refreshScoreOverlay()
     }
 
     private val noteToolButtons = mutableListOf<Pair<android.widget.TextView, () -> Boolean>>()
