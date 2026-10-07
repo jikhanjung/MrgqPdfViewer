@@ -149,6 +149,23 @@ class ScoreMateClient(
         return response.body
     }
 
+    // ── 악보 메모 (서버 0.17.0, P11 §6) ────────────────────────────────────
+
+    /** 메모 목록 원문 — `{"notes": [{score_id, layer, revision, …}], "conductor_writable": […]}`. 서버가 모르면(404) null */
+    suspend fun fetchNotesList(): String? {
+        val response = authorized("GET", ScoreMateProtocol.PATH_SYNC_NOTES)
+        if (response.code == 404) return null
+        if (response.code != 200) throw ScoreMateException("메모 목록을 받지 못했습니다 (HTTP ${response.code})")
+        return response.body
+    }
+
+    /** 메모 문서 — 200 이면 본문, 404 = 아직 없음 */
+    suspend fun getNotes(scoreId: Long, layer: String): HttpResponse = authorized("GET", ScoreMateProtocol.pathNotes(scoreId, layer))
+
+    /** 메모 문서 올리기 — 200 = 저장된 문서, 409 = 다른 기기가 먼저(`current`) */
+    suspend fun putNotes(scoreId: Long, layer: String, body: String): HttpResponse =
+        authorized("PUT", ScoreMateProtocol.pathNotes(scoreId, layer), body)
+
     /**
      * 악보 파일을 [target] 에 받는다. `download_url` 은 302 → 서명 URL(5분, 인증 불필요)이다 — **리다이렉트는 직접**:
      * 서명 URL 에 Authorization 이 함께 가면 S3 계열은 거부할 수 있다(P05 §3.1). 호스트는 늘 설정한 서버로 — 응답의

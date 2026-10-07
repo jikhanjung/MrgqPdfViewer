@@ -266,4 +266,22 @@ class ScoreNotesTest {
         val old = """{"format":1,"notes":[{"id":"a","page":0,"type":"ink","color":"#FF000000","width":1,"points":[1,2,3,4]}]}"""
         assertEquals(listOf(listOf(1f, 2f, 3f, 4f)), (ScoreNotesFile.parse(old).notes.single() as ScoreNote.Ink).strokes)
     }
+
+    // ── 서버 동기화 상태 · 합치기 ──
+
+    @Test
+    fun 합치기는_서버_더하기_내가_더한_것_빼기_내가_지운_것() {
+        val remote = ScoreNotesFile.Loaded(listOf(ink("a"), ink("b")), "s")
+        val local = ScoreNotesFile.Loaded(listOf(ink("c"), ink("b")), null)
+        val merged = ScoreNotesFile.merge(remote, local, baseIds = setOf("a", "b"))
+        assertEquals(setOf("b", "c"), merged.ids) // a 는 내가 지움, c 는 내가 더함
+        assertEquals("s", merged.pdfSha256)
+    }
+
+    @Test
+    fun 동기화_상태는_곁_파일에_남고_서버로는_빼고_보낸다() {
+        val loaded = ScoreNotesFile.Loaded(listOf(ink("a")), null, sync = ScoreNotesFile.SyncState(4, setOf("a")))
+        assertEquals(loaded.sync, ScoreNotesFile.parse(ScoreNotesFile.format(loaded)).sync)
+        assertFalse(ScoreNotesFile.formatJson(loaded, withSync = false).has("sync"))
+    }
 }

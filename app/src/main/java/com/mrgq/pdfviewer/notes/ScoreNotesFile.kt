@@ -32,7 +32,18 @@ object ScoreNotesFile {
         val notes: List<ScoreNote>,
         val pdfSha256: String?,
         val unknown: List<JsonObject> = emptyList(),
-    )
+        /** 서버와 마지막으로 맞춘 상태 — 이 기기만의 것(서버로 보내지 않는다). 동기화 전이면 null */
+        val sync: SyncState? = null,
+    ) {
+        /** 모든 메모의 id (모르는 type 포함) */
+        val ids: Set<String> get() = notes.map { it.id }.toSet() + unknown.mapNotNull { it.get("id")?.takeIf { e -> e.isJsonPrimitive }?.asString }
+    }
+
+    /**
+     * ScoreMate 개인 메모 동기화 상태(P11 §6) — 서버 문서의 [revision] 과 그때 있던 메모 id([baseIds]).
+     * 합치기 = 서버 ∪ (지금 − base: 내가 더한 것) − (base − 지금: 내가 지운 것). 메모는 불변이라 id 집합만으로 된다
+     */
+    data class SyncState(val revision: Int, val baseIds: Set<String>)
 
     /** 없거나 읽지 못하면 null (깨진 파일은 덮어쓰지 않게 호출한 쪽이 판단) */
     fun read(file: File): Loaded? {
@@ -75,11 +86,17 @@ object ScoreNotesFile {
             }
             if (note != null) notes += note else unknown += o
         }
-        val sha = root.get("pdf_sha256")?.takeIf { !it.isJsonNull }?.asString
-        return Loaded(notes, sha, unknown)
+        val sha = root.get("pdf_sha256")?.takeIf { !it.isJsonNull }?.asString?.takeIf { it.isNotEmpty() }
+        val sync = root.get("sync")?.takeIf { it.isJsonObject }?.asJsonObject?.let { o ->
+            SyncState(o.get("revision").asInt, o.getAsJsonArray("base_ids")?.map { it.asString }?.toSet().orEmpty())
+        }
+        return Loaded(notes, sha, unknown, sync)
     }
 
-    fun format(loaded: Loaded): String {
+    /** 곁 파일 내용. [withSync] 가 아니면(서버로 보낼 때) 동기화 상태는 빼고 */
+    fun format(loaded: Loaded, withSync: Boolean = true): String = formatJson(loaded, withSync).toString()
+
+    fun formatJson(loaded: Loaded, withSync: Boolean = true): JsonObject {
         val root = JsonObject()
         root.addProperty("format", FORMAT)
         loaded.pdfSha256?.let { root.addProperty("pdf_sha256", it) }
@@ -112,12 +129,34 @@ object ScoreNotesFile {
         }
         loaded.unknown.forEach { array.add(it) }
         root.add("notes", array)
-        return root.toString()
+        if (withSync) loaded.sync?.let { st ->
+            root.add("sync", JsonObject().apply {
+                addProperty("revision", st.revision)
+                add("base_ids", JsonArray().apply { st.baseIds.sorted().forEach { add(it) } })
+            })
+        }
+        return root
     }
 
-    /** 다른 이름으로 쓴 뒤 바꿔 끼운다 — 쓰다 죽어도 앞의 것이 남는다. 메모가 하나도 없으면 파일을 지운다 */
+    /** 합치기 (P11 §6) — [remote] ∪ (local − base) − (base − local). 같은 id 는 서버 것(메모는 불변이라 내용이 같다) */
+    fun merge(remote: Loaded, local: Loaded, baseIds: Set<String>): Loaded {
+        val localIds = local.ids
+        val added = localIds - baseIds
+        val deleted = baseIds - localIds
+        val remoteIds = remote.ids
+        fun JsonObject.id() = get("id")?.takeIf { it.isJsonPrimitive }?.asString
+        return remote.copy(
+            notes = remote.notes.filter { it.id !in deleted } + local.notes.filter { it.id in added && it.id !in remoteIds },
+            unknown = remote.unknown.filter { it.id() !in deleted } + local.unknown.filter { it.id() in added && it.id() !in remoteIds },
+        )
+    }
+
+    /**
+     * 다른 이름으로 쓴 뒤 바꿔 끼운다 — 쓰다 죽어도 앞의 것이 남는다. 메모가 하나도 없으면 파일을 지운다 —
+     * 단 서버와 맞춘 적이 있으면 남긴다(빈 문서를 올려야 서버에서도 지워진다)
+     */
     fun write(file: File, loaded: Loaded) {
-        if (loaded.notes.isEmpty() && loaded.unknown.isEmpty()) {
+        if (loaded.notes.isEmpty() && loaded.unknown.isEmpty() && loaded.sync == null) {
             file.delete()
             return
         }
@@ -134,18 +173,23 @@ object ScoreNotesFile {
 
     // ── 열기 · 저장 — 한 줄로 세운 스레드 하나 (순서가 지켜지고, 뷰어를 닫아도 마저 쓴다) ──────────────
     private val io = java.util.concurrent.Executors.newSingleThreadExecutor { r -> Thread(r, "score-notes").apply { isDaemon = true } }
+
+    /** 곁 파일을 읽고 쓰는 일은 이 잠금 안에서 — 뷰어의 저장 스레드와 동기화가 겹치지 않게 */
+    val lock = Any()
     private val shaCache = java.util.concurrent.ConcurrentHashMap<String, String>()
 
     /** [broken] = 곁 파일이 있는데 읽지 못함 — 덮어쓰지 않는다. [newEdition] = 메모를 쓴 뒤 PDF 가 바뀜(새 판) */
     data class Opened(val loaded: Loaded, val newEdition: Boolean, val broken: Boolean)
 
     /** [done] 은 이 스레드에서 불린다 */
-    fun openAsync(pdf: File, done: (Opened) -> Unit) = io.execute {
+    fun openAsync(pdf: File, done: (Opened) -> Unit) = io.execute { synchronized(lock) { open(pdf, done) } }
+
+    private fun open(pdf: File, done: (Opened) -> Unit) {
         val file = fileOf(pdf)
         val loaded = read(file)
         if (loaded == null) {
             done(Opened(Loaded(emptyList(), null), newEdition = false, broken = file.exists()))
-            return@execute
+            return
         }
         val now = loaded.pdfSha256?.let { currentSha(pdf) }
         if (now != null && now != loaded.pdfSha256) {
@@ -157,11 +201,15 @@ object ScoreNotesFile {
         }
     }
 
+    /** 뷰어의 저장 — 메모만 바꾸고 동기화 상태(이 파일에 있던 것)는 그대로 둔다 */
     fun saveAsync(pdf: File, notes: List<ScoreNote>, unknown: List<JsonObject>, onError: (Exception) -> Unit) = io.execute {
-        try {
-            write(fileOf(pdf), Loaded(notes, currentSha(pdf), unknown))
-        } catch (e: Exception) {
-            onError(e)
+        synchronized(lock) {
+            try {
+                val file = fileOf(pdf)
+                write(file, Loaded(notes, currentSha(pdf), unknown, read(file)?.sync))
+            } catch (e: Exception) {
+                onError(e)
+            }
         }
     }
 

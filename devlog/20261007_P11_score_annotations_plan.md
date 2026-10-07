@@ -1,7 +1,7 @@
 # P11 — 태블릿 · 휴대폰에서 악보에 메모 (펜 · 손가락으로 선 긋기 · 글자 넣기)
 
 작성일: 2026-10-07
-상태: 🟡 **0 · 1 · 2단계 구현**(2단계 글자 · 옮기기 = [`074`](20261007_074_score_notes_text_move.md), 획 묶음 = [`075`](20261007_075_score_notes_stroke_groups.md), v0.6.0-beta.3) — 1단계([`072`](20261007_072_score_notes_ink.md), CI 통과) — 실기기 확인용 사전 릴리스 **v0.6.0-beta.1**(versionCode 47, 정식 v0.6.0 은 48. 사전 릴리스 받기 설정은 v0.5.7 · [`073`](20261007_073_prerelease_updates.md)). 다음: 실기기 → 2단계(글자) · 서버 동기화(§6, ScoreMateServer 076)
+상태: 🟡 **0 · 1 · 2단계 구현**(2단계 글자 · 옮기기 = [`074`](20261007_074_score_notes_text_move.md), 획 묶음 = [`075`](20261007_075_score_notes_stroke_groups.md), **개인 메모 서버 동기화** = [`076`](20261007_076_score_notes_server_sync.md), v0.6.0-beta.3) — 1단계([`072`](20261007_072_score_notes_ink.md), CI 통과) — 실기기 확인용 사전 릴리스 **v0.6.0-beta.1**(versionCode 47, 정식 v0.6.0 은 48. 사전 릴리스 받기 설정은 v0.5.7 · [`073`](20261007_073_prerelease_updates.md)). 다음: 실기기 → 2단계(글자) · 서버 동기화(§6, ScoreMateServer 076)
 관련: [`066`](20260928_066_tablet_support.md)(태블릿 터치 몸짓), v0.4.2 ~ v0.4.5(휴대폰 조각 화면),
 [`046`](20260913_046_score_layout_in_app.md) · `ScoreOverlayGeometry`(PDF pt → 표시 비트맵 → 화면),
 [`P07`](20260928_P07_part_view_plan.md)(파트보 — 원본 쪽 ↔ 파트 PDF), [`P10`](20260929_P10_mic_conductor_autoturn_plan.md)(반 쪽 넘김 화면)

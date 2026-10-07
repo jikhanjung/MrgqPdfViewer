@@ -81,6 +81,9 @@ data class SyncReport(
     /** 세트리스트(곡목 · 순서 · 메모)가 바뀌었다 (#064) */
     val setlistsChanged: Boolean = false,
     val errors: List<String> = emptyList(),
+    /** 서버로 올린 · 서버에서 받은 메모 문서 (악보 수, P11 §6) — 목록을 다시 그릴 일은 아니다 */
+    val notesUploaded: Int = 0,
+    val notesDownloaded: Int = 0,
 ) {
     val changed: Boolean get() = downloaded + moved + removed + musicXml + layouts + updated > 0 || setlistsChanged
 }
@@ -103,6 +106,7 @@ data class SyncReport(
  *      곡목에서 빠져(3) · TV 에서 지워 PDF 가 없어질 때는 지우지 않고 보관함(`PDFs/.ScoreMateNotes/<서버 id>.notes.json`)에 두었다가
  *      그 악보를 다시 받으면 돌려 놓는다. 새 판이 오면 그대로 남는다(자리가 어긋날 수 있다는 안내는 뷰어가)
  * 4. 모두 성공했을 때만 커서를 저장한다 — 중간에 실패하면 다음에 같은 자리부터 다시 (이미 받은 것은 sha 가 같아 건너뛴다)
+ * 5. 세트리스트, 6. 악보 메모(개인) 올리기 · 받기 — [ScoreNotesSync] (P11 §6, 서버 0.17.0)
  *
  * 합주 중 · 악보를 보는 중에는 부르지 않는다 (파일 목록 화면에서만 — 열린 파일을 바꾸지 않게).
  * Android 에 의존하지 않는다 — JVM 단위 테스트 대상 (임시 폴더 + 가짜 서버).
@@ -217,7 +221,19 @@ class ScoreMateSync(
         } catch (e: ScoreMateException) {
             errors += "세트리스트: ${e.message}"
         }
-        return SyncReport(downloaded, moved, removed, pending, musicXml, layouts, updated, setlistsChanged, errors)
+
+        // 6. 악보 메모 (개인, P11 §6) — 악보 자리가 정해진 뒤. 실패해도 악보 동기화는 된 것
+        var notes = ScoreNotesSync.Result()
+        try {
+            notes = ScoreNotesSync(client).sync(store.all())
+            errors += notes.errors
+        } catch (e: ScoreMateUnlinkedException) {
+            throw e
+        } catch (e: ScoreMateException) {
+            errors += "메모: ${e.message}"
+        }
+        return SyncReport(downloaded, moved, removed, pending, musicXml, layouts, updated, setlistsChanged, errors,
+            notesUploaded = notes.uploaded, notesDownloaded = notes.downloaded)
     }
 
     /** TV 에서 지운 서버 악보 — 목록에서 빼고 다시 받지 않는다. 파일은 호출한 쪽이 지웠다 */
@@ -591,6 +607,8 @@ object ScoreMateSyncText {
         if (report.layouts > 0) parts += "분석 ${report.layouts}개 받음"
         if (report.updated > 0) parts += "곡 정보 ${report.updated}개 바뀜"
         if (report.setlistsChanged) parts += "세트리스트 갱신"
+        if (report.notesUploaded > 0) parts += "메모 ${report.notesUploaded}곡 올림"
+        if (report.notesDownloaded > 0) parts += "메모 ${report.notesDownloaded}곡 받음"
         if (report.errors.isNotEmpty()) parts += "${report.errors.size}개 실패 (${report.errors.first()})"
         return if (parts.isEmpty()) null else "ScoreMate: " + parts.joinToString(", ")
     }

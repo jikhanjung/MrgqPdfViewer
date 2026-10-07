@@ -107,8 +107,44 @@ class ScoreMateSyncTest {
         var setlists = """{"setlists":[]}"""
         var setlistsFail = false
 
+        // ── 메모 API (서버 0.17.0) ──
+        var notesEnabled = false
+        /** score_id → (revision, notes 배열 JSON) */
+        val notesDocs = LinkedHashMap<Long, Pair<Int, String>>()
+        /** 목록에서 빼는 악보 (범위 밖 · 동시에 만들어진 직후) */
+        var notesHidden = setOf<Long>()
+        /** 목록에 거짓 revision 을 싣는다 (서버에 없는데 있는 것처럼) */
+        var notesListOverride = mapOf<Long, Int>()
+        val notePuts = mutableListOf<Pair<Long, Int>>() // (score, base_revision)
+
+        fun notesDoc(id: Long): String {
+            val (rev, notes) = notesDocs.getValue(id)
+            return """{"layer":"personal","revision":$rev,"pdf_sha256":null,"updated_at":"t","updated_by":"u","format":1,"notes":$notes}"""
+        }
+
+        private fun notesApi(request: HttpRequest, path: String): HttpResponse? {
+            if (path.startsWith("/api/v1/sync/notes/")) {
+                if (!notesEnabled) return HttpResponse(404, "")
+                val rows = (notesDocs.mapValues { it.value.first } + notesListOverride).filterKeys { it !in notesHidden }
+                    .map { (id, rev) -> """{"score_id":$id,"layer":"personal","revision":$rev,"updated_at":"t","pdf_sha256":null}""" }
+                return HttpResponse(200, """{"notes":[${rows.joinToString(",")}],"conductor_writable":[]}""")
+            }
+            val m = Regex("/api/v1/scores/([0-9]+)/notes/personal/").find(path) ?: return null
+            val id = m.groupValues[1].toLong()
+            if (request.method == "GET") return if (id in notesDocs) HttpResponse(200, notesDoc(id)) else HttpResponse(404, "")
+            val body = com.google.gson.JsonParser.parseString(request.body).asJsonObject
+            val base = body.get("base_revision").asInt
+            notePuts += id to base
+            val cur = notesDocs[id]
+            if (cur == null && base != 0) return HttpResponse(409, """{"error":"conflict","message":"x","current":null}""")
+            if (cur != null && cur.first != base) return HttpResponse(409, """{"error":"conflict","message":"x","current":${notesDoc(id)}}""")
+            notesDocs[id] = (base + 1) to body.getAsJsonArray("notes").toString()
+            return HttpResponse(200, notesDoc(id))
+        }
+
         override fun execute(request: HttpRequest): HttpResponse {
             val path = request.url.removePrefix("https://sm.test")
+            notesApi(request, path)?.let { return it }
             if (path.startsWith("/api/v1/sync/setlists/")) return if (setlistsFail) HttpResponse(500, "") else HttpResponse(200, setlists)
             if (!path.startsWith("/api/v1/sync/scores/")) return HttpResponse(404, "")
             val cursor = Regex("cursor=([0-9]+)").find(path)?.groupValues?.get(1)?.toInt() ?: 0
@@ -572,5 +608,121 @@ class ScoreMateSyncTest {
         notesOf(file("현악 4중주", "몰다우.pdf")).writeText("mine")
         sync().forgetAll(deleteFiles = false)
         assertEquals("mine", File(root, "몰다우.notes.json").readText())
+    }
+
+    // ── 메모 서버 동기화 (P11 §6, 서버 0.17.0) — 개인 메모 ──
+
+    private fun ink(id: String) = com.mrgq.pdfviewer.notes.ScoreNote.Ink(id, 0, 0xFF000000.toInt(), 1.5f, listOf(listOf(1f, 2f, 3f, 4f)))
+    private val molPdf get() = file("현악 4중주", "몰다우.pdf")
+    private fun localNotes() = com.mrgq.pdfviewer.notes.ScoreNotesFile.read(com.mrgq.pdfviewer.notes.ScoreNotesFile.fileOf(molPdf))
+    private fun writeLocal(vararg ids: String, sync: com.mrgq.pdfviewer.notes.ScoreNotesFile.SyncState? = localNotes()?.sync) =
+        com.mrgq.pdfviewer.notes.ScoreNotesFile.write(
+            com.mrgq.pdfviewer.notes.ScoreNotesFile.fileOf(molPdf),
+            com.mrgq.pdfviewer.notes.ScoreNotesFile.Loaded(ids.map { ink(it) }, null, sync = sync),
+        )
+    private fun serverIds(id: Long = 1) = com.google.gson.JsonParser.parseString(server.notesDocs.getValue(id).second).asJsonArray
+        .map { it.asJsonObject.get("id").asString }.toSet()
+    private fun inkJson(vararg ids: String) = ids.joinToString(",", "[", "]") {
+        """{"id":"$it","page":0,"type":"ink","color":"#FF000000","width":1.5,"strokes":[[1,2,3,4]]}"""
+    }
+
+    private fun setUpNotes() = runBlocking {
+        server.notesEnabled = true
+        server.put(Score(1, "몰다우", "v1"))
+        sync().sync()
+    }
+
+    @Test
+    fun 메모를_모르는_서버면_조용히_건너뛴다() = runBlocking {
+        server.put(Score(1, "몰다우", "v1"))
+        sync().sync()
+        writeLocal("a")
+        val report = sync().sync()
+        assertTrue(report.errors.isEmpty())
+        assertEquals(0, report.notesUploaded)
+    }
+
+    @Test
+    fun 처음_올리기는_base_0_이고_맞춘_상태를_적는다() = runBlocking {
+        setUpNotes()
+        writeLocal("a")
+        val report = sync().sync()
+        assertEquals(1, report.notesUploaded)
+        assertEquals(listOf(1L to 0), server.notePuts)
+        assertEquals(setOf("a"), serverIds())
+        assertEquals(com.mrgq.pdfviewer.notes.ScoreNotesFile.SyncState(1, setOf("a")), localNotes()!!.sync)
+        // 바뀐 게 없으면 다시 올리지 않는다
+        assertEquals(0, sync().sync().notesUploaded)
+        assertEquals(1, server.notePuts.size)
+    }
+
+    @Test
+    fun 다른_기기의_메모를_받는다() = runBlocking {
+        setUpNotes()
+        server.notesDocs[1] = 3 to inkJson("b")
+        val report = sync().sync()
+        assertEquals(1, report.notesDownloaded)
+        assertEquals(setOf("b"), localNotes()!!.ids)
+        assertEquals(3, localNotes()!!.sync!!.revision)
+        assertTrue(server.notePuts.isEmpty())
+    }
+
+    @Test
+    fun 양쪽이_고치면_서버_더하기_내_추가_빼기_내_삭제() = runBlocking {
+        setUpNotes()
+        writeLocal("a")
+        sync().sync()                              // 서버 rev 1 = {a}
+        server.notesDocs[1] = 2 to inkJson("a", "b") // 다른 기기가 b 를 더함
+        writeLocal("c")                            // 나는 a 를 지우고 c 를 더함
+        sync().sync()
+        assertEquals(setOf("b", "c"), serverIds())
+        assertEquals(setOf("b", "c"), localNotes()!!.ids)
+        assertEquals(3, localNotes()!!.sync!!.revision)
+    }
+
+    @Test
+    fun 동시에_처음_만들면_409_current_와_합쳐_다시_올린다() = runBlocking {
+        setUpNotes()
+        server.notesDocs[1] = 1 to inkJson("b") // 다른 기기가 막 만들었다 — 아직 내 목록에는 없다
+        server.notesHidden = setOf(1L)
+        writeLocal("a")
+        sync().sync()
+        assertEquals(listOf(1L to 0, 1L to 1), server.notePuts)
+        assertEquals(setOf("a", "b"), serverIds())
+        assertEquals(setOf("a", "b"), localNotes()!!.ids)
+    }
+
+    @Test
+    fun 서버에_없는데_base_가_있으면_409_null_뒤_0_으로_다시() = runBlocking {
+        setUpNotes()
+        writeLocal("a", sync = com.mrgq.pdfviewer.notes.ScoreNotesFile.SyncState(2, emptySet()))
+        server.notesListOverride = mapOf(1L to 2) // 목록은 있다고 하지만 문서는 없다
+        sync().sync()
+        assertEquals(listOf(1L to 2, 1L to 0), server.notePuts)
+        assertEquals(setOf("a"), serverIds())
+    }
+
+    @Test
+    fun 다_지우면_빈_문서를_올리고_곁_파일은_남긴다() = runBlocking {
+        setUpNotes()
+        writeLocal("a")
+        sync().sync()
+        writeLocal()
+        assertTrue("맞춘 적이 있으면 비어도 남는다", com.mrgq.pdfviewer.notes.ScoreNotesFile.fileOf(molPdf).exists())
+        sync().sync()
+        assertTrue(serverIds().isEmpty())
+        assertEquals(2, server.notesDocs.getValue(1).first)
+    }
+
+    @Test
+    fun 목록에서_빠지면_메모를_건드리지_않는다() = runBlocking {
+        setUpNotes()
+        writeLocal("a")
+        sync().sync()
+        server.notesHidden = setOf(1L)
+        writeLocal("a", "c")
+        sync().sync()
+        assertEquals(setOf("a", "c"), localNotes()!!.ids)
+        assertEquals("올리지 않는다", 1, server.notePuts.size)
     }
 }
