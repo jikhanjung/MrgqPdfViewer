@@ -991,6 +991,7 @@ class SettingsActivity : AppCompatActivity() {
             for (file in pdfFiles) {
                 try {
                     if (file.delete()) {
+                        com.mrgq.pdfviewer.notes.ScoreNotesFile.fileOf(file).delete() // 메모도 함께 (P11)
                         deletedCount++
                     } else {
                         failedCount++

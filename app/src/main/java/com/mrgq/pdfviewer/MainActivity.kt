@@ -1026,7 +1026,9 @@ class MainActivity : AppCompatActivity() {
                 val deleted = file.delete()
                 // ScoreMate 에서 받은 악보면 숨긴다 — 다음 동기화에 다시 받지 않게 (설정 → ScoreMate → 숨긴 악보 다시 받기)
                 if (deleted && pdfFile.cloudLabel != null) {
-                    scoreMateSync().markHidden(file.path)
+                    scoreMateSync().markHidden(file.path) // 메모는 보관함으로 — 다시 받으면 돌아온다
+                } else if (deleted) {
+                    com.mrgq.pdfviewer.notes.ScoreNotesFile.fileOf(file).delete() // 메모는 악보 파일을 따라간다 (P11)
                 }
                 
                 withContext(Dispatchers.Main) {

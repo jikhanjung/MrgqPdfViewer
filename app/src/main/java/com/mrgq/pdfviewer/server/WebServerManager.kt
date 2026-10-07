@@ -930,6 +930,7 @@ class WebServerManager private constructor() {
                 
                 return if (fileToDelete.exists() && fileToDelete.isFile && fileToDelete.name.endsWith(".pdf", ignoreCase = true)) {
                     if (fileToDelete.delete()) {
+                        com.mrgq.pdfviewer.notes.ScoreNotesFile.fileOf(fileToDelete).delete() // 메모도 함께 (P11)
                         addLog("✅ 파일 삭제 완료: $decodedFileName")
                         
                         // Refresh file list in MainActivity
@@ -970,6 +971,7 @@ class WebServerManager private constructor() {
                         file.isFile && file.name.endsWith(".pdf", ignoreCase = true)
                     }?.forEach { file ->
                         if (file.delete()) {
+                            com.mrgq.pdfviewer.notes.ScoreNotesFile.fileOf(file).delete()
                             deletedCount++
                         } else {
                             failedCount++

@@ -3,6 +3,7 @@ package com.mrgq.pdfviewer
 import com.mrgq.pdfviewer.database.entity.ScoreMeasure
 import com.mrgq.pdfviewer.score.ScoreOverlayGeometry
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -100,5 +101,58 @@ class ScoreOverlayGeometryTest {
     fun 마디가_없으면_빈_결과() {
         assertTrue(boxes(emptyList()).isEmpty())
         assertTrue(ScoreOverlayGeometry.boxes(listOf(measure(1, 0, 1f, 1f, 2f, 2f)), 0, false, 1, 0, 0, 0f, 0f, 0f).isEmpty())
+    }
+
+    // ── 쪽 ↔ 표시 비트맵 양방향 (P11 메모) ──
+
+    private val a4 = 595 to 841
+    private fun placements(left: Int, right: Int?, twoPage: Boolean, top: Float = 0f, bottom: Float = 0f, padding: Float = 0f) =
+        ScoreOverlayGeometry.placements(left, right, twoPage, { a4 }, screenW, screenH, top, bottom, padding)
+
+    private fun assertRoundTrip(p: com.mrgq.pdfviewer.score.PagePlacement, xPt: Float, yPt: Float) {
+        val bx = p.toBitmapX(xPt)
+        val by = p.toBitmapY(yPt)
+        assertTrue("($bx, $by) 는 쪽 안", p.contains(bx, by))
+        assertEquals(xPt, p.toPageX(bx), 0.01f)
+        assertEquals(yPt, p.toPageY(by), 0.01f)
+    }
+
+    @Test
+    fun 한_쪽은_렌더러와_같은_크기에_왕복한다() {
+        val p = placements(4, null, false, top = 0.05f, bottom = 0.03f).single()
+        val g = PageGeometry.compute(595, 841, screenW, screenH, 0.05f, 0.03f)
+        assertEquals(4, p.pageIndex)
+        assertEquals(g.displayWidth, p.displayWidth)
+        assertEquals(g.displayHeight, p.displayHeight)
+        assertEquals(841 * 0.05f, p.clippedTopPt, 0.001f)
+        assertRoundTrip(p, 75.1f, 132.8f)
+        assertFalse("위 클리핑으로 잘린 곳은 쪽 밖", p.contains(p.toBitmapX(100f), p.toBitmapY(10f)))
+    }
+
+    @Test
+    fun 두_쪽은_왼_오_배치가_마디_박스와_같다() {
+        val (left, right) = placements(2, 3, true, padding = 0.1f)
+        assertEquals(2, left.pageIndex)
+        assertEquals(3, right.pageIndex)
+        assertTrue(right.left > left.right)
+        assertRoundTrip(left, 300f, 400f)
+        assertRoundTrip(right, 300f, 400f)
+        // 마디 박스(boxes)가 같은 배치를 쓴다
+        val box = boxes(listOf(measure(1, 3, 75f, 133f, 212f, 411f)), leftPage = 2, twoPage = true, padding = 0.1f).single()
+        assertEquals(right.toBitmapX(75f), box.left, 0.01f)
+        assertEquals(right.toBitmapY(133f), box.top, 0.01f)
+    }
+
+    @Test
+    fun 차례_넘김은_오른쪽이_다른_쪽일_수_있다() {
+        val (left, right) = placements(2, 1, true) // 3 | 2
+        assertEquals(2, left.pageIndex)
+        assertEquals(1, right.pageIndex)
+    }
+
+    @Test
+    fun 마지막_홀수_쪽은_왼쪽만_크기를_모르면_비운다() {
+        assertEquals(1, placements(12, null, true).size)
+        assertTrue(ScoreOverlayGeometry.placements(0, null, false, { null }, screenW, screenH, 0f, 0f, 0f).isEmpty())
     }
 }

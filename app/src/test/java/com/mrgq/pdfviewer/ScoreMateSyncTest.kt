@@ -502,4 +502,75 @@ class ScoreMateSyncTest {
         assertEquals("앙상블", PdfLibrary.scoreMateGroupOf(root, file("앙상블", "c.pdf")))
         assertNull(PdfLibrary.scoreMateGroupOf(root, File(root, "a.pdf")))
     }
+
+    // ── 메모 곁 파일 (P11) — 사용자 것이라 받거나 지우지 않고 PDF 를 따라다닌다 ──
+
+    private fun notesOf(pdf: File) = File(pdf.parentFile, pdf.nameWithoutExtension + ".notes.json")
+
+    @Test
+    fun 메모는_이름이_바뀌어도_새_판이_와도_PDF_를_따라간다() = runBlocking {
+        val s = Score(1, "몰다우", "v1", xml = "<x/>")
+        server.put(s)
+        sync().sync()
+        notesOf(file("현악 4중주", "몰다우.pdf")).writeText("{\"notes\":[]}")
+        s.title = "블타바"
+        server.put(s)
+        sync().sync()
+        assertEquals("{\"notes\":[]}", notesOf(file("현악 4중주", "블타바.pdf")).readText())
+        assertFalse(notesOf(file("현악 4중주", "몰다우.pdf")).exists())
+        // 새 판 + MusicXML 없어짐 → MusicXML 은 지우고 메모는 남는다
+        s.content = "v2"; s.version = 2; s.xml = null
+        server.put(s)
+        sync().sync()
+        assertFalse(file("현악 4중주", "블타바.musicxml").exists())
+        assertTrue(notesOf(file("현악 4중주", "블타바.pdf")).exists())
+        // 새 판 + 새 이름 → 메모는 새 이름으로
+        s.content = "v3"; s.version = 3; s.title = "몰다우 강"
+        server.put(s)
+        sync().sync()
+        assertTrue(notesOf(file("현악 4중주", "몰다우 강.pdf")).exists())
+        assertFalse(notesOf(file("현악 4중주", "블타바.pdf")).exists())
+    }
+
+    @Test
+    fun 곡목에서_빠지면_메모는_보관했다가_다시_받으면_돌려_놓는다() = runBlocking {
+        server.put(Score(1, "몰다우", "v1"))
+        server.put(Score(2, "아리랑", "a"))
+        sync().sync()
+        notesOf(file("현악 4중주", "몰다우.pdf")).writeText("mine")
+        server.remove(1)
+        server.put(server.scores.getValue(2))
+        sync().sync()
+        assertFalse(file("현악 4중주", "몰다우.pdf").exists())
+        assertFalse(notesOf(file("현악 4중주", "몰다우.pdf")).exists())
+        assertEquals("mine", File(root, ".ScoreMateNotes/1.notes.json").readText())
+        assertEquals("보관함은 목록에 보이지 않는다", listOf("아리랑.pdf"), PdfLibrary.listPdfFiles(root, scoreMate = true).map { it.name })
+        server.put(Score(1, "몰다우", "v1"))
+        sync().sync()
+        assertEquals("mine", notesOf(file("현악 4중주", "몰다우.pdf")).readText())
+        assertFalse(File(root, ".ScoreMateNotes").exists())
+    }
+
+    @Test
+    fun TV_에서_지운_악보의_메모도_보관하고_연결을_끊으며_파일을_지우면_함께_지운다() = runBlocking {
+        server.put(Score(1, "몰다우", "v1"))
+        sync().sync()
+        val pdf = file("현악 4중주", "몰다우.pdf")
+        notesOf(pdf).writeText("mine")
+        pdf.delete()
+        val engine = sync()
+        assertTrue(engine.markHidden(pdf.path))
+        assertTrue(File(root, ".ScoreMateNotes/1.notes.json").exists())
+        engine.forgetAll(deleteFiles = true)
+        assertFalse(File(root, ".ScoreMateNotes").exists())
+    }
+
+    @Test
+    fun 연결을_끊을_때_남기면_메모도_로컬로_따라간다() = runBlocking {
+        server.put(Score(1, "몰다우", "v1"))
+        sync().sync()
+        notesOf(file("현악 4중주", "몰다우.pdf")).writeText("mine")
+        sync().forgetAll(deleteFiles = false)
+        assertEquals("mine", File(root, "몰다우.notes.json").readText())
+    }
 }

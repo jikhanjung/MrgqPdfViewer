@@ -28,6 +28,12 @@
         android:contentDescription="@string/app_name"
         android:visibility="gone" />
 
+    <!-- 악보 메모 (P11) — 쪽 pt 에 붙은 펜 획. pdfView 와 같은 위치·크기여야 한다 -->
+    <com.mrgq.pdfviewer.notes.ScoreNotesView
+        android:id="@+id/noteLayer"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent" />
+
     <!-- 악보 분석 확인용 마디 박스 (PDF 표시 옵션에서 켬). pdfView 와 같은 위치·크기여야 한다 -->
     <com.mrgq.pdfviewer.score.ScoreOverlayView
         android:id="@+id/scoreOverlay"
@@ -214,5 +220,21 @@
         </LinearLayout>
 
     </LinearLayout>
+
+    <!-- 메모 모드 도구 줄 (P11) — 단추는 코드에서 채운다 -->
+    <LinearLayout
+        android:id="@+id/noteToolbar"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:paddingHorizontal="6dp"
+        android:background="#E6263238"
+        android:elevation="6dp"
+        android:visibility="gone"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent" />
 
 </androidx.constraintlayout.widget.ConstraintLayout>

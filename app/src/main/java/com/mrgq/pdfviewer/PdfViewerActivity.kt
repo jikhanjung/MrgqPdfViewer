@@ -69,6 +69,14 @@ class PdfViewerActivity : AppCompatActivity() {
         private const val REQUEST_MIC_FOLLOW = 7302
         /** 차례 넘김: 지휘자가 쪽에 들어선 뒤 다 친 쪽을 바꾸기까지 — 지휘자 넘김은 최악 3.7초 일찍이었다(P08 §7-2) */
         private const val ROLL_DELAY_MS = 5000L
+        // 악보 메모 (P11) — 보이기는 전역, 펜 색 · 굵기는 마지막 고른 것
+        private const val PREF_SHOW_NOTES = "show_score_notes"
+        private const val PREF_NOTE_COLOR = "note_pen_color"
+        private const val PREF_NOTE_WIDTH = "note_pen_width"
+        /** 획 줄이기 허용 오차 (pt) — 오선 두께(≈ 0.5pt)보다 작게 */
+        private const val STROKE_TOLERANCE_PT = 0.25f
+        /** 다 그은 뒤 붙은 보표 표시를 남겨 두는 시간 */
+        private const val STAFF_HINT_MS = 1200L
         // Intent extra keys
         const val EXTRA_CURRENT_INDEX = "current_index"
         const val EXTRA_FILE_PATH_LIST = "file_path_list"
@@ -765,9 +773,11 @@ class PdfViewerActivity : AppCompatActivity() {
     }
     
     private fun showPage(index: Int) {
-        rollSpread = null
-        cancelPendingRoll()
         if (index < 0 || index >= pageCount) return
+        flushNotePen() // 긋던 획은 지금 쪽에 마저 (P11)
+        rollSpread = null
+        halfPageShown = false
+        cancelPendingRoll()
         
         // Throttle rapid page changes to reduce rendering load
         val currentTime = System.currentTimeMillis()
@@ -1002,6 +1012,7 @@ class PdfViewerActivity : AppCompatActivity() {
      * 좌표는 [PageGeometry], 래스터화는 [PageRenderer] — 프리렌더(PageCache)와 **같은 함수**다.
      */
     private fun renderPageAtSinglePageTarget(page: PdfRenderer.Page): Bitmap {
+        notePageSize(page)
         val geometry = PageGeometry.compute(
             pdfWidth = page.width,
             pdfHeight = page.height,
@@ -1025,6 +1036,7 @@ class PdfViewerActivity : AppCompatActivity() {
      * 추가 스케일 없이 좌/우 영역 가운데에 배치한다.
      */
     private fun renderPageAtTwoPageTarget(page: PdfRenderer.Page): Bitmap {
+        notePageSize(page)
         val geometry = PageGeometry.compute(
             pdfWidth = page.width,
             pdfHeight = page.height,
@@ -1492,6 +1504,11 @@ class PdfViewerActivity : AppCompatActivity() {
     override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
         // 블루투스 넘김 페달 · 키보드 (태블릿 1단계): 쪽 넘김 키를 리모컨 ← → 와 같게
         pageTurnKeyAsDpad(keyCode)?.let { return onKeyDown(it, event) }
+        // 메모 모드: 뒤로 = 메모 끝 (뷰어를 나가지 않는다, P11)
+        if (notePen.editMode && (keyCode == KeyEvent.KEYCODE_BACK || keyCode == KeyEvent.KEYCODE_ESCAPE)) {
+            exitNoteMode()
+            return true
+        }
         // 메트로놈 악보 연동: 시작 마디 고르는 중에는 리모컨이 커서를 움직인다
         if (followState == FollowState.SELECTING) {
             when (keyCode) {
@@ -1717,7 +1734,18 @@ class PdfViewerActivity : AppCompatActivity() {
         })
     }
 
+    /** 이번 터치가 메모 도구 줄에서 시작했다 — 단추만 받고 몸짓 · 메모로 보내지 않는다 */
+    private var touchOnNoteToolbar = false
+
     override fun dispatchTouchEvent(ev: android.view.MotionEvent): Boolean {
+        if (ev.actionMasked == android.view.MotionEvent.ACTION_DOWN) {
+            val bar = binding.noteToolbar
+            touchOnNoteToolbar = bar.visibility == View.VISIBLE &&
+                ev.x >= bar.left && ev.x <= bar.right && ev.y >= bar.top && ev.y <= bar.bottom
+        }
+        if (touchOnNoteToolbar) return super.dispatchTouchEvent(ev)
+        // 악보 메모 (P11): 펜은 늘, 손가락은 메모 모드에서 — 먹은 것은 넘김 몸짓으로 보내지 않는다
+        if (notePen.handle(ev)) return true
         // 악보 화면에는 눌리는 뷰가 없다 — 모든 터치를 몸짓으로 (안내 카드도 옆 탭 = ← → 가 다음 · 이전 파일로 간다)
         super.dispatchTouchEvent(ev)
         touchGestures.onTouchEvent(ev)
@@ -1731,6 +1759,330 @@ class PdfViewerActivity : AppCompatActivity() {
         if (requestCode != REQUEST_MIC_FOLLOW) return
         if (grantResults.firstOrNull() == android.content.pm.PackageManager.PERMISSION_GRANTED) startMicFollow()
         else Toast.makeText(this, "마이크 권한이 없어 들을 수 없습니다", Toast.LENGTH_LONG).show()
+    }
+
+    // ── 악보 메모 (P11) — 펜 · 손가락으로 선 긋기. PDF 옆 `.notes.json` 곁 파일 ─────────────────────────────
+    /** 지금 메모 — [notesPath] 의 것. 파일이 바뀌면 새로 연다 (되돌리기도 새로) */
+    private var notes = com.mrgq.pdfviewer.notes.ScoreNotes()
+    private var notesPath: String? = null
+    private var notesReady = false
+    /** 곁 파일을 읽지 못했다 — 덮어쓰지 않는다 */
+    private var notesBroken = false
+    private var notesUnknown: List<com.google.gson.JsonObject> = emptyList()
+    /** 지우개로 문지르는 중인 것 — 화면에서 바로 빼고, 손을 떼면 한 번에 지운다(되돌리기 한 번) */
+    private val notesErasing = LinkedHashMap<String, com.mrgq.pdfviewer.notes.ScoreNote>()
+    /** 붙을 보표를 정하는 보표 띠 (P11 §3.6) — 악보 분석 */
+    private var noteStaves: List<com.mrgq.pdfviewer.database.entity.ScoreStaff> = emptyList()
+    private var noteStavesFileId: String? = null
+    private val noteHintClear = Runnable { binding.noteLayer.staffHint(null, null, true) }
+
+    /** 직접 렌더한 쪽 크기 — 렌더러가 바뀌면 비운다 (프리렌더 쪽은 [PageCache.pageSizeOf]) */
+    private val pageSizeBook = HashMap<Int, Pair<Int, Int>>()
+    private var pageSizeOwner: PdfRenderer? = null
+
+    private fun notePageSize(page: PdfRenderer.Page) = synchronized(pageSizeBook) {
+        if (pageSizeOwner !== pdfRenderer) {
+            pageSizeBook.clear()
+            pageSizeOwner = pdfRenderer
+        }
+        pageSizeBook[page.index] = page.width to page.height
+    }
+
+    private fun pageSizeOf(index: Int): Pair<Int, Int>? =
+        synchronized(pageSizeBook) { if (pageSizeOwner === pdfRenderer) pageSizeBook[index] else null }
+            ?: pageCache?.pageSizeOf(index)
+
+    private fun notesVisible() = preferences.getBoolean(PREF_SHOW_NOTES, true)
+
+    /** 메모를 쓸 수 있는 기기 — 터치가 있는 태블릿 · 휴대폰 (TV 는 보기만) */
+    private fun notesWritable() = !com.mrgq.pdfviewer.utils.DeviceForm.isTv(this)
+
+    /** 메모를 이 화면에 그릴 수 없는 까닭 — null 이면 그릴 수 있다 */
+    private fun notesBlockedReason(): String? = when {
+        partViewLayout != null -> "파트 보기에서는 아직 메모를 쓸 수 없습니다 — 전체 악보에서"
+        notesBroken -> "메모 파일을 읽지 못해 쓰지 않습니다"
+        else -> null
+    }
+
+    /** 지금 화면에 놓인 쪽들 (쪽 pt ↔ 표시 비트맵 px). 파트 보기 · 반 쪽 넘김은 원본 쪽이 아니라 비운다 */
+    private fun notePlacements(): List<com.mrgq.pdfviewer.score.PagePlacement> {
+        if (partViewLayout != null || halfPageShown || pdfRenderer == null) return emptyList()
+        val spread = rollSpread
+        val left = spread?.left ?: pageIndex
+        val right = if (isTwoPageMode) (if (spread != null) spread.right else (pageIndex + 1).takeIf { it < pageCount }) else null
+        return ScoreOverlayGeometry.placements(
+            left, right, isTwoPageMode, ::pageSizeOf, screenWidth, screenHeight,
+            currentTopClipping, currentBottomClipping, currentCenterPadding,
+        )
+    }
+
+    /** 표시 비트맵 px → 화면(창) 좌표 행렬 — 마디 탭과 같다 */
+    private fun bitmapToWindow(): android.graphics.Matrix {
+        val view = binding.pdfView
+        return android.graphics.Matrix(view.imageMatrix).apply {
+            postTranslate((view.left + view.paddingLeft).toFloat(), (view.top + view.paddingTop).toFloat())
+        }
+    }
+
+    private fun windowToBitmap(x: Float, y: Float): Pair<Float, Float>? {
+        val inverse = android.graphics.Matrix()
+        if (!bitmapToWindow().invert(inverse)) return null
+        val p = floatArrayOf(x, y)
+        inverse.mapPoints(p)
+        return p[0] to p[1]
+    }
+
+    /** 파일이 바뀌었으면 곁 파일을 연다 (메모 줄 스레드에서 — 앞서 저장 중인 것이 끝난 뒤에 읽는다) */
+    private fun ensureNotesLoaded() {
+        if (!::pdfFilePath.isInitialized) return
+        val path = pdfFilePath
+        if (path.isEmpty() || notesPath == path) return
+        notePen.cancel()
+        notesPath = path
+        notes = com.mrgq.pdfviewer.notes.ScoreNotes()
+        notesReady = false
+        notesBroken = false
+        notesUnknown = emptyList()
+        notesErasing.clear()
+        com.mrgq.pdfviewer.notes.ScoreNotesFile.openAsync(File(path)) { opened ->
+            runOnUiThread {
+                if (notesPath != path) return@runOnUiThread
+                notes = com.mrgq.pdfviewer.notes.ScoreNotes(opened.loaded.notes)
+                notesUnknown = opened.loaded.unknown
+                notesBroken = opened.broken
+                notesReady = true
+                if (opened.broken) toast("메모 파일을 읽지 못했습니다 — 이 악보에는 메모를 쓰지 않습니다")
+                if (opened.newEdition) toast("악보가 새 판입니다 — 메모 자리가 어긋날 수 있습니다")
+                refreshNotes()
+            }
+        }
+    }
+
+    /** 붙을 보표를 정할 보표 띠 — 쓸 수 있는 기기에서만, 처음 그을 때 (악보 분석은 DB 캐시) */
+    private fun ensureNoteStaves() {
+        val fileId = currentPdfFileId ?: return
+        if (noteStavesFileId == fileId || partViewLayout != null) return
+        noteStavesFileId = fileId
+        noteStaves = emptyList()
+        val file = File(pdfFilePath)
+        lifecycleScope.launch {
+            val staves = withContext(Dispatchers.IO) {
+                try { musicRepository.getOrAnalyzeScoreStaves(fileId, file) } catch (e: Exception) { null }
+            }
+            if (noteStavesFileId == fileId) noteStaves = staves.orEmpty()
+        }
+    }
+
+    /** 메모 층을 지금 화면에 맞춰 다시 그린다 — 마디 박스와 같은 때 ([refreshScoreOverlay]) */
+    private fun refreshNotes() {
+        val layer = binding.noteLayer
+        if (!notesVisible() || isAnimating) {
+            layer.clear()
+            return
+        }
+        ensureNotesLoaded()
+        layer.show(notePlacements(), { page -> notes.onPage(page).filter { it.id !in notesErasing } }, binding.pdfView.imageMatrix)
+    }
+
+    private fun saveNotes() {
+        val path = notesPath ?: return
+        if (notesBroken) return
+        com.mrgq.pdfviewer.notes.ScoreNotesFile.saveAsync(File(path), notes.notes.toList(), notesUnknown) { e ->
+            Log.e("PdfViewerActivity", "메모 저장 실패: $path", e)
+            runOnUiThread { toast("메모를 저장하지 못했습니다") }
+        }
+        updateNoteToolbar()
+    }
+
+    /** 보표 띠 (pt) → 표시 비트맵 px 사각형 — 쪽 폭 전체, 오선 위 · 아래로 한 칸씩 */
+    private fun staffBandRect(page: Int, staff: com.mrgq.pdfviewer.database.entity.ScoreStaff): android.graphics.RectF? {
+        val p = notePlacements().firstOrNull { it.pageIndex == page } ?: return null
+        val space = (staff.bottomPt - staff.topPt) / 4
+        return android.graphics.RectF(p.left, p.toBitmapY(staff.topPt - space), p.right, p.toBitmapY(staff.bottomPt + space))
+    }
+
+    /** 보표 이름 — 그 보표 번호에 이름이 적힌 시스템이 하나라도 있으면 그것 (보통 첫 시스템만 이름이 있다) */
+    private fun staffName(staff: com.mrgq.pdfviewer.database.entity.ScoreStaff): String {
+        val named = noteStaves.firstOrNull { it.staffIndex == staff.staffIndex && !it.label.isNullOrBlank() }
+        return com.mrgq.pdfviewer.notes.NoteStaff.labelOf(named ?: staff)
+    }
+
+    private fun showStaffHint(page: Int, attachment: com.mrgq.pdfviewer.notes.NoteStaff.Attachment?) {
+        binding.noteLayer.removeCallbacks(noteHintClear)
+        if (attachment == null) {
+            binding.noteLayer.staffHint(null, if (noteStaves.isEmpty()) null else "전체 악보", true)
+            return
+        }
+        binding.noteLayer.staffHint(staffBandRect(page, attachment.staff), staffName(attachment.staff), attachment.sure)
+    }
+
+    private val notePen by lazy {
+        com.mrgq.pdfviewer.notes.NotePen(object : com.mrgq.pdfviewer.notes.NotePen.Host {
+            override fun canDraw() = notesWritable() && notesVisible() && notesReady && notesBlockedReason() == null &&
+                !halfPageShown && !isAnimating && ::pdfFilePath.isInitialized && notesPath == pdfFilePath
+
+            override fun pageAt(x: Float, y: Float): Int? {
+                val (bx, by) = windowToBitmap(x, y) ?: return null
+                return notePlacements().firstOrNull { it.contains(bx, by) }?.pageIndex
+            }
+
+            override fun toPage(page: Int, x: Float, y: Float): Pair<Float, Float>? {
+                val p = notePlacements().firstOrNull { it.pageIndex == page } ?: return null
+                val (bx, by) = windowToBitmap(x, y) ?: return null
+                return p.toPageX(bx) to p.toPageY(by)
+            }
+
+            override fun pxPerPt(page: Int): Float {
+                val p = notePlacements().firstOrNull { it.pageIndex == page } ?: return 1f
+                val v = FloatArray(9)
+                binding.pdfView.imageMatrix.getValues(v)
+                return p.fitScale * v[android.graphics.Matrix.MSCALE_X]
+            }
+
+            override fun screenWidth() = binding.root.width
+
+            override fun onStroke(page: Int, points: List<Float>, color: Int, widthPt: Float) {
+                ensureNoteStaves()
+                val simplified = com.mrgq.pdfviewer.notes.NoteGeometry.simplify(points, STROKE_TOLERANCE_PT)
+                val extent = com.mrgq.pdfviewer.notes.NoteGeometry.verticalExtent(simplified)
+                val attachment = extent?.let { com.mrgq.pdfviewer.notes.NoteStaff.of(noteStaves, page, it.first, it.second) }
+                notes.add(com.mrgq.pdfviewer.notes.ScoreNote.Ink(notes.nextId(), page, color, widthPt, simplified, attachment?.staff?.staffIndex))
+                saveNotes()
+                refreshNotes()
+                // 어디에 붙었는지 잠깐 더 보여 준다
+                binding.noteLayer.postDelayed(noteHintClear, STAFF_HINT_MS)
+            }
+
+            override fun onErase(page: Int, x: Float, y: Float, radiusPt: Float) {
+                val hit = notes.onPage(page).filter {
+                    it.id !in notesErasing && it is com.mrgq.pdfviewer.notes.ScoreNote.Ink &&
+                        com.mrgq.pdfviewer.notes.NoteGeometry.hits(it, x, y, radiusPt)
+                }
+                if (hit.isEmpty()) return
+                hit.forEach { notesErasing[it.id] = it }
+                refreshNotes()
+            }
+
+            override fun onEraseEnd() {
+                if (notesErasing.isEmpty()) return
+                notes.remove(notesErasing.values.toList())
+                notesErasing.clear()
+                saveNotes()
+                refreshNotes()
+            }
+
+            override fun onLive(page: Int, points: List<Float>, color: Int, widthPx: Float, topPt: Float, bottomPt: Float) {
+                ensureNoteStaves()
+                binding.noteLayer.liveStroke(points, color, widthPx)
+                showStaffHint(page, com.mrgq.pdfviewer.notes.NoteStaff.of(noteStaves, page, topPt, bottomPt))
+            }
+
+            override fun onLiveEnd() {
+                binding.noteLayer.endLiveStroke()
+                binding.noteLayer.postDelayed(noteHintClear, STAFF_HINT_MS)
+            }
+
+            override fun onEraserCursor(x: Float, y: Float, radiusPx: Float) {
+                // 창 좌표 → 메모 층 좌표 (같은 자리 · 크기)
+                binding.noteLayer.eraserAt(x - binding.noteLayer.left, y - binding.noteLayer.top, radiusPx)
+            }
+        })
+    }
+
+    /** 쪽 · 조각이 바뀌기 직전 — 긋던 획은 지금 화면 기준으로 마저 저장한다 */
+    private fun flushNotePen() {
+        notePen.flush()
+    }
+
+    // ── 메모 모드 · 도구 줄 ──
+    private fun toggleNoteMode() {
+        if (notePen.editMode) exitNoteMode() else enterNoteMode()
+    }
+
+    private fun enterNoteMode() {
+        notesBlockedReason()?.let { return toast(it) }
+        if (!notesVisible()) preferences.edit().putBoolean(PREF_SHOW_NOTES, true).apply()
+        if (halfPageShown) showPage(pageIndex) // 반 쪽 넘김 화면은 온전한 쪽으로
+        ensureNoteStaves()
+        notePen.editMode = true
+        notePen.tool = com.mrgq.pdfviewer.notes.NotePen.Tool.PEN
+        buildNoteToolbar()
+        binding.noteToolbar.visibility = View.VISIBLE
+        refreshNotes()
+    }
+
+    private fun exitNoteMode() {
+        notePen.cancel()
+        notePen.editMode = false
+        binding.noteToolbar.visibility = View.GONE
+    }
+
+    private val noteToolButtons = mutableListOf<Pair<android.widget.TextView, () -> Boolean>>()
+    private var noteUndoButton: android.widget.TextView? = null
+    private var noteRedoButton: android.widget.TextView? = null
+
+    private fun buildNoteToolbar() {
+        val bar = binding.noteToolbar
+        if (bar.childCount > 0) return updateNoteToolbar()
+        val pen = notePen
+        pen.color = preferences.getInt(PREF_NOTE_COLOR, pen.color)
+        pen.widthPt = preferences.getFloat(PREF_NOTE_WIDTH, pen.widthPt)
+        val size = (resources.displayMetrics.density * 44).toInt()
+        fun button(label: String, color: Int = android.graphics.Color.WHITE, textSp: Float = 20f, selected: (() -> Boolean)? = null, onClick: () -> Unit): android.widget.TextView {
+            val b = android.widget.TextView(this).apply {
+                text = label
+                setTextColor(color)
+                textSize = textSp
+                gravity = android.view.Gravity.CENTER
+                minWidth = size
+                minimumHeight = size
+                setPadding(size / 6, 0, size / 6, 0)
+                isFocusable = false
+                setOnClickListener {
+                    onClick()
+                    updateNoteToolbar()
+                }
+            }
+            bar.addView(b, android.widget.LinearLayout.LayoutParams(android.view.ViewGroup.LayoutParams.WRAP_CONTENT, size))
+            if (selected != null) noteToolButtons += b to selected
+            return b
+        }
+        button("✏️", selected = { pen.tool == com.mrgq.pdfviewer.notes.NotePen.Tool.PEN }) { pen.tool = com.mrgq.pdfviewer.notes.NotePen.Tool.PEN }
+        button("🧽", selected = { pen.tool == com.mrgq.pdfviewer.notes.NotePen.Tool.ERASER }) { pen.tool = com.mrgq.pdfviewer.notes.NotePen.Tool.ERASER }
+        for (c in com.mrgq.pdfviewer.notes.NotePen.COLORS) {
+            // 검정은 어두운 줄에서 안 보이니 테두리 색으로
+            button("●", color = if (c == com.mrgq.pdfviewer.notes.NotePen.COLORS[0]) 0xFFBDBDBD.toInt() else c, textSp = 24f,
+                selected = { pen.color == c && pen.tool == com.mrgq.pdfviewer.notes.NotePen.Tool.PEN }) {
+                pen.color = c
+                pen.tool = com.mrgq.pdfviewer.notes.NotePen.Tool.PEN
+                preferences.edit().putInt(PREF_NOTE_COLOR, c).apply()
+            }
+        }
+        com.mrgq.pdfviewer.notes.NotePen.WIDTHS.forEachIndexed { i, w ->
+            button(listOf("╌", "─", "━")[i], textSp = 22f, selected = { pen.widthPt == w }) {
+                pen.widthPt = w
+                pen.tool = com.mrgq.pdfviewer.notes.NotePen.Tool.PEN
+                preferences.edit().putFloat(PREF_NOTE_WIDTH, w).apply()
+            }
+        }
+        noteUndoButton = button("↶") { if (notes.undo()) { saveNotes(); refreshNotes() } }
+        noteRedoButton = button("↷") { if (notes.redo()) { saveNotes(); refreshNotes() } }
+        button("✔") { exitNoteMode() }
+        updateNoteToolbar()
+    }
+
+    private fun updateNoteToolbar() {
+        for ((b, selected) in noteToolButtons) b.setBackgroundColor(if (selected()) 0x5590CAF9 else 0)
+        noteUndoButton?.alpha = if (notes.canUndo) 1f else 0.35f
+        noteRedoButton?.alpha = if (notes.canRedo) 1f else 0.35f
+    }
+
+    private fun toggleNotesVisible() {
+        val show = !notesVisible()
+        preferences.edit().putBoolean(PREF_SHOW_NOTES, show).apply()
+        if (!show) exitNoteMode()
+        refreshNotes()
+        toast(if (show) "메모 보이기" else "메모 숨김")
     }
 
     // ── 마이크로 연주를 듣고 넘기기 — 태블릿 지휘자 (P10) ─────────────────────────────────
@@ -1915,6 +2267,8 @@ class PdfViewerActivity : AppCompatActivity() {
         canvas.drawRect(0f, 0f, out.width.toFloat(), split.toFloat(), android.graphics.Paint().apply { color = android.graphics.Color.WHITE })
         canvas.drawBitmap(top, android.graphics.Rect(0, 0, top.width, cut), android.graphics.Rect(0, 0, top.width, cut), null)
         canvas.drawRect(0f, split - 2f, out.width.toFloat(), split + 2f, android.graphics.Paint().apply { color = 0xFF9E9E9E.toInt() })
+        flushNotePen()
+        halfPageShown = true
         binding.pdfView.setImageBitmap(out)
         setImageViewMatrix(out)
         refreshScoreOverlay()
@@ -2152,6 +2506,8 @@ class PdfViewerActivity : AppCompatActivity() {
     // ── 두 쪽 연주자의 차례 넘김 (P10 §3.3) ────────────────────────────────────────────
     /** 보통의 짝(1-2 · 3-4)이 아닌 화면(3 | 2 …). null 이면 보통 — [showPage] 가 비운다 */
     private var rollSpread: com.mrgq.pdfviewer.follow.RollingTurns.Spread? = null
+    /** 반 쪽 넘김 화면(위 · 아래가 다른 쪽)인가 — 메모는 원본 쪽 한 장에만 그린다 (P11) */
+    private var halfPageShown = false
     private var pendingRoll: Runnable? = null
 
     private fun cancelPendingRoll() {
@@ -2192,6 +2548,8 @@ class PdfViewerActivity : AppCompatActivity() {
         val left = pageCache?.getPageImmediate(spread.left) ?: return
         val right = spread.right?.let { pageCache?.getPageImmediate(it) }
         val combined = combineTwoPagesUnified(left, right)
+        flushNotePen()
+        halfPageShown = false
         binding.pdfView.setImageBitmap(combined)
         setImageViewMatrix(combined)
         rollSpread = spread
@@ -3557,6 +3915,7 @@ class PdfViewerActivity : AppCompatActivity() {
         items += "메트로놈 설정… (소리)" to { showPerformerMetronomeSettings() }
         // 합주 중에도 파트 보기 (P07 4단계) — 쪽 · 마디 신호는 파트 화면으로 옮겨진다. 반주는 합주 중에 쓰지 않는다
         items += "파트 보기: ${partViewName ?: "전체 악보"}" to { showPartViewDialog() }
+        if (notesWritable()) items += (if (notePen.editMode) "✏️ 메모 끝" else "✏️ 메모 쓰기") to { toggleNoteMode() }
         val title = when {
             ensembleRole == EnsembleRole.FOLLOWING -> "메트로놈 — 지휘자를 따라가는 중"
             canRejoinEnsemble() -> "메트로놈 — 이 기기는 빠져 있음"
@@ -3726,6 +4085,7 @@ class PdfViewerActivity : AppCompatActivity() {
         items += "메트로놈 설정…" to { showMetronomeDialog() }
         items += "파트 보기: ${partViewName ?: "전체 악보"}" to { showPartViewDialog() }
         accompanimentMenuLabel()?.let { items += it to { showAccompanimentDialog() } }
+        if (notesWritable()) items += (if (notePen.editMode) "✏️ 메모 끝" else "✏️ 메모 쓰기") to { toggleNoteMode() }
         if (micFollowCapable()) {
             items.add(0, (if (micFollower != null) "🎤 듣기 멈춤" else "🎤 연주 듣고 넘기기") to { toggleMicFollow() })
         }
@@ -3998,6 +4358,7 @@ class PdfViewerActivity : AppCompatActivity() {
     /** 휴대폰: 같은 쪽의 [start] 칸부터 (다시 그리지 않고 행렬만) */
     private fun showChunk(start: Int) {
         if (!phoneView) return
+        flushNotePen()
         chunkIndex = start
         val bitmap = (binding.pdfView.drawable as? android.graphics.drawable.BitmapDrawable)?.bitmap ?: return
         setImageViewMatrix(bitmap)
@@ -4061,6 +4422,7 @@ class PdfViewerActivity : AppCompatActivity() {
     }
 
     private fun refreshScoreOverlay() {
+        refreshNotes()
         val overlay = binding.scoreOverlay
         val fileId = currentPdfFileId
         val focus = when (followState) {
@@ -4192,10 +4554,18 @@ class PdfViewerActivity : AppCompatActivity() {
             }}",
             "파트 보기: ${partViewName ?: "전체 악보"}",
         ) + listOfNotNull(accompanimentMenuLabel()).toTypedArray()
+        // 악보 메모 (P11) — 뒤에 붙인다 (앞 번호가 반주 유무에 따라 달라지므로 이름으로 고른다)
+        val noteWrite = if (notesWritable()) (if (notePen.editMode) "✏️ 메모 끝" else "✏️ 메모 쓰기") else null
+        val noteShow = "메모 보이기: ${if (notesVisible()) "켜짐" else "꺼짐"}"
+        val allOptions = options + listOfNotNull(noteWrite, noteShow).toTypedArray()
 
         AlertDialog.Builder(this)
             .setTitle("PDF 표시 옵션")
-            .setItems(options) { dialog, which ->
+            .setItems(allOptions) { dialog, which ->
+                when (allOptions[which]) {
+                    noteWrite -> return@setItems toggleNoteMode()
+                    noteShow -> return@setItems toggleNotesVisible()
+                }
                 when (which) {
                     0 -> if (phoneView) {
                         Toast.makeText(this, "휴대폰에서는 시스템 · 반 쪽씩 봅니다", Toast.LENGTH_SHORT).show()
@@ -5294,9 +5664,11 @@ class PdfViewerActivity : AppCompatActivity() {
      * @param direction 애니메이션 방향 (1: 오른쪽으로 이동, -1: 왼쪽으로 이동)
      */
     private fun showPageWithAnimation(index: Int, direction: Int) {
-        rollSpread = null
-        cancelPendingRoll()
         if (index < 0 || index >= pageCount || isAnimating) return
+        flushNotePen()
+        rollSpread = null
+        halfPageShown = false
+        cancelPendingRoll()
         
         Log.d("PdfViewerActivity", "showPageWithAnimation: index=$index, direction=$direction")
         
@@ -5544,6 +5916,7 @@ class PdfViewerActivity : AppCompatActivity() {
                 }
                 
                 isAnimating = false
+                refreshNotes() // 넘기는 동안 숨겼던 메모 (P11)
                 Log.d("PdfViewerActivity", "Page transition animation completed")
             }
         })

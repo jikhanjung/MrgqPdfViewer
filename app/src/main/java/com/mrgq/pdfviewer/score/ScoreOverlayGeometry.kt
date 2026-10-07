@@ -54,18 +54,41 @@ object ScoreOverlayGeometry {
             val m = byPage[page]?.first() ?: anyMeasure
             return rendererPoints(m.pageWidthPt) to rendererPoints(m.pageHeightPt)
         }
-        fun geometryOf(page: Int, twoPage: Boolean): PageGeometry {
-            val (w, h) = sizeOf(page)
-            return PageGeometry.compute(w, h, screenWidth, screenHeight, topClipping, bottomClipping, centerPadding, twoPage)
-        }
+        val right = if (twoPageMode) (leftPageIndex + 1).takeIf { it < pageCount } else null
+        return placements(
+            leftPageIndex, right, twoPageMode, ::sizeOf, screenWidth, screenHeight, topClipping, bottomClipping, centerPadding,
+        ).flatMap { mapPage(byPage[it.pageIndex], it) }
+    }
 
-        if (!twoPageMode) {
-            return mapPage(byPage[leftPageIndex], geometryOf(leftPageIndex, false), sizeOf(leftPageIndex).second, 0, 0, topClipping)
-        }
+    /**
+     * 지금 화면에 놓인 쪽들 — 쪽 pt ↔ 표시 비트맵 px 변환 (마디 박스 · 메모 P11 이 함께 쓴다).
+     * 한 쪽이면 하나, 두 쪽이면 왼 · 오(오른쪽이 없으면 왼쪽만). [rightPageIndex] 는 보통 왼쪽 + 1 이지만
+     * 차례 넘김(P10 §3.3 — 3 | 2 처럼)이면 다른 쪽일 수 있다. [sizeOf] 는 `PdfRenderer` 쪽 크기(정수 pt), 모르면 null → 빠진다
+     */
+    fun placements(
+        leftPageIndex: Int,
+        rightPageIndex: Int?,
+        twoPageMode: Boolean,
+        sizeOf: (Int) -> Pair<Int, Int>?,
+        screenWidth: Int,
+        screenHeight: Int,
+        topClipping: Float,
+        bottomClipping: Float,
+        centerPadding: Float,
+    ): List<PagePlacement> {
+        if (screenWidth <= 0 || screenHeight <= 0) return emptyList()
+        val clip = topClipping.coerceIn(0f, PageGeometry.MAX_CLIPPING)
+        fun placed(page: Int, size: Pair<Int, Int>, g: PageGeometry, x: Int, y: Int) =
+            PagePlacement(page, g.fitScale, size.second * clip, x, y, g.displayWidth, g.displayHeight)
+        fun geometryOf(size: Pair<Int, Int>, twoPage: Boolean) =
+            PageGeometry.compute(size.first, size.second, screenWidth, screenHeight, topClipping, bottomClipping, centerPadding, twoPage)
 
-        val rightPageIndex = (leftPageIndex + 1).takeIf { it < pageCount }
-        val left = geometryOf(leftPageIndex, true)
-        val right = rightPageIndex?.let { geometryOf(it, true) }
+        val leftSize = sizeOf(leftPageIndex) ?: return emptyList()
+        if (!twoPageMode) return listOf(placed(leftPageIndex, leftSize, geometryOf(leftSize, false), 0, 0))
+
+        val left = geometryOf(leftSize, true)
+        val rightSize = rightPageIndex?.let(sizeOf)
+        val right = rightSize?.let { geometryOf(it, true) }
         // PdfViewerActivity.combineTwoPagesUnified 와 같은 캔버스·배치
         val offsets = TwoPageOffsets.compute(
             canvasWidth = screenWidth,
@@ -76,40 +99,50 @@ object ScoreOverlayGeometry {
             rightWidth = right?.displayWidth ?: 0,
             rightHeight = right?.displayHeight ?: 0,
         )
-        val leftBoxes = mapPage(byPage[leftPageIndex], left, sizeOf(leftPageIndex).second, offsets.leftX, offsets.leftY, topClipping)
-        val rightBoxes = if (rightPageIndex != null && right != null) {
-            mapPage(byPage[rightPageIndex], right, sizeOf(rightPageIndex).second, offsets.rightX, offsets.rightY, topClipping)
-        } else {
-            emptyList()
-        }
-        return leftBoxes + rightBoxes
+        return listOfNotNull(
+            placed(leftPageIndex, leftSize, left, offsets.leftX, offsets.leftY),
+            if (rightPageIndex != null && rightSize != null && right != null) placed(rightPageIndex, rightSize, right, offsets.rightX, offsets.rightY) else null,
+        )
     }
 
-    private fun mapPage(
-        measures: List<ScoreMeasure>?,
-        geometry: PageGeometry,
-        pdfHeight: Int,
-        offsetX: Int,
-        offsetY: Int,
-        topClipping: Float,
-    ): List<OverlayBox> {
+    private fun mapPage(measures: List<ScoreMeasure>?, p: PagePlacement): List<OverlayBox> {
         if (measures.isNullOrEmpty()) return emptyList()
-        // PageGeometry.compute 와 같은 상한으로 자른 클리핑
-        val clippedTopPt = pdfHeight * topClipping.coerceIn(0f, PageGeometry.MAX_CLIPPING)
-        val scale = geometry.fitScale
-        val minX = offsetX.toFloat()
-        val minY = offsetY.toFloat()
-        val maxX = minX + geometry.displayWidth
-        val maxY = minY + geometry.displayHeight
-
         return measures.mapNotNull { m ->
-            val left = (minX + m.leftPt * scale).coerceIn(minX, maxX)
-            val right = (minX + m.rightPt * scale).coerceIn(minX, maxX)
-            val top = (minY + (m.topPt - clippedTopPt) * scale).coerceIn(minY, maxY)
-            val bottom = (minY + (m.bottomPt - clippedTopPt) * scale).coerceIn(minY, maxY)
+            val left = p.toBitmapX(m.leftPt).coerceIn(p.left, p.right)
+            val right = p.toBitmapX(m.rightPt).coerceIn(p.left, p.right)
+            val top = p.toBitmapY(m.topPt).coerceIn(p.top, p.bottom)
+            val bottom = p.toBitmapY(m.bottomPt).coerceIn(p.top, p.bottom)
             // 클리핑으로 완전히 잘려 나간 마디는 그리지 않는다
             if (right - left < 1f || bottom - top < 1f) null
             else OverlayBox(m.measureNumber, m.systemIndex, left, top, right, bottom)
         }
     }
+}
+
+/**
+ * 표시 비트맵에 놓인 쪽 하나 — 쪽 pt(왼 위 원점, `PdfRenderer` 크기) ↔ 표시 비트맵 px.
+ * 렌더러와 같은 공식([PageGeometry] fitScale · 위 클리핑, [TwoPageOffsets] 배치)에서 나온다.
+ */
+data class PagePlacement(
+    val pageIndex: Int,
+    val fitScale: Float,
+    /** 위 클리핑으로 잘려 나간 높이 (pt) */
+    val clippedTopPt: Float,
+    val offsetX: Int,
+    val offsetY: Int,
+    val displayWidth: Int,
+    val displayHeight: Int,
+) {
+    val left: Float get() = offsetX.toFloat()
+    val top: Float get() = offsetY.toFloat()
+    val right: Float get() = (offsetX + displayWidth).toFloat()
+    val bottom: Float get() = (offsetY + displayHeight).toFloat()
+
+    fun toBitmapX(xPt: Float): Float = offsetX + xPt * fitScale
+    fun toBitmapY(yPt: Float): Float = offsetY + (yPt - clippedTopPt) * fitScale
+    fun toPageX(x: Float): Float = (x - offsetX) / fitScale
+    fun toPageY(y: Float): Float = (y - offsetY) / fitScale + clippedTopPt
+
+    /** 표시 비트맵 px 가 이 쪽 안인가 */
+    fun contains(x: Float, y: Float): Boolean = x >= left && x <= right && y >= top && y <= bottom
 }

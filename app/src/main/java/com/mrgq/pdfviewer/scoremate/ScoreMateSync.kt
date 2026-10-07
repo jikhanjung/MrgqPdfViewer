@@ -2,6 +2,7 @@ package com.mrgq.pdfviewer.scoremate
 
 import com.google.gson.JsonObject
 import com.google.gson.JsonParser
+import com.mrgq.pdfviewer.notes.ScoreNotesFile
 import java.io.File
 import java.security.MessageDigest
 
@@ -98,6 +99,9 @@ data class SyncReport(
  *    - `.musicxml` — 악보 인식 결과 (서버 0.9.6, P06 §11). null = 인식 전 · 새 판 인식 중
  *    - `.layout.json` — 보표 · 마디 분석 (서버 0.10.x, P06 §12). 앱은 이것이 있으면 직접 분석하지 않는다(ScoreLayoutStore).
  *      `analyzer_version` 이 오르면 파일 sha 가 바뀌어 다시 받는다
+ *    - `.notes.json` — **사용자가 쓴 메모**(P11). 서버가 주는 것이 아니라 받거나 지우지 않고 PDF 를 따라 옮긴다. 다시 받을 수 없으므로
+ *      곡목에서 빠져(3) · TV 에서 지워 PDF 가 없어질 때는 지우지 않고 보관함(`PDFs/.ScoreMateNotes/<서버 id>.notes.json`)에 두었다가
+ *      그 악보를 다시 받으면 돌려 놓는다. 새 판이 오면 그대로 남는다(자리가 어긋날 수 있다는 안내는 뷰어가)
  * 4. 모두 성공했을 때만 커서를 저장한다 — 중간에 실패하면 다음에 같은 자리부터 다시 (이미 받은 것은 sha 가 같아 건너뛴다)
  *
  * 합주 중 · 악보를 보는 중에는 부르지 않는다 (파일 목록 화면에서만 — 열린 파일을 바꾸지 않게).
@@ -189,7 +193,8 @@ class ScoreMateSync(
         for (score in gone) {
             // 파일만 지운다 — 레코드(파일별 설정)는 남겨 다시 받으면 돌아오게
             if (!score.hidden) File(score.filePath).delete()
-            sidecarsOf(File(score.filePath)).forEach { it.delete() }
+            serverSidecarsOf(File(score.filePath)).forEach { it.delete() }
+            keepNotes(score.serverId, File(score.filePath))
             store.delete(score.serverId)
             removed++
         }
@@ -219,7 +224,8 @@ class ScoreMateSync(
     suspend fun markHidden(filePath: String): Boolean {
         val score = store.all().firstOrNull { it.filePath == filePath && !it.hidden } ?: return false
         store.upsert(score.copy(hidden = true))
-        sidecarsOf(File(filePath)).forEach { it.delete() }
+        serverSidecarsOf(File(filePath)).forEach { it.delete() }
+        keepNotes(score.serverId, File(filePath))
         return true
     }
 
@@ -251,6 +257,8 @@ class ScoreMateSync(
         }
         removeEmptyFolders()
         scoreMateRoot.takeIf { it.isDirectory && it.listFiles()?.isEmpty() == true }?.delete()
+        // 보관한 메모 — 파일까지 지우면 함께, 남기면 그대로 (다시 연결해 받으면 돌아온다)
+        if (deleteFiles) keptNotesDir.deleteRecursively()
     }
 
     private suspend fun moveToLocal(file: File) {
@@ -297,6 +305,7 @@ class ScoreMateSync(
                 records.afterDelete(currentFile.path)
             }
             store.upsert(record)
+            restoreNotes(remote.id, target)
             return Change.DOWNLOADED
         }
 
@@ -312,14 +321,37 @@ class ScoreMateSync(
             // 새 판 + 새 이름: 레코드를 새 경로로 옮긴 뒤 옛 파일을 지운다 (파일별 설정 유지). 옛 판의 MusicXML 도
             records.beforeMove(currentFile.path, target.path)
             currentFile.delete()
-            sidecarsOf(currentFile).forEach { it.delete() }
+            serverSidecarsOf(currentFile).forEach { it.delete() }
+            moveSidecars(currentFile, target) // 남은 것은 메모뿐 — 새 이름으로 따라간다
         }
         if (!part.renameTo(target)) {
             target.delete()
             if (!part.renameTo(target)) throw ScoreMateException("받은 파일을 저장하지 못했습니다")
         }
         store.upsert(record)
+        restoreNotes(remote.id, target)
         return Change.DOWNLOADED
+    }
+
+    /** 메모 보관함 — 동기화가 PDF 를 지울 때 사용자의 메모는 여기 두었다가 다시 받으면 돌려 놓는다 (P11) */
+    private val keptNotesDir: File get() = File(pdfRoot, NOTES_KEPT_FOLDER)
+
+    private fun keepNotes(serverId: Long, pdf: File) {
+        val notes = ScoreNotesFile.fileOf(pdf)
+        if (!notes.isFile) return
+        keptNotesDir.mkdirs()
+        val kept = File(keptNotesDir, "$serverId${ScoreNotesFile.SUFFIX}")
+        kept.delete()
+        if (!notes.renameTo(kept)) notes.copyTo(kept, overwrite = true).also { notes.delete() }
+    }
+
+    private fun restoreNotes(serverId: Long, pdf: File) {
+        val kept = File(keptNotesDir, "$serverId${ScoreNotesFile.SUFFIX}")
+        if (!kept.isFile) return
+        val notes = ScoreNotesFile.fileOf(pdf)
+        if (notes.exists()) kept.delete() // 그 자리에 이미 메모가 있다 — 그쪽이 새것
+        else if (!kept.renameTo(notes)) kept.copyTo(notes).also { kept.delete() }
+        keptNotesDir.takeIf { it.listFiles()?.isEmpty() == true }?.delete()
     }
 
     /** 레코드를 먼저 옮기고 파일을 옮긴다. 대상 자리에 다른 파일이 있으면 실패 — 이름 규칙이 겹침을 피한다 */
@@ -491,8 +523,14 @@ class ScoreMateSync(
         /** PDF 옆 서버 분석 파일 — 같은 이름에 `.layout.json` (P06 §12). 읽기는 [com.mrgq.pdfviewer.score.ServerLayouts] */
         fun layoutFileOf(pdf: File): File = File(pdf.parentFile, pdf.nameWithoutExtension + ".layout.json")
 
-        /** PDF 를 옮기거나 지울 때 함께 다루는 곁 파일들 */
-        fun sidecarsOf(pdf: File): List<File> = listOf(musicXmlFileOf(pdf), layoutFileOf(pdf))
+        /** 서버가 주는 곁 파일 — PDF 가 없어지면 지운다 (다시 받을 수 있다) */
+        fun serverSidecarsOf(pdf: File): List<File> = listOf(musicXmlFileOf(pdf), layoutFileOf(pdf))
+
+        /** PDF 를 옮길 때 따라 옮기는 곁 파일 — 서버 것 + 사용자 메모(P11) */
+        fun sidecarsOf(pdf: File): List<File> = serverSidecarsOf(pdf) + ScoreNotesFile.fileOf(pdf)
+
+        /** 동기화가 지운 악보의 메모 보관함 (`PDFs/` 아래, 점으로 시작해 목록에 안 보인다) */
+        const val NOTES_KEPT_FOLDER = ".ScoreMateNotes"
 
         /** 절대 URL 이면 경로(+쿼리)만 */
         fun pathOf(url: String): String {

@@ -313,7 +313,13 @@ class PageCache(
      * 잘라낸 결과를 나중에 확대하는 단계가 없다 — 그 2차 스케일링이 오선 두께를 들쭉날쭉하게
      * 만들던 원인이었다 (P01, v0.1.11).
      */
+    /** 렌더한 쪽의 크기 (pt, `PdfRenderer` 정수) — 메모 좌표 (P11) */
+    private val pageSizes = java.util.concurrent.ConcurrentHashMap<Int, Pair<Int, Int>>()
+
+    fun pageSizeOf(pageIndex: Int): Pair<Int, Int>? = pageSizes[pageIndex]
+
     private fun renderPageToTargetBitmap(page: PdfRenderer.Page): Bitmap {
+        pageSizes[page.index] = page.width to page.height
         val settings = displaySettingsProvider?.invoke() ?: Triple(0f, 0f, 0f)
         val geometry = PageGeometry.compute(
             pdfWidth = page.width,
