@@ -1,7 +1,7 @@
 # P11 — 태블릿 · 휴대폰에서 악보에 메모 (펜 · 손가락으로 선 긋기 · 글자 넣기)
 
 작성일: 2026-10-07
-상태: 🟡 **0 · 1단계 구현**([`072`](20261007_072_score_notes_ink.md), 단위 테스트 통과 · 실기기 확인 전). 다음: 실기기 → 2단계(글자) · 서버 동기화(§6, ScoreMateServer 076)
+상태: 🟡 **0 · 1단계 구현**([`072`](20261007_072_score_notes_ink.md), CI 통과) — 실기기 확인용 사전 릴리스 **v0.6.0-beta.1**(versionCode 47, 정식 v0.6.0 은 48. 사전 릴리스 받기 설정은 v0.5.7 · [`073`](20261007_073_prerelease_updates.md)). 다음: 실기기 → 2단계(글자) · 서버 동기화(§6, ScoreMateServer 076)
 관련: [`066`](20260928_066_tablet_support.md)(태블릿 터치 몸짓), v0.4.2 ~ v0.4.5(휴대폰 조각 화면),
 [`046`](20260913_046_score_layout_in_app.md) · `ScoreOverlayGeometry`(PDF pt → 표시 비트맵 → 화면),
 [`P07`](20260928_P07_part_view_plan.md)(파트보 — 원본 쪽 ↔ 파트 PDF), [`P10`](20260929_P10_mic_conductor_autoturn_plan.md)(반 쪽 넘김 화면)
@@ -129,7 +129,7 @@
   - `GET /api/v1/sync/notes/` — 곡목 안 `{score_id, layer, revision, updated_at, pdf_sha256}` 전체. sync/scores 직후 한 번, revision 이 바뀐 것만 받고 목록에서 빠진 것은 지움
 - 앱 쪽 합의(제안 보냄): 문자열 id(했음) · 합치기 = **서버 ∪ 내가 더한 것 − 내가 지운 것**(곁 파일에 `"sync": {"revision", "base_ids"}` 를 두고 PUT 때 뺌) · **겹마다 곁 파일 하나**(`.notes.json` · `.conductor.notes.json`) · 동기화 상태가 있으면 메모가 비어도 파일을 지우지 않음(빈 PUT 을 보내야 하므로)
 - 서버가 정한 것(2026-10-07): 지휘자 쓰기 권한은 **`sync/notes` 응답의 `"conductor_writable": [score_id …]`** — 범위 안 앙상블 악보 중 내가 owner · leader 인 것 전부(문서가 아직 없어도). sync/scores 에 두면 역할이 바뀌어도 악보 updated_at 이 오르지 않아 낡는다. id 는 문자열 최대 64자, 문서 안 중복은 400. 처음 쓰는 문서는 `base_revision` 0. 문서당 2MB(본문 2.5MB 넘어도 413). page 는 0 이상만 보고 상한은 보지 않는다(판이 바뀌어 쪽이 줄어도 옛 메모를 받음). 서버는 format · pdf_sha256 · notes 만 저장(sync 블록은 앱이 빼고 보냄). 응답 `{layer, revision, pdf_sha256, updated_at, updated_by, format, notes}`, 409 는 error 안 `current` 로 지금 문서
-- **서버 1단계 구현 끝**(2026-10-07, 서버 테스트 591 통과 · 커밋 · 배포 전, 서버 devlog 076 §7) — 앱이 맞출 응답:
+- **서버 1단계(메모 API) 운영 배포**(2026-10-07, ScoreMateServer 0.17.0 · migration 0007_score_notes, 서버 devlog 076 §7). **서버 2단계(웹 악보 상세에서 메모 겹쳐 보기)** 0.18.0 배포. 서버 단계 번호는 이것(076, 커밋 7731dc2) — 앱 P11 의 단계 번호와 따로 — 앱이 맞출 응답:
   - `GET|PUT /api/v1/scores/{id}/notes/{personal|conductor}/` 200 → `{layer, revision, pdf_sha256, updated_at(ISO), updated_by, format, notes}`
   - 409 → `{"error": "conflict", "message", "current": 위 모양 | null}` — null 은 서버에 문서가 없는데 base_revision > 0 → **0 으로 다시**. 두 기기가 동시에 처음 만들면 둘째가 409
   - 400 `invalid`(format ≠ 1 · id 1 ~ 64자 아님 · 문서 안 중복 · page < 0 · type 없음 · pdf_sha256 64hex 아님), 400 `no_conductor`(개인 악보에 conductor PUT, GET 은 404), 403 `forbidden`, 413 `too_large`, 404(문서 없음 · 읽을 수 없음 · layer 이름 틀림)
@@ -138,6 +138,7 @@
   - 좌표 정의는 앱 것을 format 1 로 채택. 서버 `layout.json` 은 CropBox 기준 왼 위 원점이고 회전된 쪽은 비워 둔다 → 회전 없는 쪽은 같은 공간. /Rotate 확인은 웹 겹쳐 보기(서버 2단계) 때
 - **메모는 불변**(반장 세션 제안 A, 채택): 내용이 바뀌면(2단계 글자 고치기 · 옮기기, 색 바꾸기 등) **옛 id 지우고 새 id**. 그러면 합치기가 집합 연산만으로 끝나고 메모별 시각 · 우선 규칙이 필요 없다. 한쪽이 지우고 다른 쪽이 고치면 고친 것(새 id)이 남는다
 - **목록에서 빠짐 ≠ 메모 삭제**(제안 B, 지금 방식과 같음): sync/notes 행이 사라지는 것은 곡목 범위 밖 · 악보 삭제뿐 — 로컬 메모를 지우지 않고 동기화만 멈추고 score_id 로 보관. 삭제는 오직 `notes: []` + revision 상승으로 전달된다
+- **앱 동기화 구현 때 꼭 테스트할 것**(반장 · 사용자 요청): 서버에 아직 없는 문서는 `base_revision` 0 으로 PUT, 두 기기가 동시에 처음 만들어 둘째가 409 + current 를 받으면 평소 409 와 같이 합쳐 다시 PUT — 두 경로를 단위 테스트로(가짜 서버)
 - 앱 쪽 남은 것: 동기화가 뷰어의 저장 스레드와 겹치지 않게(같은 `ScoreNotesFile` 스레드로)
 - 그 밖의 나중: 합주에서 지휘자 메모를 연주자에게 실시간으로(서버 conductor 겹이 있으면 대부분 해결), 메모를 구운 PDF 내보내기(인쇄용)
 
@@ -150,7 +151,7 @@
 5. **글자 입력 칸** — 화면 위 떠 있는 `EditText`(그 자리에서) vs 대화상자. 그 자리 입력이 자연스럽지만 키보드가 악보를 가린다 → 입력 칸 자리에 맞춰 화면을 올리지 않고, 1차는 **아래쪽 입력 막대**(키보드 위) + 악보에는 미리보기
 6. **확대** — 손글씨는 확대해서 쓰고 싶어진다. 두 손가락 확대 · 이동은 렌더 경로(1× 정수 좌표, #042)와 부딪친다 → 1차 없음, 필요하면 확대 중엔 비트맵 확대(흐려도 됨) + 놓으면 원래대로
 
-7. **좌표 공간 정의 — 회전 · CropBox PDF**(반장 세션 제안 C): format 1 좌표 = "`PdfRenderer` 가 주는 쪽 크기 공간(회전 · CropBox 를 적용한 표시 공간), pt, 왼 위 원점". Android PdfRenderer(PDFium)는 쪽 크기에 /Rotate 를 반영해 돌려주는 것으로 알지만 **확인 전**이고, 서버(PyMuPDF `page.rect`)는 회전 전 좌표라 회전 PDF 에서는 앱 메모 · `layout.json` · 웹 SVG 가 어긋날 수 있다. 앱의 마디 분석(콘텐츠 스트림 해석)도 회전을 보지 않는다. → /Rotate 90 시험 PDF 하나로 앱 · 서버 양쪽 확인. 실제 악보에 회전 PDF 가 없으면 그 사실을 기록
+7. **좌표 공간 정의 — 회전 · CropBox PDF**(반장 세션 제안 C): format 1 좌표 = **"표시 공간(CropBox ∩ MediaBox, /Rotate 적용 후) pt, 왼 위 원점"**(서버 문구와 같게 — `PdfRenderer` 가 주는 쪽 크기 공간). 서버는 합성 PDF 로 확인: PyMuPDF 표시 공간에서 /Rotate 90 은 (x, y) → (H − y, x), CropBox 는 원점만 옮김. Android PdfRenderer(PDFium)는 쪽 크기에 /Rotate 를 반영해 돌려주는 것으로 알지만 **확인 전**이고, 서버(PyMuPDF `page.rect`)는 회전 전 좌표라 회전 PDF 에서는 앱 메모 · `layout.json` · 웹 SVG 가 어긋날 수 있다. 앱의 마디 분석(콘텐츠 스트림 해석)도 회전을 보지 않는다. → /Rotate 90 시험 PDF 하나를 앱 · 서버가 함께 쓴다. 앱: 계측 테스트에서 PdfBox 로 /Rotate 90 · CropBox 쪽을 만들어 PdfRenderer 쪽 크기 · 메모 좌표 확인, 그 PDF 와 기대 좌표를 서버 테스트(`tests/test_score_notes_web.py`)에. 실제 악보에 회전 PDF 가 없으면 그 사실을 기록
 
 ## 8. 범위 밖 (지금은 안 함)
 
