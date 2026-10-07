@@ -19,7 +19,7 @@ import java.nio.file.Files
 class ScoreNotesTest {
 
     private fun ink(id: String, page: Int = 0, vararg pts: Float, staff: Int? = null) =
-        ScoreNote.Ink(id, page, 0xFF212121.toInt(), 1.5f, pts.toList(), staff)
+        ScoreNote.Ink(id, page, 0xFF212121.toInt(), 1.5f, listOf(pts.toList()), staff)
 
     // ── 되돌리기 ──
 
@@ -149,13 +149,13 @@ class ScoreNotesTest {
     @Test
     fun 쓰고_읽으면_같다_좌표는_소수_한_자리() {
         val loaded = ScoreNotesFile.Loaded(
-            listOf(ink("1", 2, 10.04f, 20.06f, 30f, 40f, staff = 1), ScoreNote.Ink("2", 0, 0xFFE53935.toInt(), 3f, listOf(1f, 2f))),
+            listOf(ink("1", 2, 10.04f, 20.06f, 30f, 40f, staff = 1), ScoreNote.Ink("2", 0, 0xFFE53935.toInt(), 3f, listOf(listOf(1f, 2f)))),
             "abc",
         )
         val back = ScoreNotesFile.parse(ScoreNotesFile.format(loaded))
         assertEquals("abc", back.pdfSha256)
         val first = back.notes[0] as ScoreNote.Ink
-        assertEquals(listOf(10f, 20.1f, 30f, 40f), first.points)
+        assertEquals(listOf(listOf(10f, 20.1f, 30f, 40f)), first.strokes)
         assertEquals(1, first.staff)
         assertEquals(2, first.page)
         assertEquals(0xFFE53935.toInt(), back.notes[1].color)
@@ -225,7 +225,7 @@ class ScoreNotesTest {
     @Test
     fun 획_옮기기는_모든_점을_옮긴다() {
         val moved = ink("a", 0, 1f, 2f, 3f, 4f).movedBy(10f, 20f, "b", null) as ScoreNote.Ink
-        assertEquals(listOf(11f, 22f, 13f, 24f), moved.points)
+        assertEquals(listOf(listOf(11f, 22f, 13f, 24f)), moved.strokes)
         assertEquals("b", moved.id)
     }
 
@@ -237,5 +237,33 @@ class ScoreNotesTest {
         assertTrue(NoteGeometry.hitsText(t, 20f, 80f, 150f, 0f))
         assertFalse(NoteGeometry.hitsText(t, 20f, 95f, 150f, 0f))
         assertTrue("반지름만큼 넓혀", NoteGeometry.hitsText(t, 20f, 95f, 150f, 4f))
+    }
+
+    // ── 한 번에 그린 획 여럿 = 메모 하나 ──
+
+    private val group = ScoreNote.Ink("g", 0, 0xFF212121.toInt(), 1.5f, listOf(listOf(0f, 0f, 10f, 0f), listOf(50f, 50f, 60f, 60f)))
+
+    @Test
+    fun 묶음은_어느_획을_맞혀도_하나로_지운다() {
+        assertTrue(NoteGeometry.hits(group, 5f, 0.5f, 1f))
+        assertTrue(NoteGeometry.hits(group, 55f, 55f, 1f))
+        assertFalse(NoteGeometry.hits(group, 30f, 30f, 1f))
+        val notes = ScoreNotes(listOf(group))
+        assertTrue(notes.remove(listOf(group)))
+        assertTrue(notes.notes.isEmpty())
+    }
+
+    @Test
+    fun 묶음_옮기기와_곁_파일_왕복() {
+        val moved = group.movedBy(1f, 2f, "h", null) as ScoreNote.Ink
+        assertEquals(listOf(listOf(1f, 2f, 11f, 2f), listOf(51f, 52f, 61f, 62f)), moved.strokes)
+        val back = ScoreNotesFile.parse(ScoreNotesFile.format(ScoreNotesFile.Loaded(listOf(group), null)))
+        assertEquals(group.strokes, (back.notes.single() as ScoreNote.Ink).strokes)
+    }
+
+    @Test
+    fun 옛_points_한_획도_읽는다() {
+        val old = """{"format":1,"notes":[{"id":"a","page":0,"type":"ink","color":"#FF000000","width":1,"points":[1,2,3,4]}]}"""
+        assertEquals(listOf(listOf(1f, 2f, 3f, 4f)), (ScoreNotesFile.parse(old).notes.single() as ScoreNote.Ink).strokes)
     }
 }

@@ -18,13 +18,16 @@ sealed class ScoreNote {
      */
     abstract val staff: Int?
 
-    /** 펜 획 — [points] 는 x, y, x, y … (pt). [widthPt] 굵기도 pt 라 확대가 달라도 악보 대비 같은 굵기 */
+    /**
+     * 펜 그림 — **한 번에 그린 획 여럿이 메모 하나**(사용자 요청: 선을 여러 개 긋고 확인을 누르면 전체가 한 오브젝트).
+     * [strokes] 의 각 획은 x, y, x, y … (pt). [widthPt] 굵기도 pt 라 확대가 달라도 악보 대비 같은 굵기. 색 · 굵기는 묶음 전체에 하나
+     */
     data class Ink(
         override val id: String,
         override val page: Int,
         override val color: Int,
         val widthPt: Float,
-        val points: List<Float>,
+        val strokes: List<List<Float>>,
         override val staff: Int? = null,
     ) : ScoreNote()
 
@@ -45,7 +48,7 @@ sealed class ScoreNote {
 
     /** (dx, dy) pt 만큼 옮긴 **새 메모** — 메모는 불변이라 새 id ([id]), 붙는 보표도 새로 ([staff]) */
     fun movedBy(dx: Float, dy: Float, id: String, staff: Int?): ScoreNote = when (this) {
-        is Ink -> copy(id = id, points = points.mapIndexed { i, v -> if (i % 2 == 0) v + dx else v + dy }, staff = staff)
+        is Ink -> copy(id = id, strokes = strokes.map { s -> s.mapIndexed { i, v -> if (i % 2 == 0) v + dx else v + dy } }, staff = staff)
         is Text -> copy(id = id, x = x + dx, y = y + dy, staff = staff)
     }
 }

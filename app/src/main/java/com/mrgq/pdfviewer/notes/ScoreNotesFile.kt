@@ -13,7 +13,7 @@ import java.security.MessageDigest
  *
  * ```json
  * {"format": 1, "pdf_sha256": "…",
- *  "notes": [{"id": "9f2c41d07ab35e88", "page": 0, "type": "ink", "color": "#FFE53935", "width": 1.5, "staff": 0, "points": [x, y, …]},
+ *  "notes": [{"id": "9f2c41d07ab35e88", "page": 0, "type": "ink", "color": "#FFE53935", "width": 1.5, "staff": 0, "strokes": [[x, y, …], …]},
  *            {"id": "…", "page": 0, "type": "text", "color": "#FF1E88E5", "size": 11, "x": 72, "y": 140, "text": "rit.", "staff": 1}]}
  * ```
  * 글자: x, y = 상자 왼 위, size = 글자 크기(pt), 여러 줄은 \n, 첫 줄 기준선 y + 0.8 × size · 줄 간격 1.2 × size ([TextLayout]).
@@ -56,7 +56,9 @@ object ScoreNotesFile {
                     page = o.get("page").asInt,
                     color = parseColor(o.get("color").asString),
                     widthPt = o.get("width").asFloat,
-                    points = o.getAsJsonArray("points").map { it.asFloat },
+                    // "strokes": [[x, y, …], …]. v0.6.0-beta.1 · beta.2 는 획 하나를 "points" 로 썼다 — 그대로 읽는다
+                    strokes = o.getAsJsonArray("strokes")?.map { s -> s.asJsonArray.map { it.asFloat } }
+                        ?: listOf(o.getAsJsonArray("points").map { it.asFloat }),
                     staff = o.get("staff")?.takeIf { !it.isJsonNull }?.asInt,
                 )
                 "text" -> ScoreNote.Text(
@@ -92,7 +94,9 @@ object ScoreNotesFile {
                     o.addProperty("color", formatColor(note.color))
                     o.addProperty("width", round1(note.widthPt))
                     note.staff?.let { o.addProperty("staff", it) }
-                    o.add("points", JsonArray().apply { note.points.forEach { add(round1(it)) } })
+                    o.add("strokes", JsonArray().apply {
+                        note.strokes.forEach { s -> add(JsonArray().apply { s.forEach { add(round1(it)) } }) }
+                    })
                 }
                 is ScoreNote.Text -> {
                     o.addProperty("type", "text")

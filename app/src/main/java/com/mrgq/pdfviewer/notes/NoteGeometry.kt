@@ -53,13 +53,16 @@ object NoteGeometry {
 
     /** 획이 점 (x, y) 에서 [radius] 안을 지나는가 — 지우개 (굵기의 절반만큼 넓혀 본다) */
     fun hits(ink: ScoreNote.Ink, x: Float, y: Float, radius: Float): Boolean {
-        val p = ink.points
         val r = radius + ink.widthPt / 2
-        if (p.size == 2) return hypot(p[0] - x, p[1] - y) <= r
-        for (i in 0 until p.size / 2 - 1) {
-            if (distanceToSegment(x, y, p[2 * i], p[2 * i + 1], p[2 * i + 2], p[2 * i + 3]) <= r) return true
+        return ink.strokes.any { p ->
+            when {
+                p.size < 2 -> false
+                p.size == 2 -> hypot(p[0] - x, p[1] - y) <= r
+                else -> (0 until p.size / 2 - 1).any { i ->
+                    distanceToSegment(x, y, p[2 * i], p[2 * i + 1], p[2 * i + 2], p[2 * i + 3]) <= r
+                }
+            }
         }
-        return false
     }
 
     /** 글자 상자 (pt) 가 점 (x, y) 에서 [radius] 안인가 — [widthPt] 는 가장 긴 줄 폭(재는 것은 그리는 쪽) */

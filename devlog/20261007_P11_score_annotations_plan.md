@@ -1,7 +1,7 @@
 # P11 — 태블릿 · 휴대폰에서 악보에 메모 (펜 · 손가락으로 선 긋기 · 글자 넣기)
 
 작성일: 2026-10-07
-상태: 🟡 **0 · 1 · 2단계 구현**(2단계 글자 · 옮기기 = [`074`](20261007_074_score_notes_text_move.md), v0.6.0-beta.2) — 1단계([`072`](20261007_072_score_notes_ink.md), CI 통과) — 실기기 확인용 사전 릴리스 **v0.6.0-beta.1**(versionCode 47, 정식 v0.6.0 은 48. 사전 릴리스 받기 설정은 v0.5.7 · [`073`](20261007_073_prerelease_updates.md)). 다음: 실기기 → 2단계(글자) · 서버 동기화(§6, ScoreMateServer 076)
+상태: 🟡 **0 · 1 · 2단계 구현**(2단계 글자 · 옮기기 = [`074`](20261007_074_score_notes_text_move.md), 획 묶음 = [`075`](20261007_075_score_notes_stroke_groups.md), v0.6.0-beta.3) — 1단계([`072`](20261007_072_score_notes_ink.md), CI 통과) — 실기기 확인용 사전 릴리스 **v0.6.0-beta.1**(versionCode 47, 정식 v0.6.0 은 48. 사전 릴리스 받기 설정은 v0.5.7 · [`073`](20261007_073_prerelease_updates.md)). 다음: 실기기 → 2단계(글자) · 서버 동기화(§6, ScoreMateServer 076)
 관련: [`066`](20260928_066_tablet_support.md)(태블릿 터치 몸짓), v0.4.2 ~ v0.4.5(휴대폰 조각 화면),
 [`046`](20260913_046_score_layout_in_app.md) · `ScoreOverlayGeometry`(PDF pt → 표시 비트맵 → 화면),
 [`P07`](20260928_P07_part_view_plan.md)(파트보 — 원본 쪽 ↔ 파트 PDF), [`P10`](20260929_P10_mic_conductor_autoturn_plan.md)(반 쪽 넘김 화면)
@@ -74,9 +74,10 @@
 
 ```json
 {"format": 1, "pdf_sha256": "…",
- "notes": [{"id": "9f2c41d07ab35e88", "page": 0, "type": "ink", "color": "#FFE53935", "width": 1.5, "staff": 0, "points": [x, y, …]}]}
+ "notes": [{"id": "9f2c41d07ab35e88", "page": 0, "type": "ink", "color": "#FFE53935", "width": 1.5, "staff": 0, "strokes": [[x, y, …], …]}]}
 ```
 
+- **ink = 한 번에 그린 획 여럿**(확인을 누른 묶음, #075) — `strokes`. beta.1 · 2 의 `points`(한 획)도 읽는다
 - 좌표 · 굵기는 원본 PDF pt(소수 한 자리). `staff` = 붙는 보표(§3.6), 없으면 생략
 - **id 는 무작위 16자 문자열** — 처음엔 파일 안 증가 정수였으나 여러 기기(태블릿 · 휴대폰 · 지휘자 둘)가 서버에서 같은 문서를 합칠 때 겹친다는 ScoreMateServer 세션의 지적으로 format 1 배포 전에 바꿈
 - 모르는 `type`(뒤 판의 글자 등)은 읽어서 들고 있다가 그대로 돌려 쓴다 — 옛 앱이 지우지 않게

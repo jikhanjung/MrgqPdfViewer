@@ -172,13 +172,14 @@ class ScoreNotesView @JvmOverloads constructor(
         }
         is ScoreNote.Ink -> {
             val path = Path()
-            val pts = note.points
-            val mapped = ArrayList<Float>(pts.size)
-            for (i in pts.indices step 2) {
-                mapped += p.toBitmapX(pts[i])
-                mapped += p.toBitmapY(pts[i + 1])
+            for (pts in note.strokes) {
+                val mapped = ArrayList<Float>(pts.size)
+                for (i in pts.indices step 2) {
+                    mapped += p.toBitmapX(pts[i])
+                    mapped += p.toBitmapY(pts[i + 1])
+                }
+                smoothPath(path, mapped, reset = false)
             }
-            smoothPath(path, mapped)
             val paint = strokePaint().apply {
                 color = note.color
                 strokeWidth = (note.widthPt * p.fitScale).coerceAtLeast(1f)
@@ -208,8 +209,9 @@ class ScoreNotesView @JvmOverloads constructor(
         fun boundsPt(note: ScoreNote): RectF = when (note) {
             is ScoreNote.Text -> RectF(note.x, note.y, note.x + textWidthPt(note), note.y + TextLayout.height(note))
             is ScoreNote.Ink -> {
-                val xs = note.points.filterIndexed { i, _ -> i % 2 == 0 }
-                val ys = note.points.filterIndexed { i, _ -> i % 2 == 1 }
+                val all = note.strokes.flatten()
+                val xs = all.filterIndexed { i, _ -> i % 2 == 0 }
+                val ys = all.filterIndexed { i, _ -> i % 2 == 1 }
                 val h = note.widthPt / 2
                 RectF(xs.min() - h, ys.min() - h, xs.max() + h, ys.max() + h)
             }
@@ -222,8 +224,8 @@ class ScoreNotesView @JvmOverloads constructor(
         }
 
         /** 점 사이 가운데를 잇는 2차 곡선 — 손 떨림 꺾임이 덜 보인다. 점 하나면 점 */
-        private fun smoothPath(path: Path, pts: List<Float>) {
-            path.reset()
+        private fun smoothPath(path: Path, pts: List<Float>, reset: Boolean = true) {
+            if (reset) path.reset()
             val n = pts.size / 2
             if (n == 0) return
             path.moveTo(pts[0], pts[1])

@@ -1842,6 +1842,7 @@ class PdfViewerActivity : AppCompatActivity() {
         val path = pdfFilePath
         if (path.isEmpty() || notesPath == path) return
         notePen.cancel()
+        commitPendingNote(refresh = false) // 그리던 묶음은 앞 파일에 (다시 그리기는 이 함수를 부르므로 하지 않는다)
         notesPath = path
         notes = com.mrgq.pdfviewer.notes.ScoreNotes()
         notesReady = false
@@ -1889,7 +1890,7 @@ class PdfViewerActivity : AppCompatActivity() {
             notes.onPage(page).filter { it.id !in notesErasing }.map { n ->
                 // 옮기는 중이면 그 메모 대신 옮긴 모습
                 if (n.id == noteMoving?.id) noteMovePreview ?: n else n
-            }
+            } + listOfNotNull(notePending?.takeIf { it.page == page && it.strokes.isNotEmpty() }) // 그리는 중인 묶음
         }, binding.pdfView.imageMatrix)
     }
 
@@ -1999,7 +2000,7 @@ class PdfViewerActivity : AppCompatActivity() {
         binding.noteLayer.staffHint(staffBandRect(page, attachment.staff), staffName(attachment.staff), attachment.sure)
     }
 
-    private val notePen by lazy {
+    private val notePen: com.mrgq.pdfviewer.notes.NotePen by lazy {
         com.mrgq.pdfviewer.notes.NotePen(object : com.mrgq.pdfviewer.notes.NotePen.Host {
             override fun canDraw() = notesWritable() && notesVisible() && notesReady && notesBlockedReason() == null &&
                 !halfPageShown && !isAnimating && ::pdfFilePath.isInitialized && notesPath == pdfFilePath
@@ -2027,16 +2028,21 @@ class PdfViewerActivity : AppCompatActivity() {
             override fun onStroke(page: Int, points: List<Float>, color: Int, widthPt: Float) {
                 ensureNoteStaves()
                 val simplified = com.mrgq.pdfviewer.notes.NoteGeometry.simplify(points, STROKE_TOLERANCE_PT)
-                val extent = com.mrgq.pdfviewer.notes.NoteGeometry.verticalExtent(simplified)
-                val attachment = extent?.let { com.mrgq.pdfviewer.notes.NoteStaff.of(noteStaves, page, it.first, it.second) }
-                notes.add(com.mrgq.pdfviewer.notes.ScoreNote.Ink(notes.nextId(), page, color, widthPt, simplified, attachment?.staff?.staffIndex))
-                saveNotes()
+                // 그리는 중인 묶음에 더한다 — 다른 쪽 · 색 · 굵기면 앞 묶음을 확정하고 새로
+                val pending = notePending?.takeIf { it.page == page && it.color == color && it.widthPt == widthPt && it.strokes.isNotEmpty() }
+                if (pending == null) commitPendingNote()
+                val base = pending ?: com.mrgq.pdfviewer.notes.ScoreNote.Ink("", page, color, widthPt, emptyList())
+                notePending = base.copy(strokes = base.strokes + listOf(simplified))
+                notePendingRedo.clear()
+                // 메모 모드 밖의 펜 — 도구 줄을 띄워 확인을 누를 수 있게
+                if (!notePen.editMode) enterNoteMode()
+                showStaffHint(page, notePending?.let { noteAttachment(it) })
                 refreshNotes()
-                // 어디에 붙었는지 잠깐 더 보여 준다
-                binding.noteLayer.postDelayed(noteHintClear, STAFF_HINT_MS)
+                updateNoteToolbar()
             }
 
             override fun onErase(page: Int, x: Float, y: Float, radiusPt: Float) {
+                commitPendingNote()
                 val hit = notes.onPage(page).filter {
                     it.id !in notesErasing && when (it) {
                         is com.mrgq.pdfviewer.notes.ScoreNote.Ink -> com.mrgq.pdfviewer.notes.NoteGeometry.hits(it, x, y, radiusPt)
@@ -2060,12 +2066,18 @@ class PdfViewerActivity : AppCompatActivity() {
             override fun onLive(page: Int, points: List<Float>, color: Int, widthPx: Float, topPt: Float, bottomPt: Float) {
                 ensureNoteStaves()
                 binding.noteLayer.liveStroke(points, color, widthPx)
-                showStaffHint(page, com.mrgq.pdfviewer.notes.NoteStaff.of(noteStaves, page, topPt, bottomPt))
+                // 붙을 보표는 묶음 전체(그리는 중인 획들 + 지금 획)로
+                val group = notePending?.takeIf { it.page == page && it.strokes.isNotEmpty() }
+                    ?.let { com.mrgq.pdfviewer.notes.ScoreNotesView.boundsPt(it) }
+                val top = minOf(topPt, group?.top ?: topPt)
+                val bottom = maxOf(bottomPt, group?.bottom ?: bottomPt)
+                showStaffHint(page, com.mrgq.pdfviewer.notes.NoteStaff.of(noteStaves, page, top, bottom))
             }
 
             override fun onLiveEnd() {
                 binding.noteLayer.endLiveStroke()
-                binding.noteLayer.postDelayed(noteHintClear, STAFF_HINT_MS)
+                // 묶음을 그리는 중이면 보표 표시를 남겨 둔다 (확인 때 지운다)
+                if (notePending?.strokes.isNullOrEmpty()) binding.noteLayer.postDelayed(noteHintClear, STAFF_HINT_MS)
             }
 
             override fun onTextTap(page: Int, x: Float, y: Float) {
@@ -2076,6 +2088,7 @@ class PdfViewerActivity : AppCompatActivity() {
 
             override fun onMoveStart(page: Int, x: Float, y: Float): Boolean {
                 ensureNoteStaves()
+                commitPendingNote()
                 val picked = noteAt(page, x, y, com.mrgq.pdfviewer.notes.NotePen.PICK_PX / pxPerPt(page)) ?: return false
                 noteMoving = picked
                 noteMovePreview = picked
@@ -2117,6 +2130,47 @@ class PdfViewerActivity : AppCompatActivity() {
     /** 쪽 · 조각이 바뀌기 직전 — 긋던 획은 지금 화면 기준으로 마저 저장한다 */
     private fun flushNotePen() {
         notePen.flush()
+        commitPendingNote() // 쪽이 바뀌면 그리던 묶음은 확정
+    }
+
+    /** 그리는 중인 묶음 (확인 전, 저장 전) — 확인을 누르면 메모 하나(사용자 요청 2026-10-07) */
+    private var notePending: com.mrgq.pdfviewer.notes.ScoreNote.Ink? = null
+    /** 묶음 안에서 되돌린 획 — 다시(↷) */
+    private val notePendingRedo = ArrayDeque<List<Float>>()
+
+    private fun hasPendingNote() = !notePending?.strokes.isNullOrEmpty()
+
+    /** 그리는 중인 묶음을 메모 하나로 확정 — 붙는 보표는 묶음 전체로 */
+    private fun commitPendingNote(refresh: Boolean = true) {
+        val pending = notePending
+        notePending = null
+        notePendingRedo.clear()
+        if (pending == null || pending.strokes.isEmpty()) return
+        notes.add(pending.copy(id = notes.nextId(), staff = noteAttachment(pending)?.staff?.staffIndex))
+        saveNotes()
+        if (!refresh) return
+        refreshNotes()
+        binding.noteLayer.postDelayed(noteHintClear, STAFF_HINT_MS)
+    }
+
+    private fun undoNote() {
+        val pending = notePending
+        if (pending != null && pending.strokes.isNotEmpty()) {
+            notePendingRedo.addLast(pending.strokes.last())
+            notePending = pending.copy(strokes = pending.strokes.dropLast(1))
+            if (!hasPendingNote()) binding.noteLayer.postDelayed(noteHintClear, 0)
+        } else if (notes.undo()) saveNotes()
+        refreshNotes()
+        updateNoteToolbar()
+    }
+
+    private fun redoNote() {
+        val pending = notePending
+        if (pending != null && notePendingRedo.isNotEmpty()) {
+            notePending = pending.copy(strokes = pending.strokes + listOf(notePendingRedo.removeLast()))
+        } else if (notes.redo()) saveNotes()
+        refreshNotes()
+        updateNoteToolbar()
     }
 
     // ── 메모 모드 · 도구 줄 ──
@@ -2138,6 +2192,7 @@ class PdfViewerActivity : AppCompatActivity() {
 
     private fun exitNoteMode() {
         notePen.cancel()
+        commitPendingNote()
         notePen.editMode = false
         binding.noteToolbar.visibility = View.GONE
     }
@@ -2145,6 +2200,7 @@ class PdfViewerActivity : AppCompatActivity() {
     private val noteToolButtons = mutableListOf<Pair<android.widget.TextView, () -> Boolean>>()
     private var noteUndoButton: android.widget.TextView? = null
     private var noteRedoButton: android.widget.TextView? = null
+    private var noteDoneButton: android.widget.TextView? = null
 
     private fun buildNoteToolbar() {
         val bar = binding.noteToolbar
@@ -2173,14 +2229,27 @@ class PdfViewerActivity : AppCompatActivity() {
             if (selected != null) noteToolButtons += b to selected
             return b
         }
-        button("✏️", selected = { pen.tool == com.mrgq.pdfviewer.notes.NotePen.Tool.PEN }) { pen.tool = com.mrgq.pdfviewer.notes.NotePen.Tool.PEN }
-        button("🧽", selected = { pen.tool == com.mrgq.pdfviewer.notes.NotePen.Tool.ERASER }) { pen.tool = com.mrgq.pdfviewer.notes.NotePen.Tool.ERASER }
-        button("🅰", selected = { pen.tool == com.mrgq.pdfviewer.notes.NotePen.Tool.TEXT }) { pen.tool = com.mrgq.pdfviewer.notes.NotePen.Tool.TEXT }
-        button("✋", selected = { pen.tool == com.mrgq.pdfviewer.notes.NotePen.Tool.MOVE }) { pen.tool = com.mrgq.pdfviewer.notes.NotePen.Tool.MOVE }
+        button("✏️", selected = { pen.tool == com.mrgq.pdfviewer.notes.NotePen.Tool.PEN }) {
+            if (pen.tool != com.mrgq.pdfviewer.notes.NotePen.Tool.PEN) commitPendingNote()
+            pen.tool = com.mrgq.pdfviewer.notes.NotePen.Tool.PEN
+        }
+        button("🧽", selected = { pen.tool == com.mrgq.pdfviewer.notes.NotePen.Tool.ERASER }) {
+            if (pen.tool != com.mrgq.pdfviewer.notes.NotePen.Tool.ERASER) commitPendingNote()
+            pen.tool = com.mrgq.pdfviewer.notes.NotePen.Tool.ERASER
+        }
+        button("🅰", selected = { pen.tool == com.mrgq.pdfviewer.notes.NotePen.Tool.TEXT }) {
+            if (pen.tool != com.mrgq.pdfviewer.notes.NotePen.Tool.TEXT) commitPendingNote()
+            pen.tool = com.mrgq.pdfviewer.notes.NotePen.Tool.TEXT
+        }
+        button("✋", selected = { pen.tool == com.mrgq.pdfviewer.notes.NotePen.Tool.MOVE }) {
+            if (pen.tool != com.mrgq.pdfviewer.notes.NotePen.Tool.MOVE) commitPendingNote()
+            pen.tool = com.mrgq.pdfviewer.notes.NotePen.Tool.MOVE
+        }
         for (c in com.mrgq.pdfviewer.notes.NotePen.COLORS) {
             // 검정은 어두운 줄에서 안 보이니 테두리 색으로
             button("●", color = if (c == com.mrgq.pdfviewer.notes.NotePen.COLORS[0]) 0xFFBDBDBD.toInt() else c, textSp = 24f,
                 selected = { pen.color == c && (pen.tool == com.mrgq.pdfviewer.notes.NotePen.Tool.PEN || pen.tool == com.mrgq.pdfviewer.notes.NotePen.Tool.TEXT) }) {
+                if (pen.color != c) commitPendingNote() // 묶음은 한 색
                 pen.color = c
                 // 글자 도구면 글자 색, 아니면 펜으로
                 if (pen.tool != com.mrgq.pdfviewer.notes.NotePen.Tool.TEXT) pen.tool = com.mrgq.pdfviewer.notes.NotePen.Tool.PEN
@@ -2198,15 +2267,17 @@ class PdfViewerActivity : AppCompatActivity() {
                     pen.textSizePt = size
                     preferences.edit().putFloat(PREF_NOTE_TEXT_SIZE, size).apply()
                 } else {
+                    if (pen.widthPt != w) commitPendingNote() // 묶음은 한 굵기
                     pen.widthPt = w
                     pen.tool = com.mrgq.pdfviewer.notes.NotePen.Tool.PEN
                     preferences.edit().putFloat(PREF_NOTE_WIDTH, w).apply()
                 }
             }
         }
-        noteUndoButton = button("↶") { if (notes.undo()) { saveNotes(); refreshNotes() } }
-        noteRedoButton = button("↷") { if (notes.redo()) { saveNotes(); refreshNotes() } }
-        button("✔") { exitNoteMode() }
+        noteUndoButton = button("↶") { undoNote() }
+        noteRedoButton = button("↷") { redoNote() }
+        // 그리는 중이면 "확인" = 묶음을 메모 하나로, 아니면 "끝" = 메모 모드 닫기
+        noteDoneButton = button("끝", textSp = 18f) { if (hasPendingNote()) commitPendingNote() else exitNoteMode() }
         updateNoteToolbar()
     }
 
@@ -2219,8 +2290,10 @@ class PdfViewerActivity : AppCompatActivity() {
             b.textSize = if (text) NOTE_TEXT_SIZE_SP[i] else 22f
         }
         for ((b, selected) in noteToolButtons) b.setBackgroundColor(if (selected()) 0x5590CAF9 else 0)
-        noteUndoButton?.alpha = if (notes.canUndo) 1f else 0.35f
-        noteRedoButton?.alpha = if (notes.canRedo) 1f else 0.35f
+        noteUndoButton?.alpha = if (notes.canUndo || hasPendingNote()) 1f else 0.35f
+        noteRedoButton?.alpha = if (notes.canRedo || notePendingRedo.isNotEmpty()) 1f else 0.35f
+        noteDoneButton?.text = if (hasPendingNote()) "확인" else "끝"
+        noteDoneButton?.setBackgroundColor(if (hasPendingNote()) 0xCC43A047.toInt() else 0)
     }
 
     private fun toggleNotesVisible() {
@@ -5680,6 +5753,7 @@ class PdfViewerActivity : AppCompatActivity() {
 
     override fun onPause() {
         super.onPause()
+        commitPendingNote() // 그리던 메모 묶음은 확정해 저장 (P11)
         com.mrgq.pdfviewer.ensemble.VersionNotice.detach()
         
         // Clear collaboration callbacks when PdfViewerActivity goes to background
