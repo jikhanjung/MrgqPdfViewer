@@ -17,6 +17,9 @@ data class PdfFile(
     val composer: String? = null,
     val partName: String? = null,
     val arranger: String? = null,
+    // 악보 메모 (P11) — 곁 파일에 메모가 있나 · ScoreMate 에 올리지 못한 것이 있나 (목록 표시)
+    val hasNotes: Boolean = false,
+    val notesUnsent: Boolean = false,
 ) {
     /** 목록에 보이는 이름 — 서버 제목이 있으면 그것, 없으면 파일 이름 */
     val shownName: String get() = serverTitle?.takeIf { it.isNotBlank() } ?: name

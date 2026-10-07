@@ -141,7 +141,8 @@ class MainActivity : AppCompatActivity() {
             return
         }
         Log.i("MainActivity", "ScoreMate 동기화: $report")
-        if (report.changed) loadPdfFiles()
+        // 메모만 오갔어도 목록의 ✏️ 동기화 표시가 바뀐다
+        if (report.changed || report.notesUploaded + report.notesDownloaded > 0) loadPdfFiles()
         val summary = com.mrgq.pdfviewer.scoremate.ScoreMateSyncText.summary(report)
         if (summary != null && (report.changed || !quiet || report.errors.isNotEmpty())) {
             Toast.makeText(this, summary, Toast.LENGTH_LONG).show()
@@ -669,6 +670,7 @@ class MainActivity : AppCompatActivity() {
                     Log.e("MainActivity", "Error syncing PDF record for ${file.name}", e)
                     null
                 }
+                val badge = com.mrgq.pdfviewer.scoremate.ScoreNotesSync.badgeOf(file)
                 pdfFiles.add(PdfFile(
                     name = file.name,
                     path = file.absolutePath,
@@ -684,6 +686,9 @@ class MainActivity : AppCompatActivity() {
                     composer = synced[file.path]?.composer,
                     partName = synced[file.path]?.partName,
                     arranger = synced[file.path]?.arranger,
+                    hasNotes = badge.hasNotes,
+                    // 서버에서 받은 악보만 메모를 주고받는다
+                    notesUnsent = badge.unsent && synced[file.path] != null,
                 ))
             }
         }

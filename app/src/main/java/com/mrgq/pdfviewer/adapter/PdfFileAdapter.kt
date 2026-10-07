@@ -106,11 +106,17 @@ class PdfFileAdapter(
             // 세트리스트로 볼 때는 곡 순서를 앞에 (#064). ScoreMate 악보면 제목 옆에 파트(Full Score 등)를 작고 흐리게 (사용자 요청 2026-09-28)
             val title = pdfFile.setlistPosition?.let { "$it. ${pdfFile.shownName}" } ?: pdfFile.shownName
             val part = pdfFile.partName?.takeIf { it.isNotBlank() && pdfFile.serverTitle != null }
-            fileNameText.text = if (part == null) title else android.text.SpannableStringBuilder(title).apply {
-                val start = length
-                append("   ").append(part)
-                setSpan(android.text.style.RelativeSizeSpan(0.72f), start, length, android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
-                setSpan(android.text.style.ForegroundColorSpan(0xFFB0B0B0.toInt()), start, length, android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+            fileNameText.text = android.text.SpannableStringBuilder(title).apply {
+                fun small(text: String, color: Int) {
+                    val start = length
+                    append(text)
+                    setSpan(android.text.style.RelativeSizeSpan(0.72f), start, length, android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                    setSpan(android.text.style.ForegroundColorSpan(color), start, length, android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                }
+                if (part != null) small("   $part", 0xFFB0B0B0.toInt())
+                // 악보 메모 (P11) — 있으면 ✏️, 서버에 올리지 못한 것이 있으면 "동기화 필요" (사용자 요청 2026-10-08)
+                if (pdfFile.notesUnsent) small("   ✏️ 동기화 필요", 0xFFFFB74D.toInt())
+                else if (pdfFile.hasNotes) small("   ✏️", 0xFFB0B0B0.toInt())
             }
 
             // 둘째 줄 — ScoreMate 악보면 "작곡 ○○ · 편곡 ○○"(서버 곡 정보), 아니면 PDF 문서 정보(제목 · 작성자). 없으면 줄을 숨긴다

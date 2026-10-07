@@ -205,6 +205,21 @@ class ScoreNotesSync(
             sync.writable && loaded.ids != sync.baseIds
         }
 
+        /** 곡 목록 표시 — 메모가 있나 · 서버에 올리지 못한 것이 있나 (개인 + 지휘자 겹) */
+        data class Badge(val hasNotes: Boolean, val unsent: Boolean)
+
+        fun badgeOf(pdf: File): Badge = synchronized(ScoreNotesFile.lock) {
+            val personal = ScoreNotesFile.read(ScoreNotesFile.fileOf(pdf))
+            val conductor = ScoreNotesFile.read(ScoreNotesFile.conductorFileOf(pdf))
+            // 개인 메모는 늘 쓸 수 있다 — 받은 뒤(base)와 다르면 올릴 것이 있다
+            val personalUnsent = personal != null && personal.ids != (personal.sync?.baseIds ?: emptySet<String>())
+            val conductorUnsent = conductor != null && conductor.sync?.writable == true && conductor.ids != conductor.sync.baseIds
+            Badge(
+                hasNotes = personal?.ids.orEmpty().isNotEmpty() || conductor?.ids.orEmpty().isNotEmpty(),
+                unsent = personalUnsent || conductorUnsent,
+            )
+        }
+
         fun parseList(body: String): NotesList {
             val root = JsonParser.parseString(body).asJsonObject
             val revisions = root.getAsJsonArray("notes")?.mapNotNull { e ->

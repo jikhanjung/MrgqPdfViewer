@@ -836,4 +836,17 @@ class ScoreMateSyncTest {
         assertEquals("x 는 다시 받은 뒤 올라간다", setOf("x"), com.google.gson.JsonParser.parseString(server.conductorDocs.getValue(1).second)
             .asJsonArray.map { it.asJsonObject.get("id").asString }.toSet())
     }
+
+    @Test
+    fun 목록_표시는_메모와_올리지_못한_것을_가린다() = runBlocking {
+        setUpNotes()
+        val badge = { com.mrgq.pdfviewer.scoremate.ScoreNotesSync.badgeOf(molPdf) }
+        assertEquals(com.mrgq.pdfviewer.scoremate.ScoreNotesSync.Companion.Badge(hasNotes = false, unsent = false), badge())
+        writeLocal("a")
+        assertEquals("동기화 전 메모", com.mrgq.pdfviewer.scoremate.ScoreNotesSync.Companion.Badge(hasNotes = true, unsent = true), badge())
+        sync().sync()
+        assertEquals("올린 뒤", com.mrgq.pdfviewer.scoremate.ScoreNotesSync.Companion.Badge(hasNotes = true, unsent = false), badge())
+        writeLocal()
+        assertEquals("지운 것도 올려야 한다", com.mrgq.pdfviewer.scoremate.ScoreNotesSync.Companion.Badge(hasNotes = false, unsent = true), badge())
+    }
 }
