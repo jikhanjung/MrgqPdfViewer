@@ -198,8 +198,8 @@ class ScoreMateSync(
         for (score in gone) {
             // 파일만 지운다 — 레코드(파일별 설정)는 남겨 다시 받으면 돌아오게
             if (!score.hidden) File(score.filePath).delete()
+            keepNotes(score.serverId, File(score.filePath)) // 서버 곁 파일을 지우기 전에 — 올리지 못한 지휘자 메모가 있을 수 있다
             serverSidecarsOf(File(score.filePath)).forEach { it.delete() }
-            keepNotes(score.serverId, File(score.filePath))
             store.delete(score.serverId)
             removed++
         }
@@ -226,7 +226,7 @@ class ScoreMateSync(
         // 6. 악보 메모 (개인, P11 §6) — 악보 자리가 정해진 뒤. 실패해도 악보 동기화는 된 것
         var notes = ScoreNotesSync.Result()
         try {
-            notes = ScoreNotesSync(client).sync(store.all())
+            notes = ScoreNotesSync(client, keptNotesDir).sync(store.all())
             errors += notes.errors
         } catch (e: ScoreMateUnlinkedException) {
             throw e
@@ -241,8 +241,8 @@ class ScoreMateSync(
     suspend fun markHidden(filePath: String): Boolean {
         val score = store.all().firstOrNull { it.filePath == filePath && !it.hidden } ?: return false
         store.upsert(score.copy(hidden = true))
-        serverSidecarsOf(File(filePath)).forEach { it.delete() }
         keepNotes(score.serverId, File(filePath))
+        serverSidecarsOf(File(filePath)).forEach { it.delete() }
         return true
     }
 
@@ -353,22 +353,33 @@ class ScoreMateSync(
     /** 메모 보관함 — 동기화가 PDF 를 지울 때 사용자의 메모는 여기 두었다가 다시 받으면 돌려 놓는다 (P11) */
     private val keptNotesDir: File get() = File(pdfRoot, NOTES_KEPT_FOLDER)
 
+    /**
+     * PDF 가 없어질 때 메모를 보관함으로 — 개인 메모는 늘, 지휘자 메모는 **올리지 못한 것이 남았을 때만**(나머지는 서버에 있다,
+     * 반장 검토 2026-10-08). 다시 받으면 [restoreNotes] 가 돌려 놓고, 다음 동기화가 올린다
+     */
     private fun keepNotes(serverId: Long, pdf: File) {
-        val notes = ScoreNotesFile.fileOf(pdf)
-        if (!notes.isFile) return
+        moveToKept(ScoreNotesFile.fileOf(pdf), File(keptNotesDir, "$serverId${ScoreNotesFile.SUFFIX}"))
+        val conductor = ScoreNotesFile.conductorFileOf(pdf)
+        if (ScoreNotesSync.hasUnsent(conductor)) moveToKept(conductor, File(keptNotesDir, "$serverId${ScoreNotesFile.CONDUCTOR_SUFFIX}"))
+    }
+
+    private fun moveToKept(file: File, kept: File) {
+        if (!file.isFile) return
         keptNotesDir.mkdirs()
-        val kept = File(keptNotesDir, "$serverId${ScoreNotesFile.SUFFIX}")
         kept.delete()
-        if (!notes.renameTo(kept)) notes.copyTo(kept, overwrite = true).also { notes.delete() }
+        if (!file.renameTo(kept)) file.copyTo(kept, overwrite = true).also { file.delete() }
     }
 
     private fun restoreNotes(serverId: Long, pdf: File) {
-        val kept = File(keptNotesDir, "$serverId${ScoreNotesFile.SUFFIX}")
-        if (!kept.isFile) return
-        val notes = ScoreNotesFile.fileOf(pdf)
-        if (notes.exists()) kept.delete() // 그 자리에 이미 메모가 있다 — 그쪽이 새것
-        else if (!kept.renameTo(notes)) kept.copyTo(notes).also { kept.delete() }
+        restoreKept(File(keptNotesDir, "$serverId${ScoreNotesFile.SUFFIX}"), ScoreNotesFile.fileOf(pdf))
+        restoreKept(File(keptNotesDir, "$serverId${ScoreNotesFile.CONDUCTOR_SUFFIX}"), ScoreNotesFile.conductorFileOf(pdf))
         keptNotesDir.takeIf { it.listFiles()?.isEmpty() == true }?.delete()
+    }
+
+    private fun restoreKept(kept: File, target: File) {
+        if (!kept.isFile) return
+        if (target.exists()) kept.delete() // 그 자리에 이미 메모가 있다 — 그쪽이 새것
+        else if (!kept.renameTo(target)) kept.copyTo(target).also { kept.delete() }
     }
 
     /** 레코드를 먼저 옮기고 파일을 옮긴다. 대상 자리에 다른 파일이 있으면 실패 — 이름 규칙이 겹침을 피한다 */

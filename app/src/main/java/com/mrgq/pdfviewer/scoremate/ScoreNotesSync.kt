@@ -23,7 +23,11 @@ import java.io.File
  * 곁 파일 읽기 · 쓰기는 [ScoreNotesFile.lock] 안에서. 네트워크 동안 뷰어가 고쳤으면(id 가 달라졌으면) 이번에는 쓰지 않는다 — 다음 동기화에.
  * Android 에 의존하지 않는다 — JVM 단위 테스트 대상(가짜 서버).
  */
-class ScoreNotesSync(private val client: ScoreMateClient) {
+class ScoreNotesSync(
+    private val client: ScoreMateClient,
+    /** 쓰기 권한을 잃은 지휘자 메모의 올리지 못한 판을 남겨 두는 곳 (`PDFs/.ScoreMateNotes`) */
+    private val keptDir: File? = null,
+) {
 
     data class Result(val uploaded: Int = 0, val downloaded: Int = 0, val errors: List<String> = emptyList())
 
@@ -69,6 +73,12 @@ class ScoreNotesSync(private val client: ScoreMateClient) {
             else Loaded(emptyList(), null)
         }
         val base = local.sync ?: SyncState(0, emptySet())
+        if (layer == LAYER_CONDUCTOR && !writable && local.ids != base.baseIds && local.ids.isNotEmpty()) {
+            // 리더였다가 아니게 됐는데 올리지 못한 지휘자 메모가 있다 — 서버 것으로 바뀌기 전에 보관 (반장 검토)
+            keepUnsent(score, file)
+            resetToServer(score, layer, file, local)
+            throw ScoreMateException("지휘자 메모를 쓸 권한이 없어 올리지 못한 메모를 보관해 두었습니다")
+        }
         val dirty = writable && local.ids != base.baseIds
 
         if (remoteRevision == null) {
@@ -119,7 +129,15 @@ class ScoreNotesSync(private val client: ScoreMateClient) {
                         revision = remote.revision
                     }
                 }
-                // 403: owner · leader 가 아니게 됐다 — 다음 목록에서 쓰기를 거둔다
+                // 403: owner · leader 가 아니게 됐다 — 쓰기를 거두고 올리지 못한 것은 보관(다음 동기화에 서버 것으로 바뀐다). 다시 시도하지 않는다
+                403 -> {
+                    if (layer == LAYER_CONDUCTOR) {
+                        keepUnsent(score, file)
+                        setWritable(file, false)
+                        resetToServer(score, layer, file, local)
+                    }
+                    throw ScoreMateException("지휘자 메모를 쓸 권한이 없습니다 — 올리지 못한 메모는 보관해 두었습니다")
+                }
                 else -> throw ScoreMateException("메모를 올리지 못했습니다 (HTTP ${response.code})")
             }
         }
@@ -136,6 +154,23 @@ class ScoreNotesSync(private val client: ScoreMateClient) {
         val writable = now.sync?.writable ?: false
         ScoreNotesFile.write(file, doc.copy(pdfSha256 = doc.pdfSha256 ?: now.pdfSha256, sync = SyncState(revision, doc.ids, writable)))
         true
+    }
+
+    /** 곁 파일을 서버 문서 그대로로 (없으면 빈 것) — 보관한 뒤, 같은 것을 다시 보관하지 않게 */
+    private suspend fun resetToServer(score: SyncedScore, layer: String, file: File, local: Loaded) {
+        val response = client.getNotes(score.serverId, layer)
+        when (response.code) {
+            200 -> parseDoc(response.body).let { writeLocal(file, local, it.loaded, it.revision) }
+            404 -> writeLocal(file, local, Loaded(emptyList(), null), 0)
+        }
+    }
+
+    /** 올리지 못한 지휘자 메모를 보관함에 그대로 복사 (`<score_id>.conductor-unsent-<시각>.notes.json`) */
+    private fun keepUnsent(score: SyncedScore, file: File) = synchronized(ScoreNotesFile.lock) {
+        val dir = keptDir ?: return@synchronized
+        if (!file.isFile) return@synchronized
+        dir.mkdirs()
+        file.copyTo(File(dir, "${score.serverId}.conductor-unsent-${System.currentTimeMillis()}${ScoreNotesFile.SUFFIX}"), overwrite = true)
     }
 
     /** 지휘자 메모를 쓸 수 있는지 곁 파일에 — 쓸 수 있는데 파일이 없으면 빈 것으로 만든다(뷰어가 쓰기 겹을 보이게) */
@@ -162,6 +197,13 @@ class ScoreNotesSync(private val client: ScoreMateClient) {
         const val LAYER = "personal"
         const val LAYER_CONDUCTOR = "conductor"
         private const val MAX_ATTEMPTS = 3
+
+        /** 올리지 못한 변경이 남았나 — 맞춘 뒤 id 가 바뀌었거나(쓸 수 있을 때), 맞춘 적 없이 메모가 있다 */
+        fun hasUnsent(file: File): Boolean = synchronized(ScoreNotesFile.lock) {
+            val loaded = ScoreNotesFile.read(file) ?: return@synchronized false
+            val sync = loaded.sync ?: return@synchronized loaded.ids.isNotEmpty()
+            sync.writable && loaded.ids != sync.baseIds
+        }
 
         fun parseList(body: String): NotesList {
             val root = JsonParser.parseString(body).asJsonObject

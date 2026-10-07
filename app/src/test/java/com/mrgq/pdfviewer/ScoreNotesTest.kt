@@ -284,4 +284,24 @@ class ScoreNotesTest {
         assertEquals(loaded.sync, ScoreNotesFile.parse(ScoreNotesFile.format(loaded)).sync)
         assertFalse(ScoreNotesFile.formatJson(loaded, withSync = false).has("sync"))
     }
+
+    // ── 지휘자 메모: 쓴 사람 · 쓰기 권한 ──
+
+    @Test
+    fun 서버가_찍은_쓴_사람을_읽고_보존한다() {
+        val text = """{"format":1,"notes":[{"id":"a","page":0,"type":"ink","color":"#FF000000","width":1,"strokes":[[1,2]],"author":{"id":7,"name":"리더"}}],""" +
+            """"sync":{"revision":3,"base_ids":["a"],"writable":true}}"""
+        val loaded = ScoreNotesFile.parse(text)
+        assertEquals("리더", loaded.notes.single().author)
+        assertTrue(loaded.sync!!.writable)
+        val again = ScoreNotesFile.parse(ScoreNotesFile.format(loaded))
+        assertEquals("리더", again.notes.single().author)
+        assertTrue(again.sync!!.writable)
+    }
+
+    @Test
+    fun 옮기면_새_메모라_쓴_사람을_비운다() {
+        val note = ink("a").copy(author = "리더")
+        assertNull(note.movedBy(1f, 1f, "b", null).author)
+    }
 }

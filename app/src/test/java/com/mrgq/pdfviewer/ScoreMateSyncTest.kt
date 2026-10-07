@@ -116,6 +116,11 @@ class ScoreMateSyncTest {
         /** 목록에 거짓 revision 을 싣는다 (서버에 없는데 있는 것처럼) */
         var notesListOverride = mapOf<Long, Int>()
         val notePuts = mutableListOf<Pair<Long, Int>>() // (score, base_revision)
+        // 지휘자 겹 — score_id → (revision, notes), 쓸 수 있는 악보, 목록은 쓸 수 있다고 해도 PUT 은 막기(권한이 막 바뀜)
+        val conductorDocs = LinkedHashMap<Long, Pair<Int, String>>()
+        var conductorWritable = setOf<Long>()
+        var conductorForbidden = false
+        val conductorPuts = mutableListOf<Pair<Long, Int>>()
 
         fun notesDoc(id: Long): String {
             val (rev, notes) = notesDocs.getValue(id)
@@ -126,8 +131,32 @@ class ScoreMateSyncTest {
             if (path.startsWith("/api/v1/sync/notes/")) {
                 if (!notesEnabled) return HttpResponse(404, "")
                 val rows = (notesDocs.mapValues { it.value.first } + notesListOverride).filterKeys { it !in notesHidden }
-                    .map { (id, rev) -> """{"score_id":$id,"layer":"personal","revision":$rev,"updated_at":"t","pdf_sha256":null}""" }
-                return HttpResponse(200, """{"notes":[${rows.joinToString(",")}],"conductor_writable":[]}""")
+                    .map { (id, rev) -> """{"score_id":$id,"layer":"personal","revision":$rev,"updated_at":"t","pdf_sha256":null}""" } +
+                    conductorDocs.map { (id, d) -> """{"score_id":$id,"layer":"conductor","revision":${d.first},"updated_at":"t","pdf_sha256":null}""" }
+                return HttpResponse(200, """{"notes":[${rows.joinToString(",")}],"conductor_writable":[${conductorWritable.joinToString(",")}]}""")
+            }
+            Regex("/api/v1/scores/([0-9]+)/notes/conductor/").find(path)?.let { c ->
+                val id = c.groupValues[1].toLong()
+                fun doc() = conductorDocs.getValue(id).let { (rev, notes) ->
+                    """{"layer":"conductor","revision":$rev,"pdf_sha256":null,"updated_at":"t","updated_by":"A","format":1,"notes":$notes}"""
+                }
+                if (request.method == "GET") return if (id in conductorDocs) HttpResponse(200, doc()) else HttpResponse(404, "")
+                if (conductorForbidden || id !in conductorWritable) return HttpResponse(403, """{"error":"forbidden"}""")
+                val body = com.google.gson.JsonParser.parseString(request.body).asJsonObject
+                val base = body.get("base_revision").asInt
+                conductorPuts += id to base
+                val cur = conductorDocs[id]
+                if ((cur?.first ?: 0) != base) return HttpResponse(409, """{"error":"conflict","current":${if (cur == null) "null" else doc()}}""")
+                // 서버가 쓴 사람을 찍는다 — 보낸 author 는 버리고, 있던 id 는 그대로
+                val before = cur?.second?.let { com.google.gson.JsonParser.parseString(it).asJsonArray.associate { e ->
+                    e.asJsonObject.get("id").asString to e.asJsonObject.get("author") } }.orEmpty()
+                val notes = body.getAsJsonArray("notes")
+                notes.forEach { e ->
+                    val o = e.asJsonObject
+                    o.add("author", before[o.get("id").asString] ?: com.google.gson.JsonParser.parseString("""{"id":7,"name":"리더"}"""))
+                }
+                conductorDocs[id] = (base + 1) to notes.toString()
+                return HttpResponse(200, doc())
             }
             val m = Regex("/api/v1/scores/([0-9]+)/notes/personal/").find(path) ?: return null
             val id = m.groupValues[1].toLong()
@@ -724,5 +753,87 @@ class ScoreMateSyncTest {
         sync().sync()
         assertEquals(setOf("a", "c"), localNotes()!!.ids)
         assertEquals("올리지 않는다", 1, server.notePuts.size)
+    }
+
+    // ── 지휘자 메모 (conductor, 앙상블 악보) ──
+
+    private fun conductorNotes() = com.mrgq.pdfviewer.notes.ScoreNotesFile.read(com.mrgq.pdfviewer.notes.ScoreNotesFile.conductorFileOf(molPdf))
+    private fun writeConductor(vararg ids: String, sync: com.mrgq.pdfviewer.notes.ScoreNotesFile.SyncState? = conductorNotes()?.sync) =
+        com.mrgq.pdfviewer.notes.ScoreNotesFile.write(
+            com.mrgq.pdfviewer.notes.ScoreNotesFile.conductorFileOf(molPdf),
+            com.mrgq.pdfviewer.notes.ScoreNotesFile.Loaded(ids.map { ink(it) }, null, sync = sync),
+        )
+
+    @Test
+    fun 멤버는_지휘자_메모를_받기만_한다() = runBlocking {
+        setUpNotes()
+        server.conductorDocs[1] = 2 to inkJson("c1")
+        sync().sync()
+        val c = conductorNotes()!!
+        assertEquals(setOf("c1"), c.ids)
+        assertFalse(c.sync!!.writable)
+        assertTrue(server.conductorPuts.isEmpty())
+    }
+
+    @Test
+    fun 리더는_지휘자_메모를_올리고_서버가_쓴_사람을_찍는다() = runBlocking {
+        setUpNotes()
+        server.conductorWritable = setOf(1L)
+        sync().sync()
+        assertTrue("쓸 수 있으면 빈 곁 파일이라도 만들어 뷰어가 쓰기 겹을 보인다", conductorNotes()!!.sync!!.writable)
+        writeConductor("x")
+        sync().sync()
+        assertEquals(listOf(1L to 0), server.conductorPuts)
+        val x = conductorNotes()!!.notes.single()
+        assertEquals("리더", x.author)
+        assertEquals(1, conductorNotes()!!.sync!!.revision)
+    }
+
+    @Test
+    fun 리더가_아니게_되면_올리지_못한_지휘자_메모를_보관하고_서버_것으로() = runBlocking {
+        setUpNotes()
+        server.conductorWritable = setOf(1L)
+        sync().sync()
+        writeConductor("x") // 아직 못 올림
+        server.conductorWritable = emptySet()
+        val report = sync().sync()
+        assertTrue(report.errors.any { it.contains("보관") })
+        assertTrue(conductorNotes()!!.ids.isEmpty())
+        assertFalse(conductorNotes()!!.sync!!.writable)
+        assertEquals(1, File(root, ".ScoreMateNotes").listFiles()!!.count { it.name.startsWith("1.conductor-unsent-") })
+        // 다음 동기화에는 다시 보관하지 않는다
+        assertTrue(sync().sync().errors.isEmpty())
+    }
+
+    @Test
+    fun 올리다_403_이면_쓰기를_거두고_보관한다() = runBlocking {
+        setUpNotes()
+        server.conductorWritable = setOf(1L)
+        sync().sync()
+        writeConductor("x")
+        server.conductorForbidden = true // 목록은 아직 쓸 수 있다고 한다
+        sync().sync()
+        assertTrue("403 은 PUT 기록 전에 막힌다", server.conductorPuts.isEmpty())
+        assertFalse(conductorNotes()!!.sync!!.writable)
+        assertTrue(conductorNotes()!!.ids.isEmpty())
+        assertTrue(File(root, ".ScoreMateNotes").listFiles()!!.any { it.name.startsWith("1.conductor-unsent-") })
+    }
+
+    @Test
+    fun 곡목에서_빠질_때_올리지_못한_지휘자_메모는_보관했다가_돌려_놓는다() = runBlocking {
+        setUpNotes()
+        server.conductorWritable = setOf(1L)
+        sync().sync()
+        writeConductor("x")
+        server.remove(1)
+        server.put(Score(2, "아리랑", "a"))
+        server.notesEnabled = false // 이번에는 메모를 맞추지 않고 악보만 빠진다
+        sync().sync()
+        assertTrue(File(root, ".ScoreMateNotes/1.conductor.notes.json").exists())
+        server.notesEnabled = true
+        server.put(Score(1, "몰다우", "v1"))
+        sync().sync()
+        assertEquals("x 는 다시 받은 뒤 올라간다", setOf("x"), com.google.gson.JsonParser.parseString(server.conductorDocs.getValue(1).second)
+            .asJsonArray.map { it.asJsonObject.get("id").asString }.toSet())
     }
 }
