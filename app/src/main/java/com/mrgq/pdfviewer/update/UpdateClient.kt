@@ -1,5 +1,6 @@
 package com.mrgq.pdfviewer.update
 
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
@@ -24,7 +25,49 @@ class UpdateClient(
     private val rawUrl: String = RAW_URL,
 ) {
 
-    suspend fun fetchLatestRelease(): ReleaseInfo = withContext(Dispatchers.IO) {
+    /**
+     * 받을 릴리스. [includePrerelease](설정 "사전 릴리스 받기")면 릴리스 피드에서 정식 · 사전 릴리스 중 가장 높은 것 —
+     * 피드를 못 읽으면 조용히 정식(`releases/latest`)으로. 아니면 지금처럼 정식만
+     */
+    suspend fun fetchLatestRelease(includePrerelease: Boolean = false): ReleaseInfo {
+        if (includePrerelease) {
+            try {
+                newestFromFeed()?.let { return it }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                // 정식으로 — 아래
+            }
+        }
+        return fetchLatestStable()
+    }
+
+    /** 릴리스 피드에서 가장 높은 버전 — 릴리스(파일)가 실제로 있는 것만 (피드에는 릴리스 없는 태그도 온다). 앞의 몇 개만 본다 */
+    private suspend fun newestFromFeed(): ReleaseInfo? = withContext(Dispatchers.IO) {
+        val tags = open("$repoUrl/releases.atom", accept = "application/atom+xml").use { ReleaseInfo.tagsFromAtom(it.readText()) }
+        ReleaseInfo.candidates(tags, includePrerelease = true).take(MAX_FEED_CANDIDATES).firstNotNullOfOrNull { tag ->
+            ensureActive()
+            val info = try { ReleaseInfo.fromTag(repoUrl, tag) } catch (e: IllegalArgumentException) { null }
+            info?.takeIf { hasFile(it.checksums!!.downloadUrl) }
+        }
+    }
+
+    /** 릴리스 파일 주소가 있는가 — GitHub 은 있으면 파일 서버로 302, 없으면 404 (따라가지 않고 머리만) */
+    private fun hasFile(url: String): Boolean {
+        val conn = URL(url).openConnection() as HttpURLConnection
+        return try {
+            conn.connectTimeout = 10_000
+            conn.readTimeout = 30_000
+            conn.instanceFollowRedirects = false
+            conn.requestMethod = "HEAD"
+            conn.setRequestProperty("User-Agent", USER_AGENT)
+            conn.responseCode in 200..399
+        } finally {
+            conn.disconnect()
+        }
+    }
+
+    private suspend fun fetchLatestStable(): ReleaseInfo = withContext(Dispatchers.IO) {
         val location = try {
             val conn = URL("$repoUrl/releases/latest").openConnection() as HttpURLConnection
             try {
@@ -172,6 +215,8 @@ class UpdateClient(
         const val REPO_URL = "https://github.com/jikhanjung/MrgqPdfViewer"
         const val RAW_URL = "https://raw.githubusercontent.com/jikhanjung/MrgqPdfViewer"
         private const val USER_AGENT = "MrgqPdfViewer-updater"
+        /** 피드에서 릴리스가 있는지 확인해 볼 후보 수 (높은 버전부터) */
+        private const val MAX_FEED_CANDIDATES = 3
 
         private fun ByteArray.toHex() = joinToString("") { "%02x".format(it) }
     }

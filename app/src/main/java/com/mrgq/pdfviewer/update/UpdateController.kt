@@ -45,11 +45,11 @@ class UpdateController(
 
     fun checkForUpdate() {
         if (job?.isActive == true) return
-        val checking = progressDialog("업데이트 확인", "GitHub 에서 최신 릴리스를 확인하는 중…", indeterminate = true)
+        val checking = progressDialog("업데이트 확인", if (isPrereleaseEnabled(activity)) "GitHub 에서 최신 릴리스(사전 릴리스 포함)를 확인하는 중…" else "GitHub 에서 최신 릴리스를 확인하는 중…", indeterminate = true)
         job = scope.launch {
             try {
                 withContext(Dispatchers.IO) { updatesDir(activity).deleteRecursively() }
-                val release = client.fetchLatestRelease()
+                val release = client.fetchLatestRelease(isPrereleaseEnabled(activity))
                 checking.dialog.dismiss()
                 val current = AppVersion.parse(BuildConfig.VERSION_NAME)
                 if (current != null && release.version <= current) {
@@ -81,7 +81,7 @@ class UpdateController(
         job = scope.launch {
             try {
                 withContext(Dispatchers.IO) { updatesDir(activity).deleteRecursively() }
-                val release = client.fetchLatestRelease()
+                val release = client.fetchLatestRelease(isPrereleaseEnabled(activity))
                 val current = AppVersion.parse(BuildConfig.VERSION_NAME) ?: return@launch
                 val offer = release.version > current && release.apk != null && release.tag != declinedTag &&
                     !activity.isFinishing && !activity.isDestroyed
@@ -272,6 +272,8 @@ class UpdateController(
         private const val TAG = "UpdateController"
         private const val PREFS = "pdf_viewer_prefs"
         private const val PREF_CHECK_ON_START = "update_check_on_start"
+        /** 사전 릴리스(-alpha · -beta · -rc)도 받기 — 기본 꺼짐. 끄면 더 높은 정식이 나올 때까지 지금 판 그대로(내려가지 않는다) */
+        private const val PREF_PRERELEASE = "update_include_prerelease"
 
         /** 다음 자동 확인 시각 (elapsedRealtime). 0 = 아직 안 함 — 프로세스 안에서 화면이 바뀌어도 유지된다 */
         private var nextAutoCheckAtMs = 0L
@@ -291,6 +293,13 @@ class UpdateController(
         fun setCheckOnStartup(context: Context, enabled: Boolean) {
             context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putBoolean(PREF_CHECK_ON_START, enabled).apply()
         }
+        fun isPrereleaseEnabled(context: Context): Boolean =
+            context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean(PREF_PRERELEASE, false)
+
+        fun setPrereleaseEnabled(context: Context, enabled: Boolean) {
+            context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putBoolean(PREF_PRERELEASE, enabled).apply()
+        }
+
         private const val APK_MIME = "application/vnd.android.package-archive"
 
         /** 받은 APK 를 두는 곳 — `res/xml/file_paths.xml` 의 `cache-path updates/` 와 맞춘다 */
