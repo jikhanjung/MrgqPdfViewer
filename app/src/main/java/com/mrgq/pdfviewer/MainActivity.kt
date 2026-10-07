@@ -42,8 +42,13 @@ class MainActivity : AppCompatActivity() {
         /** 이 프로세스에서 ScoreMate heartbeat 를 보냈나 — 앱을 켤 때 한 번 */
         var scoreMateHeartbeatSent = false
 
-        /** 목록에서 메모 동기화가 필요한지 보는 간격 */
-        const val NOTES_SYNC_CHECK_MS = 60_000L
+        /** 목록에서 메모 동기화가 필요한지 보는 간격 — 10분 ± [NOTES_SYNC_JITTER_MS] (1분 → 10분, 서버 부하 · 사용자 지시 2026-10-08) */
+        const val NOTES_SYNC_CHECK_MS = 10 * 60_000L
+        /** 기기들이 같은 순간에 몰리지 않게 흔든다 */
+        const val NOTES_SYNC_JITTER_MS = 30_000L
+
+        fun nextNotesSyncCheckMs(): Long =
+            NOTES_SYNC_CHECK_MS + kotlin.random.Random.nextLong(-NOTES_SYNC_JITTER_MS, NOTES_SYNC_JITTER_MS + 1)
     }
 
     private lateinit var binding: ActivityMainBinding
@@ -130,7 +135,7 @@ class MainActivity : AppCompatActivity() {
 
     /**
      * ScoreMate 악보 동기화. 바뀐 게 있으면 목록을 다시 읽는다.
-     * [quiet] 면 네트워크 오류 · 변경 없음은 알리지 않는다 (앱 시작 시 · 악보에서 돌아올 때). [background] 면 결과를 아예 알리지 않는다 (1분 확인)
+     * [quiet] 면 네트워크 오류 · 변경 없음은 알리지 않는다 (앱 시작 시 · 악보에서 돌아올 때). [background] 면 결과를 아예 알리지 않는다 (주기 확인)
      */
     private suspend fun runScoreMateSync(quiet: Boolean, background: Boolean = false) {
         if (GlobalCollaborationManager.getInstance().getCurrentMode() != CollaborationMode.NONE) return
@@ -152,7 +157,7 @@ class MainActivity : AppCompatActivity() {
         // 메모만 오갔어도 목록의 ✏️ 동기화 표시가 바뀐다
         if (report.changed || report.notesUploaded + report.notesDownloaded > 0) loadPdfFiles()
         val summary = com.mrgq.pdfviewer.scoremate.ScoreMateSyncText.summary(report)
-        // 1분 확인에서 부른 것(background)은 알리지 않는다 — 실패가 되풀이돼도 1분마다 뜨지 않게. 목록의 "동기화 필요" 가 남는다
+        // 주기 확인에서 부른 것(background)은 알리지 않는다 — 실패가 되풀이돼도 확인마다 뜨지 않게. 목록의 "동기화 필요" 가 남는다
         if (background) return
         if (summary != null && (report.changed || !quiet || report.errors.isNotEmpty())) {
             Toast.makeText(this, summary, Toast.LENGTH_LONG).show()
@@ -161,18 +166,18 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    /** 이 화면에서 동기화 중 — 1분 확인 · 자동 동기화가 🔄 와 겹치지 않게 */
+    /** 이 화면에서 동기화 중 — 주기 확인 · 자동 동기화가 🔄 와 겹치지 않게 */
     private var scoreMateSyncing = false
     /** 악보를 열고 나갔다 — 돌아오면 한 번 동기화 (메모를 올리려고, 사용자 요청 2026-10-08) */
     private var syncOnReturn = false
 
     /**
-     * 목록이 떠 있는 동안 1분마다 메모를 주고받을 것이 있는지 보고, 있으면 조용히 동기화 (사용자 요청 2026-10-08).
+     * 목록이 떠 있는 동안 10분(± 30초)마다 메모를 주고받을 것이 있는지 보고, 있으면 조용히 동기화 (사용자 요청 2026-10-08).
      * 확인은 메모 목록 한 번 — 네트워크 오류는 무시. 합주 중 · 대화상자 위 · 연결 안 됨이면 건너뛴다
      */
     private val notesSyncCheck: Runnable = object : Runnable {
         override fun run() {
-            binding.root.postDelayed(this, NOTES_SYNC_CHECK_MS)
+            binding.root.postDelayed(this, nextNotesSyncCheckMs())
             if (isFinishing || !hasWindowFocus() || scoreMateSyncing || !scoreMateLinked ||
                 GlobalCollaborationManager.getInstance().getCurrentMode() != CollaborationMode.NONE) return
             lifecycleScope.launch {
@@ -235,7 +240,7 @@ class MainActivity : AppCompatActivity() {
         updateController.onResume()
         scheduleAutoUpdateCheck()
         binding.root.removeCallbacks(notesSyncCheck)
-        binding.root.postDelayed(notesSyncCheck, NOTES_SYNC_CHECK_MS)
+        binding.root.postDelayed(notesSyncCheck, nextNotesSyncCheckMs())
         if (syncOnReturn) {
             // 악보에서 돌아왔다 — 쓴 메모를 올리고 다른 기기 것을 받는다 (조용히)
             syncOnReturn = false

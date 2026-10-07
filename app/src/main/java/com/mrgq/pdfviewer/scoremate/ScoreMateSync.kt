@@ -125,11 +125,11 @@ class ScoreMateSync(
     val scoreMateRoot: File get() = File(pdfRoot, FOLDER)
 
     /**
-     * 한 번에 하나 — 목록의 1분 확인 · 돌아올 때 자동 · 🔄 · 설정 "지금 동기화" 가 겹치면 앞 것이 끝난 뒤에 (곁 파일 · 커서를 함께 쓴다)
+     * 한 번에 하나 — 목록의 주기 확인(10분) · 돌아올 때 자동 · 🔄 · 설정 "지금 동기화" 가 겹치면 앞 것이 끝난 뒤에 (곁 파일 · 커서를 함께 쓴다)
      */
     suspend fun sync(): SyncReport = RUNNING.withLock { syncOnce() }
 
-    /** 메모를 주고받을 것이 있나 — 목록에서 1분마다 (메모 목록 한 번만 받는다). [ScoreNotesSync.needsSync] */
+    /** 메모를 주고받을 것이 있나 — 목록에서 10분마다 (메모 목록 한 번만 받는다). [ScoreNotesSync.needsSync] */
     suspend fun notesNeedSync(): Boolean = ScoreNotesSync(client).needsSync(store.all())
 
     private suspend fun syncOnce(): SyncReport {
