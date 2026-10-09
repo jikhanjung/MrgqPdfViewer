@@ -114,6 +114,8 @@ class PdfViewerActivity : AppCompatActivity() {
         const val PREF_VOICE_TEXT_INPUT = "voice_text_input"
         /** 👂 계속 듣기 (#085) — 🎙 를 누르지 않고 "메이트, …" */
         const val PREF_VOICE_ALWAYS = "voice_always_listen"
+        /** 👂 계속 듣기의 호출어 (#091) — 쉼표로 여럿, 없으면 기본(메이트 · 매이트 · mate) */
+        const val PREF_VOICE_WAKE_WORDS = "voice_wake_words"
         /** 휴대폰 악보 화면의 회전 모드 (#090) — 설정 → 표시 모드. 기본 기기 회전 */
         const val PREF_PHONE_ORIENTATION = "phone_orientation"
         const val PHONE_ORIENTATION_AUTO = "auto"
@@ -5127,7 +5129,7 @@ class PdfViewerActivity : AppCompatActivity() {
         val listener = voiceListener ?: VoiceListener(this, voiceCallback).also { voiceListener = it }
         if (listener.isActive) return
         voicePushToTalk = false
-        listener.start(voiceHints() + VoiceLexicon.WAKE_WORDS)
+        listener.start(voiceHints() + wakeWords(), patientEnd = true)
     }
 
     /** 👂 계속 듣기를 접는다 — 🎙 단추로 듣는 중이면 그대로 둔다 */
@@ -5135,6 +5137,9 @@ class PdfViewerActivity : AppCompatActivity() {
         binding.voiceButton.removeCallbacks(restartAlwaysListening)
         if (!voicePushToTalk) voiceListener?.takeIf { it.isActive }?.cancel()
     }
+
+    /** 설정의 호출어 (#091) */
+    private fun wakeWords(): List<String> = WakeWord.parseSetting(preferences.getString(PREF_VOICE_WAKE_WORDS, null))
 
     private fun awaitingCommand(): Boolean = wakeHeardAtMs > 0 && SystemClock.uptimeMillis() - wakeHeardAtMs < WAKE_WINDOW_MS
 
@@ -5213,7 +5218,7 @@ class PdfViewerActivity : AppCompatActivity() {
         override fun onPartial(text: String) {
             if (voicePushToTalk) return showVoiceStatus("🎙 $text")
             // 👂 호출어가 들렸을 때만 띄운다 — 방 안의 다른 말은 보이지 않는다
-            val command = WakeWord.commandAfter(text) ?: text.takeIf { awaitingCommand() } ?: return
+            val command = WakeWord.commandAfter(text, wakeWords()) ?: text.takeIf { awaitingCommand() } ?: return
             showVoiceStatus("👂 $command")
         }
 
@@ -5225,14 +5230,16 @@ class PdfViewerActivity : AppCompatActivity() {
             }
             alwaysErrorStreak = 0
             val awaiting = awaitingCommand()
-            val commands = candidates.mapNotNull { WakeWord.commandAfter(it) ?: it.takeIf { awaiting } }
+            val words = wakeWords()
+            val commands = candidates.mapNotNull { WakeWord.commandAfter(it, words) ?: it.takeIf { awaiting } }
             when {
                 commands.isEmpty() -> scheduleAlwaysListening() // 호출어 없는 말 — 흘려듣는다(기록하지 않는다)
                 commands.all { it.isBlank() } -> {
-                    // "메이트"만 — 이어지는 말을 호출어 없이 받는다
+                    // "메이트"만 — 이어지는 말을 호출어 없이 받는다. 곧바로 다시 들어야 이어 말한 첫머리를 놓치지 않는다 (#091)
+                    Log.i("VoiceCommand", "👂 호출어만: $candidates")
                     wakeHeardAtMs = SystemClock.uptimeMillis()
                     showVoiceStatus("👂 네? — 명령을 말하세요", WAKE_WINDOW_MS)
-                    scheduleAlwaysListening()
+                    scheduleAlwaysListening(0)
                 }
                 else -> {
                     wakeHeardAtMs = 0L

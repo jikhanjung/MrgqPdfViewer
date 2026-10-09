@@ -19,6 +19,7 @@ import com.mrgq.pdfviewer.voice.VoiceCommand.SetTempo
 import com.mrgq.pdfviewer.voice.WakeWord
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /** 음성 명령 1단계(P12): 한국어 수 · 정규화 · 규칙. 발화 문자열 → 기대 명령. */
@@ -260,6 +261,30 @@ class VoiceCommandTest {
         assertEquals("3쪽", WakeWord.commandAfter("메이트 아니 메이트 3쪽"))
         assertEquals("", WakeWord.commandAfter("메이트"))
         assertEquals("", WakeWord.commandAfter("메이트야!"))
+    }
+
+    @Test
+    fun 호출어를_바꿀_수_있다() {
+        val maestro = WakeWord.parseSetting("마에스트로, maestro")
+        assertEquals(listOf("마에스트로", "maestro"), maestro)
+        assertEquals("57마디부터", WakeWord.commandAfter("마에스트로, 57마디부터", maestro))
+        assertEquals("다음 쪽", WakeWord.commandAfter("Maestro 다음 쪽", maestro))
+        assertNull(WakeWord.commandAfter("메이트 다음 쪽", maestro)) // 바꾸면 기본 호출어는 듣지 않는다
+        // 띄어 쓴 호출어 — 붙여 적혀도
+        assertEquals("다음 쪽", WakeWord.commandAfter("헤이메이트 다음 쪽", listOf("헤이 메이트")))
+        // 비우면 기본
+        assertEquals(listOf("메이트", "매이트", "mate"), WakeWord.parseSetting(" , "))
+        assertEquals(listOf("메이트", "매이트", "mate"), WakeWord.parseSetting(null))
+    }
+
+    @Test
+    fun 짧거나_명령인_말은_호출어로_쓰지_않는다() {
+        assertNull(WakeWord.problem("메이트"))
+        assertNull(WakeWord.problem("마에스트로"))
+        assertTrue(WakeWord.problem("가") != null)
+        assertTrue(WakeWord.problem("시작") != null)
+        assertTrue(WakeWord.problem("다음 쪽") != null)
+        assertTrue(WakeWord.problem("72") != null)
     }
 
     @Test

@@ -58,13 +58,21 @@ class VoiceListener(context: Context, private val callback: Callback) {
 
     val isActive: Boolean get() = active
 
-    /** [hints] = 이 악보에서 나올 말(파트 이름 등) — Android 13+ 에서 인식 쪽으로 기울인다 */
-    fun start(hints: List<String>) {
+    /**
+     * [hints] = 이 악보에서 나올 말(파트 이름 등) — Android 13+ 에서 인식 쪽으로 기울인다.
+     * [patientEnd] = 👂 계속 듣기 — "메이트, (쉼) 57마디부터"의 짧은 쉼에서 듣기를 끝내지 않게 말 끝 판단을 늦춰 달라고 한다
+     * (서비스가 따르지 않을 수도 있다, #091)
+     */
+    fun start(hints: List<String>, patientEnd: Boolean = false) {
         val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
             putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
             putExtra(RecognizerIntent.EXTRA_LANGUAGE, "ko-KR")
             putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, MAX_RESULTS)
             putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
+            if (patientEnd) {
+                putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, PATIENT_SILENCE_MS)
+                putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, PATIENT_SILENCE_MS)
+            }
             if (Build.VERSION.SDK_INT >= 33) {
                 putExtra(RecognizerIntent.EXTRA_BIASING_STRINGS, ArrayList((BASE_HINTS + hints).distinct()))
             }
@@ -91,6 +99,8 @@ class VoiceListener(context: Context, private val callback: Callback) {
     companion object {
         private const val TAG = "VoiceListener"
         private const val MAX_RESULTS = 5
+        /** 👂 계속 듣기에서 말이 끝났다고 볼 조용함 — 호출어 뒤 숨 고르는 쉼(0.5 ~ 1초)을 넘기게 */
+        private const val PATIENT_SILENCE_MS = 1500L
 
         /** 명령 낱말 — 숫자 · 단위가 맞게 들리도록 */
         private val BASE_HINTS = listOf(

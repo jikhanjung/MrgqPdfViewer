@@ -636,6 +636,57 @@ class SettingsActivity : AppCompatActivity() {
         showDetailPanel("표시 모드", items)
     }
     
+    private fun wakeWords(): List<String> =
+        com.mrgq.pdfviewer.voice.WakeWord.parseSetting(preferences.getString(PdfViewerActivity.PREF_VOICE_WAKE_WORDS, null))
+
+    /**
+     * 호출어 바꾸기 (#091) — 쉼표로 여럿(STT 가 달리 적는 표기도 함께: "메이트, 매이트, mate"). 비우거나 "기본값"이면 메이트.
+     * 두 글자 미만이거나 그 자체가 명령으로 읽히는 말은 받지 않는다
+     */
+    private fun showWakeWordsDialog() {
+        val density = resources.displayMetrics.density
+        val custom = preferences.getString(PdfViewerActivity.PREF_VOICE_WAKE_WORDS, null)
+        val input = android.widget.EditText(this).apply {
+            setText(if (custom.isNullOrBlank()) "" else custom)
+            hint = com.mrgq.pdfviewer.voice.WakeWord.toSetting(com.mrgq.pdfviewer.voice.VoiceLexicon.WAKE_WORDS)
+            setSingleLine(true)
+        }
+        val help = android.widget.TextView(this).apply {
+            text = "👂 계속 듣기에서 이 말 뒤의 말만 명령으로 실행합니다. 쉼표로 여럿 — 음성 인식이 달리 적는 표기도 함께 넣으면 좋습니다" +
+                " (예: 마에스트로, maestro). 비우면 기본(메이트)"
+            textSize = 13f
+            setPadding(0, (8 * density).toInt(), 0, 0)
+        }
+        val box = android.widget.LinearLayout(this).apply {
+            orientation = android.widget.LinearLayout.VERTICAL
+            setPadding((24 * density).toInt(), (8 * density).toInt(), (24 * density).toInt(), 0)
+            addView(input)
+            addView(help)
+        }
+        AlertDialog.Builder(this)
+            .setTitle("🗣 호출어")
+            .setView(box)
+            .setPositiveButton("저장") { _, _ ->
+                val words = com.mrgq.pdfviewer.voice.WakeWord.parseSetting(input.text.toString())
+                val problem = words.firstNotNullOfOrNull { com.mrgq.pdfviewer.voice.WakeWord.problem(it) }
+                if (problem != null) {
+                    Toast.makeText(this, "저장하지 않았습니다 — $problem", Toast.LENGTH_LONG).show()
+                    return@setPositiveButton
+                }
+                val editor = preferences.edit()
+                if (input.text.isBlank()) editor.remove(PdfViewerActivity.PREF_VOICE_WAKE_WORDS)
+                else editor.putString(PdfViewerActivity.PREF_VOICE_WAKE_WORDS, com.mrgq.pdfviewer.voice.WakeWord.toSetting(words))
+                editor.apply()
+                showInfoPanel()
+            }
+            .setNeutralButton("기본값") { _, _ ->
+                preferences.edit().remove(PdfViewerActivity.PREF_VOICE_WAKE_WORDS).apply()
+                showInfoPanel()
+            }
+            .setNegativeButton("취소", null)
+            .show()
+    }
+
     private fun phoneOrientationMode(): String =
         preferences.getString(PdfViewerActivity.PREF_PHONE_ORIENTATION, PdfViewerActivity.PHONE_ORIENTATION_AUTO)
             ?: PdfViewerActivity.PHONE_ORIENTATION_AUTO
@@ -709,12 +760,23 @@ class SettingsActivity : AppCompatActivity() {
                 title = "계속 듣기 (시험)",
                 subtitle = when {
                     !preferences.getBoolean(PdfViewerActivity.PREF_VOICE_COMMANDS, false) -> "위의 🎙 음성 명령을 먼저 켜세요"
-                    preferences.getBoolean(PdfViewerActivity.PREF_VOICE_ALWAYS, false) ->
-                        "켜짐 — 악보 화면에서 늘 듣다가 \"메이트\" 뒤의 말만 실행(\"메이트, 57마디부터\" · \"Mate, 1페이지 시작\" · \"메이트, 멈춰\"). " +
+                    preferences.getBoolean(PdfViewerActivity.PREF_VOICE_ALWAYS, false) -> wakeWords().first().let { w ->
+                        "켜짐 — 악보 화면에서 늘 듣다가 호출어 \"$w\" 뒤의 말만 실행(\"$w, 57마디부터\" · \"$w, 멈춰\"). " +
                             "연주 중에도 듣습니다. 듣는 소리는 계속 기기의 음성 인식(대개 Google, 인터넷)으로 갑니다"
-                    else -> "꺼짐 — 켜면 🎙 를 누르지 않고 \"메이트, …\"로 명령합니다"
+                    }
+                    else -> "꺼짐 — 켜면 🎙 를 누르지 않고 \"${wakeWords().first()}, …\"로 명령합니다"
                 },
                 type = SettingsType.TOGGLE
+            ).takeIf { !com.mrgq.pdfviewer.utils.DeviceForm.isTv(this) },
+            // 🗣 계속 듣기의 호출어 (#091)
+            SettingsItem(
+                id = "voice_wake_words",
+                icon = "🗣",
+                title = "호출어 (계속 듣기)",
+                subtitle = wakeWords().joinToString(" · ") +
+                    (if (preferences.getString(PdfViewerActivity.PREF_VOICE_WAKE_WORDS, null).isNullOrBlank()) " (기본)" else "") +
+                    " — 누르면 바꿉니다",
+                type = SettingsType.ACTION
             ).takeIf { !com.mrgq.pdfviewer.utils.DeviceForm.isTv(this) },
             SettingsItem(
                 id = "voice_text_input_toggle",
@@ -1010,6 +1072,7 @@ class SettingsActivity : AppCompatActivity() {
                 preferences.edit().putBoolean(PdfViewerActivity.PREF_VOICE_ALWAYS, enable).apply()
                 showInfoPanel()
             }
+            "voice_wake_words" -> showWakeWordsDialog()
             "voice_text_input_toggle" -> {
                 val enable = !preferences.getBoolean(PdfViewerActivity.PREF_VOICE_TEXT_INPUT, false)
                 preferences.edit().putBoolean(PdfViewerActivity.PREF_VOICE_TEXT_INPUT, enable).apply()
