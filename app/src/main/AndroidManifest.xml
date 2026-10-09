@@ -23,6 +23,13 @@
         android:name="android.hardware.microphone"
         android:required="false" />
 
+    <!-- 🎙 음성 명령 (P12): 기기의 음성 인식 서비스(보통 Google)를 찾으려면 Android 11+ 에서 보이게 선언해야 한다 -->
+    <queries>
+        <intent>
+            <action android:name="android.speech.RecognitionService" />
+        </intent>
+    </queries>
+
     <application
         android:name=".PdfViewerApplication"
         android:allowBackup="true"

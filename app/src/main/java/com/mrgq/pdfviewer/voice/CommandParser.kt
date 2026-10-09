@@ -21,6 +21,23 @@ object CommandParser {
 
     fun parse(text: String): ParseResult = parse(CommandNormalizer.normalize(text))
 
+    /**
+     * 음성 인식 후보 여럿(가능성 높은 순) → 쓸 후보와 그 결과. 첫 후보가 명령이 아니면 다음 후보를 보되, 첫 후보가 **일부러 한 말로
+     * 막힌 것**(부정 · 상대 위치 · 둘)이면 그대로 둔다 — "57마디 말고"를 둘째 후보 "57마디"로 실행하지 않게. 후보가 없으면 null
+     */
+    fun parseBest(candidates: List<String>): Pair<String, ParseResult>? {
+        val parsed = candidates.filter { it.isNotBlank() }.map { it to parse(it) }
+        val first = parsed.firstOrNull() ?: return null
+        val top = first.second
+        if (top is ParseResult.Unrecognized && top.reason !in RETRYABLE) return first
+        return parsed.firstOrNull { it.second is ParseResult.Commands }
+            ?: parsed.firstOrNull { it.second is ParseResult.BareNumber }
+            ?: first
+    }
+
+    /** 잘못 들었을 수 있는 실패 — 다음 후보를 본다 */
+    private val RETRYABLE = setOf(Reason.NOTHING, Reason.STRAY_NUMBER)
+
     fun parse(raw: List<Token>): ParseResult {
         if (raw.any { it == Token.Word(Kw.NEGATION) }) return ParseResult.Unrecognized(Reason.NEGATION)
         if (raw.any { it == Token.Word(Kw.RELATIVE) }) return ParseResult.Unrecognized(Reason.RELATIVE)

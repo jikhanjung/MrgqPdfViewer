@@ -104,6 +104,24 @@ class VoiceCommandRunnerTest {
         assertEquals(listOf("tempo 80", "start"), run("템포 팔십 시작").second)
     }
 
+    // ── 음성 인식 후보 고르기 ──
+
+    @Test
+    fun 첫_후보가_명령이_아니면_다음_후보() {
+        val best = CommandParser.parseBest(listOf("다섯시 반부터", "57마디부터 템포 72", "57마디"))
+        assertEquals("57마디부터 템포 72", best?.first)
+        assertEquals(listOf("tempo 72", "measure 57"), run(best!!.first).second)
+        assertEquals("72", CommandParser.parseBest(listOf("안녕", "72"))?.first)
+    }
+
+    @Test
+    fun 일부러_한_말로_막히면_다음_후보로_가지_않는다() {
+        assertEquals("57마디 말고", CommandParser.parseBest(listOf("57마디 말고", "57마디"))?.first)
+        assertEquals("두 마디 전부터", CommandParser.parseBest(listOf("두 마디 전부터", "두 마디부터"))?.first)
+        assertEquals("안녕", CommandParser.parseBest(listOf("안녕", "반가워"))?.first)
+        assertNull(CommandParser.parseBest(listOf("", " ")))
+    }
+
     // ── 파트 이름 맞추기 ──
 
     @Test

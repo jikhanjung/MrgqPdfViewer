@@ -629,7 +629,7 @@ class SettingsActivity : AppCompatActivity() {
     }
     
     private fun showInfoPanel() {
-        val items = listOf(
+        val items = listOfNotNull(
             SettingsItem(
                 id = "app_version",
                 icon = "📱",
@@ -652,6 +652,19 @@ class SettingsActivity : AppCompatActivity() {
                     else "꺼짐 — 정식 릴리스만 받습니다",
                 type = SettingsType.TOGGLE
             ),
+            // 🎙 음성 명령 (P12 2단계) — 태블릿 · 휴대폰. 기기의 음성 인식(보통 Google)을 쓴다
+            SettingsItem(
+                id = "voice_commands_toggle",
+                icon = "🎙",
+                title = "음성 명령 (시험)",
+                subtitle = when {
+                    !com.mrgq.pdfviewer.voice.VoiceListener.isAvailable(this) -> "이 기기에는 음성 인식 서비스가 없습니다 (Google 앱 등)"
+                    preferences.getBoolean(PdfViewerActivity.PREF_VOICE_COMMANDS, false) ->
+                        "켜짐 — 악보 화면 오른쪽 아래 🎙 를 누른 채로 \"57마디부터 템포 72\" · \"다음 쪽\" · \"첼로 파트\". 기기의 음성 인식(대개 인터넷)을 씁니다"
+                    else -> "꺼짐 — 켜면 악보 화면에 🎙 단추가 생깁니다"
+                },
+                type = SettingsType.TOGGLE
+            ).takeIf { !com.mrgq.pdfviewer.utils.DeviceForm.isTv(this) },
             SettingsItem(
                 id = "voice_text_input_toggle",
                 icon = "⌨️",
@@ -928,6 +941,12 @@ class SettingsActivity : AppCompatActivity() {
             "scoremate_server" -> showScoreMateServerDialog()
             "update_on_start_toggle" -> {
                 UpdateController.setCheckOnStartup(this, !UpdateController.isCheckOnStartup(this))
+                showInfoPanel()
+            }
+            "voice_commands_toggle" -> {
+                if (!com.mrgq.pdfviewer.voice.VoiceListener.isAvailable(this)) return
+                val enable = !preferences.getBoolean(PdfViewerActivity.PREF_VOICE_COMMANDS, false)
+                preferences.edit().putBoolean(PdfViewerActivity.PREF_VOICE_COMMANDS, enable).apply()
                 showInfoPanel()
             }
             "voice_text_input_toggle" -> {

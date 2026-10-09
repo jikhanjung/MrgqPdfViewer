@@ -222,6 +222,44 @@
     </LinearLayout>
 
     <!-- 메모 모드 도구 줄 (P11) — 단추는 코드에서 채운다 -->
+    <!-- 🎙 음성 명령 (P12, 태블릿 · 휴대폰) — 누르는 동안 듣는다. 설정 → 앱 정보에서 켤 때만 보인다 -->
+    <TextView
+        android:id="@+id/voiceButton"
+        android:layout_width="64dp"
+        android:layout_height="64dp"
+        android:layout_margin="16dp"
+        android:background="@drawable/voice_button_background"
+        android:contentDescription="음성 명령 — 누른 채로 말하기"
+        android:elevation="6dp"
+        android:gravity="center"
+        android:text="🎙"
+        android:textSize="28sp"
+        android:visibility="gone"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent" />
+
+    <!-- 🎙 듣는 중 · 알아들은 말 · 결과 -->
+    <TextView
+        android:id="@+id/voiceStatus"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginEnd="16dp"
+        android:layout_marginBottom="8dp"
+        android:layout_marginStart="16dp"
+        android:background="#CC000000"
+        android:elevation="6dp"
+        android:maxLines="3"
+        android:paddingHorizontal="12dp"
+        android:paddingVertical="6dp"
+        android:textColor="#FFFFFFFF"
+        android:textSize="18sp"
+        android:visibility="gone"
+        app:layout_constrainedWidth="true"
+        app:layout_constraintHorizontal_bias="1"
+        app:layout_constraintBottom_toTopOf="@+id/voiceButton"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent" />
+
     <LinearLayout
         android:id="@+id/noteToolbar"
         android:layout_width="wrap_content"
