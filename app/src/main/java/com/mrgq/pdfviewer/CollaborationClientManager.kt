@@ -233,7 +233,8 @@ class CollaborationClientManager(
                     // 버전 필드가 아예 없는 것으로는 판단하지 않는다 (옛 지휘자는 둘째 메시지의 server_version "v0.1.5" 로 알아본다)
                     val hasVersion = json.has("app_version") || json.has("server_version")
                     val conductorVersion = json.get("app_version")?.asString ?: json.get("server_version")?.asString
-                    if (hasVersion) com.mrgq.pdfviewer.ensemble.EnsembleVersion.check(BuildConfig.VERSION_NAME, conductorVersion)?.let {
+                    val conductorEnsemble = json.get("ensemble_version")?.asString // v0.7.1-beta.2 부터 (#086)
+                    if (hasVersion) com.mrgq.pdfviewer.ensemble.EnsembleVersion.check(BuildConfig.VERSION_NAME, conductorVersion, conductorEnsemble)?.let {
                         Log.w(TAG, "지휘자와 버전이 다르다: $it")
                         onVersionMismatch?.invoke(com.mrgq.pdfviewer.ensemble.EnsembleVersion.performerMessage(it))
                     }
@@ -316,6 +317,7 @@ class CollaborationClientManager(
                 addProperty("device_id", clientId)
                 addProperty("device_name", deviceName)
                 addProperty("app_version", BuildConfig.VERSION_NAME) // 지휘자가 버전을 비교한다 (#061). v0.2.5 까지는 "v0.1.5" 고정
+                addProperty("ensemble_version", com.mrgq.pdfviewer.ensemble.EnsembleVersion.CURRENT) // 이것이 다를 때만 알린다 (#086)
             }
             
             webSocket.send(connectMessage.toString())

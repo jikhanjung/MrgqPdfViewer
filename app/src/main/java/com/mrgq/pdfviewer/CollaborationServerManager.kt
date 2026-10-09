@@ -303,20 +303,22 @@ class CollaborationServerManager(
                     val deviceId = json.get("device_id")?.asString ?: clientId
                     val deviceName = json.get("device_name")?.asString ?: "Unknown Device"
                     val appVersion = json.get("app_version")?.asString
+                    val ensembleVersion = json.get("ensemble_version")?.asString // v0.7.1-beta.2 부터 (#086)
                     
                     Log.d(TAG, "Client $clientId connected: $deviceName ($appVersion)")
                     
-                    // Send welcome response — app_version 으로 연주자도 버전을 비교한다 (#061).
+                    // Send welcome response — app_version · ensemble_version 으로 연주자도 버전을 비교한다 (#061 · #086).
                     // server_version 은 옛 연주자와의 호환용(읽는 곳은 없다)
                     val response = JsonObject().apply {
                         addProperty("action", "connect_response")
                         addProperty("status", "success")
                         addProperty("server_version", "v0.1.5")
                         addProperty("app_version", BuildConfig.VERSION_NAME)
+                        addProperty("ensemble_version", com.mrgq.pdfviewer.ensemble.EnsembleVersion.CURRENT)
                         addProperty("timestamp", System.currentTimeMillis())
                     }
                     connectedClients[clientId]?.send(response.toString())
-                    com.mrgq.pdfviewer.ensemble.EnsembleVersion.check(BuildConfig.VERSION_NAME, appVersion)?.let {
+                    com.mrgq.pdfviewer.ensemble.EnsembleVersion.check(BuildConfig.VERSION_NAME, appVersion, ensembleVersion)?.let {
                         Log.w(TAG, "연주자 $deviceName 와 버전이 다르다: $it")
                         onVersionMismatch?.invoke(com.mrgq.pdfviewer.ensemble.EnsembleVersion.conductorMessage(deviceName, it))
                     }

@@ -960,7 +960,10 @@ class SettingsActivity : AppCompatActivity() {
             "voice_commands_toggle" -> {
                 if (!com.mrgq.pdfviewer.voice.VoiceListener.isAvailable(this)) return
                 val enable = !preferences.getBoolean(PdfViewerActivity.PREF_VOICE_COMMANDS, false)
-                preferences.edit().putBoolean(PdfViewerActivity.PREF_VOICE_COMMANDS, enable).apply()
+                val editor = preferences.edit().putBoolean(PdfViewerActivity.PREF_VOICE_COMMANDS, enable)
+                // 끄면 👂 계속 듣기도 함께 끈다 — 다시 켰을 때 모르는 사이 듣기 시작하지 않게
+                if (!enable) editor.putBoolean(PdfViewerActivity.PREF_VOICE_ALWAYS, false)
+                editor.apply()
                 showInfoPanel()
             }
             "voice_always_toggle" -> {
