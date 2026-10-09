@@ -38,6 +38,7 @@ class VoiceCommandRunnerTest {
         override suspend fun showFullScore() = call("full")
         override suspend fun start() = call("start")
         override suspend fun stop() = call("stop")
+        override suspend fun listen() = call("listen")
     }
 
     private fun run(text: String, viewer: FakeViewer = FakeViewer(), bareNumberIsTempo: Boolean = false) =
@@ -112,6 +113,13 @@ class VoiceCommandRunnerTest {
         assertFalse(report.ok)
         assertTrue(calls.isEmpty())
         assertEquals("예비박은 한 마디나 두 마디만 돼요", report.message)
+    }
+
+    @Test
+    fun 듣기는_마디를_고른_뒤에() {
+        assertEquals(listOf("select 57", "listen"), run("57마디부터 듣기").second)
+        assertEquals(listOf("tempo 72", "page 3", "listen"), run("템포 72 3쪽 듣기").second)
+        assertEquals(listOf("listen"), run("듣기 시작").second)
     }
 
     @Test

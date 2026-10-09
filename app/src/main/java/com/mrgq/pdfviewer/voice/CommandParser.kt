@@ -17,6 +17,7 @@ import com.mrgq.pdfviewer.voice.VoiceCommand.SetTempo
  * - 조사 · 말끝만인 조각은 버리고, 모르는 말은 남겨 앞뒤가 이어지지 않게 한다
  * - "말고 · 아니 · 취소" 나 "전 · 뒤 · 후"(상대 위치)가 들리면, 어디에도 붙지 않은 수가 남으면, 위치 · 템포가 둘이면 → 실행하지 않음
  * - 마디 고르기에 "시작 · 다시"가 붙으면 그 마디부터 시작("57마디 시작" = 57마디부터)
+ * - "듣기"가 있으면 메트로놈 대신 🎤 연주 듣기로 시작: "57마디부터 듣기" = 57마디 고르고 듣기, "듣기 시작" = 듣기
  * - "다시"는 다른 위치 명령이 있으면 빠진다("처음부터 다시" = 처음부터), "시작"은 재생을 시작하는 위치 명령이 있으면 빠진다
  *
  * Android 에 의존하지 않는다 — JVM 단위 테스트 대상.
@@ -98,6 +99,7 @@ object CommandParser {
                 t == Token.Word(Kw.RESUME) -> found += VoiceCommand.Resume
                 t == Token.Word(Kw.START) -> found += VoiceCommand.Start
                 t == Token.Word(Kw.STOP) -> found += VoiceCommand.Stop
+                t == Token.Word(Kw.LISTEN) -> found += VoiceCommand.Listen
                 t == Token.Word(Kw.METRONOME) -> metronome = true
                 t == Token.Word(Kw.FULL_SCORE) -> found += VoiceCommand.ShowFullScore
                 // "세컨 바이올린" — 서수가 앞에
@@ -158,6 +160,12 @@ object CommandParser {
 
     private fun resolve(found: List<VoiceCommand>, strayNumbers: Int): ParseResult {
         var commands = found
+        // "57마디부터 듣기", "듣기 시작" — 메트로놈이 아니라 🎤 연주 듣기로 시작한다: 마디는 고르기로, "시작"은 듣기에 든다
+        if (VoiceCommand.Listen in commands) {
+            commands = commands.map { if (it is GotoMeasure) SelectMeasure(it.measure) else it } - VoiceCommand.Start
+            // "처음부터 듣기" · "이어서 듣기" · "듣기 멈춰"는 아직 받지 않는다
+            if (VoiceCommand.Stop in commands || commands.any { it.startsPlayback }) return ParseResult.Unrecognized(Reason.CONFLICT)
+        }
         // "57마디 시작", "57마디 다시" — 고르기에 시작이 붙으면 그 마디부터
         val select = commands.filterIsInstance<SelectMeasure>()
         if (select.isNotEmpty() && (VoiceCommand.Start in commands || VoiceCommand.Restart in commands)) {

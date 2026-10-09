@@ -19,6 +19,7 @@ enum class Kw {
     METRONOME,    // 메트로놈 — 홀로면 시작, "메트로놈 정지"면 정지를 따른다
     COUNT_IN,     // 예비박 — "예비박 한 마디", "두 마디 예비박"
     STOP,         // 멈춰 · 정지 · 그만 — 👂 계속 듣기에서 연주를 멈추는 말 (#085)
+    LISTEN,       // 듣기 · 듣고 넘기기 — 🎤 연주 듣고 넘기기 시작 (#087)
     PART,         // 파트 — 악기 이름 뒤에 붙어도 되고 안 붙어도 된다
     FULL_SCORE,   // 총보
     LETTER,       // 레터 · 리허설 — 리허설 마크
@@ -73,6 +74,7 @@ object VoiceLexicon {
         "넘겨" to Kw.TURN, "넘기기" to Kw.TURN, "넘김" to Kw.TURN,
         "시작" to Kw.START, "메트로놈" to Kw.METRONOME,
         "예비박" to Kw.COUNT_IN, "카운트인" to Kw.COUNT_IN,
+        "듣고넘기기" to Kw.LISTEN, "듣고넘겨" to Kw.LISTEN, "듣기" to Kw.LISTEN, "들어줘" to Kw.LISTEN,
         "멈춰" to Kw.STOP, "멈춤" to Kw.STOP, "멈추" to Kw.STOP, "정지" to Kw.STOP, "그만" to Kw.STOP, "스톱" to Kw.STOP,
         "파트" to Kw.PART,
         "총보" to Kw.FULL_SCORE, "풀스코어" to Kw.FULL_SCORE, "전체악보" to Kw.FULL_SCORE,

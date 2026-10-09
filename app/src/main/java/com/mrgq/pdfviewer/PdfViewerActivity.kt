@@ -2583,18 +2583,30 @@ class PdfViewerActivity : AppCompatActivity() {
 
     /** 다음 [startMicFollow] 가 시작할 마디 — 시작 마디 고르기의 "🎤 여기서부터 듣기"(#087). null = 지금 쪽 첫 마디 */
     private var micStartAt: ScoreMeasure? = null
+    /** [startMicFollow] 가 마디 · 악보 크로마를 준비하는 중 — 그사이 👂 계속 듣기가 마이크를 다시 잡지 않게 (#087) */
+    private var micFollowStarting = false
+
+    /** 연주 듣고 넘기기를 시작할 수 없는 까닭 — 시작할 수 있으면 null (P10 §3.1). 마디 · MusicXML 맞춤은 시작하면서 본다 */
+    private fun micFollowBlocker(): String? = when {
+        currentPdfFileId == null -> "악보를 아직 여는 중입니다"
+        collaborationMode == CollaborationMode.PERFORMER -> "연주자 기기에서는 쓸 수 없습니다 — 지휘자가 넘깁니다"
+        partViewLayout != null -> "전체 악보에서만 쓸 수 있습니다 (파트 보기를 끄세요)"
+        musicXml == null || musicXmlFileId != currentPdfFileId -> "이 곡의 MusicXML 이 없어 들을 수 없습니다"
+        else -> null
+    }
 
     /**
      * [micStartAt](고른 마디) 또는 지금 쪽 첫 마디부터 듣기 시작. 조건: 전체 악보 · 맞는 MusicXML · 악보 분석 마디 (P10 §3.1)
      */
     private fun startMicFollow() {
         val at = micStartAt.also { micStartAt = null }
+        micFollowBlocker()?.let { return toast(it) }
         val fileId = currentPdfFileId ?: return
-        if (collaborationMode == CollaborationMode.PERFORMER) return toast("연주자 기기에서는 쓸 수 없습니다 — 지휘자가 넘깁니다")
-        if (partViewLayout != null) return toast("전체 악보에서만 쓸 수 있습니다 (파트 보기를 끄세요)")
-        val score = musicXml?.takeIf { musicXmlFileId == fileId } ?: return toast("이 곡의 MusicXML 이 없어 들을 수 없습니다")
+        val score = musicXml ?: return
         stopMetronome()
-        // 👂 계속 듣기가 마이크를 쥐고 있으면 놓는다 — 추적이 열리면 refreshVoiceButton 이 다시 걸지 않는다, 못 열면 다시 건다
+        // 👂 계속 듣기가 마이크를 쥐고 있으면 놓는다 — 준비하는 동안 다시 잡지 않고, 추적이 열리면 refreshVoiceButton 이 다시 걸지 않는다,
+        // 못 열면 다시 건다
+        micFollowStarting = true
         stopAlwaysListening()
         val file = File(pdfFilePath)
         lifecycleScope.launch {
@@ -2644,7 +2656,12 @@ class PdfViewerActivity : AppCompatActivity() {
             binding.micStatus.visibility = View.VISIBLE
             refreshVoiceButton()
             Toast.makeText(this@PdfViewerActivity, "🎤 ${mapped[startMeasure]?.measureNumber}번 마디부터 듣습니다 — 연주를 시작하세요", Toast.LENGTH_LONG).show()
-        }.invokeOnCompletion { binding.voiceButton.post { if (micFollower == null) scheduleAlwaysListening() } } // 못 열었으면 👂 다시
+        }.invokeOnCompletion {
+            binding.voiceButton.post {
+                micFollowStarting = false
+                if (micFollower == null) scheduleAlwaysListening() // 못 열었으면 👂 다시
+            }
+        }
     }
 
     private fun stopMicFollow(announce: Boolean = false) {
@@ -4813,6 +4830,23 @@ class PdfViewerActivity : AppCompatActivity() {
             return startFollowingAt(fileId, startable, chosen ?: firstShownMeasure(startable))
         }
 
+        override suspend fun listen(): CommandOutcome {
+            if (!micFollowCapable()) return failed("이 기기에서는 연주를 들을 수 없어요")
+            if (micFollower != null) return CommandOutcome.Done
+            micFollowBlocker()?.let { return failed(it) }
+            val page = commandPageTarget
+            micStartAt = when {
+                // "3쪽 듣기" — 넘김이 끝나 그 쪽이 보인 뒤 그 쪽 첫 마디부터 (startMicFollow 가 지금 쪽에서 고른다)
+                page != null -> { awaitPageIndex(page); null }
+                // "57마디부터 듣기" · 고른 뒤 "듣기" — 고른 마디부터
+                followState == FollowState.SELECTING -> followMeasures.getOrNull(cursorIndex)
+                else -> null
+            }
+            if (followState == FollowState.SELECTING) cancelMeasureSelection()
+            toggleMicFollow()
+            return CommandOutcome.Done
+        }
+
         override suspend fun stop(): CommandOutcome {
             when {
                 ensembleRole == EnsembleRole.FOLLOWING -> detachFromEnsemble() // 연주자: 이 기기만 빠진다 (뒤로 키와 같다)
@@ -5016,10 +5050,10 @@ class PdfViewerActivity : AppCompatActivity() {
         if (alwaysListenAllowed()) scheduleAlwaysListening(0) else stopAlwaysListening()
     }
 
-    /** 👂 계속 듣기를 켰고, 화면이 앞에 있고, 🎙 단추가 보이고, 🎤 연주 추적이 마이크를 쓰지 않을 때 */
+    /** 👂 계속 듣기를 켰고, 화면이 앞에 있고, 🎙 단추가 보이고, 🎤 연주 추적이 마이크를 쓰지 않을 때(준비 중도 아닐 때) */
     private fun alwaysListenAllowed(): Boolean =
         voiceResumed && preferences.getBoolean(PREF_VOICE_ALWAYS, false) &&
-            binding.voiceButton.visibility == View.VISIBLE && micFollower == null
+            binding.voiceButton.visibility == View.VISIBLE && micFollower == null && !micFollowStarting
 
     private fun scheduleAlwaysListening(delayMs: Long = ALWAYS_RESTART_MS) {
         binding.voiceButton.removeCallbacks(restartAlwaysListening)

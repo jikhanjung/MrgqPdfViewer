@@ -233,6 +233,21 @@ class VoiceCommandTest {
         assertUnrecognized("정지 시작", Reason.CONFLICT)
     }
 
+    @Test
+    fun 연주_듣기() {
+        assertCommands("듣기", VoiceCommand.Listen)
+        assertCommands("연주 듣기", VoiceCommand.Listen)
+        assertCommands("듣고 넘기기", VoiceCommand.Listen)
+        assertCommands("듣기 시작", VoiceCommand.Listen)
+        assertCommands("57마디부터 듣기", SelectMeasure(57), VoiceCommand.Listen)
+        assertCommands("57마디 듣기", SelectMeasure(57), VoiceCommand.Listen)
+        assertCommands("3쪽 듣기", GotoPage(3), VoiceCommand.Listen)
+        assertCommands("템포 72 듣기", SetTempo(72), VoiceCommand.Listen)
+        assertCommands("다음 쪽 넘겨", VoiceCommand.NextPage) // "넘겨"는 그대로 넘김
+        assertUnrecognized("처음부터 듣기", Reason.CONFLICT)
+        assertUnrecognized("듣기 멈춰", Reason.CONFLICT)
+    }
+
     // ── 👂 호출어 ──
 
     @Test

@@ -38,4 +38,6 @@ interface ViewerCommands {
     suspend fun start(): CommandOutcome
     /** 연주를 멈춘다 — 합주 지휘자면 연주자도, 연주자면 이 기기만 빠진다. 시작 마디를 고르는 중이면 고르기를 접는다 */
     suspend fun stop(): CommandOutcome
+    /** 🎤 연주 듣고 넘기기 — 같은 말의 쪽 명령의 쪽 첫 마디, 고른 마디, 아니면 이 쪽 첫 마디부터 (#087) */
+    suspend fun listen(): CommandOutcome
 }
