@@ -39,6 +39,12 @@ import com.mrgq.pdfviewer.score.PartLayout
 import com.mrgq.pdfviewer.score.PartPdfBuilder
 import com.mrgq.pdfviewer.score.ScoreParts
 import com.mrgq.pdfviewer.score.PartStaves
+import com.mrgq.pdfviewer.voice.CommandOutcome
+import com.mrgq.pdfviewer.voice.CommandParser
+import com.mrgq.pdfviewer.voice.PartMatcher
+import com.mrgq.pdfviewer.voice.PartRef
+import com.mrgq.pdfviewer.voice.ViewerCommands
+import com.mrgq.pdfviewer.voice.VoiceCommandRunner
 import com.mrgq.pdfviewer.metronome.Accent
 import com.mrgq.pdfviewer.metronome.MetronomeClock
 import com.mrgq.pdfviewer.metronome.MetronomeEngine
@@ -98,6 +104,10 @@ class PdfViewerActivity : AppCompatActivity() {
         /** 반주 소리 크기 — 메트로놈 클릭과 따로 (사용자 요청 2026-09-28), 0~1 */
         private const val PREF_ACCOMPANIMENT_VOLUME = "metronome_accompaniment_volume"
         private const val DEFAULT_COUNT_IN_BARS = 2
+        /** 설정 → 앱 정보 → ⌨️ 글자로 명령 시험 (P12 1단계) — 켜면 ↑ 메뉴에 ⌨️ 줄. 설정 화면(SettingsActivity)과 같은 키 */
+        const val PREF_VOICE_TEXT_INPUT = "voice_text_input"
+        /** 파트 보기를 바꾼 명령이 파일이 다시 열리기를 기다리는 한도 */
+        private const val FILE_RELOAD_TIMEOUT_MS = 15_000L
 
         /** 악보 연동 자동 넘김: 페이지 마지막 마디가 끝나기 몇 박 전에 넘길지 */
         private const val TURN_LEAD_BEATS = 2
@@ -1479,7 +1489,10 @@ class PdfViewerActivity : AppCompatActivity() {
                                 }
                             } else 0
                             showPage(targetPage)
-                            
+                            // 파트 보기를 바꾼 명령이 이어지는 명령(마디로 가기)을 실행하려고 기다린다
+                            fileShownSignal?.complete(Unit)
+                            fileShownSignal = null
+
                             // Broadcast file change if in conductor mode
                             if (collaborationMode == CollaborationMode.CONDUCTOR) {
                                 // Add file to server first
@@ -1550,35 +1563,8 @@ class PdfViewerActivity : AppCompatActivity() {
                     showInputBlockedMessage()
                     return true
                 }
-                
-                if (isNavigationGuideVisible) {
-                    if (navigationGuideType == "start" && currentFileIndex > 0) {
-                        // 첫 페이지 안내에서 왼쪽 키 -> 이전 파일로 이동
-                        hideNavigationGuide()
-                        loadPreviousFile()
-                        return true
-                    }
-                    // 안내가 표시된 상태에서는 일반 페이지 이동 차단
-                    return true
-                } else if (phoneView && chunkIndex > 0) {
-                    showChunk(phoneStartEndingAt(chunkIndex - 1)) // 휴대폰: 같은 쪽 앞 화면
-                    return true
-                } else if (pageIndex > 0) {
-                    if (phoneView) pendingChunk = LAST_CHUNK // 앞 쪽의 마지막 조각으로
-                    val nextPageIndex = if (isTwoPageMode) pageIndex - 2 else pageIndex - 1
-                    val target = maxOf(0, nextPageIndex)
-                    if (collaborationMode == CollaborationMode.CONDUCTOR && isSyncTurnEnabled()) {
-                        conductorScheduledTurn(target, -1)
-                    } else {
-                        showPageWithAnimation(target, -1)
-                    }
-                    anchorMicFollow(target)
-                    return true
-                } else {
-                    // 첫 페이지에서 안내 표시
-                    showStartOfFileGuide()
-                    return true
-                }
+                turnBack()
+                return true
             }
             KeyEvent.KEYCODE_DPAD_RIGHT -> {
                 // Check if input is blocked due to synchronization
@@ -1586,35 +1572,8 @@ class PdfViewerActivity : AppCompatActivity() {
                     showInputBlockedMessage()
                     return true
                 }
-                
-                if (isNavigationGuideVisible) {
-                    if (navigationGuideType == "end" && currentFileIndex < filePathList.size - 1) {
-                        // 마지막 페이지 안내에서 오른쪽 키 -> 다음 파일로 이동
-                        hideNavigationGuide()
-                        loadNextFile()
-                        return true
-                    }
-                    // 안내가 표시된 상태에서는 일반 페이지 이동 차단
-                    return true
-                } else if (phoneView && phoneWindowEnd < phoneChunks.lastIndex) {
-                    showChunk(phoneWindowEnd + 1) // 휴대폰: 같은 쪽 다음 화면
-                    return true
-                } else {
-                    val nextPageIndex = if (isTwoPageMode) pageIndex + 2 else pageIndex + 1
-                    if (nextPageIndex < pageCount) {
-                        if (collaborationMode == CollaborationMode.CONDUCTOR && isSyncTurnEnabled()) {
-                            conductorScheduledTurn(nextPageIndex, 1)
-                        } else {
-                            showPageWithAnimation(nextPageIndex, 1)
-                        }
-                        anchorMicFollow(nextPageIndex)
-                        return true
-                    } else {
-                        // 마지막 페이지에서 안내 표시
-                        showEndOfFileGuide()
-                        return true
-                    }
-                }
+                turnForward()
+                return true
             }
             KeyEvent.KEYCODE_BACK, KeyEvent.KEYCODE_ESCAPE -> {
                 // 지휘자 모드에서 뒤로가기 시 연주자에게 알림
@@ -1646,6 +1605,59 @@ class PdfViewerActivity : AppCompatActivity() {
         return super.onKeyDown(keyCode, event)
     }
     
+    /** ← · 페달 · 터치 · 명령 층의 "이전 쪽" — 휴대폰은 같은 쪽 앞 화면부터, 첫 쪽이면 안내(안내 중이면 이전 파일로) */
+    private fun turnBack() {
+        if (isNavigationGuideVisible) {
+            if (navigationGuideType == "start" && currentFileIndex > 0) {
+                // 첫 페이지 안내에서 왼쪽 키 -> 이전 파일로 이동
+                hideNavigationGuide()
+                loadPreviousFile()
+            }
+            // 안내가 표시된 상태에서는 일반 페이지 이동 차단
+        } else if (phoneView && chunkIndex > 0) {
+            showChunk(phoneStartEndingAt(chunkIndex - 1)) // 휴대폰: 같은 쪽 앞 화면
+        } else if (pageIndex > 0) {
+            if (phoneView) pendingChunk = LAST_CHUNK // 앞 쪽의 마지막 조각으로
+            val nextPageIndex = if (isTwoPageMode) pageIndex - 2 else pageIndex - 1
+            turnTo(maxOf(0, nextPageIndex), -1)
+        } else {
+            // 첫 페이지에서 안내 표시
+            showStartOfFileGuide()
+        }
+    }
+
+    /** → · 페달 · 터치 · 명령 층의 "다음 쪽" — 휴대폰은 같은 쪽 다음 화면부터, 마지막 쪽이면 안내(안내 중이면 다음 파일로) */
+    private fun turnForward() {
+        if (isNavigationGuideVisible) {
+            if (navigationGuideType == "end" && currentFileIndex < filePathList.size - 1) {
+                // 마지막 페이지 안내에서 오른쪽 키 -> 다음 파일로 이동
+                hideNavigationGuide()
+                loadNextFile()
+            }
+            // 안내가 표시된 상태에서는 일반 페이지 이동 차단
+        } else if (phoneView && phoneWindowEnd < phoneChunks.lastIndex) {
+            showChunk(phoneWindowEnd + 1) // 휴대폰: 같은 쪽 다음 화면
+        } else {
+            val nextPageIndex = if (isTwoPageMode) pageIndex + 2 else pageIndex + 1
+            if (nextPageIndex < pageCount) {
+                turnTo(nextPageIndex, 1)
+            } else {
+                // 마지막 페이지에서 안내 표시
+                showEndOfFileGuide()
+            }
+        }
+    }
+
+    /** 손으로 넘기기 — 지휘자 동기 넘김이 켜져 있으면 예약, 마이크 추적이면 다시 맞춘다 */
+    private fun turnTo(target: Int, direction: Int) {
+        if (collaborationMode == CollaborationMode.CONDUCTOR && isSyncTurnEnabled()) {
+            conductorScheduledTurn(target, direction)
+        } else {
+            showPageWithAnimation(target, direction)
+        }
+        anchorMicFollow(target)
+    }
+
     /**
      * 넘김 페달이 보내는 키 → 리모컨 ← →. 페달은 보통 PageUp/PageDown · 미디어 이전/다음 중 하나를 보낸다 (←→ 를 보내는 것은 그대로 된다).
      * ↑ ↓ 를 보내는 페달은 ↑ 이 메트로놈 메뉴라 맞지 않는다 — 페달 모드를 바꿔 쓴다
@@ -4324,6 +4336,7 @@ class PdfViewerActivity : AppCompatActivity() {
         // 합주 중에도 파트 보기 (P07 4단계) — 쪽 · 마디 신호는 파트 화면으로 옮겨진다. 반주는 합주 중에 쓰지 않는다
         items += "파트 보기: ${partViewName ?: "전체 악보"}" to { showPartViewDialog() }
         if (notesWritable()) items += (if (notePen.editMode) "✏️ 메모 끝" else "✏️ 메모 쓰기") to { toggleNoteMode() }
+        if (voiceTextInputEnabled()) items += "⌨️ 글자로 명령 (시험) — 쪽 · 파트만" to { showVoiceTextInput() }
         val title = when {
             ensembleRole == EnsembleRole.FOLLOWING -> "메트로놈 — 지휘자를 따라가는 중"
             canRejoinEnsemble() -> "메트로놈 — 이 기기는 빠져 있음"
@@ -4494,6 +4507,7 @@ class PdfViewerActivity : AppCompatActivity() {
         items += "파트 보기: ${partViewName ?: "전체 악보"}" to { showPartViewDialog() }
         accompanimentMenuLabel()?.let { items += it to { showAccompanimentDialog() } }
         if (notesWritable()) items += (if (notePen.editMode) "✏️ 메모 끝" else "✏️ 메모 쓰기") to { toggleNoteMode() }
+        if (voiceTextInputEnabled()) items += "⌨️ 글자로 명령 (시험)" to { showVoiceTextInput() }
         if (micFollowCapable()) {
             items.add(0, (if (micFollower != null) "🎤 듣기 멈춤" else "🎤 연주 듣고 넘기기") to { toggleMicFollow() })
         }
@@ -4528,6 +4542,221 @@ class PdfViewerActivity : AppCompatActivity() {
             metronome.soundEnabled = preferences.getBoolean(PREF_METRONOME_SOUND, true)
             metronome.volume = preferences.getFloat(PREF_METRONOME_VOLUME, 0.6f)
             startMetronomeFromDialog()
+        }
+    }
+
+    // ── 명령 층 (P12 §5) ────────────────────────────────────────────────────
+
+    /** 이 곡에서 마지막으로 악보 연동을 시작한 마디 — "다시"가 쓴다. 정지가 [followStartMeasure] 를 지워도 남는다 */
+    private var lastFollowStart: Pair<String, Int>? = null
+    /** 파일을 다시 열어 첫 쪽을 보인 순간 — 파트 보기를 바꾼 명령이 기다린다 ([applyPartStaves]) */
+    private var fileShownSignal: kotlinx.coroutines.CompletableDeferred<Unit>? = null
+    private var voiceTextLast = ""
+
+    private fun failed(message: String) = CommandOutcome.Failed(message)
+
+    /**
+     * 음성 · 글자 명령이 부르는 악보 화면의 일. 기존 경로(↑ 메뉴 · 키 · 파트 보기 대화상자)와 같은 함수를 부른다 — 새로 생긴 동작은
+     * 하나뿐: 멈춰 있어도 **마디 고르기 없이 바로** 그 마디에서 악보 연동을 시작한다.
+     * 합주 연주자는 쪽 · 파트만 (마디 · 템포 · 시작은 지휘자, P12 §3.3), 지휘자는 늘 총보.
+     */
+    private val viewerCommands = object : ViewerCommands {
+        override suspend fun gotoMeasure(measure: Int) = followFrom("${measure}마디") { it.firstOrNull { m -> m.measureNumber == measure } }
+
+        override suspend fun gotoStart() = followFrom("처음") { it.firstOrNull() }
+
+        override suspend fun restart(): CommandOutcome {
+            val at = lastFollowStart?.takeIf { it.first == currentPdfFileId }?.second
+                ?: return failed("다시 시작할 마디가 없어요 — 이 곡에서 아직 시작한 적이 없어요")
+            return followFrom("${at}마디") { it.firstOrNull { m -> m.measureNumber == at } }
+        }
+
+        override suspend fun resume(): CommandOutcome {
+            val at = lastFollowPosition?.takeIf { it.first == currentPdfFileId }?.second
+                ?: return failed("이어서 할 마디가 없어요 — 멈춘 적이 없어요")
+            return followFrom("${at}마디") { it.firstOrNull { m -> m.measureNumber == at } }
+        }
+
+        override suspend fun gotoRehearsalMark(mark: String) = failed("레터(리허설 마크)는 아직 몰라요 — 마디 번호로 말하세요")
+
+        override suspend fun nextPage(): CommandOutcome {
+            if (isInputBlocked()) return failed("지휘자가 방금 넘겨 잠시 넘길 수 없어요")
+            val more = (phoneView && phoneWindowEnd < phoneChunks.lastIndex) ||
+                (if (isTwoPageMode) pageIndex + 2 else pageIndex + 1) < pageCount
+            if (!more) return failed("마지막 쪽이에요")
+            if (isNavigationGuideVisible) hideNavigationGuide()
+            turnForward()
+            return CommandOutcome.Done
+        }
+
+        override suspend fun previousPage(): CommandOutcome {
+            if (isInputBlocked()) return failed("지휘자가 방금 넘겨 잠시 넘길 수 없어요")
+            if (!(phoneView && chunkIndex > 0) && pageIndex == 0) return failed("첫 쪽이에요")
+            if (isNavigationGuideVisible) hideNavigationGuide()
+            turnBack()
+            return CommandOutcome.Done
+        }
+
+        override suspend fun gotoPage(page: Int): CommandOutcome {
+            if (isInputBlocked()) return failed("지휘자가 방금 넘겨 잠시 넘길 수 없어요")
+            if (pageCount == 0) return failed("악보를 아직 여는 중이에요")
+            // 파트 보기면 원본 쪽 번호로 말한다 — 그 쪽이 놓인 파트 쪽으로 (합주 쪽 신호와 같게)
+            val layout = partViewLayout
+            val sourcePages = layout?.strips?.maxOfOrNull { it.srcPage + 1 } ?: pageCount
+            if (page > sourcePages) return failed("${page}쪽이 없어요 (1 ~ $sourcePages)")
+            val target = pairStart((layout?.dstPageForSource(page - 1) ?: (page - 1)).coerceIn(0, pageCount - 1))
+            if (target == pageIndex) return CommandOutcome.Done
+            if (isNavigationGuideVisible) hideNavigationGuide()
+            turnTo(target, if (target > pageIndex) 1 else -1)
+            return CommandOutcome.Done
+        }
+
+        override suspend fun setTempo(bpm: Int): CommandOutcome {
+            if (collaborationMode == CollaborationMode.PERFORMER) return failed("템포는 지휘자가 정해요")
+            val fileId = currentPdfFileId
+            metronome.bpm = bpm
+            if (fileId != null) {
+                // 파일별 저장 (대화상자를 닫을 때와 같다) — 이어지는 "57마디부터"가 이 템포로 시작한다
+                val settings = metronomeSettingsFor(fileId)
+                withContext(Dispatchers.IO) {
+                    musicRepository.setMetronomeForFile(fileId, bpm, settings.meter.numerator, settings.meter.denominator, settings.dotted)
+                }
+            }
+            refreshFollowTempo()
+            retimeConductorRun()
+            return CommandOutcome.Done
+        }
+
+        override suspend fun selectParts(parts: List<PartRef>): CommandOutcome {
+            if (collaborationMode == CollaborationMode.CONDUCTOR) return failed("지휘자는 총보만 봅니다 — 파트 보기는 연주자 · 혼자 연습에서")
+            val fileId = currentPdfFileId ?: return failed("악보를 아직 여는 중이에요")
+            val staves = withContext(Dispatchers.IO) { musicRepository.getOrAnalyzeScoreStaves(fileId, File(pdfFilePath)) }
+            val all = when (val result = staves?.let { ScoreParts.of(it) } ?: ScoreParts.Result.NoStaves) {
+                is ScoreParts.Result.Parts -> result.parts
+                ScoreParts.Result.NoStaves -> return failed("악보 구조를 찾지 못했어요 (벡터 악보 PDF 만)")
+                ScoreParts.Result.SingleStaff -> return failed("보표가 하나라 이미 파트보예요")
+                is ScoreParts.Result.VaryingStaves -> return failed("시스템마다 보표 수가 달라 파트 보기를 못 해요")
+            }
+            return when (val match = PartMatcher.match(all.map { it.staffIndex to knownPartName(it, all.size) }, parts)) {
+                is PartMatcher.Result.Missing -> failed("${match.part.label} 파트가 없어요")
+                is PartMatcher.Result.Ambiguous -> failed("${match.part.label} 파트가 여럿이에요 (${match.names.joinToString()}) — 번호까지 말하세요")
+                is PartMatcher.Result.Staves -> applyPartStaves(fileId, match.staves.takeIf { it.size < all.size })
+            }
+        }
+
+        override suspend fun showFullScore(): CommandOutcome {
+            if (collaborationMode == CollaborationMode.CONDUCTOR) return CommandOutcome.Done // 지휘자는 늘 총보
+            val fileId = currentPdfFileId ?: return failed("악보를 아직 여는 중이에요")
+            return applyPartStaves(fileId, null)
+        }
+
+        override suspend fun start(): CommandOutcome {
+            if (collaborationMode == CollaborationMode.PERFORMER) return failed("시작은 지휘자가 해요")
+            startMetronomeWithSavedSettings()
+            return CommandOutcome.Done
+        }
+    }
+
+    /**
+     * 시작 가능 마디 중 [pick] 이 고른 마디에서 바로 악보 연동을 시작한다 (마디 고르기 없이). 엔진에는 이 파일의 설정(방금 바꾼 템포 포함)을 넣는다 —
+     * ↑ 메뉴 "시작"([startMetronomeWithSavedSettings])과 같다. [what] 은 없을 때 알릴 이름("57마디")
+     */
+    private suspend fun followFrom(what: String, pick: (List<ScoreMeasure>) -> ScoreMeasure?): CommandOutcome {
+        if (collaborationMode == CollaborationMode.PERFORMER) return failed("마디는 지휘자가 정해요")
+        val fileId = currentPdfFileId ?: return failed("악보를 아직 여는 중이에요")
+        val cached = if (scoreMeasuresFileId == fileId) scoreMeasures else null
+        val measures = cached ?: withContext(Dispatchers.IO) { measuresForView(fileId, File(pdfFilePath)) }
+        if (currentPdfFileId != fileId) return failed("다른 곡으로 넘어갔어요")
+        if (cached == null && measures != null) {
+            scoreMeasures = measures
+            scoreMeasuresFileId = fileId
+        }
+        val startable = ScoreFollower.startableMeasures(measures.orEmpty())
+        if (startable.isEmpty()) return failed("이 악보는 마디 · 박자표를 읽지 못해 마디로 갈 수 없어요")
+        val start = pick(startable)
+            ?: return failed("${what}가 없어요 (${startable.minOf { it.measureNumber }} ~ ${startable.maxOf { it.measureNumber }})")
+
+        if (metronome.isRunning || followState != FollowState.OFF) stopMetronome()
+        val settings = metronomeSettingsFor(fileId)
+        if (currentPdfFileId != fileId) return failed("다른 곡으로 넘어갔어요")
+        metronome.bpm = settings.bpm
+        metronome.timeSignature = settings.meter
+        metronome.dottedBeat = settings.dotted
+        metronome.soundEnabled = preferences.getBoolean(PREF_METRONOME_SOUND, true)
+        metronome.volume = preferences.getFloat(PREF_METRONOME_VOLUME, 0.6f)
+        followMeasures = startable
+        followFileId = fileId
+        cursorIndex = startable.indexOf(start)
+        ensureMeasureVisible(start)
+        startFollowing()
+        return CommandOutcome.Done
+    }
+
+    /** 파트 보기를 [target] 보표로 (null = 전체 악보) — 저장하고 파일을 다시 연다. 다음 명령이 새 화면에서 돌도록 다 열릴 때까지 기다린다 */
+    private suspend fun applyPartStaves(fileId: String, target: Set<Int>?): CommandOutcome {
+        if (target == partViewStaves) return CommandOutcome.Done
+        if (metronome.isRunning || followState != FollowState.OFF) stopMetronome()
+        withContext(Dispatchers.IO) { musicRepository.setPartStavesForFile(fileId, target) }
+        if (currentPdfFileId != fileId) return failed("다른 곡으로 넘어갔어요")
+        val shown = kotlinx.coroutines.CompletableDeferred<Unit>()
+        fileShownSignal = shown
+        loadFile(pdfFilePath, pdfFileName)
+        kotlinx.coroutines.withTimeoutOrNull(FILE_RELOAD_TIMEOUT_MS) { shown.await() }
+            ?: return failed("파트 보기로 다시 여는 데 너무 오래 걸려요")
+        return CommandOutcome.Done
+    }
+
+    /** 설정 → 앱 정보 → ⌨️ "글자로 명령 시험"을 켰나 — ↑ 메뉴에 ⌨️ 줄이 생긴다 */
+    private fun voiceTextInputEnabled(): Boolean = preferences.getBoolean(PREF_VOICE_TEXT_INPUT, false)
+
+    /**
+     * ⌨️ 글자로 명령 (P12 1단계 시험 창) — 음성 대신 글자로 같은 길(정규화 → 규칙 → 명령 층)을 지난다. 🎙 와 같은 규칙:
+     * 🎤 연주 추적 중에는 쓰지 않고(§4.1), 여는 순간 메트로놈을 멈춘다(§4.2 — 합주 연주자면 이 기기만 빠진다).
+     */
+    private fun showVoiceTextInput() {
+        if (micFollower != null) return toast("🎤 연주 추적을 멈춘 뒤에 하세요")
+        if (ensembleRole == EnsembleRole.FOLLOWING) {
+            detachFromEnsemble()
+        } else if (metronome.isRunning || followState != FollowState.OFF) {
+            stopMetronome()
+        }
+        val density = resources.displayMetrics.density
+        val input = android.widget.EditText(this).apply {
+            setText(voiceTextLast)
+            selectAll()
+            hint = "예: 57마디부터 템포 72 · 첼로 파트 · 다음 쪽"
+            setSingleLine(true)
+            imeOptions = android.view.inputmethod.EditorInfo.IME_ACTION_DONE
+        }
+        val box = android.widget.FrameLayout(this).apply {
+            setPadding((24 * density).toInt(), (8 * density).toInt(), (24 * density).toInt(), 0)
+            addView(input)
+        }
+        val dialog = AlertDialog.Builder(this)
+            .setTitle("⌨️ 글자로 명령 (시험)")
+            .setView(box)
+            .setPositiveButton("실행") { _, _ -> runTextCommand(input.text.toString()) }
+            .setNegativeButton("닫기", null)
+            .create()
+        input.setOnEditorActionListener { _, actionId, _ ->
+            if (actionId != android.view.inputmethod.EditorInfo.IME_ACTION_DONE) return@setOnEditorActionListener false
+            dialog.dismiss()
+            runTextCommand(input.text.toString())
+            true
+        }
+        dialog.window?.setSoftInputMode(android.view.WindowManager.LayoutParams.SOFT_INPUT_STATE_VISIBLE)
+        dialog.show()
+        input.requestFocus()
+    }
+
+    private fun runTextCommand(text: String) {
+        if (text.isBlank()) return
+        voiceTextLast = text
+        val parsed = CommandParser.parse(text)
+        lifecycleScope.launch {
+            val report = VoiceCommandRunner.run(parsed, viewerCommands)
+            Log.i("VoiceCommand", "\"$text\" → $parsed → ${if (report.ok) "✓" else "✗"} ${report.message}")
+            Toast.makeText(this@PdfViewerActivity, (if (report.ok) "✓ " else "✗ ") + report.message, Toast.LENGTH_LONG).show()
         }
     }
 
@@ -4571,6 +4800,7 @@ class PdfViewerActivity : AppCompatActivity() {
         val scoreFollower = ScoreFollower(followMeasures, start.measureNumber, metronome.dottedBeat, sections, countInBarsSetting())
         follower = scoreFollower
         followStartMeasure = start.measureNumber
+        followFileId?.let { lastFollowStart = it to start.measureNumber }
         followTempo = tempo
         followTempoDeferredNotice = false
         followMeasure = start
