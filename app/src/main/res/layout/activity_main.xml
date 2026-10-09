@@ -56,25 +56,26 @@
                 android:textSize="12sp"
                 android:layout_marginStart="8dp" />
 
-            <!-- ScoreMate 에 연결된 TV: 앱 이름 옆에 "× ScoreMate ☁️" (사용자 요청 2026-09-28) — 서재가 ScoreMate 라는 표시 -->
+            <!-- ScoreMate 에 연결된 TV: 앱 이름 옆에 "× ScoreMate ☁️" (사용자 요청 2026-09-28) — 서재가 ScoreMate 라는 표시.
+                 색은 휴대폰 제목과 같은 연한 파랑 (사용자 요청 2026-10-09) -->
             <TextView
                 android:id="@+id/scoreMateBadge"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="×  ScoreMate ☁️"
-                android:textColor="#E6FFFFFF"
+                android:textColor="#FF90CAF9"
                 android:textSize="20sp"
                 android:layout_marginStart="14dp"
                 android:visibility="gone" />
         </LinearLayout>
 
-            <!-- 세로 화면: 제목 바로 아래 줄 (사용자 요청 2026-09-28) -->
+            <!-- 세로 화면(태블릿): 제목 바로 아래 줄 (사용자 요청 2026-09-28), 연한 파랑 (2026-10-09) -->
             <TextView
                 android:id="@+id/scoreMateBadgeBelow"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="× ScoreMate ☁️"
-                android:textColor="#CCFFFFFF"
+                android:textColor="#FF90CAF9"
                 android:textSize="15sp"
                 android:visibility="gone" />
         </LinearLayout>
