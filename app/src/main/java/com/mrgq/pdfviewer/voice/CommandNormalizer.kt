@@ -1,0 +1,104 @@
+package com.mrgq.pdfviewer.voice
+
+/** 정규화한 명령 조각 */
+sealed class Token {
+    data class Num(val value: Int) : Token()
+    data class Word(val kw: Kw) : Token()
+    data class Instrument(val key: String) : Token()
+    data class Ordinal(val n: Int) : Token()
+    /** 어휘에 없는 조각 — 조사 · 말끝이거나 모르는 말 */
+    data class Other(val text: String) : Token()
+}
+
+/**
+ * STT 결과 → 명령 조각 목록 (P12 §3.1). "오십칠 마디부터, 템포 칠십이" → `[57, 마디, 부터, 템포, 72]`.
+ *
+ * - **공백을 지우고 읽는다**: STT 의 띄어쓰기는 믿을 수 없다("오십 칠 마디", "다음쪽으로"). 단 아라비아 숫자 사이의 공백은
+ *   경계로 남긴다("72 57" ≠ 7257)
+ * - 한 자리에서 **어휘(긴 것부터) → 아라비아 숫자 → 한국어 수** 순으로 찾는다 — "이전"이 "이"보다, "세컨"이 "세"보다 먼저
+ * - **한 글자 한국어 수**("오", "세", "열", "백")는 낱말 조각과 헷갈리므로 앞이 템포 · 악기이거나 바로 뒤가 단위(마디 · 쪽 ·
+ *   번째 · bpm)일 때만 수로 읽는다. "이"는 "이 마디"(= 지금 마디)와 헷갈려 악기 뒤("바이올린 이")에서만, 레터 뒤에서는
+ *   한 글자를 알파벳으로 남긴다("레터 이" = E). "한번"의 "번"은 단위로 보지 않는다
+ *
+ * Android 에 의존하지 않는다 — JVM 단위 테스트 대상.
+ */
+object CommandNormalizer {
+
+    private const val BOUNDARY = '|'
+    private val PUNCTUATION = Regex("[.,!?~…·'\"()\\[\\]]")
+    private val SINGLE_SYLLABLE_UNITS = setOf(Kw.MEASURE, Kw.PAGE, Kw.BPM)
+    private val SINGLE_SYLLABLE_COUNTERS = setOf("번째", "째")
+    private const val MAX_DIGITS = 4
+
+    fun normalize(text: String): List<Token> {
+        val compact = compact(text)
+        val out = mutableListOf<Token>()
+        val other = StringBuilder()
+        fun flush() {
+            if (other.isNotEmpty()) out += Token.Other(other.toString())
+            other.clear()
+        }
+        var i = 0
+        while (i < compact.length) {
+            val c = compact[i]
+            if (c == BOUNDARY) { flush(); i++; continue }
+            val word = keywordAt(compact, i)
+            if (word != null) {
+                flush()
+                out += word.second
+                i += word.first.length
+                continue
+            }
+            if (c in '0'..'9') {
+                var j = i
+                while (j < compact.length && compact[j] in '0'..'9') j++
+                val digits = compact.substring(i, j)
+                if (digits.length <= MAX_DIGITS) { flush(); out += Token.Num(digits.toInt()) } else other.append(digits)
+                i = j
+                continue
+            }
+            val number = KoreanNumbers.prefixAt(compact, i)
+            if (number != null && acceptNumber(compact, i, number, out.lastOrNull(), other.isNotEmpty())) {
+                flush()
+                out += Token.Num(number.value)
+                i += number.length
+                continue
+            }
+            other.append(c)
+            i++
+        }
+        flush()
+        return out
+    }
+
+    /** 소문자 · 흔한 오인식 고침 · 문장부호 → 공백, 그리고 공백 지우기(아라비아 숫자 사이만 경계로) */
+    internal fun compact(text: String): String {
+        var s = text.lowercase()
+        VoiceLexicon.TYPOS.forEach { (wrong, right) -> s = s.replace(wrong, right) }
+        s = PUNCTUATION.replace(s, " ")
+        val sb = StringBuilder()
+        var pendingSpace = false
+        for (c in s) {
+            if (c.isWhitespace()) { pendingSpace = true; continue }
+            if (pendingSpace && sb.isNotEmpty() && sb.last() in '0'..'9' && c in '0'..'9') sb.append(BOUNDARY)
+            pendingSpace = false
+            sb.append(c)
+        }
+        return sb.toString()
+    }
+
+    private fun keywordAt(text: String, i: Int): Pair<String, Token>? =
+        VoiceLexicon.KEYWORDS_BY_LENGTH.firstOrNull { text.startsWith(it.first, i) }
+
+    private fun acceptNumber(text: String, i: Int, number: KoreanNumbers.Match, prev: Token?, inWord: Boolean): Boolean {
+        if (number.length >= 2) return true
+        if (inWord) return false
+        if (prev == Token.Word(Kw.LETTER)) return false
+        if (prev is Token.Instrument) return true
+        if (text[i] == '이') return false
+        if (prev == Token.Word(Kw.TEMPO)) return true
+        val next = keywordAt(text, i + number.length) ?: return false
+        val token = next.second
+        return (token is Token.Word && token.kw in SINGLE_SYLLABLE_UNITS) || next.first in SINGLE_SYLLABLE_COUNTERS
+    }
+}

@@ -1,0 +1,67 @@
+package com.mrgq.pdfviewer.voice
+
+/** 파트 하나 — 악기 키([VoiceLexicon.INSTRUMENTS]) + 번호("바이올린 2"), 번호 없으면 null */
+data class PartRef(val instrument: String, val number: Int? = null) {
+    val label: String get() = (VoiceLexicon.INSTRUMENT_LABELS[instrument] ?: instrument) + (number?.let { " $it" } ?: "")
+}
+
+/** 음성 명령 (P12 §3.2). 값이 악보 · 상태에 맞는지는 실행하는 쪽이 검사한다(P12 §3.3). */
+sealed class VoiceCommand {
+    abstract val label: String
+
+    // ── 위치 — 한 발화에 하나만 ──
+    data class GotoMeasure(val measure: Int) : VoiceCommand() { override val label get() = "${measure}마디" }
+    object GotoStart : VoiceCommand() { override val label get() = "처음부터" }
+    /** 직전 시작 마디부터 */
+    object Restart : VoiceCommand() { override val label get() = "다시" }
+    /** 멈춘 마디부터 */
+    object Resume : VoiceCommand() { override val label get() = "이어서" }
+    data class GotoRehearsalMark(val mark: String) : VoiceCommand() { override val label get() = "레터 $mark" }
+    object NextPage : VoiceCommand() { override val label get() = "다음 쪽" }
+    object PreviousPage : VoiceCommand() { override val label get() = "이전 쪽" }
+    data class GotoPage(val page: Int) : VoiceCommand() { override val label get() = "${page}쪽" }
+
+    // ── 설정 ──
+    data class SetTempo(val bpm: Int) : VoiceCommand() { override val label get() = "♩=$bpm" }
+    data class SelectParts(val parts: List<PartRef>) : VoiceCommand() {
+        override val label get() = parts.joinToString(" · ") { it.label } + " 파트"
+    }
+    object ShowFullScore : VoiceCommand() { override val label get() = "총보" }
+
+    /** 메트로놈 시작(지금 설정 그대로) — 위치 명령이 함께 있으면 그쪽이 시작하므로 빠진다 */
+    object Start : VoiceCommand() { override val label get() = "시작" }
+
+    val isPosition: Boolean
+        get() = this is GotoMeasure || this == GotoStart || this == Restart || this == Resume ||
+            this is GotoRehearsalMark || this == NextPage || this == PreviousPage || this is GotoPage
+
+    /** 위치 명령 중 메트로놈을 그 자리에서 시작하는 것 (쪽 넘김은 시작하지 않는다) */
+    val startsPlayback: Boolean
+        get() = this is GotoMeasure || this == GotoStart || this == Restart || this == Resume || this is GotoRehearsalMark
+}
+
+/** 발화 하나를 읽은 결과 */
+sealed class ParseResult {
+    /** 실행할 명령 — 실행 순서(템포 · 파트 → 위치 → 시작). [label] 은 화면에 보일 "57마디 · ♩=72" */
+    data class Commands(val commands: List<VoiceCommand>) : ParseResult() {
+        val label: String get() = commands.sortedBy { if (it.isPosition) 0 else 1 }.joinToString(" · ") { it.label }
+    }
+
+    /** 수만 들렸다("칠십이") — 마디인지 템포인지는 지금 화면이 정한다(P12 §3.2) */
+    data class BareNumber(val value: Int) : ParseResult()
+
+    data class Unrecognized(val reason: Reason) : ParseResult()
+
+    enum class Reason {
+        /** 명령으로 읽히는 것이 없다 */
+        NOTHING,
+        /** "말고 · 아니 · 취소"가 들렸다 */
+        NEGATION,
+        /** "두 마디 전"처럼 상대 위치 — 1차에 받지 않는다 */
+        RELATIVE,
+        /** 위치 둘(57마디 · 3쪽), 템포 둘, 파트와 총보를 함께 */
+        CONFLICT,
+        /** 어디에도 붙지 않은 수가 남았다 — 잘못 실행하느니 묻는다 */
+        STRAY_NUMBER,
+    }
+}

@@ -1,7 +1,7 @@
 # P12 — 말로 하는 명령 (푸시투토크 · 기기 안 STT + 규칙)
 
 작성일: 2026-10-09
-상태: 📝 **계획** — 구현 전
+상태: 🔨 **진행 중** — 1단계(정규화 · 규칙) 코드 · 단위 테스트(#081, v0.6.4-beta.1). 글자 입력 창 · 명령 층(0단계)은 아직
 관련: [`docs/ScoreMate_technical_discussion_2026-10-07.md`](../docs/ScoreMate_technical_discussion_2026-10-07.md)(음성 명령 · AI 연동 논의, §6 EmbeddingGemma 2 검토),
 [`P10`](20260929_P10_mic_conductor_autoturn_plan.md) · [`067`](20260929_067_mic_follow_core.md)(마이크 연주 추적 — 같은 마이크, 겹치지 않는다 §4.1),
 [`053`](20260913_053_metronome_pause_menu.md)(↑ 메트로놈 메뉴 · 일시정지 · 마디 골라 다시), [`057`](20260927_057_tempo_sections.md)(구간별 빠르기),
