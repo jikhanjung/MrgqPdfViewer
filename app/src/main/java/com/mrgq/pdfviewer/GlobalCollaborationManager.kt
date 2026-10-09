@@ -36,7 +36,8 @@ class GlobalCollaborationManager private constructor() {
     private var onServerClientConnected: ((String, String) -> Unit)? = null
     private var onServerClientDisconnected: ((String) -> Unit)? = null
     private var onClientConnectionStatusChanged: ((Boolean) -> Unit)? = null
-    private var onPageChangeReceived: ((Int, String, Long?, Boolean) -> Unit)? = null
+    /** (쪽, 파일, 동기 넘김 시각, roll — 듣고 넘긴 것, roll_start — 듣고 넘기기를 시작한 쪽 #088) */
+    private var onPageChangeReceived: ((Int, String, Long?, Boolean, Boolean) -> Unit)? = null
     /** (파일 이름, 페이지, 파일 내용 SHA-256 — #063) */
     private var onFileChangeReceived: ((String, Int, String?) -> Unit)? = null
     private var onBackToListReceived: (() -> Unit)? = null
@@ -274,9 +275,9 @@ class GlobalCollaborationManager private constructor() {
     private fun initializePerformerMode(): Boolean {
         return try {
             collaborationClientManager = CollaborationClientManager(
-                onPageChangeReceived = { page, file, turnAt, roll ->
-                    Log.d(TAG, "Page change received: $page, $file, turnAt=$turnAt, roll=$roll")
-                    onPageChangeReceived?.invoke(page, file, turnAt, roll)
+                onPageChangeReceived = { page, file, turnAt, roll, rollStart ->
+                    Log.d(TAG, "Page change received: $page, $file, turnAt=$turnAt, roll=$roll, rollStart=$rollStart")
+                    onPageChangeReceived?.invoke(page, file, turnAt, roll, rollStart)
                 },
                 onFileChangeReceived = { file, page, sha256 ->
                     Log.d(TAG, "File change received: $file, page: $page")
@@ -329,8 +330,8 @@ class GlobalCollaborationManager private constructor() {
         return collaborationServerManager?.getConnectedClients() ?: emptyList()
     }
     
-    fun broadcastPageChange(pageNumber: Int, fileName: String, turnAt: Long? = null, roll: Boolean = false) {
-        collaborationServerManager?.broadcastPageChange(pageNumber, fileName, turnAt, roll)
+    fun broadcastPageChange(pageNumber: Int, fileName: String, turnAt: Long? = null, roll: Boolean = false, rollStart: Boolean = false) {
+        collaborationServerManager?.broadcastPageChange(pageNumber, fileName, turnAt, roll, rollStart)
     }
     
     /** [sha256] = 지휘자가 연 파일의 내용 해시 (#063) — 연주자가 내용으로 찾는다 (EnsembleFiles) */
@@ -427,7 +428,7 @@ class GlobalCollaborationManager private constructor() {
         onClientConnectionStatusChanged = callback
     }
     
-    fun setOnPageChangeReceived(callback: (Int, String, Long?, Boolean) -> Unit) {
+    fun setOnPageChangeReceived(callback: (Int, String, Long?, Boolean, Boolean) -> Unit) {
         onPageChangeReceived = callback
     }
     

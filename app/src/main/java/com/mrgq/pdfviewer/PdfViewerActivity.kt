@@ -78,6 +78,9 @@ class PdfViewerActivity : AppCompatActivity() {
         private const val REQUEST_MIC_FOLLOW = 7302
         /** 차례 넘김: 지휘자가 쪽에 들어선 뒤 다 친 쪽을 바꾸기까지 — 지휘자 넘김은 최악 3.7초 일찍이었다(P08 §7-2) */
         private const val ROLL_DELAY_MS = 5000L
+        /** 듣기 시작 펼침(#088): 쪽이 아직 그려지지 않았으면 이 간격으로 이만큼 다시 해 본다(약 3초) */
+        private const val ROLL_START_RETRY_MS = 200L
+        private const val ROLL_START_ATTEMPTS = 15
         // 악보 메모 (P11) — 보이기는 전역, 펜 색 · 굵기는 마지막 고른 것
         private const val PREF_SHOW_NOTES = "show_score_notes"
         private const val PREF_NOTE_COLOR = "note_pen_color"
@@ -2651,6 +2654,10 @@ class PdfViewerActivity : AppCompatActivity() {
             )
             if (!follower.start()) return@launch toast("마이크를 열지 못했습니다")
             micFollower = follower
+            // 두 쪽 연주자: 시작 쪽이 펼침 오른쪽이면 왼쪽 자리를 바로 다음 쪽으로 — 듣기 시작 신호 (#088)
+            if (collaborationMode == CollaborationMode.CONDUCTOR) {
+                globalCollaborationManager.broadcastPageChange(pageOf[startMeasure] + 1, pdfFileName, roll = true, rollStart = true)
+            }
             micMeasures = mapped
             binding.micStatus.text = "🎤 대기"
             binding.micStatus.visibility = View.VISIBLE
@@ -2945,14 +2952,15 @@ class PdfViewerActivity : AppCompatActivity() {
     }
     
     private fun setupPerformerCallbacks() {
-        globalCollaborationManager.setOnPageChangeReceived { page, file, turnAt, roll ->
+        globalCollaborationManager.setOnPageChangeReceived { page, file, turnAt, roll, rollStart ->
             runOnUiThread {
                 if (file != pdfFileName) return@runOnUiThread
-                // 지휘자가 마이크로 듣고 넘긴 쪽 — 두 쪽 · 전체 악보면 차례 넘김 (P10 §3.3). 한 쪽 · 파트 보기는 지금처럼
+                // 지휘자가 마이크로 듣고 넘긴 쪽 — 두 쪽 · 전체 악보면 차례 넘김 (P10 §3.3). 한 쪽 · 파트 보기는 지금처럼.
+                // 듣기를 시작한 쪽이면(roll_start) 기다리지 않고 바로 시작 펼침으로 (#088)
                 if (roll && turnAt == null && isTwoPageMode && partViewLayout == null &&
                     !(ensembleRole == EnsembleRole.FOLLOWING && metronome.isRunning)
                 ) {
-                    handleRollPageChange(page)
+                    if (rollStart) handleRollStart(page) else handleRollPageChange(page)
                     return@runOnUiThread
                 }
                 // 합주 메트로놈을 따라가는 중에는 마디로 스스로 넘긴다 — 지휘자와 표시 모드가 달라도 맞게 (#055).
@@ -3061,17 +3069,43 @@ class PdfViewerActivity : AppCompatActivity() {
         }
     }
 
-    /** 두 쪽 화면에 [spread] 의 왼 · 오 쪽을 그린다. 보통의 짝이면 [showPage] 로 */
-    private fun showSpread(spread: com.mrgq.pdfviewer.follow.RollingTurns.Spread, conductorPage: Int) {
-        if (!isTwoPageMode || isAnimating) return
+    /**
+     * 지휘자가 [page](1부터) 쪽에서 듣고 넘기기를 시작했다 (`roll_start`, #088) — 기다리지 않고 바로 시작 펼침으로.
+     * 그 쪽이 오른쪽 자리면 왼쪽 자리(이미 지난 쪽)를 다음 쪽으로(3 | 4 에서 4 시작 → 5 | 4). 쪽이 아직 그려지지 않았으면 그려지기를 잠시 기다린다
+     */
+    private fun handleRollStart(page: Int) {
+        val p = page - 1
+        if (p !in 0 until pageCount) return
+        cancelPendingRoll()
+        val spread = com.mrgq.pdfviewer.follow.RollingTurns.startSpread(p, pageCount)
+        if (spread.isPair) return handleRemotePageChange(page)
+        Log.d("PdfViewerActivity", "🎼 듣기 시작 펼침: 지휘자 ${page}쪽 → ${spread.left + 1} | ${spread.right?.plus(1)}")
+        pageCache?.prerenderAround(p)
+        var attempts = 0
+        val r = object : Runnable {
+            override fun run() {
+                if (showSpread(spread, conductorPage = p) || ++attempts >= ROLL_START_ATTEMPTS) {
+                    pendingRoll = null
+                    return
+                }
+                binding.pdfView.postDelayed(this, ROLL_START_RETRY_MS)
+            }
+        }
+        pendingRoll = r
+        r.run()
+    }
+
+    /** 두 쪽 화면에 [spread] 의 왼 · 오 쪽을 그린다. 보통의 짝이면 [showPage] 로. 쪽이 아직 캐시에 없거나 넘기는 중이면 false */
+    private fun showSpread(spread: com.mrgq.pdfviewer.follow.RollingTurns.Spread, conductorPage: Int): Boolean {
+        if (!isTwoPageMode || isAnimating) return false
         if (spread.isPair) {
             isHandlingRemotePageChange = true
             showPage(spread.left)
             isHandlingRemotePageChange = false
-            return
+            return true
         }
-        val left = pageCache?.getPageImmediate(spread.left) ?: return
-        val right = spread.right?.let { pageCache?.getPageImmediate(it) }
+        val left = pageCache?.getPageImmediate(spread.left) ?: return false
+        val right = spread.right?.let { pageCache?.getPageImmediate(it) ?: return false }
         val combined = combineTwoPagesUnified(left, right)
         flushNotePen()
         halfPageShown = false
@@ -3082,6 +3116,7 @@ class PdfViewerActivity : AppCompatActivity() {
         updatePageInfo()
         pageCache?.prerenderAround(pairStart(conductorPage) + 2)
         Log.d("PdfViewerActivity", "🎼 차례 넘김: ${spread.left + 1} | ${spread.right?.plus(1)}")
+        return true
     }
 
     /** 연주자: 지휘자 마이크 추적의 지금 마디 번호 — 그 시스템을 연하게 (P10) */

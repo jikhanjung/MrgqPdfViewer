@@ -34,6 +34,11 @@ object CollaborationProtocol {
     const val KEY_TURN_AT = "turn_at"
     /** page_change: 마이크 추적이 넘긴 것 — 두 쪽 연주자는 다 친 쪽 자리만 바꾼다 (P10 §3.2). 옛 앱은 무시 */
     const val KEY_ROLL = "roll"
+    /**
+     * page_change(roll): 지휘자가 이 쪽에서 듣고 넘기기를 **시작**했다 (#088) — 두 쪽 연주자는 기다리지 않고 바로 시작 펼침으로
+     * (시작 쪽이 오른쪽 자리면 왼쪽 자리를 다음 쪽으로). 옛 앱은 무시하고 보통의 roll 로 5초 뒤 차례 넘김
+     */
+    const val KEY_ROLL_START = "roll_start"
     const val KEY_FILE_SERVER_URL = "file_server_url"
 
     // 합주 메트로놈 (#055)
@@ -85,6 +90,7 @@ object CollaborationProtocol {
         turnAt: Long? = null,
         timestamp: Long = System.currentTimeMillis(),
         roll: Boolean = false,
+        rollStart: Boolean = false,
     ): JsonObject = JsonObject().apply {
         addProperty(KEY_ACTION, ACTION_PAGE_CHANGE)
         addProperty(KEY_PAGE, pageNumber)
@@ -92,6 +98,7 @@ object CollaborationProtocol {
         addProperty(KEY_TIMESTAMP, timestamp)
         turnAt?.let { addProperty(KEY_TURN_AT, it) }
         if (roll) addProperty(KEY_ROLL, true)
+        if (roll && rollStart) addProperty(KEY_ROLL_START, true)
     }
 
     fun buildFileChange(
@@ -208,7 +215,7 @@ object CollaborationProtocol {
 
     // ── 파싱 (연주자) ───────────────────────────────────────────────────────
 
-    data class PageChange(val page: Int, val file: String, val turnAt: Long?, val roll: Boolean = false)
+    data class PageChange(val page: Int, val file: String, val turnAt: Long?, val roll: Boolean = false, val rollStart: Boolean = false)
 
     /** [sha256] = 파일 내용 해시(소문자 hex, #063). 옛 지휘자(v0.2.6 이하)는 없다 → 이름으로 찾는다 */
     data class FileChange(val file: String, val page: Int, val fileServerUrl: String?, val sha256: String? = null)
@@ -218,6 +225,7 @@ object CollaborationProtocol {
         file = json.optStringOrNull(KEY_FILE) ?: "",
         turnAt = json.optLong(KEY_TURN_AT),
         roll = json.get(KEY_ROLL)?.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isBoolean }?.asBoolean ?: false,
+        rollStart = json.get(KEY_ROLL_START)?.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isBoolean }?.asBoolean ?: false,
     )
 
     fun parseFileChange(json: JsonObject) = FileChange(

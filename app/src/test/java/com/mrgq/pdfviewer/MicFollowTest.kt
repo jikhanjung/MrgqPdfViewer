@@ -204,6 +204,18 @@ class RollingTurnsTest {
     }
 
     @Test
+    fun `듣기 시작 펼침 — 오른쪽 자리에서 시작하면 왼쪽은 바로 다음 쪽 (#088)`() {
+        // 3쪽(2, 왼쪽 자리)에서 시작 → 보통의 짝 3 | 4
+        assertEquals(RollingTurns.Spread(2, 3), RollingTurns.startSpread(2, n))
+        // 4쪽(3, 오른쪽 자리)에서 시작 → 3쪽은 지났으니 5 | 4
+        assertEquals(RollingTurns.Spread(4, 3), RollingTurns.startSpread(3, n))
+        // 마지막 쪽(10쪽, 9)에서 시작 — 다음 쪽이 없으니 보통의 짝 9 | 10
+        assertEquals(RollingTurns.Spread(8, 9), RollingTurns.startSpread(9, n))
+        // 이어지는 넘김은 보통의 차례 넘김: 5 | 4 에서 5쪽(4)에 들어서면 오른쪽을 6쪽(5)으로
+        assertEquals(RollingTurns.Spread(4, 5), (RollingTurns.onPage(RollingTurns.startSpread(3, n), 4, n) as RollingTurns.Action.Delayed).spread)
+    }
+
+    @Test
     fun `화면에 없는 쪽은 바로 그 짝으로, 되돌아가면 그대로`() {
         val s32 = RollingTurns.Spread(2, 1)
         assertEquals(RollingTurns.Action.Immediate(RollingTurns.Spread(6, 7)), RollingTurns.onPage(s32, 6, n))

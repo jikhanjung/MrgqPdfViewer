@@ -34,6 +34,16 @@ object RollingTurns {
         object None : Action()
     }
 
+    /**
+     * 지휘자가 [page] 쪽에서 듣고 넘기기를 **시작**했다 (#088) — 기다리지 않고 바로 보일 펼침. 그 쪽이 왼쪽 자리(짝수 순번)면 보통의 짝,
+     * 오른쪽 자리면 왼쪽 자리는 이미 지난 쪽이니 다음 쪽으로(순번 2 | 3 에서 3 시작 → 4 | 3). 다음 쪽이 없으면 보통의 짝
+     */
+    fun startSpread(page: Int, pageCount: Int): Spread {
+        if (page % 2 == 0) return Spread.pairOf(page, pageCount)
+        val next = page + 1
+        return if (next < pageCount) Spread(next, page) else Spread.pairOf(page, pageCount)
+    }
+
     /** 지금 화면 [current] 에서 지휘자가 [page] 쪽에 들어섰다 */
     fun onPage(current: Spread, page: Int, pageCount: Int): Action {
         if (page !in 0 until pageCount) return Action.None

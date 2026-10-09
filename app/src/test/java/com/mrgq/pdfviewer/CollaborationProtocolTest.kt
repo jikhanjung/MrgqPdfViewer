@@ -46,6 +46,16 @@ class CollaborationProtocolTest {
     }
 
     @Test
+    fun `page_change 의 roll_start 는 roll 과 함께일 때만 (#088)`() {
+        val start = CollaborationProtocol.buildPageChange(4, "a.pdf", roll = true, rollStart = true)
+        assertEquals(true, start.get("roll_start").asBoolean)
+        val parsed = CollaborationProtocol.parsePageChange(parse(start.toString()))
+        assertTrue(parsed.roll && parsed.rollStart)
+        assertFalse(CollaborationProtocol.buildPageChange(4, "a.pdf", rollStart = true).has("roll_start"))
+        assertFalse(CollaborationProtocol.parsePageChange(parse(CollaborationProtocol.buildPageChange(4, "a.pdf", roll = true).toString())).rollStart)
+    }
+
+    @Test
     fun `follow_position 왕복 — 마디 번호, 0 은 끝`() {
         val m = CollaborationProtocol.parseFollowPosition(parse(CollaborationProtocol.buildFollowPosition("곡.pdf", 37).toString()))
         assertEquals("곡.pdf", m.file)
