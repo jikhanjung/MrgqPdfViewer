@@ -238,6 +238,26 @@
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent" />
 
+    <!-- 🎤 시작 마디를 고르는 동안: 그 마디부터 연주 듣고 넘기기 (P10 §10, #087) — 태블릿 · 휴대폰 -->
+    <TextView
+        android:id="@+id/micStartButton"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="24dp"
+        android:background="@drawable/mic_start_button_background"
+        android:elevation="6dp"
+        android:gravity="center"
+        android:minHeight="48dp"
+        android:paddingHorizontal="20dp"
+        android:paddingVertical="10dp"
+        android:text="🎤 여기서부터 듣기"
+        android:textColor="#FFFFFFFF"
+        android:textSize="18sp"
+        android:visibility="gone"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent" />
+
     <!-- 🎙 듣는 중 · 알아들은 말 · 결과 -->
     <TextView
         android:id="@+id/voiceStatus"

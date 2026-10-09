@@ -1736,13 +1736,11 @@ class PdfViewerActivity : AppCompatActivity() {
                 return true
             }
             override fun onSingleTapUp(e: android.view.MotionEvent): Boolean {
-                if (followState == FollowState.SELECTING) {
-                    val index = followMeasureAt(e.x, e.y)
-                    if (index >= 0) {
-                        tapTaken = true
-                        if (index == cursorIndex) startFollowing() else moveCursor(index - cursorIndex)
-                        return true
-                    }
+                // 시작 마디 고르기의 마디 탭은 두 번 탭(↑ 메뉴)이 아닌 것이 확인된 뒤에 (onSingleTapConfirmed) — 커서 마디를
+                // 두 번 탭해 메뉴를 열려다 첫 탭에 시작하지 않게 (#087)
+                if (followState == FollowState.SELECTING && followMeasureAt(e.x, e.y) >= 0) {
+                    tapTaken = true
+                    return true
                 }
                 when (zone(e)) {
                     -1 -> press(KeyEvent.KEYCODE_DPAD_LEFT)
@@ -1751,6 +1749,13 @@ class PdfViewerActivity : AppCompatActivity() {
                 return true
             }
             override fun onSingleTapConfirmed(e: android.view.MotionEvent): Boolean {
+                if (followState == FollowState.SELECTING) {
+                    val index = followMeasureAt(e.x, e.y)
+                    if (index >= 0) {
+                        if (index == cursorIndex) startFollowing() else moveCursor(index - cursorIndex)
+                        return true
+                    }
+                }
                 if (zone(e) == 0 && !tapTaken) {
                     // OK 짧게 — 누르고 떼기
                     press(KeyEvent.KEYCODE_DPAD_CENTER)
@@ -1760,11 +1765,19 @@ class PdfViewerActivity : AppCompatActivity() {
                 return true
             }
             override fun onDoubleTap(e: android.view.MotionEvent): Boolean {
+                // 시작 마디를 고르는 중에도 두 번 탭 = ↑ 메뉴(🎤 고른 마디부터 듣기 · 시작 · 취소, #087). 리모컨의 ↑ 는 여전히 윗줄로 —
+                // 터치 기기는 줄을 탭으로 고르고, 듣기는 TV 에 없다
+                if (followState == FollowState.SELECTING) {
+                    showMetronomeMenu()
+                    return true
+                }
                 if (zone(e) == 0) press(KeyEvent.KEYCODE_DPAD_UP)
                 return true
             }
             override fun onLongPress(e: android.view.MotionEvent) {
                 if (followState == FollowState.SELECTING) return
+                // 🎤 듣는 중: 마디를 길게 누르면 그 마디부터 다시 맞춘다 (P10 §10, #087). 마디 밖이면 전처럼 PDF 표시 옵션
+                if (micFollower != null && anchorMicFollowAt(e.x, e.y)) return
                 isLongPressing = true
                 longPressRunnable.run()
                 isLongPressing = false
@@ -1772,13 +1785,13 @@ class PdfViewerActivity : AppCompatActivity() {
         })
     }
 
-    /** 이번 터치가 메모 도구 줄 · 🎙 단추에서 시작했다 — 단추만 받고 몸짓 · 메모로 보내지 않는다 */
+    /** 이번 터치가 메모 도구 줄 · 🎙 단추 · 🎤 시작 단추에서 시작했다 — 단추만 받고 몸짓 · 메모로 보내지 않는다 */
     private var touchOnNoteToolbar = false
 
     override fun dispatchTouchEvent(ev: android.view.MotionEvent): Boolean {
         if (ev.actionMasked == android.view.MotionEvent.ACTION_DOWN) {
             fun View.hit() = visibility == View.VISIBLE && ev.x >= left && ev.x <= right && ev.y >= top && ev.y <= bottom
-            touchOnNoteToolbar = binding.noteToolbar.hit() || binding.voiceButton.hit()
+            touchOnNoteToolbar = binding.noteToolbar.hit() || binding.voiceButton.hit() || binding.micStartButton.hit()
         }
         if (touchOnNoteToolbar) return super.dispatchTouchEvent(ev)
         // 메모 모드의 두 손가락 = 확대 · 이동 (긋던 획은 버린다)
@@ -1803,7 +1816,10 @@ class PdfViewerActivity : AppCompatActivity() {
         }
         if (requestCode != REQUEST_MIC_FOLLOW) return
         if (grantResults.firstOrNull() == android.content.pm.PackageManager.PERMISSION_GRANTED) startMicFollow()
-        else Toast.makeText(this, "마이크 권한이 없어 들을 수 없습니다", Toast.LENGTH_LONG).show()
+        else {
+            micStartAt = null
+            Toast.makeText(this, "마이크 권한이 없어 들을 수 없습니다", Toast.LENGTH_LONG).show()
+        }
     }
 
     // ── 악보 메모 (P11) — 펜 · 손가락으로 선 긋기. PDF 옆 `.notes.json` 곁 파일 ─────────────────────────────
@@ -2565,8 +2581,14 @@ class PdfViewerActivity : AppCompatActivity() {
         startMicFollow()
     }
 
-    /** 지금 쪽 첫 마디부터 듣기 시작. 조건: 전체 악보 · 맞는 MusicXML · 악보 분석 마디 (P10 §3.1) */
+    /** 다음 [startMicFollow] 가 시작할 마디 — 시작 마디 고르기의 "🎤 여기서부터 듣기"(#087). null = 지금 쪽 첫 마디 */
+    private var micStartAt: ScoreMeasure? = null
+
+    /**
+     * [micStartAt](고른 마디) 또는 지금 쪽 첫 마디부터 듣기 시작. 조건: 전체 악보 · 맞는 MusicXML · 악보 분석 마디 (P10 §3.1)
+     */
     private fun startMicFollow() {
+        val at = micStartAt.also { micStartAt = null }
         val fileId = currentPdfFileId ?: return
         if (collaborationMode == CollaborationMode.PERFORMER) return toast("연주자 기기에서는 쓸 수 없습니다 — 지휘자가 넘깁니다")
         if (partViewLayout != null) return toast("전체 악보에서만 쓸 수 있습니다 (파트 보기를 끄세요)")
@@ -2586,7 +2608,13 @@ class PdfViewerActivity : AppCompatActivity() {
             val pageOf = IntArray(mapped.size) { i -> (mapped[i]?.pageIndex ?: lastPage).also { lastPage = it } }
             val lowerHalf = BooleanArray(mapped.size) { i -> mapped[i]?.let { it.topPt >= it.pageHeightPt / 2 } ?: false }
             val here = if (isTwoPageMode) pairStart(pageIndex) else pageIndex
-            val startMeasure = pageOf.indexOfFirst { it >= here }.takeIf { it >= 0 } ?: return@launch toast("이 쪽에 마디가 없습니다")
+            val startMeasure = if (at != null) {
+                // 고른 마디 — 같은 쪽의 같은 번호(MusicXML 순서에서 처음 나오는 것)
+                mapped.indexOfFirst { it != null && it.measureNumber == at.measureNumber && it.pageIndex == at.pageIndex }
+                    .takeIf { it >= 0 } ?: return@launch toast("${at.measureNumber}마디를 MusicXML 에서 찾지 못했습니다")
+            } else {
+                pageOf.indexOfFirst { it >= here }.takeIf { it >= 0 } ?: return@launch toast("이 쪽에 마디가 없습니다")
+            }
             // 기준 빠르기 = 이 곡 메트로놈 템포 (박 → 4분음표)
             val meter = metronome.timeSignature
             val beatQ = 4.0 / meter.denominator * (if (metronome.dottedBeat) 3 else 1)
@@ -2671,6 +2699,37 @@ class PdfViewerActivity : AppCompatActivity() {
             toast("🎤 $message")
             stopMicFollow()
         }
+    }
+
+    /** 🎤 듣는 중 (x, y) 의 마디를 길게 눌렀다 — 그 마디부터 다시 맞춘다 (P10 §10, #087). 마디가 아니면 false */
+    private fun anchorMicFollowAt(x: Float, y: Float): Boolean {
+        val f = micFollower ?: return false
+        val m = measureAt(micMeasures.filterNotNull().distinct(), x, y) ?: return false
+        val index = micMeasures.indexOfFirst { it != null && it.measureNumber == m.measureNumber && it.pageIndex == m.pageIndex }
+        if (index < 0) return false
+        f.anchor(m.pageIndex, index)
+        binding.pdfView.performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS)
+        toast("🎤 ${m.measureNumber}마디부터 다시 맞춥니다")
+        return true
+    }
+
+    /** 시작 마디를 고르는 중 "🎤 N마디부터 듣기" — 고르기를 접고 그 마디부터 연주 듣고 넘기기 (#087) */
+    private fun startMicFollowFromSelection() {
+        val at = followMeasures.getOrNull(cursorIndex)?.takeIf { followState == FollowState.SELECTING } ?: return
+        cancelMeasureSelection()
+        micStartAt = at
+        toggleMicFollow()
+    }
+
+    /** 시작 마디를 고르는 동안만 "🎤 N마디부터 듣기" — 마이크가 있는 기기, 연주자가 아니고 듣는 중이 아닐 때 */
+    private fun refreshMicStartButton() {
+        val at = followMeasures.getOrNull(cursorIndex)
+        val show = followState == FollowState.SELECTING && at != null && micFollowCapable() && micFollower == null &&
+            collaborationMode != CollaborationMode.PERFORMER
+        binding.micStartButton.visibility = if (show) View.VISIBLE else View.GONE
+        if (!show) return
+        binding.micStartButton.text = "🎤 ${at!!.measureNumber}마디부터 듣기"
+        binding.micStartButton.setOnClickListener { startMicFollowFromSelection() }
     }
 
     /** 손으로 [page] 쪽으로 넘겼다 — 추적도 그 쪽 첫 마디에서 다시 (P10 §2) */
@@ -4460,7 +4519,9 @@ class PdfViewerActivity : AppCompatActivity() {
         refreshScoreOverlay()
         broadcastConductorCursor()
         if (at == null) {
-            Toast.makeText(this, "시작할 마디를 고르세요 — ←→ 마디, ↑↓ 줄, OK 시작, 뒤로 취소 (연주 중 ↑ 메뉴)", Toast.LENGTH_LONG).show()
+            val hint = if (com.mrgq.pdfviewer.utils.DeviceForm.isTv(this)) "←→ 마디, ↑↓ 줄, OK 시작, 뒤로 취소 (연주 중 ↑ 메뉴)"
+                else "마디를 탭해 고르고 한 번 더 탭하면 시작, 두 번 탭 = 메뉴(🎤 그 마디부터 듣기)"
+            Toast.makeText(this, "시작할 마디를 고르세요 — $hint", Toast.LENGTH_LONG).show()
         }
     }
 
@@ -4531,7 +4592,13 @@ class PdfViewerActivity : AppCompatActivity() {
         pauseFollowing()
         val items = mutableListOf<Pair<String, () -> Unit>>()
         val paused = followState == FollowState.PAUSED
+        // 시작 마디를 고르는 중 (터치 기기의 두 번 탭, #087) — 고른 마디로 시작 · 듣기
+        val selected = followMeasures.getOrNull(cursorIndex)?.takeIf { followState == FollowState.SELECTING }
         when {
+            selected != null -> {
+                items += "▶ ${selected.measureNumber}마디부터 시작 (예비박 ${countInBarsSetting()}마디 뒤)" to { startFollowing() }
+                items += "마디 고르기 취소" to { cancelMeasureSelection() }
+            }
             paused -> {
                 items += "이어서 — ${followMeasure?.measureNumber}번 마디부터 (예비박 ${countInBarsSetting()}마디 뒤)" to { resumeFollowing() }
                 items += "마디 골라 다시 시작" to { reselectFromPause() }
@@ -4546,7 +4613,11 @@ class PdfViewerActivity : AppCompatActivity() {
         if (notesWritable()) items += (if (notePen.editMode) "✏️ 메모 끝" else "✏️ 메모 쓰기") to { toggleNoteMode() }
         if (voiceTextInputEnabled()) items += "⌨️ 글자로 명령 (시험)" to { showVoiceTextInput() }
         if (micFollowCapable()) {
-            items.add(0, (if (micFollower != null) "🎤 듣기 멈춤" else "🎤 연주 듣고 넘기기") to { toggleMicFollow() })
+            items.add(0, when {
+                micFollower != null -> "🎤 듣기 멈춤" to { toggleMicFollow() }
+                selected != null -> "🎤 ${selected.measureNumber}마디부터 연주 듣고 넘기기" to { startMicFollowFromSelection() }
+                else -> "🎤 연주 듣고 넘기기 — 이 쪽 첫 마디부터" to { toggleMicFollow() }
+            })
         }
 
         var chosen = false
@@ -5444,6 +5515,7 @@ class PdfViewerActivity : AppCompatActivity() {
 
     private fun refreshScoreOverlay() {
         refreshNotes()
+        refreshMicStartButton()
         val overlay = binding.scoreOverlay
         val fileId = currentPdfFileId
         val focus = when (followState) {
@@ -5501,18 +5573,24 @@ class PdfViewerActivity : AppCompatActivity() {
      * 비트맵 → 화면은 ImageView 에 실제로 걸린 행렬 그대로 (오버레이와 같다)
      */
     private fun followMeasureAt(x: Float, y: Float): Int {
+        val hit = measureAt(followMeasures, x, y) ?: return -1
+        return followMeasures.indexOfFirst { it.measureNumber == hit.measureNumber }
+    }
+
+    /** 화면 (x, y) 에 있는 [measures] 의 마디 — 없으면 null */
+    private fun measureAt(measures: List<ScoreMeasure>, x: Float, y: Float): ScoreMeasure? {
         val view = binding.pdfView
         val toView = android.graphics.Matrix(view.imageMatrix).apply {
             postTranslate((view.left + view.paddingLeft).toFloat(), (view.top + view.paddingTop).toFloat())
         }
         val rect = android.graphics.RectF()
-        val boxes = overlayBoxes(followMeasures)
-        val hit = boxes.firstOrNull { box ->
+        val hit = overlayBoxes(measures).firstOrNull { box ->
             rect.set(box.left, box.top, box.right, box.bottom)
             toView.mapRect(rect)
             rect.contains(x, y)
-        } ?: return -1
-        return followMeasures.indexOfFirst { it.measureNumber == hit.measureNumber }
+        } ?: return null
+        return measures.firstOrNull { it.measureNumber == hit.measureNumber && it.systemIndex == hit.systemIndex }
+            ?: measures.firstOrNull { it.measureNumber == hit.measureNumber }
     }
 
     /** [announce] = 마디 수 · 못 찾음 안내 (연주자 시스템 표시처럼 뒤에서 읽을 때는 조용히) */
