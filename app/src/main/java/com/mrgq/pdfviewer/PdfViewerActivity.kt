@@ -114,6 +114,11 @@ class PdfViewerActivity : AppCompatActivity() {
         const val PREF_VOICE_TEXT_INPUT = "voice_text_input"
         /** 👂 계속 듣기 (#085) — 🎙 를 누르지 않고 "메이트, …" */
         const val PREF_VOICE_ALWAYS = "voice_always_listen"
+        /** 휴대폰 악보 화면의 회전 모드 (#090) — 설정 → 표시 모드. 기본 기기 회전 */
+        const val PREF_PHONE_ORIENTATION = "phone_orientation"
+        const val PHONE_ORIENTATION_AUTO = "auto"
+        const val PHONE_ORIENTATION_LANDSCAPE = "landscape"
+        const val PHONE_ORIENTATION_PORTRAIT = "portrait"
         /** 파트 보기를 바꾼 명령이 파일이 다시 열리기를 기다리는 한도 */
         private const val FILE_RELOAD_TIMEOUT_MS = 15_000L
         /** 설정 → 앱 정보 → 🎙 음성 명령 (P12 2단계) — 켜면 악보 화면 오른쪽 아래 🎙 단추 */
@@ -343,8 +348,8 @@ class PdfViewerActivity : AppCompatActivity() {
     
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        // TV 가 아니면 세로가 기본. 휴대폰은 가로로 — 한 쪽을 위 · 아래 절반씩 본다 (사용자 요청 2026-10-06)
-        if (phoneView) requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+        // TV 가 아니면 세로가 기본. 휴대폰은 설정의 회전 모드 — 기본은 기기 회전(가로면 시스템 1 ~ 2개씩, 세로면 보통 한 쪽 전체, #090)
+        if (phoneView) requestedOrientation = phoneOrientationRequest()
         else com.mrgq.pdfviewer.utils.DeviceForm.applyOrientation(this)
         binding = ActivityPdfViewerBinding.inflate(layoutInflater)
         setContentView(binding.root)
@@ -395,8 +400,9 @@ class PdfViewerActivity : AppCompatActivity() {
         }
         val physicalHeight = if (phoneView) minOf(screenWidth, screenHeight) else screenHeight
         if (phoneView) {
-            // 가로로 돌기 전 첫 onCreate 일 수도 있다 — 늘 가로 기준. 렌더 높이는 넉넉히(폭 × 3) 잡아 쪽이 화면 폭에 맞게
-            screenWidth = maxOf(displayMetrics.widthPixels, displayMetrics.heightPixels)
+            // 회전 모드(#090): 가로 · 세로 고정이면 그 방향의 폭(돌기 전 첫 onCreate 일 수 있다), 기기 회전이면 지금 폭.
+            // 렌더 높이는 넉넉히(폭 × 3) 잡아 쪽이 화면 폭에 맞게. 열고 나서 돌면 onConfigurationChanged 가 새 폭으로 다시 그린다
+            screenWidth = phoneRenderWidth(displayMetrics.widthPixels, displayMetrics.heightPixels)
             screenHeight = screenWidth * 3
         }
 
@@ -602,7 +608,7 @@ class PdfViewerActivity : AppCompatActivity() {
                 }
                 
                 // 세로 화면(태블릿)은 늘 한 쪽 — 저장된 두 쪽 설정은 건드리지 않는다(가로에서 열면 그대로) (사용자 요청 2026-09-28)
-                if (isPortraitScreen() || phoneView) { // 휴대폰(가로)도 한 쪽 — 조각씩 본다
+                if (isPortraitScreen() || phoneView) { // 휴대폰도 한 쪽 — 조각씩 본다(세로면 보통 한 쪽 전체)
                     withContext(Dispatchers.Main) {
                         isTwoPageMode = false
                         onComplete()
@@ -5707,13 +5713,53 @@ class PdfViewerActivity : AppCompatActivity() {
     }
 
     /** 세로 화면인가 (태블릿 · 휴대폰) — 늘 한 쪽 */
+    private fun phoneOrientationMode(): String =
+        getSharedPreferences("pdf_viewer_prefs", MODE_PRIVATE).getString(PREF_PHONE_ORIENTATION, PHONE_ORIENTATION_AUTO)
+            ?: PHONE_ORIENTATION_AUTO
+
+    /** 휴대폰 회전 모드 → 화면 방향 요청. 기기 회전 = FULL_USER (기기의 자동 회전 · 회전 잠금을 따른다) */
+    private fun phoneOrientationRequest(): Int = when (phoneOrientationMode()) {
+        PHONE_ORIENTATION_LANDSCAPE -> android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+        PHONE_ORIENTATION_PORTRAIT -> android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT
+        else -> android.content.pm.ActivityInfo.SCREEN_ORIENTATION_FULL_USER
+    }
+
+    /** 휴대폰 렌더 폭 — 고정 방향이면 그 방향의 폭, 기기 회전이면 지금 폭 */
+    private fun phoneRenderWidth(width: Int, height: Int): Int = when (phoneOrientationMode()) {
+        PHONE_ORIENTATION_LANDSCAPE -> maxOf(width, height)
+        PHONE_ORIENTATION_PORTRAIT -> minOf(width, height)
+        else -> width
+    }
+
+    /** 휴대폰을 돌렸다 (#090) — 새 폭으로 쪽 캐시를 새로 만들고 같은 쪽 · 같은 칸을 다시 그린다 */
+    private fun rebuildForPhoneWidth(width: Int) {
+        Log.i("PdfViewerActivity", "📱 휴대폰 회전: 렌더 폭 $screenWidth → $width")
+        screenWidth = width
+        screenHeight = width * 3
+        val renderer = pdfRenderer ?: return
+        if (pageCount == 0) return
+        pageCache?.destroy()
+        pageCache = PageCache(renderer, screenWidth, screenHeight)
+        registerSettingsCallback()
+        pageCache?.updateSettings(isTwoPageMode, 1f) // 배율은 PageCache 가 쪽마다 PageGeometry 로 정한다
+        // 뷰가 새 크기로 놓인 뒤에 — 같은 쪽을 다시 그리면 보던 칸(chunkIndex)은 그대로다
+        binding.pdfView.post { showPage(pageIndex) }
+    }
+
     private fun isPortraitScreen(): Boolean =
-        // 지금 방향이 아니라 기기 종류로 — 화면이 아직 돌기 전일 수 있다. 태블릿은 늘 세로, 휴대폰은 가로, TV 는 가로
+        // 지금 방향이 아니라 기기 종류로 — 화면이 아직 돌기 전일 수 있다. 태블릿은 늘 세로, TV 는 가로, 휴대폰은 회전 모드(#090)라 여기서는 아님
         !phoneView && !com.mrgq.pdfviewer.utils.DeviceForm.isTv(this)
 
-    /** 방향이 바뀌어도(태블릿 · 휴대폰이 열자마자 돈다) 다시 만들지 않는다 — 새 뷰 크기로 행렬만 다시 잡는다 */
+    /**
+     * 방향이 바뀌어도(태블릿 · 휴대폰이 열자마자 돈다) 다시 만들지 않는다 — 새 뷰 크기로 행렬만 다시 잡는다.
+     * 휴대폰은 폭이 바뀌면(가로 ↔ 세로, #090) 새 폭으로 다시 그린다 — 1× 렌더 · 정수 좌표(#042)를 지키려고 줄여 보이지 않는다
+     */
     override fun onConfigurationChanged(newConfig: android.content.res.Configuration) {
         super.onConfigurationChanged(newConfig)
+        if (phoneView) {
+            val width = resources.displayMetrics.widthPixels
+            if (width != screenWidth) return rebuildForPhoneWidth(width)
+        }
         binding.pdfView.post {
             (binding.pdfView.drawable as? android.graphics.drawable.BitmapDrawable)?.bitmap?.let { setImageViewMatrix(it) }
         }
@@ -6744,6 +6790,7 @@ class PdfViewerActivity : AppCompatActivity() {
         performerRun?.let { onEnsembleRunReceived(it, retry = true) }
         voiceResumed = true
         refreshVoiceButton() // 설정에서 켜고 돌아왔을 수 있다 — 👂 계속 듣기도 여기서 건다
+        if (phoneView) requestedOrientation = phoneOrientationRequest() // 회전 모드를 바꾸고 돌아왔을 수 있다 (#090)
     }
     
     override fun onDestroy() {

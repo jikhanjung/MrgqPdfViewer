@@ -608,7 +608,15 @@ class SettingsActivity : AppCompatActivity() {
     }
     
     private fun showDisplayModePanel() {
-        val items = listOf(
+        val items = listOfNotNull(
+            // 📱 휴대폰 악보 화면의 회전 모드 (#090) — 휴대폰만
+            SettingsItem(
+                id = "phone_orientation",
+                icon = "📱",
+                title = "회전 모드 (악보 화면)",
+                subtitle = phoneOrientationLabel(),
+                type = SettingsType.ACTION
+            ).takeIf { com.mrgq.pdfviewer.utils.DeviceForm.isPhone(this) },
             SettingsItem(
                 id = "view_display_modes",
                 icon = "👁️",
@@ -628,6 +636,35 @@ class SettingsActivity : AppCompatActivity() {
         showDetailPanel("표시 모드", items)
     }
     
+    private fun phoneOrientationMode(): String =
+        preferences.getString(PdfViewerActivity.PREF_PHONE_ORIENTATION, PdfViewerActivity.PHONE_ORIENTATION_AUTO)
+            ?: PdfViewerActivity.PHONE_ORIENTATION_AUTO
+
+    private fun phoneOrientationLabel(): String = when (phoneOrientationMode()) {
+        PdfViewerActivity.PHONE_ORIENTATION_LANDSCAPE -> "가로 — 휴대폰을 돌려도 가로(시스템 1 ~ 2개씩)"
+        PdfViewerActivity.PHONE_ORIENTATION_PORTRAIT -> "세로 — 휴대폰을 돌려도 세로(보통 한 쪽 전체)"
+        else -> "기기 회전 — 휴대폰을 돌리는 대로(기기의 자동 회전 · 회전 잠금을 따름)"
+    }
+
+    /** 회전 모드 고르기 (#090): 기기 회전 · 가로 · 세로 */
+    private fun showPhoneOrientationDialog() {
+        val modes = listOf(
+            PdfViewerActivity.PHONE_ORIENTATION_AUTO to "기기 회전",
+            PdfViewerActivity.PHONE_ORIENTATION_LANDSCAPE to "가로",
+            PdfViewerActivity.PHONE_ORIENTATION_PORTRAIT to "세로",
+        )
+        val current = modes.indexOfFirst { it.first == phoneOrientationMode() }.coerceAtLeast(0)
+        AlertDialog.Builder(this)
+            .setTitle("회전 모드 (악보 화면)")
+            .setSingleChoiceItems(modes.map { it.second }.toTypedArray(), current) { dialog, which ->
+                preferences.edit().putString(PdfViewerActivity.PREF_PHONE_ORIENTATION, modes[which].first).apply()
+                dialog.dismiss()
+                showDisplayModePanel()
+            }
+            .setNegativeButton("닫기", null)
+            .show()
+    }
+
     private fun showInfoPanel() {
         val items = listOfNotNull(
             SettingsItem(
@@ -939,6 +976,7 @@ class SettingsActivity : AppCompatActivity() {
             "volume_setting" -> showVolumeSettingDialog()
             "page_info_toggle" -> togglePageInfo()
             "animation_speed" -> showAnimationSpeedDialog()
+            "phone_orientation" -> showPhoneOrientationDialog()
             "view_display_modes" -> showDisplayModeListDialog()
             "reset_display_modes" -> showResetDisplayModeDialog()
             "input_block_time" -> showInputBlockTimeDialog()
