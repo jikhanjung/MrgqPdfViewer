@@ -762,7 +762,8 @@ class SettingsActivity : AppCompatActivity() {
                     !preferences.getBoolean(PdfViewerActivity.PREF_VOICE_COMMANDS, false) -> "위의 🎙 음성 명령을 먼저 켜세요"
                     preferences.getBoolean(PdfViewerActivity.PREF_VOICE_ALWAYS, false) -> wakeWords().first().let { w ->
                         "켜짐 — 악보 화면에서 늘 듣다가 호출어 \"$w\" 뒤의 말만 실행(\"$w, 57마디부터\" · \"$w, 멈춰\"). " +
-                            "연주 중에도 듣습니다. 듣는 소리는 계속 기기의 음성 인식(대개 Google, 인터넷)으로 갑니다"
+                            "연주 중에도 듣습니다. 듣는 동안 알림 소리를 끕니다(휴대폰은 전화가 진동으로 올 수 있음). " +
+                        "듣는 소리는 계속 기기의 음성 인식(대개 Google, 인터넷)으로 갑니다"
                     }
                     else -> "꺼짐 — 켜면 🎙 를 누르지 않고 \"${wakeWords().first()}, …\"로 명령합니다"
                 },

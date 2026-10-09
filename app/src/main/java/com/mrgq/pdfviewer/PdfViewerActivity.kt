@@ -5105,7 +5105,23 @@ class PdfViewerActivity : AppCompatActivity() {
                 true
             }
         }
-        if (alwaysListenAllowed()) scheduleAlwaysListening(0) else stopAlwaysListening()
+        if (alwaysListenAllowed()) {
+            scheduleAlwaysListening(0)
+            muteRecognizerBeep(true)
+        } else {
+            stopAlwaysListening()
+            muteRecognizerBeep(false)
+        }
+    }
+
+    /** 알림 소리를 끄지 못했다고 이 화면에서 이미 알렸다 */
+    private var beepMuteWarned = false
+
+    /** 👂 계속 듣기 동안 음성 서비스의 시작음(알림 채널)을 끈다 — 몇 초마다 딸깍거리지 않게 (#092) */
+    private fun muteRecognizerBeep(mute: Boolean) {
+        if (com.mrgq.pdfviewer.voice.NotificationMute.set(this, mute) || !mute || beepMuteWarned) return
+        beepMuteWarned = true
+        showVoiceStatus("👂 이 기기에서는 알림 소리를 끌 수 없어 듣기를 다시 걸 때 딸깍 소리가 날 수 있어요", VOICE_STATUS_MS)
     }
 
     /** 👂 계속 듣기를 켰고, 화면이 앞에 있고, 🎙 단추가 보이고, 🎤 연주 추적이 마이크를 쓰지 않을 때(준비 중도 아닐 때) */
@@ -6784,6 +6800,7 @@ class PdfViewerActivity : AppCompatActivity() {
         binding.voiceButton.removeCallbacks(stopVoiceListening)
         binding.voiceButton.removeCallbacks(restartAlwaysListening)
         voiceListener?.cancel()
+        muteRecognizerBeep(false) // 화면을 나가면 알림 소리를 되돌린다 (#092)
         voicePushToTalk = false
         wakeHeardAtMs = 0L
         binding.voiceButton.isActivated = false
@@ -6804,6 +6821,7 @@ class PdfViewerActivity : AppCompatActivity() {
         super.onDestroy()
         voiceListener?.destroy()
         voiceListener = null
+        com.mrgq.pdfviewer.voice.NotificationMute.set(this, false)
         
         // Clean up long press handler
         longPressHandler.removeCallbacks(longPressRunnable)
