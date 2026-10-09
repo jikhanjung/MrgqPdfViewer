@@ -36,4 +36,6 @@ interface ViewerCommands {
     suspend fun showFullScore(): CommandOutcome
     /** 고른 마디(고르는 중이 아니면 지금 쪽 첫 마디)에서 예비박 뒤 바로. 마디를 못 읽은 악보면 악보 연동 없이 메트로놈만 */
     suspend fun start(): CommandOutcome
+    /** 연주를 멈춘다 — 합주 지휘자면 연주자도, 연주자면 이 기기만 빠진다. 시작 마디를 고르는 중이면 고르기를 접는다 */
+    suspend fun stop(): CommandOutcome
 }

@@ -33,6 +33,9 @@ sealed class VoiceCommand {
     }
     object ShowFullScore : VoiceCommand() { override val label get() = "총보" }
 
+    /** 연주(메트로놈 · 악보 연동)를 멈춘다 — 👂 계속 듣기에서 (🎙 단추는 누르는 순간 멈추므로 필요 없었다, #085) */
+    object Stop : VoiceCommand() { override val label get() = "정지" }
+
     /** 고른 마디(없으면 지금 쪽 첫 마디)에서 예비박 뒤 바로 — 재생을 시작하는 위치 명령이 함께 있으면 그쪽이 시작하므로 빠진다 */
     object Start : VoiceCommand() { override val label get() = "시작" }
 

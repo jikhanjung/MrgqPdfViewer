@@ -50,6 +50,7 @@ object CommandParser {
         val found = mutableListOf<VoiceCommand>()
         val parts = mutableListOf<PartRef>()
         var strayNumbers = 0
+        var metronome = false
         var i = 0
         while (i < tokens.size) {
             val t = tokens[i]
@@ -96,6 +97,8 @@ object CommandParser {
                 t == Token.Word(Kw.AGAIN) -> found += VoiceCommand.Restart
                 t == Token.Word(Kw.RESUME) -> found += VoiceCommand.Resume
                 t == Token.Word(Kw.START) -> found += VoiceCommand.Start
+                t == Token.Word(Kw.STOP) -> found += VoiceCommand.Stop
+                t == Token.Word(Kw.METRONOME) -> metronome = true
                 t == Token.Word(Kw.FULL_SCORE) -> found += VoiceCommand.ShowFullScore
                 // "세컨 바이올린" — 서수가 앞에
                 t is Token.Ordinal && next is Token.Instrument -> {
@@ -121,6 +124,8 @@ object CommandParser {
             i++
         }
         if (parts.isNotEmpty()) found += SelectParts(parts.distinct())
+        // "메트로놈"만 = 시작, "메트로놈 정지" = 정지
+        if (metronome && VoiceCommand.Stop !in found) found += VoiceCommand.Start
         // 수 하나만 들렸다("칠십이요") — 무엇의 수인지는 지금 화면이 정한다
         val only = tokens.singleOrNull()
         if (found.isEmpty() && only is Token.Num) return ParseResult.BareNumber(only.value)
@@ -168,6 +173,10 @@ object CommandParser {
         if (commands.count { it.isPosition } > 1) return ParseResult.Unrecognized(Reason.CONFLICT)
         if (commands.count { it is SetTempo } > 1) return ParseResult.Unrecognized(Reason.CONFLICT)
         if (commands.count { it is SetCountIn } > 1) return ParseResult.Unrecognized(Reason.CONFLICT)
+        // "멈춰 57마디부터" — 멈추고 시작하라는 말은 서로 어긋난다
+        if (VoiceCommand.Stop in commands && commands.any { it.startsPlayback || it == VoiceCommand.Start }) {
+            return ParseResult.Unrecognized(Reason.CONFLICT)
+        }
         if (commands.any { it is SelectParts } && commands.contains(VoiceCommand.ShowFullScore)) {
             return ParseResult.Unrecognized(Reason.CONFLICT)
         }

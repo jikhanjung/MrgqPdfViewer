@@ -61,6 +61,7 @@ object VoiceCommandRunner {
         is SelectParts -> target.selectParts(command.parts)
         VoiceCommand.ShowFullScore -> target.showFullScore()
         VoiceCommand.Start -> target.start()
+        VoiceCommand.Stop -> target.stop()
     }
 
     private fun rangeError(command: VoiceCommand): String? = when {

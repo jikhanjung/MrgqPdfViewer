@@ -665,6 +665,20 @@ class SettingsActivity : AppCompatActivity() {
                 },
                 type = SettingsType.TOGGLE
             ).takeIf { !com.mrgq.pdfviewer.utils.DeviceForm.isTv(this) },
+            // 👂 계속 듣기 (#085) — 🎙 를 누르지 않고 호출어 "메이트" 뒤의 말을 명령으로
+            SettingsItem(
+                id = "voice_always_toggle",
+                icon = "👂",
+                title = "계속 듣기 (시험)",
+                subtitle = when {
+                    !preferences.getBoolean(PdfViewerActivity.PREF_VOICE_COMMANDS, false) -> "위의 🎙 음성 명령을 먼저 켜세요"
+                    preferences.getBoolean(PdfViewerActivity.PREF_VOICE_ALWAYS, false) ->
+                        "켜짐 — 악보 화면에서 늘 듣다가 \"메이트\" 뒤의 말만 실행(\"메이트, 57마디부터\" · \"Mate, 1페이지 시작\" · \"메이트, 멈춰\"). " +
+                            "연주 중에도 듣습니다. 듣는 소리는 계속 기기의 음성 인식(대개 Google, 인터넷)으로 갑니다"
+                    else -> "꺼짐 — 켜면 🎙 를 누르지 않고 \"메이트, …\"로 명령합니다"
+                },
+                type = SettingsType.TOGGLE
+            ).takeIf { !com.mrgq.pdfviewer.utils.DeviceForm.isTv(this) },
             SettingsItem(
                 id = "voice_text_input_toggle",
                 icon = "⌨️",
@@ -947,6 +961,12 @@ class SettingsActivity : AppCompatActivity() {
                 if (!com.mrgq.pdfviewer.voice.VoiceListener.isAvailable(this)) return
                 val enable = !preferences.getBoolean(PdfViewerActivity.PREF_VOICE_COMMANDS, false)
                 preferences.edit().putBoolean(PdfViewerActivity.PREF_VOICE_COMMANDS, enable).apply()
+                showInfoPanel()
+            }
+            "voice_always_toggle" -> {
+                if (!preferences.getBoolean(PdfViewerActivity.PREF_VOICE_COMMANDS, false)) return
+                val enable = !preferences.getBoolean(PdfViewerActivity.PREF_VOICE_ALWAYS, false)
+                preferences.edit().putBoolean(PdfViewerActivity.PREF_VOICE_ALWAYS, enable).apply()
                 showInfoPanel()
             }
             "voice_text_input_toggle" -> {

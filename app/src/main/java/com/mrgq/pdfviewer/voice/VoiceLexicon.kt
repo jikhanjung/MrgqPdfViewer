@@ -15,8 +15,10 @@ enum class Kw {
     PREV,         // 이전 · 앞 — 쪽 앞에서만("이전 쪽")
     RELATIVE,     // 전 · 뒤 · 후 — "두 마디 전" 같은 상대 위치는 1차에 받지 않는다(마디 번호로 잘못 읽히지 않게)
     TURN,         // 넘겨 — "다음 쪽"과 같다
-    START,        // 시작 · 메트로놈
+    START,        // 시작
+    METRONOME,    // 메트로놈 — 홀로면 시작, "메트로놈 정지"면 정지를 따른다
     COUNT_IN,     // 예비박 — "예비박 한 마디", "두 마디 예비박"
+    STOP,         // 멈춰 · 정지 · 그만 — 👂 계속 듣기에서 연주를 멈추는 말 (#085)
     PART,         // 파트 — 악기 이름 뒤에 붙어도 되고 안 붙어도 된다
     FULL_SCORE,   // 총보
     LETTER,       // 레터 · 리허설 — 리허설 마크
@@ -41,6 +43,12 @@ object VoiceLexicon {
     )
 
     /**
+     * 👂 계속 듣기의 호출어 (#085, 사용자 결정 "메이트 Mate") — 이 말 뒤의 말만 명령으로 읽는다("메이트, 57마디부터").
+     * "매이트"는 STT 가 ㅔ/ㅐ 를 바꿔 적는 것. 바꾸거나 더하려면 여기만. 음성 인식 낱말 힌트에도 들어간다
+     */
+    val WAKE_WORDS: List<String> = listOf("메이트", "매이트", "mate")
+
+    /**
      * 끝 음절이 잘린 단위 — 빨리 말하고 손을 떼면 "50 마디"가 "50 마"로 온다(#084). **수 바로 뒤, 말의 맨 끝**일 때만 단위로 읽는다
      * (가운데의 "마"는 다른 말일 수 있다)
      */
@@ -63,8 +71,9 @@ object VoiceLexicon {
         "이전" to Kw.PREV, "앞" to Kw.PREV,
         "전" to Kw.RELATIVE, "뒤" to Kw.RELATIVE, "후" to Kw.RELATIVE,
         "넘겨" to Kw.TURN, "넘기기" to Kw.TURN, "넘김" to Kw.TURN,
-        "시작" to Kw.START, "메트로놈" to Kw.START,
+        "시작" to Kw.START, "메트로놈" to Kw.METRONOME,
         "예비박" to Kw.COUNT_IN, "카운트인" to Kw.COUNT_IN,
+        "멈춰" to Kw.STOP, "멈춤" to Kw.STOP, "멈추" to Kw.STOP, "정지" to Kw.STOP, "그만" to Kw.STOP, "스톱" to Kw.STOP,
         "파트" to Kw.PART,
         "총보" to Kw.FULL_SCORE, "풀스코어" to Kw.FULL_SCORE, "전체악보" to Kw.FULL_SCORE,
         "레터" to Kw.LETTER, "리허설" to Kw.LETTER, "연습번호" to Kw.LETTER,

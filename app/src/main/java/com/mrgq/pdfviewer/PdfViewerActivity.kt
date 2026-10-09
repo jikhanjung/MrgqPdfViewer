@@ -47,6 +47,7 @@ import com.mrgq.pdfviewer.voice.ViewerCommands
 import com.mrgq.pdfviewer.voice.VoiceLexicon
 import com.mrgq.pdfviewer.voice.VoiceListener
 import com.mrgq.pdfviewer.voice.VoiceCommandRunner
+import com.mrgq.pdfviewer.voice.WakeWord
 import com.mrgq.pdfviewer.metronome.Accent
 import com.mrgq.pdfviewer.metronome.MetronomeClock
 import com.mrgq.pdfviewer.metronome.MetronomeEngine
@@ -108,6 +109,8 @@ class PdfViewerActivity : AppCompatActivity() {
         private const val DEFAULT_COUNT_IN_BARS = 2
         /** 설정 → 앱 정보 → ⌨️ 글자로 명령 시험 (P12 1단계) — 켜면 ↑ 메뉴에 ⌨️ 줄. 설정 화면(SettingsActivity)과 같은 키 */
         const val PREF_VOICE_TEXT_INPUT = "voice_text_input"
+        /** 👂 계속 듣기 (#085) — 🎙 를 누르지 않고 "메이트, …" */
+        const val PREF_VOICE_ALWAYS = "voice_always_listen"
         /** 파트 보기를 바꾼 명령이 파일이 다시 열리기를 기다리는 한도 */
         private const val FILE_RELOAD_TIMEOUT_MS = 15_000L
         /** 설정 → 앱 정보 → 🎙 음성 명령 (P12 2단계) — 켜면 악보 화면 오른쪽 아래 🎙 단추 */
@@ -117,6 +120,13 @@ class PdfViewerActivity : AppCompatActivity() {
         private const val VOICE_STATUS_MS = 5_000L
         /** 손을 뗀 뒤에도 이만큼 더 듣는다 — 바로 떼면 끝 음절이 잘린다("50 마디" → "50 마", #084) */
         private const val VOICE_RELEASE_TAIL_MS = 600L
+        /** 👂 한 번 듣기가 끝나면 이만큼 뒤에 다시 듣는다 — 오류가 이어지면 두 배씩, [ALWAYS_BACKOFF_MAX_MS] 까지 */
+        private const val ALWAYS_RESTART_MS = 250L
+        private const val ALWAYS_BACKOFF_MAX_MS = 10_000L
+        /** "메이트"만 들린 뒤 이 시간 안의 말은 호출어 없이 받는다 */
+        private const val WAKE_WINDOW_MS = 6_000L
+        /** "3쪽 시작" — 넘김이 끝나기를 이만큼까지 기다린다 */
+        private const val PAGE_SETTLE_TIMEOUT_MS = 2_000L
         private const val VOICE_LOG_MAX_BYTES = 1_000_000L
 
         /** 악보 연동 자동 넘김: 페이지 마지막 마디가 끝나기 몇 박 전에 넘길지 */
@@ -1788,6 +1798,7 @@ class PdfViewerActivity : AppCompatActivity() {
         if (requestCode == REQUEST_VOICE) {
             val granted = grantResults.firstOrNull() == android.content.pm.PackageManager.PERMISSION_GRANTED
             showVoiceStatus(if (granted) "🎙 이제 단추를 누른 채로 말하세요" else "🎙 마이크 권한이 없어 들을 수 없어요", VOICE_STATUS_MS)
+            if (granted) scheduleAlwaysListening()
             return
         }
         if (requestCode != REQUEST_MIC_FOLLOW) return
@@ -2561,6 +2572,8 @@ class PdfViewerActivity : AppCompatActivity() {
         if (partViewLayout != null) return toast("전체 악보에서만 쓸 수 있습니다 (파트 보기를 끄세요)")
         val score = musicXml?.takeIf { musicXmlFileId == fileId } ?: return toast("이 곡의 MusicXML 이 없어 들을 수 없습니다")
         stopMetronome()
+        // 👂 계속 듣기가 마이크를 쥐고 있으면 놓는다 — 추적이 열리면 refreshVoiceButton 이 다시 걸지 않는다, 못 열면 다시 건다
+        stopAlwaysListening()
         val file = File(pdfFilePath)
         lifecycleScope.launch {
             val measures = withContext(Dispatchers.IO) { musicRepository.getOrAnalyzeScoreMeasures(fileId, file) }
@@ -2603,7 +2616,7 @@ class PdfViewerActivity : AppCompatActivity() {
             binding.micStatus.visibility = View.VISIBLE
             refreshVoiceButton()
             Toast.makeText(this@PdfViewerActivity, "🎤 ${mapped[startMeasure]?.measureNumber}번 마디부터 듣습니다 — 연주를 시작하세요", Toast.LENGTH_LONG).show()
-        }
+        }.invokeOnCompletion { binding.voiceButton.post { if (micFollower == null) scheduleAlwaysListening() } } // 못 열었으면 👂 다시
     }
 
     private fun stopMicFollow(announce: Boolean = false) {
@@ -4451,10 +4464,10 @@ class PdfViewerActivity : AppCompatActivity() {
         }
     }
 
-    /** 지금 화면의 첫 마디 — 화면에 없으면 이 쪽 뒤의 첫 마디, 그것도 없으면 맨 앞 */
-    private fun firstShownMeasure(startable: List<ScoreMeasure>): ScoreMeasure =
-        startable.firstOrNull { isMeasureVisible(it) }
-            ?: startable.firstOrNull { it.pageIndex >= pageIndex }
+    /** [page] 화면(두 쪽이면 펼침)의 첫 마디 — 없으면 그 쪽 뒤의 첫 마디, 그것도 없으면 맨 앞 */
+    private fun firstShownMeasure(startable: List<ScoreMeasure>, page: Int = pageIndex): ScoreMeasure =
+        startable.firstOrNull { it.pageIndex == page || (isTwoPageMode && it.pageIndex == page + 1) }
+            ?: startable.firstOrNull { it.pageIndex >= page }
             ?: startable.first()
 
     private fun cancelMeasureSelection() {
@@ -4569,8 +4582,16 @@ class PdfViewerActivity : AppCompatActivity() {
     /** 파일을 다시 열어 첫 쪽을 보인 순간 — 파트 보기를 바꾼 명령이 기다린다 ([applyPartStaves]) */
     private var fileShownSignal: kotlinx.coroutines.CompletableDeferred<Unit>? = null
     private var voiceTextLast = ""
+    /** 이 발화의 쪽 명령이 넘어갈 쪽 — 이어지는 "시작"이 그 쪽 첫 마디에서("Mate, 1페이지 시작", #085). 발화마다 비운다([runCommand]) */
+    private var commandPageTarget: Int? = null
 
     private fun failed(message: String) = CommandOutcome.Failed(message)
+
+    /** 발화 하나를 실행 — 🎙 · 👂 · ⌨️ 가 모두 이 길로 */
+    private suspend fun runCommand(parsed: com.mrgq.pdfviewer.voice.ParseResult): VoiceCommandRunner.Report {
+        commandPageTarget = null
+        return VoiceCommandRunner.run(parsed, viewerCommands)
+    }
 
     /**
      * 음성 · 글자 명령이 부르는 악보 화면의 일. 기존 경로(↑ 메뉴 · 키 · 파트 보기 대화상자)와 같은 함수를 부른다 — 새로 생긴 동작은
@@ -4620,6 +4641,11 @@ class PdfViewerActivity : AppCompatActivity() {
                 (if (isTwoPageMode) pageIndex + 2 else pageIndex + 1) < pageCount
             if (!more) return failed("마지막 쪽이에요")
             if (isNavigationGuideVisible) hideNavigationGuide()
+            commandPageTarget = when {
+                phoneView && phoneWindowEnd < phoneChunks.lastIndex -> pageIndex // 휴대폰: 같은 쪽 다음 화면
+                isTwoPageMode -> pageIndex + 2
+                else -> pageIndex + 1
+            }
             turnForward()
             return CommandOutcome.Done
         }
@@ -4628,6 +4654,7 @@ class PdfViewerActivity : AppCompatActivity() {
             if (isInputBlocked()) return failed("지휘자가 방금 넘겨 잠시 넘길 수 없어요")
             if (!(phoneView && chunkIndex > 0) && pageIndex == 0) return failed("첫 쪽이에요")
             if (isNavigationGuideVisible) hideNavigationGuide()
+            commandPageTarget = if (phoneView && chunkIndex > 0) pageIndex else maxOf(0, pageIndex - if (isTwoPageMode) 2 else 1)
             turnBack()
             return CommandOutcome.Done
         }
@@ -4640,6 +4667,7 @@ class PdfViewerActivity : AppCompatActivity() {
             val sourcePages = layout?.strips?.maxOfOrNull { it.srcPage + 1 } ?: pageCount
             if (page > sourcePages) return failed("${page}쪽이 없어요 (1 ~ $sourcePages)")
             val target = pairStart((layout?.dstPageForSource(page - 1) ?: (page - 1)).coerceIn(0, pageCount - 1))
+            commandPageTarget = target
             if (target == pageIndex) return CommandOutcome.Done
             if (isNavigationGuideVisible) hideNavigationGuide()
             turnTo(target, if (target > pageIndex) 1 else -1)
@@ -4703,10 +4731,32 @@ class PdfViewerActivity : AppCompatActivity() {
                 startMetronome()
                 return CommandOutcome.Done
             }
+            // 같은 말에 쪽 명령이 있었으면("3쪽 시작") 그 쪽이 보인 뒤 그 쪽 첫 마디에서 — 넘김 렌더를 기다린다(#085)
+            commandPageTarget?.let { page ->
+                awaitPageIndex(page)
+                return startFollowingAt(fileId, startable, firstShownMeasure(startable, page))
+            }
             // 고른 마디가 있으면 거기서, 없으면 지금 쪽 첫 마디에서 — 예비박 뒤 바로 (#084)
             val chosen = followMeasures.getOrNull(cursorIndex)
                 ?.takeIf { followState == FollowState.SELECTING && followFileId == fileId && it in startable }
             return startFollowingAt(fileId, startable, chosen ?: firstShownMeasure(startable))
+        }
+
+        override suspend fun stop(): CommandOutcome {
+            when {
+                ensembleRole == EnsembleRole.FOLLOWING -> detachFromEnsemble() // 연주자: 이 기기만 빠진다 (뒤로 키와 같다)
+                followState == FollowState.SELECTING -> cancelMeasureSelection()
+                metronome.isRunning || followState != FollowState.OFF -> stopMetronome()
+                else -> return failed("멈출 연주가 없어요")
+            }
+            return CommandOutcome.Done
+        }
+    }
+
+    /** [target] 쪽이 화면에 올 때까지(넘김 렌더 · 애니메이션) 기다린다 — [PAGE_SETTLE_TIMEOUT_MS] 넘으면 그냥 간다 */
+    private suspend fun awaitPageIndex(target: Int) {
+        kotlinx.coroutines.withTimeoutOrNull(PAGE_SETTLE_TIMEOUT_MS) {
+            while (pageIndex != target || isAnimating) kotlinx.coroutines.delay(30)
         }
     }
 
@@ -4851,7 +4901,7 @@ class PdfViewerActivity : AppCompatActivity() {
         voiceTextLast = text
         val parsed = CommandParser.parse(text)
         lifecycleScope.launch {
-            val report = VoiceCommandRunner.run(parsed, viewerCommands)
+            val report = runCommand(parsed)
             Log.i("VoiceCommand", "\"$text\" → $parsed → ${if (report.ok) "✓" else "✗"} ${report.message}")
             Toast.makeText(this@PdfViewerActivity, (if (report.ok) "✓ " else "✗ ") + report.message, Toast.LENGTH_LONG).show()
         }
@@ -4864,20 +4914,85 @@ class PdfViewerActivity : AppCompatActivity() {
     private val hideVoiceStatus = Runnable { binding.voiceStatus.visibility = View.GONE }
     private val stopVoiceListening = Runnable { voiceListener?.stop() }
 
+    // 👂 계속 듣기 (#085): 🎙 를 누르지 않아도 듣기를 끝없이 다시 걸고, 호출어("메이트") 뒤의 말만 명령으로 실행한다
+    /** 화면이 앞에 있다 — onResume ~ onPause */
+    private var voiceResumed = false
+    /** 지금 듣기가 🎙 단추로 시작한 것인가 (아니면 👂 계속 듣기) */
+    private var voicePushToTalk = false
+    /** "메이트"만 들린 때 — 그 뒤 [WAKE_WINDOW_MS] 동안은 호출어 없이 받는다("메이트" … "57마디부터") */
+    private var wakeHeardAtMs = 0L
+    private var alwaysErrorStreak = 0
+    private val restartAlwaysListening = Runnable { startAlwaysListening() }
+
     /** 설정 → 앱 정보 → 🎙 음성 명령을 켰고, TV 가 아니고, 마이크와 음성 인식 서비스가 있으면 단추를 보인다. 🎤 추적 중에는 흐리게(§4.1) */
     private fun refreshVoiceButton() {
         val show = preferences.getBoolean(PREF_VOICE_COMMANDS, false) && micFollowCapable() && VoiceListener.isAvailable(this)
         binding.voiceButton.visibility = if (show) View.VISIBLE else View.GONE
         binding.voiceButton.alpha = if (micFollower != null) 0.4f else 1f
-        if (!show || voiceButtonReady) return
-        voiceButtonReady = true
-        binding.voiceButton.setOnTouchListener { v, event ->
-            when (event.actionMasked) {
-                android.view.MotionEvent.ACTION_DOWN -> onVoicePress()
-                android.view.MotionEvent.ACTION_UP -> { v.performClick(); onVoiceRelease() }
-                android.view.MotionEvent.ACTION_CANCEL -> onVoiceRelease()
+        // 👂 = 계속 듣는 중 (단추는 그대로 누른 채 말하기로도 쓴다)
+        binding.voiceButton.text = if (preferences.getBoolean(PREF_VOICE_ALWAYS, false)) "👂" else "🎙"
+        if (show && !voiceButtonReady) {
+            voiceButtonReady = true
+            binding.voiceButton.setOnTouchListener { v, event ->
+                when (event.actionMasked) {
+                    android.view.MotionEvent.ACTION_DOWN -> onVoicePress()
+                    android.view.MotionEvent.ACTION_UP -> { v.performClick(); onVoiceRelease() }
+                    android.view.MotionEvent.ACTION_CANCEL -> onVoiceRelease()
+                }
+                true
             }
-            true
+        }
+        if (alwaysListenAllowed()) scheduleAlwaysListening(0) else stopAlwaysListening()
+    }
+
+    /** 👂 계속 듣기를 켰고, 화면이 앞에 있고, 🎙 단추가 보이고, 🎤 연주 추적이 마이크를 쓰지 않을 때 */
+    private fun alwaysListenAllowed(): Boolean =
+        voiceResumed && preferences.getBoolean(PREF_VOICE_ALWAYS, false) &&
+            binding.voiceButton.visibility == View.VISIBLE && micFollower == null
+
+    private fun scheduleAlwaysListening(delayMs: Long = ALWAYS_RESTART_MS) {
+        binding.voiceButton.removeCallbacks(restartAlwaysListening)
+        if (alwaysListenAllowed()) binding.voiceButton.postDelayed(restartAlwaysListening, delayMs)
+    }
+
+    private fun startAlwaysListening() {
+        binding.voiceButton.removeCallbacks(restartAlwaysListening)
+        if (!alwaysListenAllowed()) return
+        if (androidx.core.content.ContextCompat.checkSelfPermission(this, android.Manifest.permission.RECORD_AUDIO) !=
+            android.content.pm.PackageManager.PERMISSION_GRANTED
+        ) {
+            return showVoiceStatus("👂 계속 들으려면 🎙 를 한 번 눌러 마이크 권한을 주세요", VOICE_STATUS_MS)
+        }
+        val listener = voiceListener ?: VoiceListener(this, voiceCallback).also { voiceListener = it }
+        if (listener.isActive) return
+        voicePushToTalk = false
+        listener.start(voiceHints() + VoiceLexicon.WAKE_WORDS)
+    }
+
+    /** 👂 계속 듣기를 접는다 — 🎙 단추로 듣는 중이면 그대로 둔다 */
+    private fun stopAlwaysListening() {
+        binding.voiceButton.removeCallbacks(restartAlwaysListening)
+        if (!voicePushToTalk) voiceListener?.takeIf { it.isActive }?.cancel()
+    }
+
+    private fun awaitingCommand(): Boolean = wakeHeardAtMs > 0 && SystemClock.uptimeMillis() - wakeHeardAtMs < WAKE_WINDOW_MS
+
+    /** 👂 계속 듣기의 오류 — 조용함 · 못 알아들음은 바로 다시, 그 밖은 점점 길게 기다렸다 다시. 마이크 권한이 없으면 멈춘다 */
+    private fun onAlwaysListeningError(error: Int) {
+        when (error) {
+            android.speech.SpeechRecognizer.ERROR_NO_MATCH, android.speech.SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> {
+                alwaysErrorStreak = 0
+                scheduleAlwaysListening()
+            }
+            android.speech.SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS ->
+                showVoiceStatus("👂 마이크 권한이 없어 계속 듣기를 멈췄어요", VOICE_STATUS_MS)
+            else -> {
+                alwaysErrorStreak++
+                val delayMs = (ALWAYS_RESTART_MS shl alwaysErrorStreak.coerceAtMost(6)).coerceAtMost(ALWAYS_BACKOFF_MAX_MS)
+                Log.i("VoiceCommand", "👂 계속 듣기 오류 $error (${alwaysErrorStreak}번째) — ${delayMs}ms 뒤 다시")
+                if (alwaysErrorStreak == 3) showVoiceStatus("👂 음성 인식이 잘 안 돼요 (오류 $error) — 다시 시도하는 중", VOICE_STATUS_MS)
+                scheduleAlwaysListening(delayMs)
+            }
         }
     }
 
@@ -4895,6 +5010,7 @@ class PdfViewerActivity : AppCompatActivity() {
     /** 누르는 순간: 메트로놈 정지(§4.2) → 듣기 시작 */
     private fun onVoicePress() {
         binding.voiceButton.removeCallbacks(stopVoiceListening)
+        binding.voiceButton.removeCallbacks(restartAlwaysListening)
         if (micFollower != null) return showVoiceStatus("🎤 연주 추적을 멈춘 뒤에 말하세요", VOICE_STATUS_MS)
         if (androidx.core.content.ContextCompat.checkSelfPermission(this, android.Manifest.permission.RECORD_AUDIO) !=
             android.content.pm.PackageManager.PERMISSION_GRANTED
@@ -4904,7 +5020,8 @@ class PdfViewerActivity : AppCompatActivity() {
         }
         stopForCommand()
         val listener = voiceListener ?: VoiceListener(this, voiceCallback).also { voiceListener = it }
-        if (listener.isActive) listener.cancel()
+        if (listener.isActive) listener.cancel() // 👂 계속 듣는 중이었으면 접고 단추로
+        voicePushToTalk = true
         binding.voiceButton.isActivated = true
         showVoiceStatus("🎙 …")
         listener.start(voiceHints())
@@ -4917,7 +5034,7 @@ class PdfViewerActivity : AppCompatActivity() {
     private fun onVoiceRelease() {
         binding.voiceButton.isActivated = false
         val listener = voiceListener ?: return
-        if (!listener.isActive) return
+        if (!listener.isActive || !voicePushToTalk) return
         showVoiceStatus("🎙 알아듣는 중…")
         binding.voiceButton.postDelayed(stopVoiceListening, VOICE_RELEASE_TAIL_MS)
     }
@@ -4928,30 +5045,70 @@ class PdfViewerActivity : AppCompatActivity() {
             musicXml?.takeIf { musicXmlFileId == currentPdfFileId }?.parts?.map { it.name }.orEmpty()
 
     private val voiceCallback = object : VoiceListener.Callback {
-        override fun onListening() = showVoiceStatus("🎙 듣는 중…")
+        override fun onListening() {
+            if (voicePushToTalk) showVoiceStatus("🎙 듣는 중…")
+        }
 
-        override fun onPartial(text: String) = showVoiceStatus("🎙 $text")
+        override fun onPartial(text: String) {
+            if (voicePushToTalk) return showVoiceStatus("🎙 $text")
+            // 👂 호출어가 들렸을 때만 띄운다 — 방 안의 다른 말은 보이지 않는다
+            val command = WakeWord.commandAfter(text) ?: text.takeIf { awaitingCommand() } ?: return
+            showVoiceStatus("👂 $command")
+        }
 
         override fun onResults(candidates: List<String>) {
-            binding.voiceButton.isActivated = false
-            val best = CommandParser.parseBest(candidates)
-            if (best == null) {
-                showVoiceStatus("🎙 못 알아들었어요 — 누른 채로 말하세요", VOICE_STATUS_MS)
-                logVoiceCommand(candidates, null, null)
-                return
+            if (voicePushToTalk) {
+                voicePushToTalk = false
+                binding.voiceButton.isActivated = false
+                return runVoiceCandidates(candidates, candidates, alwaysListening = false)
             }
-            val (text, parsed) = best
-            showVoiceStatus("🎙 “$text”")
-            lifecycleScope.launch {
-                val report = VoiceCommandRunner.run(parsed, viewerCommands)
-                showVoiceStatus("🎙 “$text”\n" + (if (report.ok) "✓ " else "✗ ") + report.message, VOICE_STATUS_MS)
-                logVoiceCommand(candidates, text, report)
+            alwaysErrorStreak = 0
+            val awaiting = awaitingCommand()
+            val commands = candidates.mapNotNull { WakeWord.commandAfter(it) ?: it.takeIf { awaiting } }
+            when {
+                commands.isEmpty() -> scheduleAlwaysListening() // 호출어 없는 말 — 흘려듣는다(기록하지 않는다)
+                commands.all { it.isBlank() } -> {
+                    // "메이트"만 — 이어지는 말을 호출어 없이 받는다
+                    wakeHeardAtMs = SystemClock.uptimeMillis()
+                    showVoiceStatus("👂 네? — 명령을 말하세요", WAKE_WINDOW_MS)
+                    scheduleAlwaysListening()
+                }
+                else -> {
+                    wakeHeardAtMs = 0L
+                    runVoiceCandidates(commands.filter { it.isNotBlank() }, candidates, alwaysListening = true)
+                }
             }
         }
 
-        override fun onError(message: String?) {
+        override fun onError(error: Int, message: String?) {
+            if (!voicePushToTalk) return onAlwaysListeningError(error)
+            voicePushToTalk = false
             binding.voiceButton.isActivated = false
             showVoiceStatus(message?.let { "🎙 $it" }, VOICE_STATUS_MS)
+            scheduleAlwaysListening()
+        }
+    }
+
+    /**
+     * 후보들 → 명령 실행 → 결과 표시 · 기록. 끝나면 👂 계속 듣기를 다시 건다. [heard] 는 기록할 원래 후보(👂 면 호출어 포함),
+     * [candidates] 는 명령으로 읽을 말(👂 면 호출어 뒤)
+     */
+    private fun runVoiceCandidates(candidates: List<String>, heard: List<String>, alwaysListening: Boolean) {
+        val icon = if (alwaysListening) "👂" else "🎙"
+        val best = CommandParser.parseBest(candidates)
+        if (best == null) {
+            showVoiceStatus(if (alwaysListening) "👂 못 알아들었어요" else "🎙 못 알아들었어요 — 누른 채로 말하세요", VOICE_STATUS_MS)
+            logVoiceCommand(heard, null, null, alwaysListening)
+            scheduleAlwaysListening()
+            return
+        }
+        val (text, parsed) = best
+        showVoiceStatus("$icon “$text”")
+        lifecycleScope.launch {
+            val report = runCommand(parsed)
+            showVoiceStatus("$icon “$text”\n" + (if (report.ok) "✓ " else "✗ ") + report.message, VOICE_STATUS_MS)
+            logVoiceCommand(heard, text, report, alwaysListening)
+            scheduleAlwaysListening()
         }
     }
 
@@ -4959,9 +5116,10 @@ class PdfViewerActivity : AppCompatActivity() {
      * 음성 명령 기록 (P12 §8 — 오인식을 모아 정규화 · 규칙을 늘린다): `files/voice/commands.jsonl` 한 줄에 후보들 · 고른 말 · 결과.
      * 기기 밖으로 보내지 않는다. 1 MB 를 넘으면 뒤 절반만 남긴다
      */
-    private fun logVoiceCommand(candidates: List<String>, chosen: String?, report: VoiceCommandRunner.Report?) {
+    private fun logVoiceCommand(candidates: List<String>, chosen: String?, report: VoiceCommandRunner.Report?, alwaysListening: Boolean) {
         val line = org.json.JSONObject().apply {
             put("time", System.currentTimeMillis())
+            put("mode", if (alwaysListening) "always" else "button")
             put("pdf", pdfFileName)
             put("candidates", org.json.JSONArray(candidates))
             put("chosen", chosen ?: org.json.JSONObject.NULL)
@@ -6397,6 +6555,7 @@ class PdfViewerActivity : AppCompatActivity() {
 
     override fun onPause() {
         super.onPause()
+        voiceResumed = false
         commitPendingNote() // 그리던 메모 묶음은 확정해 저장 (P11)
         com.mrgq.pdfviewer.ensemble.VersionNotice.detach()
         
@@ -6408,7 +6567,10 @@ class PdfViewerActivity : AppCompatActivity() {
         stopMetronome()
         stopMicFollow()
         binding.voiceButton.removeCallbacks(stopVoiceListening)
+        binding.voiceButton.removeCallbacks(restartAlwaysListening)
         voiceListener?.cancel()
+        voicePushToTalk = false
+        wakeHeardAtMs = 0L
         binding.voiceButton.isActivated = false
         showVoiceStatus(null)
     }
@@ -6418,7 +6580,8 @@ class PdfViewerActivity : AppCompatActivity() {
         com.mrgq.pdfviewer.ensemble.VersionNotice.attach(this) // 합주 상대와 버전이 다르면 대화상자로 (#061)
         // 합주 연주자: 돌아오면 지휘자 연주에 다시 합류 (#055)
         performerRun?.let { onEnsembleRunReceived(it, retry = true) }
-        refreshVoiceButton() // 설정에서 켜고 돌아왔을 수 있다
+        voiceResumed = true
+        refreshVoiceButton() // 설정에서 켜고 돌아왔을 수 있다 — 👂 계속 듣기도 여기서 건다
     }
     
     override fun onDestroy() {

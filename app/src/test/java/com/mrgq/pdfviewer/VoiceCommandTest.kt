@@ -16,6 +16,7 @@ import com.mrgq.pdfviewer.voice.VoiceCommand.SelectMeasure
 import com.mrgq.pdfviewer.voice.VoiceCommand.SetCountIn
 import com.mrgq.pdfviewer.voice.VoiceCommand.SelectParts
 import com.mrgq.pdfviewer.voice.VoiceCommand.SetTempo
+import com.mrgq.pdfviewer.voice.WakeWord
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
@@ -90,7 +91,7 @@ class VoiceCommandTest {
         assertEquals(listOf(Token.Word(Kw.TEMPO), Token.Num(100)), CommandNormalizer.normalize("템포 백"))
         assertEquals(listOf(Token.Instrument("violin"), Token.Num(2)), CommandNormalizer.normalize("바이올린 이"))
         assertEquals("세게 — 세(3)가 아니다", listOf(Token.Other("세게")), CommandNormalizer.normalize("세게"))
-        assertEquals(listOf(Token.Other("일시정지")), CommandNormalizer.normalize("일시정지"))
+        assertEquals(listOf(Token.Other("일시"), Token.Word(Kw.STOP)), CommandNormalizer.normalize("일시정지")) // "일"은 수가 아니다
         assertEquals(listOf(Token.Other("한"), Token.Word(Kw.COUNTER), Token.Other("더")), CommandNormalizer.normalize("한 번 더"))
     }
 
@@ -214,6 +215,47 @@ class VoiceCommandTest {
     }
 
     @Test
+    fun 쪽_넘기고_시작() {
+        assertCommands("1페이지 시작", GotoPage(1), VoiceCommand.Start)
+        assertCommands("3쪽부터 시작", GotoPage(3), VoiceCommand.Start)
+    }
+
+    @Test
+    fun 정지() {
+        assertCommands("멈춰", VoiceCommand.Stop)
+        assertCommands("정지", VoiceCommand.Stop)
+        assertCommands("그만", VoiceCommand.Stop)
+        assertCommands("일시정지", VoiceCommand.Stop)
+        assertCommands("메트로놈 정지", VoiceCommand.Stop)
+        assertCommands("메트로놈 멈춰 줘", VoiceCommand.Stop)
+        assertCommands("메트로놈", VoiceCommand.Start)
+        assertUnrecognized("멈춰 57마디부터", Reason.CONFLICT)
+        assertUnrecognized("정지 시작", Reason.CONFLICT)
+    }
+
+    // ── 👂 호출어 ──
+
+    @Test
+    fun 호출어_뒤의_말만() {
+        assertEquals("57마디부터", WakeWord.commandAfter("메이트, 57마디부터"))
+        assertEquals("1페이지 시작.", WakeWord.commandAfter("Mate, 1페이지 시작."))
+        assertEquals("다음 쪽", WakeWord.commandAfter("mate 다음 쪽"))
+        assertEquals("다음 쪽", WakeWord.commandAfter("메 이트 다음 쪽"))
+        assertEquals("다음 쪽", WakeWord.commandAfter("매이트야 다음 쪽"))
+        assertEquals("3쪽", WakeWord.commandAfter("메이트 아니 메이트 3쪽"))
+        assertEquals("", WakeWord.commandAfter("메이트"))
+        assertEquals("", WakeWord.commandAfter("메이트야!"))
+    }
+
+    @Test
+    fun 호출어가_없거나_다른_낱말_속이면_명령이_아니다() {
+        assertNull(WakeWord.commandAfter("57마디에서 첼로가 커요"))
+        assertNull(WakeWord.commandAfter("룸메이트가 57마디부터 하재"))
+        assertNull(WakeWord.commandAfter("estimate 57"))
+        assertNull(WakeWord.commandAfter("mates 다음 쪽"))
+    }
+
+    @Test
     fun 마디_고르기에_시작이_붙으면_그_마디부터() {
         assertCommands("57마디 시작", GotoMeasure(57))
         assertCommands("57마디에서 시작", GotoMeasure(57))
@@ -259,7 +301,6 @@ class VoiceCommandTest {
         assertUnrecognized("이 마디부터", Reason.NOTHING)
         assertUnrecognized("한 번 더", Reason.NOTHING)
         assertUnrecognized("다음 곡", Reason.NOTHING)
-        assertUnrecognized("일시정지", Reason.NOTHING)
         assertUnrecognized("칠", Reason.NOTHING)
     }
 

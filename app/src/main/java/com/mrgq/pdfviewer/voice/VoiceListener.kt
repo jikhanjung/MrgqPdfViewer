@@ -22,7 +22,8 @@ class VoiceListener(context: Context, private val callback: Callback) {
         fun onListening()
         fun onPartial(text: String)
         fun onResults(candidates: List<String>)
-        fun onError(message: String?)
+        /** [error] = `SpeechRecognizer.ERROR_*`, [message] = 화면에 보일 말(null 이면 조용히) */
+        fun onError(error: Int, message: String?)
     }
 
     private val recognizer: SpeechRecognizer = SpeechRecognizer.createSpeechRecognizer(context)
@@ -50,7 +51,7 @@ class VoiceListener(context: Context, private val callback: Callback) {
                 if (!active) return
                 active = false
                 Log.i(TAG, "인식 오류 $error")
-                callback.onError(errorMessage(error))
+                callback.onError(error, errorMessage(error))
             }
         })
     }
