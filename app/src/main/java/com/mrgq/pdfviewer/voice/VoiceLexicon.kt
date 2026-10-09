@@ -16,6 +16,7 @@ enum class Kw {
     RELATIVE,     // 전 · 뒤 · 후 — "두 마디 전" 같은 상대 위치는 1차에 받지 않는다(마디 번호로 잘못 읽히지 않게)
     TURN,         // 넘겨 — "다음 쪽"과 같다
     START,        // 시작 · 메트로놈
+    COUNT_IN,     // 예비박 — "예비박 한 마디", "두 마디 예비박"
     PART,         // 파트 — 악기 이름 뒤에 붙어도 되고 안 붙어도 된다
     FULL_SCORE,   // 총보
     LETTER,       // 레터 · 리허설 — 리허설 마크
@@ -39,6 +40,15 @@ object VoiceLexicon {
         "비피앰" to "비피엠",
     )
 
+    /**
+     * 끝 음절이 잘린 단위 — 빨리 말하고 손을 떼면 "50 마디"가 "50 마"로 온다(#084). **수 바로 뒤, 말의 맨 끝**일 때만 단위로 읽는다
+     * (가운데의 "마"는 다른 말일 수 있다)
+     */
+    val CLIPPED_UNITS: Map<String, Kw> = mapOf(
+        "마" to Kw.MEASURE,
+        "페이" to Kw.PAGE,
+    )
+
     val KEYWORDS: Map<String, Kw> = mapOf(
         "마디" to Kw.MEASURE, "소절" to Kw.MEASURE,
         "쪽" to Kw.PAGE, "페이지" to Kw.PAGE, "장" to Kw.PAGE,
@@ -54,6 +64,7 @@ object VoiceLexicon {
         "전" to Kw.RELATIVE, "뒤" to Kw.RELATIVE, "후" to Kw.RELATIVE,
         "넘겨" to Kw.TURN, "넘기기" to Kw.TURN, "넘김" to Kw.TURN,
         "시작" to Kw.START, "메트로놈" to Kw.START,
+        "예비박" to Kw.COUNT_IN, "카운트인" to Kw.COUNT_IN,
         "파트" to Kw.PART,
         "총보" to Kw.FULL_SCORE, "풀스코어" to Kw.FULL_SCORE, "전체악보" to Kw.FULL_SCORE,
         "레터" to Kw.LETTER, "리허설" to Kw.LETTER, "연습번호" to Kw.LETTER,

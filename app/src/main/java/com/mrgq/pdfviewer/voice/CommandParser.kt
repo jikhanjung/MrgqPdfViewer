@@ -4,15 +4,19 @@ import com.mrgq.pdfviewer.voice.ParseResult.Reason
 import com.mrgq.pdfviewer.voice.VoiceCommand.GotoMeasure
 import com.mrgq.pdfviewer.voice.VoiceCommand.GotoPage
 import com.mrgq.pdfviewer.voice.VoiceCommand.GotoRehearsalMark
+import com.mrgq.pdfviewer.voice.VoiceCommand.SetCountIn
+import com.mrgq.pdfviewer.voice.VoiceCommand.SelectMeasure
 import com.mrgq.pdfviewer.voice.VoiceCommand.SelectParts
 import com.mrgq.pdfviewer.voice.VoiceCommand.SetTempo
 
 /**
  * 정규화한 조각 → 명령 (P12 §3.2). 원칙은 **모르면 실행하지 않는다** — 잘못 실행(다른 마디로 감)이 못 알아듣는 것보다 훨씬 나쁘다.
  *
- * - 수는 바로 뒤 낱말에 붙는다: `57 마디` · `57 부터` = 마디, `3 쪽` = 쪽, `72 bpm` · `템포 72` = 템포. 사이에 "번 · 번째"는 건너뛴다
+ * - 수는 바로 뒤 낱말에 붙는다: `57 마디` = 마디 고르기, `57 마디 부터` · `57 부터` = 그 마디부터 시작, `3 쪽` = 쪽,
+ *   `72 bpm` · `템포 72` = 템포, `예비박 2 마디` · `2 마디 예비박` = 예비박. 사이에 "번 · 번째"는 건너뛴다
  * - 조사 · 말끝만인 조각은 버리고, 모르는 말은 남겨 앞뒤가 이어지지 않게 한다
  * - "말고 · 아니 · 취소" 나 "전 · 뒤 · 후"(상대 위치)가 들리면, 어디에도 붙지 않은 수가 남으면, 위치 · 템포가 둘이면 → 실행하지 않음
+ * - 마디 고르기에 "시작 · 다시"가 붙으면 그 마디부터 시작("57마디 시작" = 57마디부터)
  * - "다시"는 다른 위치 명령이 있으면 빠진다("처음부터 다시" = 처음부터), "시작"은 재생을 시작하는 위치 명령이 있으면 빠진다
  *
  * Android 에 의존하지 않는다 — JVM 단위 테스트 대상.
@@ -54,13 +58,33 @@ object CommandParser {
                 t is Token.Num -> {
                     val j = skipCounters(tokens, i + 1)
                     when ((tokens.getOrNull(j) as? Token.Word)?.kw) {
-                        Kw.MEASURE, Kw.FROM -> { found += GotoMeasure(t.value); i = j + 1; continue }
+                        Kw.MEASURE -> {
+                            // "두 마디 예비박" — 단 "57마디 예비박 두 마디"의 57 은 마디(뒤 수가 예비박 몫)
+                            if (tokens.getOrNull(j + 1) == Token.Word(Kw.COUNT_IN) && tokens.getOrNull(j + 2) !is Token.Num) {
+                                found += SetCountIn(t.value)
+                                i = j + 2
+                                continue
+                            }
+                            // "57마디부터" = 시작, "57마디" = 고르기만
+                            val from = tokens.getOrNull(j + 1) == Token.Word(Kw.FROM)
+                            found += if (from) GotoMeasure(t.value) else SelectMeasure(t.value)
+                            i = j + if (from) 2 else 1
+                            continue
+                        }
+                        Kw.FROM -> { found += GotoMeasure(t.value); i = j + 1; continue }
                         Kw.PAGE -> { found += GotoPage(t.value); i = j + 1; continue }
                         Kw.BPM -> { found += SetTempo(t.value); i = j + 1; continue }
                         else -> strayNumbers++
                     }
                 }
                 t == Token.Word(Kw.TEMPO) && next is Token.Num -> { found += SetTempo(next.value); i += 2; continue }
+                // "예비박 한 마디", "예비박 둘" — 뒤의 마디는 이 수의 단위
+                t == Token.Word(Kw.COUNT_IN) && next is Token.Num -> {
+                    found += SetCountIn(next.value)
+                    val j = skipCounters(tokens, i + 2)
+                    i = if (tokens.getOrNull(j) == Token.Word(Kw.MEASURE)) j + 1 else i + 2
+                    continue
+                }
                 t == Token.Word(Kw.NEXT) && next == Token.Word(Kw.PAGE) -> { found += VoiceCommand.NextPage; i += 2; continue }
                 t == Token.Word(Kw.PREV) -> {
                     // "앞 · 이전"은 쪽 앞에서만 — "57마디 앞"은 상대 위치라 받지 않는다
@@ -129,6 +153,11 @@ object CommandParser {
 
     private fun resolve(found: List<VoiceCommand>, strayNumbers: Int): ParseResult {
         var commands = found
+        // "57마디 시작", "57마디 다시" — 고르기에 시작이 붙으면 그 마디부터
+        val select = commands.filterIsInstance<SelectMeasure>()
+        if (select.isNotEmpty() && (VoiceCommand.Start in commands || VoiceCommand.Restart in commands)) {
+            commands = commands.map { if (it is SelectMeasure) GotoMeasure(it.measure) else it } - VoiceCommand.Start - VoiceCommand.Restart
+        }
         // "처음부터 다시", "57마디부터 다시" — 다시는 다른 위치 명령에 양보
         if (commands.any { it.isPosition && it != VoiceCommand.Restart }) commands = commands - VoiceCommand.Restart
         // "57마디부터 시작" — 위치 명령이 이미 시작한다
@@ -138,6 +167,7 @@ object CommandParser {
         if (strayNumbers > 0) return ParseResult.Unrecognized(Reason.STRAY_NUMBER)
         if (commands.count { it.isPosition } > 1) return ParseResult.Unrecognized(Reason.CONFLICT)
         if (commands.count { it is SetTempo } > 1) return ParseResult.Unrecognized(Reason.CONFLICT)
+        if (commands.count { it is SetCountIn } > 1) return ParseResult.Unrecognized(Reason.CONFLICT)
         if (commands.any { it is SelectParts } && commands.contains(VoiceCommand.ShowFullScore)) {
             return ParseResult.Unrecognized(Reason.CONFLICT)
         }
@@ -145,7 +175,7 @@ object CommandParser {
     }
 
     private fun order(c: VoiceCommand): Int = when {
-        c is SetTempo -> 0
+        c is SetTempo || c is SetCountIn -> 0
         c is SelectParts || c == VoiceCommand.ShowFullScore -> 1
         c.isPosition -> 2
         else -> 3

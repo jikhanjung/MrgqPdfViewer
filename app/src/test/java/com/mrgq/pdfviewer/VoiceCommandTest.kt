@@ -12,6 +12,8 @@ import com.mrgq.pdfviewer.voice.VoiceCommand
 import com.mrgq.pdfviewer.voice.VoiceCommand.GotoMeasure
 import com.mrgq.pdfviewer.voice.VoiceCommand.GotoPage
 import com.mrgq.pdfviewer.voice.VoiceCommand.GotoRehearsalMark
+import com.mrgq.pdfviewer.voice.VoiceCommand.SelectMeasure
+import com.mrgq.pdfviewer.voice.VoiceCommand.SetCountIn
 import com.mrgq.pdfviewer.voice.VoiceCommand.SelectParts
 import com.mrgq.pdfviewer.voice.VoiceCommand.SetTempo
 import org.junit.Assert.assertEquals
@@ -106,14 +108,32 @@ class VoiceCommandTest {
     // ── 규칙: 위치 ──
 
     @Test
-    fun 마디로_가기() {
+    fun 마디부터는_시작() {
         assertCommands("57마디부터", GotoMeasure(57))
         assertCommands("오십칠 마디부터", GotoMeasure(57))
-        assertCommands("쉰일곱 마디", GotoMeasure(57))
         assertCommands("57부터", GotoMeasure(57))
-        assertCommands("57번 마디에서", GotoMeasure(57))
-        assertCommands("세 번째 마디", GotoMeasure(3))
+        assertCommands("57마디에서부터", GotoMeasure(57))
         assertCommands("백이십 소절부터 해볼게요", GotoMeasure(120))
+    }
+
+    @Test
+    fun 마디만_말하면_고르기만() {
+        assertCommands("57마디", SelectMeasure(57))
+        assertCommands("쉰일곱 마디", SelectMeasure(57))
+        assertCommands("57번 마디에서", SelectMeasure(57))
+        assertCommands("세 번째 마디", SelectMeasure(3))
+        assertCommands("57마디로", SelectMeasure(57))
+    }
+
+    @Test
+    fun 끝_음절이_잘린_마디() {
+        assertCommands("50 마", SelectMeasure(50))
+        assertCommands("115 마", SelectMeasure(115))
+        assertCommands("오십 마", SelectMeasure(50))
+        assertCommands("3 페이", GotoPage(3))
+        // 가운데의 "마"나 수 없는 "마"는 단위가 아니다
+        assertUnrecognized("50 마 템포 72", Reason.STRAY_NUMBER)
+        assertUnrecognized("마", Reason.NOTHING)
     }
 
     @Test
@@ -130,6 +150,7 @@ class VoiceCommandTest {
         assertCommands("처음부터 다시", VoiceCommand.GotoStart)
         assertCommands("다시", VoiceCommand.Restart)
         assertCommands("57마디부터 다시", GotoMeasure(57))
+        assertCommands("57마디 다시", GotoMeasure(57))
         assertCommands("이어서", VoiceCommand.Resume)
         assertCommands("계속", VoiceCommand.Resume)
     }
@@ -181,6 +202,7 @@ class VoiceCommandTest {
     @Test
     fun 악기_뒤_수가_마디면_파트_번호가_아니다() {
         assertCommands("바이올린 3마디부터", SelectParts(listOf(PartRef("violin"))), GotoMeasure(3))
+        assertCommands("바이올린 3마디", SelectParts(listOf(PartRef("violin"))), SelectMeasure(3))
     }
 
     @Test
@@ -192,8 +214,31 @@ class VoiceCommandTest {
     }
 
     @Test
+    fun 마디_고르기에_시작이_붙으면_그_마디부터() {
+        assertCommands("57마디 시작", GotoMeasure(57))
+        assertCommands("57마디에서 시작", GotoMeasure(57))
+        assertCommands("57마디 템포 72 시작", SetTempo(72), GotoMeasure(57))
+    }
+
+    @Test
     fun 화면_표시는_위치_먼저() {
-        assertEquals("57마디 · ♩=72", (CommandParser.parse("57마디부터 템포 72") as ParseResult.Commands).label)
+        assertEquals("57마디부터 · ♩=72", (CommandParser.parse("57마디부터 템포 72") as ParseResult.Commands).label)
+        assertEquals("57마디 선택 · ♩=72", (CommandParser.parse("57마디 템포 72") as ParseResult.Commands).label)
+    }
+
+    @Test
+    fun 예비박() {
+        assertCommands("예비박 한 마디", SetCountIn(1))
+        assertCommands("예비박 두마디", SetCountIn(2))
+        assertCommands("예비박 2마디", SetCountIn(2))
+        assertCommands("예비박 한 마디로", SetCountIn(1))
+        assertCommands("두 마디 예비박", SetCountIn(2))
+        assertCommands("예비박 둘", SetCountIn(2))
+        assertCommands("예비 박 이 마디", SetCountIn(2))
+        assertCommands("예비박 한 마디 57마디부터", SetCountIn(1), GotoMeasure(57))
+        assertCommands("57마디 예비박 두 마디", SetCountIn(2), SelectMeasure(57))
+        assertUnrecognized("예비박", Reason.NOTHING)
+        assertUnrecognized("예비박 한 마디 예비박 두 마디", Reason.CONFLICT)
     }
 
     // ── 수만 ──
@@ -238,7 +283,7 @@ class VoiceCommandTest {
         assertUnrecognized("57마디 3쪽", Reason.CONFLICT)
         assertUnrecognized("템포 72 템포 84", Reason.CONFLICT)
         assertUnrecognized("첼로 총보", Reason.CONFLICT)
-        assertCommands("57마디 57마디", GotoMeasure(57))
+        assertCommands("57마디 57마디", SelectMeasure(57))
     }
 
     @Test

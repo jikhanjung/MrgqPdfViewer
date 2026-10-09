@@ -5,6 +5,8 @@ import com.mrgq.pdfviewer.voice.ParseResult.Reason
 import com.mrgq.pdfviewer.voice.VoiceCommand.GotoMeasure
 import com.mrgq.pdfviewer.voice.VoiceCommand.GotoPage
 import com.mrgq.pdfviewer.voice.VoiceCommand.GotoRehearsalMark
+import com.mrgq.pdfviewer.voice.VoiceCommand.SelectMeasure
+import com.mrgq.pdfviewer.voice.VoiceCommand.SetCountIn
 import com.mrgq.pdfviewer.voice.VoiceCommand.SelectParts
 import com.mrgq.pdfviewer.voice.VoiceCommand.SetTempo
 
@@ -13,7 +15,7 @@ import com.mrgq.pdfviewer.voice.VoiceCommand.SetTempo
  *
  * - 값 범위(템포 20 ~ 240, 마디 · 쪽 1 이상)는 **아무것도 하기 전에** 본다 — 하나라도 벗어나면 하나도 실행하지 않는다
  * - 명령은 [ParseResult.Commands] 의 순서(템포 · 파트 → 위치 → 시작)대로, 하나가 실패하면 거기서 멈추고 앞에서 한 것을 알린다
- * - 수만 들렸으면([ParseResult.BareNumber]) 메트로놈 대화상자가 열려 있을 때는 템포, 아니면 마디 (P12 §3.2)
+ * - 수만 들렸으면([ParseResult.BareNumber]) 메트로놈 대화상자가 열려 있을 때는 템포, 아니면 마디 고르기 (P12 §3.2)
  *
  * Android 에 의존하지 않는다 — JVM 단위 테스트 대상.
  */
@@ -24,7 +26,7 @@ object VoiceCommandRunner {
     suspend fun run(result: ParseResult, target: ViewerCommands, bareNumberIsTempo: Boolean = false): Report = when (result) {
         is ParseResult.Unrecognized -> Report(false, reasonMessage(result.reason))
         is ParseResult.BareNumber -> run(
-            ParseResult.Commands(listOf(if (bareNumberIsTempo) SetTempo(result.value) else GotoMeasure(result.value))),
+            ParseResult.Commands(listOf(if (bareNumberIsTempo) SetTempo(result.value) else SelectMeasure(result.value))),
             target,
         )
         is ParseResult.Commands -> execute(result, target)
@@ -45,6 +47,7 @@ object VoiceCommandRunner {
     }
 
     private suspend fun dispatch(command: VoiceCommand, target: ViewerCommands): CommandOutcome = when (command) {
+        is SelectMeasure -> target.selectMeasure(command.measure)
         is GotoMeasure -> target.gotoMeasure(command.measure)
         VoiceCommand.GotoStart -> target.gotoStart()
         VoiceCommand.Restart -> target.restart()
@@ -54,6 +57,7 @@ object VoiceCommandRunner {
         VoiceCommand.PreviousPage -> target.previousPage()
         is GotoPage -> target.gotoPage(command.page)
         is SetTempo -> target.setTempo(command.bpm)
+        is SetCountIn -> target.setCountIn(command.bars)
         is SelectParts -> target.selectParts(command.parts)
         VoiceCommand.ShowFullScore -> target.showFullScore()
         VoiceCommand.Start -> target.start()
@@ -62,7 +66,9 @@ object VoiceCommandRunner {
     private fun rangeError(command: VoiceCommand): String? = when {
         command is SetTempo && command.bpm !in MetronomeClock.MIN_BPM..MetronomeClock.MAX_BPM ->
             "템포 ${command.bpm} 은 쓸 수 없어요 (${MetronomeClock.MIN_BPM} ~ ${MetronomeClock.MAX_BPM})"
+        command is SetCountIn && command.bars !in 1..2 -> "예비박은 한 마디나 두 마디만 돼요"
         command is GotoMeasure && command.measure < 1 -> "${command.measure}마디는 없어요"
+        command is SelectMeasure && command.measure < 1 -> "${command.measure}마디는 없어요"
         command is GotoPage && command.page < 1 -> "${command.page}쪽은 없어요"
         else -> null
     }

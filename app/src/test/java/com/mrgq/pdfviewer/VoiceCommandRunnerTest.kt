@@ -23,6 +23,7 @@ class VoiceCommandRunnerTest {
             calls += name
             return if (failOn.any { name.startsWith(it) }) CommandOutcome.Failed("$name 실패") else CommandOutcome.Done
         }
+        override suspend fun selectMeasure(measure: Int) = call("select $measure")
         override suspend fun gotoMeasure(measure: Int) = call("measure $measure")
         override suspend fun gotoStart() = call("start-over")
         override suspend fun restart() = call("restart")
@@ -32,6 +33,7 @@ class VoiceCommandRunnerTest {
         override suspend fun previousPage() = call("prev")
         override suspend fun gotoPage(page: Int) = call("page $page")
         override suspend fun setTempo(bpm: Int) = call("tempo $bpm")
+        override suspend fun setCountIn(bars: Int) = call("count-in $bars")
         override suspend fun selectParts(parts: List<PartRef>) = call("parts ${parts.joinToString { it.label }}")
         override suspend fun showFullScore() = call("full")
         override suspend fun start() = call("start")
@@ -45,7 +47,7 @@ class VoiceCommandRunnerTest {
         val (report, calls) = run("오십칠 마디부터 템포 칠십이")
         assertEquals(listOf("tempo 72", "measure 57"), calls)
         assertTrue(report.ok)
-        assertEquals("57마디 · ♩=72", report.message)
+        assertEquals("57마디부터 · ♩=72", report.message)
     }
 
     @Test
@@ -55,8 +57,8 @@ class VoiceCommandRunnerTest {
     }
 
     @Test
-    fun 수만_들리면_마디_대화상자가_열려_있으면_템포() {
-        assertEquals(listOf("measure 72"), run("칠십이").second)
+    fun 수만_들리면_마디_고르기_대화상자가_열려_있으면_템포() {
+        assertEquals(listOf("select 72"), run("칠십이").second)
         assertEquals(listOf("tempo 72"), run("칠십이", bareNumberIsTempo = true).second)
     }
 
@@ -91,6 +93,24 @@ class VoiceCommandRunnerTest {
         val (r2, c2) = run("템포 72 57마디", first)
         assertEquals(listOf("tempo 72"), c2)
         assertEquals("tempo 72 실패", r2.message)
+    }
+
+    @Test
+    fun 마디만이면_고르고_시작이_붙으면_그_마디부터() {
+        assertEquals(listOf("select 57"), run("57마디").second)
+        assertEquals(listOf("select 50"), run("50 마").second)
+        assertEquals(listOf("measure 57"), run("57마디 시작").second)
+        assertEquals(listOf("start"), run("시작").second)
+        assertEquals(listOf("tempo 72", "select 57"), run("57마디 템포 72").second)
+    }
+
+    @Test
+    fun 예비박은_한_마디나_두_마디() {
+        assertEquals(listOf("count-in 1", "measure 57"), run("예비박 한 마디 57마디부터").second)
+        val (report, calls) = run("예비박 세 마디")
+        assertFalse(report.ok)
+        assertTrue(calls.isEmpty())
+        assertEquals("예비박은 한 마디나 두 마디만 돼요", report.message)
     }
 
     @Test

@@ -148,6 +148,7 @@ MrgqPdfViewer 개발 로그 모음. 구현 기록은 `YYYYMMDD_NNN_` 형식(NNN 
 - [`081`](20261009_081_voice_command_parser.md) — **음성 명령 1단계: 정규화 · 규칙**(`voice/`): 한국어 수(한자어 · 고유어) · 공백 지우고 긴 낱말부터 · 한 글자 수는 앞뒤를 보고 · 모르면 실행 안 함(부정 · 상대 위치 · 남는 수 · 위치 둘). 단위 테스트 +25. v0.6.4-beta.1
 - [`082`](20261009_082_command_layer_text_input.md) — **음성 명령 명령 층 + ⌨️ 글자로 명령 시험 창**: `ViewerCommands`(명령 하나 = 함수 하나) · 실행기(범위는 실행 전, 실패하면 멈추고 알림) · 보표 이름 맞추기(`PartMatcher`), 마디 명령은 마디 고르기 없이 바로 시작, ← → 본문을 `turnForward`/`turnBack` 으로. 설정 → 앱 정보에서 켬
 - [`083`](20261009_083_voice_button_speech_recognizer.md) — **🎙 음성 명령 — 기기 음성 인식**: 기기 안 Moonshine(sherpa-onnx +27MB · 커뮤니티 라이선스) 대신 Android `SpeechRecognizer`(사용자 결정). 오른쪽 아래 🎙 누르는 동안 듣기, 후보 여럿 중 명령인 것(일부러 막힌 말은 그대로), 낱말 힌트, `files/voice/commands.jsonl` 기록
+- [`084`](20261009_084_voice_tablet_setup_and_clipped_endings.md) — **태블릿에서 🎙 가 켜지지 않던 까닭**: 중국판 롬은 Google 앱의 인식 서비스가 꺼진 채라 Google 앱만으로는 부족 → "음성 인식 및 합성" 설치 + 그 앱에 마이크 권한(없으면 한국어 기기 안 팩 없음 오류 12 로 보임). 휴대폰은 마이크 권한만. **끝 음절 잘림**: 떼고 0.6초 더 듣기 + 수 뒤 맨 끝 "마" = 마디. **"N마디" = 고르기**, "부터 · 시작" = 바로, "시작" = 고른 마디 · 없으면 지금 화면 첫 마디. **"예비박 한 마디 · 두 마디"**, 명령 전체 목록 [`docs/Voice_Commands.md`](../docs/Voice_Commands.md). v0.7.0
 
 ## 🔄 사전 릴리스 받기 (2026-10-07, v0.5.7)
 - [`073`](20261007_073_prerelease_updates.md) — 설정 **🧪 사전 릴리스(beta) 받기**(기본 꺼짐): 웹 릴리스 피드(`releases.atom`)에서 가장 높은 판(릴리스 없는 태그 · `-test` 는 건너뜀), 버전 비교를 SemVer 우선순위로. 0.5.7 정식 = 이 설정만, 메모는 0.6.0-beta.1

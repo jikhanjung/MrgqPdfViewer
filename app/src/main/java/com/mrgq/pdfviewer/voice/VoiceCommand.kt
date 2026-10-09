@@ -10,7 +10,10 @@ sealed class VoiceCommand {
     abstract val label: String
 
     // ── 위치 — 한 발화에 하나만 ──
-    data class GotoMeasure(val measure: Int) : VoiceCommand() { override val label get() = "${measure}마디" }
+    /** "57마디" — 그 마디를 시작 마디로 고르기만 한다(시작은 "시작" · 마디 탭) */
+    data class SelectMeasure(val measure: Int) : VoiceCommand() { override val label get() = "${measure}마디 선택" }
+    /** "57마디부터" · "57마디 시작" — 그 마디에서 예비박 뒤 바로 */
+    data class GotoMeasure(val measure: Int) : VoiceCommand() { override val label get() = "${measure}마디부터" }
     object GotoStart : VoiceCommand() { override val label get() = "처음부터" }
     /** 직전 시작 마디부터 */
     object Restart : VoiceCommand() { override val label get() = "다시" }
@@ -23,19 +26,21 @@ sealed class VoiceCommand {
 
     // ── 설정 ──
     data class SetTempo(val bpm: Int) : VoiceCommand() { override val label get() = "♩=$bpm" }
+    /** 악보 연동 예비박 마디 수(1 · 2, 전역 — #060) */
+    data class SetCountIn(val bars: Int) : VoiceCommand() { override val label get() = "예비박 ${bars}마디" }
     data class SelectParts(val parts: List<PartRef>) : VoiceCommand() {
         override val label get() = parts.joinToString(" · ") { it.label } + " 파트"
     }
     object ShowFullScore : VoiceCommand() { override val label get() = "총보" }
 
-    /** 메트로놈 시작(지금 설정 그대로) — 위치 명령이 함께 있으면 그쪽이 시작하므로 빠진다 */
+    /** 고른 마디(없으면 지금 쪽 첫 마디)에서 예비박 뒤 바로 — 재생을 시작하는 위치 명령이 함께 있으면 그쪽이 시작하므로 빠진다 */
     object Start : VoiceCommand() { override val label get() = "시작" }
 
     val isPosition: Boolean
-        get() = this is GotoMeasure || this == GotoStart || this == Restart || this == Resume ||
+        get() = this is SelectMeasure || this is GotoMeasure || this == GotoStart || this == Restart || this == Resume ||
             this is GotoRehearsalMark || this == NextPage || this == PreviousPage || this is GotoPage
 
-    /** 위치 명령 중 메트로놈을 그 자리에서 시작하는 것 (쪽 넘김은 시작하지 않는다) */
+    /** 위치 명령 중 메트로놈을 그 자리에서 시작하는 것 (마디 고르기 · 쪽 넘김은 시작하지 않는다) */
     val startsPlayback: Boolean
         get() = this is GotoMeasure || this == GotoStart || this == Restart || this == Resume || this is GotoRehearsalMark
 }
@@ -47,7 +52,7 @@ sealed class ParseResult {
         val label: String get() = commands.sortedBy { if (it.isPosition) 0 else 1 }.joinToString(" · ") { it.label }
     }
 
-    /** 수만 들렸다("칠십이") — 마디인지 템포인지는 지금 화면이 정한다(P12 §3.2) */
+    /** 수만 들렸다("칠십이") — 마디(고르기)인지 템포인지는 지금 화면이 정한다(P12 §3.2) */
     data class BareNumber(val value: Int) : ParseResult()
 
     data class Unrecognized(val reason: Reason) : ParseResult()

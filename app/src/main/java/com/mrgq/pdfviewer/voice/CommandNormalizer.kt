@@ -19,6 +19,7 @@ sealed class Token {
  * - **한 글자 한국어 수**("오", "세", "열", "백")는 낱말 조각과 헷갈리므로 앞이 템포 · 악기이거나 바로 뒤가 단위(마디 · 쪽 ·
  *   번째 · bpm)일 때만 수로 읽는다. "이"는 "이 마디"(= 지금 마디)와 헷갈려 악기 뒤("바이올린 이")에서만, 레터 뒤에서는
  *   한 글자를 알파벳으로 남긴다("레터 이" = E). "한번"의 "번"은 단위로 보지 않는다
+ * - **끝 음절이 잘린 단위**([VoiceLexicon.CLIPPED_UNITS]): 수 바로 뒤 말의 맨 끝 "마"는 마디("50 마" = 50마디)
  *
  * Android 에 의존하지 않는다 — JVM 단위 테스트 대상.
  */
@@ -68,7 +69,16 @@ object CommandNormalizer {
             i++
         }
         flush()
-        return out
+        return restoreClippedUnit(out)
+    }
+
+    /** "50 마" → `[50, 마디]` — 손을 일찍 떼 잘린 끝 음절. 수 바로 뒤, 맨 끝 조각일 때만 */
+    private fun restoreClippedUnit(tokens: MutableList<Token>): List<Token> {
+        val last = tokens.lastOrNull() as? Token.Other ?: return tokens
+        if (tokens.getOrNull(tokens.lastIndex - 1) !is Token.Num) return tokens
+        val unit = VoiceLexicon.CLIPPED_UNITS[last.text] ?: return tokens
+        tokens[tokens.lastIndex] = Token.Word(unit)
+        return tokens
     }
 
     /** 소문자 · 흔한 오인식 고침 · 문장부호 → 공백, 그리고 공백 지우기(아라비아 숫자 사이만 경계로) */
@@ -95,6 +105,7 @@ object CommandNormalizer {
         if (inWord) return false
         if (prev == Token.Word(Kw.LETTER)) return false
         if (prev is Token.Instrument) return true
+        if (prev == Token.Word(Kw.COUNT_IN)) return true // "예비박 둘", "예비박 이 마디"
         if (text[i] == '이') return false
         if (prev == Token.Word(Kw.TEMPO)) return true
         val next = keywordAt(text, i + number.length) ?: return false

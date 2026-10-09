@@ -115,6 +115,8 @@ class PdfViewerActivity : AppCompatActivity() {
         private const val REQUEST_VOICE = 7303
         /** 🎙 결과를 화면에 남겨 두는 시간 */
         private const val VOICE_STATUS_MS = 5_000L
+        /** 손을 뗀 뒤에도 이만큼 더 듣는다 — 바로 떼면 끝 음절이 잘린다("50 마디" → "50 마", #084) */
+        private const val VOICE_RELEASE_TAIL_MS = 600L
         private const val VOICE_LOG_MAX_BYTES = 1_000_000L
 
         /** 악보 연동 자동 넘김: 페이지 마지막 마디가 끝나기 몇 박 전에 넘길지 */
@@ -4430,22 +4432,30 @@ class PdfViewerActivity : AppCompatActivity() {
         }
     }
 
-    private fun enterMeasureSelection(fileId: String, startable: List<ScoreMeasure>) {
+    /** 시작 마디 고르기. [at] 이 있으면 그 마디에 커서를(🎙 "57마디" — 안내는 음성 쪽이 띄운다) */
+    private fun enterMeasureSelection(fileId: String, startable: List<ScoreMeasure>, at: ScoreMeasure? = null) {
         followMeasures = startable
         followFileId = fileId
         // 마지막으로 멈춘 마디가 화면에 있으면 거기서 (일시정지 후 다시 고르기, 정지 후 다시 시작 — #053)
         val last = lastFollowPosition?.takeIf { it.first == fileId }?.second
-        cursorIndex = startable.indexOfFirst { it.measureNumber == last && isMeasureVisible(it) }.takeIf { it >= 0 }
-            ?: startable.indexOfFirst { isMeasureVisible(it) }.takeIf { it >= 0 }
-            ?: startable.indexOfFirst { it.pageIndex >= pageIndex }.takeIf { it >= 0 }
-            ?: 0
+        cursorIndex = at?.let { startable.indexOf(it) }?.takeIf { it >= 0 }
+            ?: startable.indexOfFirst { it.measureNumber == last && isMeasureVisible(it) }.takeIf { it >= 0 }
+            ?: startable.indexOf(firstShownMeasure(startable))
         followState = FollowState.SELECTING
         turnRequestedTo = -1
         ensureMeasureVisible(startable[cursorIndex])
         refreshScoreOverlay()
         broadcastConductorCursor()
-        Toast.makeText(this, "시작할 마디를 고르세요 — ←→ 마디, ↑↓ 줄, OK 시작, 뒤로 취소 (연주 중 ↑ 메뉴)", Toast.LENGTH_LONG).show()
+        if (at == null) {
+            Toast.makeText(this, "시작할 마디를 고르세요 — ←→ 마디, ↑↓ 줄, OK 시작, 뒤로 취소 (연주 중 ↑ 메뉴)", Toast.LENGTH_LONG).show()
+        }
     }
+
+    /** 지금 화면의 첫 마디 — 화면에 없으면 이 쪽 뒤의 첫 마디, 그것도 없으면 맨 앞 */
+    private fun firstShownMeasure(startable: List<ScoreMeasure>): ScoreMeasure =
+        startable.firstOrNull { isMeasureVisible(it) }
+            ?: startable.firstOrNull { it.pageIndex >= pageIndex }
+            ?: startable.first()
 
     private fun cancelMeasureSelection() {
         // 지휘자가 일시정지 → 마디 골라 다시 → 취소면 연주자들도 정지 (#055)
@@ -4548,14 +4558,7 @@ class PdfViewerActivity : AppCompatActivity() {
     private fun startMetronomeWithSavedSettings() {
         val fileId = currentPdfFileId
         lifecycleScope.launch {
-            val (bpm, meter, dotted) = metronomeSettingsFor(fileId)
-            if (currentPdfFileId != fileId) return@launch
-            metronome.bpm = bpm
-            metronome.timeSignature = meter
-            metronome.dottedBeat = dotted
-            metronome.soundEnabled = preferences.getBoolean(PREF_METRONOME_SOUND, true)
-            metronome.volume = preferences.getFloat(PREF_METRONOME_VOLUME, 0.6f)
-            startMetronomeFromDialog()
+            if (loadSavedMetronomeSettings(fileId)) startMetronomeFromDialog()
         }
     }
 
@@ -4571,10 +4574,28 @@ class PdfViewerActivity : AppCompatActivity() {
 
     /**
      * 음성 · 글자 명령이 부르는 악보 화면의 일. 기존 경로(↑ 메뉴 · 키 · 파트 보기 대화상자)와 같은 함수를 부른다 — 새로 생긴 동작은
-     * 하나뿐: 멈춰 있어도 **마디 고르기 없이 바로** 그 마디에서 악보 연동을 시작한다.
+     * 시작하는 명령이 **마디 고르기 없이 바로** 그 마디에서 악보 연동을 시작하는 것("57마디"만이면 고르기만, #084).
      * 합주 연주자는 쪽 · 파트만 (마디 · 템포 · 시작은 지휘자, P12 §3.3), 지휘자는 늘 총보.
      */
     private val viewerCommands = object : ViewerCommands {
+        override suspend fun selectMeasure(measure: Int): CommandOutcome {
+            val (fileId, startable) = when (val target = followableMeasures()) {
+                is MeasureTarget.Unavailable -> return target.outcome
+                is MeasureTarget.Ready -> target
+            }
+            val at = startable.firstOrNull { it.measureNumber == measure } ?: return noSuchMeasure("${measure}마디", startable)
+            if (followState == FollowState.SELECTING && followFileId == fileId) {
+                followMeasures = startable
+                moveCursor(startable.indexOf(at) - cursorIndex)
+                return CommandOutcome.Done
+            }
+            if (metronome.isRunning || followState != FollowState.OFF) stopMetronome()
+            // 마디를 탭해 시작할 때 이 파일의 설정(방금 바꾼 템포 포함)으로 — ↑ 메뉴 "시작"과 같다
+            if (!loadSavedMetronomeSettings(fileId)) return failed("다른 곡으로 넘어갔어요")
+            enterMeasureSelection(fileId, startable, at)
+            return CommandOutcome.Done
+        }
+
         override suspend fun gotoMeasure(measure: Int) = followFrom("${measure}마디") { it.firstOrNull { m -> m.measureNumber == measure } }
 
         override suspend fun gotoStart() = followFrom("처음") { it.firstOrNull() }
@@ -4641,6 +4662,13 @@ class PdfViewerActivity : AppCompatActivity() {
             return CommandOutcome.Done
         }
 
+        override suspend fun setCountIn(bars: Int): CommandOutcome {
+            if (collaborationMode == CollaborationMode.PERFORMER) return failed("예비박은 지휘자가 정해요")
+            // 박자 상세의 예비박 버튼과 같은 전역 설정 (#060) — 다음 시작부터
+            preferences.edit().putInt(PREF_METRONOME_COUNT_IN_BARS, bars).apply()
+            return CommandOutcome.Done
+        }
+
         override suspend fun selectParts(parts: List<PartRef>): CommandOutcome {
             if (collaborationMode == CollaborationMode.CONDUCTOR) return failed("지휘자는 총보만 봅니다 — 파트 보기는 연주자 · 혼자 연습에서")
             val fileId = currentPdfFileId ?: return failed("악보를 아직 여는 중이에요")
@@ -4666,38 +4694,85 @@ class PdfViewerActivity : AppCompatActivity() {
 
         override suspend fun start(): CommandOutcome {
             if (collaborationMode == CollaborationMode.PERFORMER) return failed("시작은 지휘자가 해요")
-            startMetronomeWithSavedSettings()
-            return CommandOutcome.Done
+            val fileId = currentPdfFileId ?: return failed("악보를 아직 여는 중이에요")
+            val startable = startableMeasuresNow(fileId) ?: return failed("다른 곡으로 넘어갔어요")
+            if (startable.isEmpty()) {
+                // 마디 · 박자표를 못 읽은 악보 — 악보 연동 없이 메트로놈만 (↑ 메뉴 "시작"과 같다)
+                if (metronome.isRunning || followState != FollowState.OFF) stopMetronome()
+                if (!loadSavedMetronomeSettings(fileId)) return failed("다른 곡으로 넘어갔어요")
+                startMetronome()
+                return CommandOutcome.Done
+            }
+            // 고른 마디가 있으면 거기서, 없으면 지금 쪽 첫 마디에서 — 예비박 뒤 바로 (#084)
+            val chosen = followMeasures.getOrNull(cursorIndex)
+                ?.takeIf { followState == FollowState.SELECTING && followFileId == fileId && it in startable }
+            return startFollowingAt(fileId, startable, chosen ?: firstShownMeasure(startable))
         }
     }
 
-    /**
-     * 시작 가능 마디 중 [pick] 이 고른 마디에서 바로 악보 연동을 시작한다 (마디 고르기 없이). 엔진에는 이 파일의 설정(방금 바꾼 템포 포함)을 넣는다 —
-     * ↑ 메뉴 "시작"([startMetronomeWithSavedSettings])과 같다. [what] 은 없을 때 알릴 이름("57마디")
-     */
-    private suspend fun followFrom(what: String, pick: (List<ScoreMeasure>) -> ScoreMeasure?): CommandOutcome {
-        if (collaborationMode == CollaborationMode.PERFORMER) return failed("마디는 지휘자가 정해요")
-        val fileId = currentPdfFileId ?: return failed("악보를 아직 여는 중이에요")
+    /** 이 악보의 시작 가능 마디 — 분석이 아직이면 불러온다. 그사이 다른 곡으로 넘어갔으면 null */
+    private suspend fun startableMeasuresNow(fileId: String): List<ScoreMeasure>? {
         val cached = if (scoreMeasuresFileId == fileId) scoreMeasures else null
         val measures = cached ?: withContext(Dispatchers.IO) { measuresForView(fileId, File(pdfFilePath)) }
-        if (currentPdfFileId != fileId) return failed("다른 곡으로 넘어갔어요")
+        if (currentPdfFileId != fileId) return null
         if (cached == null && measures != null) {
             scoreMeasures = measures
             scoreMeasuresFileId = fileId
         }
-        val startable = ScoreFollower.startableMeasures(measures.orEmpty())
-        if (startable.isEmpty()) return failed("이 악보는 마디 · 박자표를 읽지 못해 마디로 갈 수 없어요")
-        val start = pick(startable)
-            ?: return failed("${what}가 없어요 (${startable.minOf { it.measureNumber }} ~ ${startable.maxOf { it.measureNumber }})")
+        return ScoreFollower.startableMeasures(measures.orEmpty())
+    }
 
-        if (metronome.isRunning || followState != FollowState.OFF) stopMetronome()
+    private sealed class MeasureTarget {
+        data class Ready(val fileId: String, val startable: List<ScoreMeasure>) : MeasureTarget()
+        class Unavailable(val outcome: CommandOutcome) : MeasureTarget()
+    }
+
+    /** 마디 명령을 받을 수 있으면 파일과 시작 가능 마디, 아니면 실패 이유 */
+    private suspend fun followableMeasures(): MeasureTarget {
+        if (collaborationMode == CollaborationMode.PERFORMER) return MeasureTarget.Unavailable(failed("마디는 지휘자가 정해요"))
+        val fileId = currentPdfFileId ?: return MeasureTarget.Unavailable(failed("악보를 아직 여는 중이에요"))
+        val startable = startableMeasuresNow(fileId) ?: return MeasureTarget.Unavailable(failed("다른 곡으로 넘어갔어요"))
+        if (startable.isEmpty()) {
+            return MeasureTarget.Unavailable(failed("이 악보는 마디 · 박자표를 읽지 못해 마디로 갈 수 없어요"))
+        }
+        return MeasureTarget.Ready(fileId, startable)
+    }
+
+    private fun noSuchMeasure(what: String, startable: List<ScoreMeasure>) =
+        failed("${what}가 없어요 (${startable.minOf { it.measureNumber }} ~ ${startable.maxOf { it.measureNumber }})")
+
+    /** 이 파일의 메트로놈 설정(없으면 악보 박자표)을 엔진에 — 그사이 다른 곡으로 넘어갔으면 false */
+    private suspend fun loadSavedMetronomeSettings(fileId: String?): Boolean {
         val settings = metronomeSettingsFor(fileId)
-        if (currentPdfFileId != fileId) return failed("다른 곡으로 넘어갔어요")
+        if (currentPdfFileId != fileId) return false
         metronome.bpm = settings.bpm
         metronome.timeSignature = settings.meter
         metronome.dottedBeat = settings.dotted
         metronome.soundEnabled = preferences.getBoolean(PREF_METRONOME_SOUND, true)
         metronome.volume = preferences.getFloat(PREF_METRONOME_VOLUME, 0.6f)
+        return true
+    }
+
+    /**
+     * 시작 가능 마디 중 [pick] 이 고른 마디에서 바로 악보 연동을 시작한다 (마디 고르기 없이). [what] 은 없을 때 알릴 이름("57마디")
+     */
+    private suspend fun followFrom(what: String, pick: (List<ScoreMeasure>) -> ScoreMeasure?): CommandOutcome {
+        val (fileId, startable) = when (val target = followableMeasures()) {
+            is MeasureTarget.Unavailable -> return target.outcome
+            is MeasureTarget.Ready -> target
+        }
+        val start = pick(startable) ?: return noSuchMeasure(what, startable)
+        return startFollowingAt(fileId, startable, start)
+    }
+
+    /**
+     * [start] 에서 악보 연동을 바로 시작한다. 엔진에는 이 파일의 설정(방금 바꾼 템포 포함)을 넣는다 — ↑ 메뉴 "시작"과 같다.
+     * 이 곡의 시작 마디를 고르는 중이었으면 멈추지 않고 그대로 시작한다 — OK · 마디 탭과 같다(지휘자면 고르던 합주 진행을 이어 간다)
+     */
+    private suspend fun startFollowingAt(fileId: String, startable: List<ScoreMeasure>, start: ScoreMeasure): CommandOutcome {
+        val selectingHere = followState == FollowState.SELECTING && followFileId == fileId
+        if (metronome.isRunning || (followState != FollowState.OFF && !selectingHere)) stopMetronome()
+        if (!loadSavedMetronomeSettings(fileId)) return failed("다른 곡으로 넘어갔어요")
         followMeasures = startable
         followFileId = fileId
         cursorIndex = startable.indexOf(start)
@@ -4759,11 +4834,14 @@ class PdfViewerActivity : AppCompatActivity() {
         input.requestFocus()
     }
 
-    /** 명령을 듣기 전에 (🎙 · ⌨️, P12 §4.2): 메트로놈 정지 — 합주 연주자면 이 기기만 빠진다 */
+    /**
+     * 명령을 듣기 전에 (🎙 · ⌨️, P12 §4.2): 메트로놈 정지 — 합주 연주자면 이 기기만 빠진다. 시작 마디를 고르는 중이면 그대로 둔다
+     * ("57마디" → "시작", #084)
+     */
     private fun stopForCommand() {
         if (ensembleRole == EnsembleRole.FOLLOWING) {
             detachFromEnsemble()
-        } else if (metronome.isRunning || followState != FollowState.OFF) {
+        } else if (metronome.isRunning || (followState != FollowState.OFF && followState != FollowState.SELECTING)) {
             stopMetronome()
         }
     }
@@ -4784,6 +4862,7 @@ class PdfViewerActivity : AppCompatActivity() {
     private var voiceListener: VoiceListener? = null
     private var voiceButtonReady = false
     private val hideVoiceStatus = Runnable { binding.voiceStatus.visibility = View.GONE }
+    private val stopVoiceListening = Runnable { voiceListener?.stop() }
 
     /** 설정 → 앱 정보 → 🎙 음성 명령을 켰고, TV 가 아니고, 마이크와 음성 인식 서비스가 있으면 단추를 보인다. 🎤 추적 중에는 흐리게(§4.1) */
     private fun refreshVoiceButton() {
@@ -4815,6 +4894,7 @@ class PdfViewerActivity : AppCompatActivity() {
 
     /** 누르는 순간: 메트로놈 정지(§4.2) → 듣기 시작 */
     private fun onVoicePress() {
+        binding.voiceButton.removeCallbacks(stopVoiceListening)
         if (micFollower != null) return showVoiceStatus("🎤 연주 추적을 멈춘 뒤에 말하세요", VOICE_STATUS_MS)
         if (androidx.core.content.ContextCompat.checkSelfPermission(this, android.Manifest.permission.RECORD_AUDIO) !=
             android.content.pm.PackageManager.PERMISSION_GRANTED
@@ -4830,13 +4910,16 @@ class PdfViewerActivity : AppCompatActivity() {
         listener.start(voiceHints())
     }
 
-    /** 손을 뗐다 — 지금까지 말한 것으로 결과를 낸다 (서비스가 먼저 끝냈으면 이미 결과가 왔다) */
+    /**
+     * 손을 뗐다 — [VOICE_RELEASE_TAIL_MS] 더 들은 뒤 지금까지 말한 것으로 결과를 낸다(서비스가 먼저 끝냈으면 이미 결과가 왔다).
+     * 말을 끝내자마자 떼면 마지막 음절이 아직 들어오는 중이다
+     */
     private fun onVoiceRelease() {
         binding.voiceButton.isActivated = false
         val listener = voiceListener ?: return
         if (!listener.isActive) return
         showVoiceStatus("🎙 알아듣는 중…")
-        listener.stop()
+        binding.voiceButton.postDelayed(stopVoiceListening, VOICE_RELEASE_TAIL_MS)
     }
 
     /** 이 악보에서 나올 말 — 인식이 이쪽으로 기울게 (Android 13+) */
@@ -6324,6 +6407,7 @@ class PdfViewerActivity : AppCompatActivity() {
         // 연주 화면을 벗어나면 메트로놈을 멈춘다 (홈·다른 앱으로 가도 계속 울리지 않게). 마이크 추적도 마무리
         stopMetronome()
         stopMicFollow()
+        binding.voiceButton.removeCallbacks(stopVoiceListening)
         voiceListener?.cancel()
         binding.voiceButton.isActivated = false
         showVoiceStatus(null)
