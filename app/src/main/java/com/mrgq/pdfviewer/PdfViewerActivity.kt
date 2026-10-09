@@ -2555,14 +2555,20 @@ class PdfViewerActivity : AppCompatActivity() {
     private var micMeasures: List<ScoreMeasure?> = emptyList()
     /** 추정한 지금 마디 — 노란 테두리 */
     private var micFocus: ScoreMeasure? = null
+    /** 듣기를 켜고 연주 시작을 기다리는 마디 — 시작을 찾을 때까지 그 마디만 연하게 (#089). 시작하거나 손으로 짚으면 null */
+    private var micWaitingMeasure: ScoreMeasure? = null
     /** 다음 page_change 는 마이크 추적이 넘긴 것 — 연주자는 차례 넘김 (P10 §3.2) */
     private var micRollBroadcast = false
     /** 연주자에게 마지막으로 알린 시스템 (쪽 × 1000 + 시스템) */
     private var micSentSystem: Int? = null
 
     /** 이 기기에서 마이크 추적을 쓸 수 있나 — 태블릿(TV 아님)에 마이크 */
-    /** 마이크 추적의 지금 시스템 — 그 시스템 마디 박스들을 합친 사각형 (표시 비트맵 픽셀) */
+    /** 마이크 추적의 지금 시스템 — 그 시스템 마디 박스들을 합친 사각형 (표시 비트맵 픽셀). 시작을 기다리는 동안은 그 마디 하나 */
     private fun micSystemFrame(): android.graphics.RectF? {
+        micWaitingMeasure?.let { m ->
+            val box = overlayBoxes(listOf(m)).firstOrNull() ?: return null
+            return android.graphics.RectF(box.left, box.top, box.right, box.bottom)
+        }
         val focus = micFocus ?: return null
         val boxes = overlayBoxes(micMeasures.filter { it != null && it.pageIndex == focus.pageIndex && it.systemIndex == focus.systemIndex }.filterNotNull())
         if (boxes.isEmpty()) return null
@@ -2661,7 +2667,9 @@ class PdfViewerActivity : AppCompatActivity() {
             micMeasures = mapped
             binding.micStatus.text = "🎤 대기"
             binding.micStatus.visibility = View.VISIBLE
+            micWaitingMeasure = mapped[startMeasure] // 시작을 찾을 때까지 이 마디만 연하게 (#089)
             refreshVoiceButton()
+            refreshScoreOverlay()
             Toast.makeText(this@PdfViewerActivity, "🎤 ${mapped[startMeasure]?.measureNumber}번 마디부터 듣습니다 — 연주를 시작하세요", Toast.LENGTH_LONG).show()
         }.invokeOnCompletion {
             binding.voiceButton.post {
@@ -2676,6 +2684,7 @@ class PdfViewerActivity : AppCompatActivity() {
         micFollower = null
         f.stop()
         micFocus = null
+        micWaitingMeasure = null
         if (micSentSystem != null && collaborationMode == CollaborationMode.CONDUCTOR) {
             globalCollaborationManager.broadcastFollowPosition(pdfFileName, 0) // 연주자 표시 지움
         }
@@ -2690,6 +2699,8 @@ class PdfViewerActivity : AppCompatActivity() {
         override fun onListening() {
             if (micFollower == null) return
             binding.micStatus.text = "🎤 듣는 중"
+            micWaitingMeasure = null // 시작을 찾았다 — 이제 지금 시스템 표시 (#089)
+            refreshScoreOverlay()
         }
 
         override fun onPosition(measurePos: Double) {
@@ -2732,6 +2743,7 @@ class PdfViewerActivity : AppCompatActivity() {
         val index = micMeasures.indexOfFirst { it != null && it.measureNumber == m.measureNumber && it.pageIndex == m.pageIndex }
         if (index < 0) return false
         f.anchor(m.pageIndex, index)
+        micWaitingMeasure = null // 손으로 짚은 곳이 곧 시작
         binding.pdfView.performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS)
         toast("🎤 ${m.measureNumber}마디부터 다시 맞춥니다")
         return true
@@ -2760,7 +2772,10 @@ class PdfViewerActivity : AppCompatActivity() {
     private fun anchorMicFollow(page: Int) {
         val f = micFollower ?: return
         val first = micMeasures.indexOfFirst { it != null && it.pageIndex >= page }
-        if (first >= 0) f.anchor(page, first)
+        if (first >= 0) {
+            f.anchor(page, first)
+            micWaitingMeasure = null // 손으로 넘긴 쪽이 곧 시작 (#089)
+        }
     }
 
     /**
