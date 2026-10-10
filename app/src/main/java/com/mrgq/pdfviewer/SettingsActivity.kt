@@ -782,15 +782,6 @@ class SettingsActivity : AppCompatActivity() {
                 type = SettingsType.ACTION
             ).takeIf { !com.mrgq.pdfviewer.utils.DeviceForm.isTv(this) && PdfViewerActivity.VOICE_ALWAYS_AVAILABLE },
             SettingsItem(
-                id = "voice_text_input_toggle",
-                icon = "⌨️",
-                title = "글자로 명령 시험",
-                subtitle = if (preferences.getBoolean(PdfViewerActivity.PREF_VOICE_TEXT_INPUT, false))
-                    "켜짐 — 악보 화면 메트로놈 메뉴에 ⌨️ 글자로 명령(\"57마디부터 템포 72\") — 음성 명령 준비용"
-                    else "꺼짐 — 음성 명령(준비 중)의 규칙을 글자로 시험해 보는 창",
-                type = SettingsType.TOGGLE
-            ),
-            SettingsItem(
                 id = "check_update",
                 icon = "🔄",
                 title = "업데이트 확인",
@@ -1077,11 +1068,6 @@ class SettingsActivity : AppCompatActivity() {
                 showInfoPanel()
             }
             "voice_wake_words" -> showWakeWordsDialog()
-            "voice_text_input_toggle" -> {
-                val enable = !preferences.getBoolean(PdfViewerActivity.PREF_VOICE_TEXT_INPUT, false)
-                preferences.edit().putBoolean(PdfViewerActivity.PREF_VOICE_TEXT_INPUT, enable).apply()
-                showInfoPanel()
-            }
             "update_prerelease_toggle" -> {
                 val enable = !UpdateController.isPrereleaseEnabled(this)
                 UpdateController.setPrereleaseEnabled(this, enable)

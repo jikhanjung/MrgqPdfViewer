@@ -111,8 +111,6 @@ class PdfViewerActivity : AppCompatActivity() {
         /** 반주 소리 크기 — 메트로놈 클릭과 따로 (사용자 요청 2026-09-28), 0~1 */
         private const val PREF_ACCOMPANIMENT_VOLUME = "metronome_accompaniment_volume"
         private const val DEFAULT_COUNT_IN_BARS = 2
-        /** 설정 → 앱 정보 → ⌨️ 글자로 명령 시험 (P12 1단계) — 켜면 ↑ 메뉴에 ⌨️ 줄. 설정 화면(SettingsActivity)과 같은 키 */
-        const val PREF_VOICE_TEXT_INPUT = "voice_text_input"
         /** 👂 계속 듣기 (#085) — 🎙 를 누르지 않고 "메이트, …" */
         const val PREF_VOICE_ALWAYS = "voice_always_listen"
         /** 👂 계속 듣기를 쓸 수 있나 — 잠시 꺼 둠(#093, 효용이 낮아 다듬을 때까지). 켜 둔 기기도 듣지 않는다 */
@@ -4505,7 +4503,6 @@ class PdfViewerActivity : AppCompatActivity() {
         // 합주 중에도 파트 보기 (P07 4단계) — 쪽 · 마디 신호는 파트 화면으로 옮겨진다. 반주는 합주 중에 쓰지 않는다
         items += "파트 보기: ${partViewName ?: "전체 악보"}" to { showPartViewDialog() }
         if (notesWritable()) items += (if (notePen.editMode) "✏️ 메모 끝" else "✏️ 메모 쓰기") to { toggleNoteMode() }
-        if (voiceTextInputEnabled()) items += "⌨️ 글자로 명령 (시험) — 쪽 · 파트만" to { showVoiceTextInput() }
         val title = when {
             ensembleRole == EnsembleRole.FOLLOWING -> "메트로놈 — 지휘자를 따라가는 중"
             canRejoinEnsemble() -> "메트로놈 — 이 기기는 빠져 있음"
@@ -4692,7 +4689,6 @@ class PdfViewerActivity : AppCompatActivity() {
         items += "파트 보기: ${partViewName ?: "전체 악보"}" to { showPartViewDialog() }
         accompanimentMenuLabel()?.let { items += it to { showAccompanimentDialog() } }
         if (notesWritable()) items += (if (notePen.editMode) "✏️ 메모 끝" else "✏️ 메모 쓰기") to { toggleNoteMode() }
-        if (voiceTextInputEnabled()) items += "⌨️ 글자로 명령 (시험)" to { showVoiceTextInput() }
         if (micFollowCapable()) {
             items.add(0, when {
                 micFollower != null -> "🎤 듣기 멈춤" to { toggleMicFollow() }
@@ -4733,13 +4729,12 @@ class PdfViewerActivity : AppCompatActivity() {
     private var lastFollowStart: Pair<String, Int>? = null
     /** 파일을 다시 열어 첫 쪽을 보인 순간 — 파트 보기를 바꾼 명령이 기다린다 ([applyPartStaves]) */
     private var fileShownSignal: kotlinx.coroutines.CompletableDeferred<Unit>? = null
-    private var voiceTextLast = ""
     /** 이 발화의 쪽 명령이 넘어갈 쪽 — 이어지는 "시작"이 그 쪽 첫 마디에서("Mate, 1페이지 시작", #085). 발화마다 비운다([runCommand]) */
     private var commandPageTarget: Int? = null
 
     private fun failed(message: String) = CommandOutcome.Failed(message)
 
-    /** 발화 하나를 실행 — 🎙 · 👂 · ⌨️ 가 모두 이 길로 */
+    /** 발화 하나를 실행 — 🎙 · 👂 가 모두 이 길로 */
     private suspend fun runCommand(parsed: com.mrgq.pdfviewer.voice.ParseResult): VoiceCommandRunner.Report {
         commandPageTarget = null
         return VoiceCommandRunner.run(parsed, viewerCommands)
@@ -5014,47 +5009,8 @@ class PdfViewerActivity : AppCompatActivity() {
         return CommandOutcome.Done
     }
 
-    /** 설정 → 앱 정보 → ⌨️ "글자로 명령 시험"을 켰나 — ↑ 메뉴에 ⌨️ 줄이 생긴다 */
-    private fun voiceTextInputEnabled(): Boolean = preferences.getBoolean(PREF_VOICE_TEXT_INPUT, false)
-
     /**
-     * ⌨️ 글자로 명령 (P12 1단계 시험 창) — 음성 대신 글자로 같은 길(정규화 → 규칙 → 명령 층)을 지난다. 🎙 와 같은 규칙:
-     * 🎤 연주 추적 중에는 쓰지 않고(§4.1), 여는 순간 메트로놈을 멈춘다(§4.2 — 합주 연주자면 이 기기만 빠진다).
-     */
-    private fun showVoiceTextInput() {
-        if (micFollower != null) return toast("🎤 연주 추적을 멈춘 뒤에 하세요")
-        stopForCommand()
-        val density = resources.displayMetrics.density
-        val input = android.widget.EditText(this).apply {
-            setText(voiceTextLast)
-            selectAll()
-            hint = "예: 57마디부터 템포 72 · 첼로 파트 · 다음 쪽"
-            setSingleLine(true)
-            imeOptions = android.view.inputmethod.EditorInfo.IME_ACTION_DONE
-        }
-        val box = android.widget.FrameLayout(this).apply {
-            setPadding((24 * density).toInt(), (8 * density).toInt(), (24 * density).toInt(), 0)
-            addView(input)
-        }
-        val dialog = AlertDialog.Builder(this)
-            .setTitle("⌨️ 글자로 명령 (시험)")
-            .setView(box)
-            .setPositiveButton("실행") { _, _ -> runTextCommand(input.text.toString()) }
-            .setNegativeButton("닫기", null)
-            .create()
-        input.setOnEditorActionListener { _, actionId, _ ->
-            if (actionId != android.view.inputmethod.EditorInfo.IME_ACTION_DONE) return@setOnEditorActionListener false
-            dialog.dismiss()
-            runTextCommand(input.text.toString())
-            true
-        }
-        dialog.window?.setSoftInputMode(android.view.WindowManager.LayoutParams.SOFT_INPUT_STATE_VISIBLE)
-        dialog.show()
-        input.requestFocus()
-    }
-
-    /**
-     * 명령을 듣기 전에 (🎙 · ⌨️, P12 §4.2): 메트로놈 정지 — 합주 연주자면 이 기기만 빠진다. 시작 마디를 고르는 중이면 그대로 둔다
+     * 명령을 듣기 전에 (🎙, P12 §4.2): 메트로놈 정지 — 합주 연주자면 이 기기만 빠진다. 시작 마디를 고르는 중이면 그대로 둔다
      * ("57마디" → "시작", #084)
      */
     private fun stopForCommand() {
@@ -5062,17 +5018,6 @@ class PdfViewerActivity : AppCompatActivity() {
             detachFromEnsemble()
         } else if (metronome.isRunning || (followState != FollowState.OFF && followState != FollowState.SELECTING)) {
             stopMetronome()
-        }
-    }
-
-    private fun runTextCommand(text: String) {
-        if (text.isBlank()) return
-        voiceTextLast = text
-        lifecycleScope.launch {
-            val parsed = CommandParser.parse(text, voiceStaffNames())
-            val report = runCommand(parsed)
-            Log.i("VoiceCommand", "\"$text\" → $parsed → ${if (report.ok) "✓" else "✗"} ${report.message}")
-            Toast.makeText(this@PdfViewerActivity, (if (report.ok) "✓ " else "✗ ") + report.message, Toast.LENGTH_LONG).show()
         }
     }
 
