@@ -4076,7 +4076,7 @@ class PdfViewerActivity : AppCompatActivity() {
                 header(volumeLabel, ::showSoundDetail), volumeSeek,
             ) + sectionList + hintText(
                 "템포 · 박자는 이 파일에, 소리는 모든 파일에 저장됩니다. " +
-                    "악보 화면에서 ↑ 키로 메트로놈 메뉴(일시정지 · 이어서 · 정지)를 열 수 있습니다."
+                    "악보 화면에서 ↑ 키로 연주 메뉴(일시정지 · 이어서 · 정지)를 열 수 있습니다."
             )
         )
 
@@ -4499,14 +4499,13 @@ class PdfViewerActivity : AppCompatActivity() {
                 performerRun?.let { joinEnsembleRun(it) }
             }
         }
-        items += "메트로놈 설정… (소리)" to { showPerformerMetronomeSettings() }
-        // 합주 중에도 파트 보기 (P07 4단계) — 쪽 · 마디 신호는 파트 화면으로 옮겨진다. 반주는 합주 중에 쓰지 않는다
-        items += "파트 보기: ${partViewName ?: "전체 악보"}" to { showPartViewDialog() }
-        if (notesWritable()) items += (if (notePen.editMode) "✏️ 메모 끝" else "✏️ 메모 쓰기") to { toggleNoteMode() }
+        // 소리는 누르면 바로 켬 ↔ 끔 (P13). 파트 보기 · 메모는 보기 메뉴(길게)에
+        val soundOn = preferences.getBoolean(PREF_ENSEMBLE_SOUND, false)
+        items += "메트로놈 소리: ${if (soundOn) "켬" else "끔"}" to { setPerformerSound(!soundOn) }
         val title = when {
-            ensembleRole == EnsembleRole.FOLLOWING -> "메트로놈 — 지휘자를 따라가는 중"
-            canRejoinEnsemble() -> "메트로놈 — 이 기기는 빠져 있음"
-            else -> "메트로놈 — 지휘자가 시작하면 따라갑니다"
+            ensembleRole == EnsembleRole.FOLLOWING -> "연주 — 지휘자를 따라가는 중"
+            canRejoinEnsemble() -> "연주 — 이 기기는 빠져 있음"
+            else -> "연주 — 지휘자가 시작하면 따라갑니다"
         }
         metronomeMenuShowing = true
         AlertDialog.Builder(this)
@@ -4685,10 +4684,9 @@ class PdfViewerActivity : AppCompatActivity() {
             metronome.isRunning -> items += "정지" to { stopMetronome() }
             else -> items += "시작 — 악보에서 마디 고르기" to { startMetronomeWithSavedSettings() }
         }
+        // ↑ = 연주(소리 · 시간)만 — 파트 보기 · 메모는 보기 메뉴(길게)에 (P13)
         items += "메트로놈 설정…" to { showMetronomeDialog() }
-        items += "파트 보기: ${partViewName ?: "전체 악보"}" to { showPartViewDialog() }
         accompanimentMenuLabel()?.let { items += it to { showAccompanimentDialog() } }
-        if (notesWritable()) items += (if (notePen.editMode) "✏️ 메모 끝" else "✏️ 메모 쓰기") to { toggleNoteMode() }
         if (micFollowCapable()) {
             items.add(0, when {
                 micFollower != null -> "🎤 듣기 멈춤" to { toggleMicFollow() }
@@ -4700,7 +4698,7 @@ class PdfViewerActivity : AppCompatActivity() {
         var chosen = false
         metronomeMenuShowing = true
         AlertDialog.Builder(this)
-            .setTitle(if (paused) "메트로놈 — 일시정지" else "메트로놈")
+            .setTitle(if (paused) "연주 — 일시정지" else "연주")
             .setItems(items.map { it.first }.toTypedArray()) { _, which ->
                 chosen = true
                 items[which].second()
@@ -5773,52 +5771,33 @@ class PdfViewerActivity : AppCompatActivity() {
         }
     }
 
+    /**
+     * 보기 메뉴 (OK 길게 · 길게 누르기, 예전 "PDF 표시 옵션") — 화면에 무엇을 어떻게 보일지만 (P13). 소리 · 시간(메트로놈 · 반주 ·
+     * 시작)은 ↑ 연주 메뉴에. 그 기기 · 역할에서 못 쓰는 줄은 숨긴다
+     */
     private fun showPdfDisplayOptions() {
-        Log.d("PdfViewerActivity", "PDF 표시 옵션 다이얼로그 표시")
-        
-        val options = arrayOf(
-            when {
-                phoneView -> "두 페이지 모드 (휴대폰은 시스템 · 반 쪽씩)"
-                isPortraitScreen() -> "두 페이지 모드 (세로 화면에서는 한 쪽만)"
-                else -> "두 페이지 모드 전환"
-            },
-            "위/아래 클리핑 설정",
-            "마디 박스 표시 (악보 분석): ${if (isScoreOverlayEnabled()) "켜짐" else "꺼짐"}",
-            "메트로놈${when {
-                followState == FollowState.PAUSED -> " (일시정지)"
-                metronome.isRunning -> " (실행 중)"
-                else -> ""
-            }}",
-            "파트 보기: ${partViewName ?: "전체 악보"}",
-        ) + listOfNotNull(accompanimentMenuLabel()).toTypedArray()
-        // 악보 메모 (P11) — 뒤에 붙인다 (앞 번호가 반주 유무에 따라 달라지므로 이름으로 고른다)
-        val noteWrite = if (notesWritable()) (if (notePen.editMode) "✏️ 메모 끝" else "✏️ 메모 쓰기") else null
-        val noteShow = "메모 보이기: ${if (notesVisible()) "켜짐" else "꺼짐"}"
-        val allOptions = options + listOfNotNull(noteWrite, noteShow).toTypedArray()
-
-        AlertDialog.Builder(this)
-            .setTitle("PDF 표시 옵션")
-            .setItems(allOptions) { dialog, which ->
-                when (allOptions[which]) {
-                    noteWrite -> return@setItems toggleNoteMode()
-                    noteShow -> return@setItems toggleNotesVisible()
-                }
-                when (which) {
-                    0 -> if (phoneView) {
-                        Toast.makeText(this, "휴대폰에서는 시스템 · 반 쪽씩 봅니다", Toast.LENGTH_SHORT).show()
-                    } else if (isPortraitScreen()) {
-                        Toast.makeText(this, "세로 화면에서는 한 쪽씩 봅니다 — 두 쪽은 가로에서", Toast.LENGTH_SHORT).show()
-                    } else showTwoPageModeDialog {
-                        // 두 페이지 모드 변경 완료 후 현재 페이지 다시 렌더링
-                        showPage(pageIndex)
-                    }
-                    1 -> showClippingDialog()
-                    2 -> toggleScoreOverlay()
-                    3 -> showMetronomeDialog()
-                    4 -> showPartViewDialog()
-                    5 -> showAccompanimentDialog()
+        val items = mutableListOf<Pair<String, () -> Unit>>()
+        // 지휘자는 늘 총보 (P07 4단계)
+        if (collaborationMode != CollaborationMode.CONDUCTOR) {
+            items += "파트 보기: ${partViewName ?: "전체 악보"}" to { showPartViewDialog() }
+        }
+        items += "마디 박스: ${if (isScoreOverlayEnabled()) "켜짐" else "꺼짐"}" to { toggleScoreOverlay() }
+        items += "메모 보이기: ${if (notesVisible()) "켜짐" else "꺼짐"}" to { toggleNotesVisible() }
+        if (notesWritable()) items += (if (notePen.editMode) "✏️ 메모 끝" else "✏️ 메모 쓰기") to { toggleNoteMode() }
+        // 두 쪽은 TV 가로에서만 — 세로 화면 · 휴대폰은 늘 한 쪽(휴대폰은 시스템 조각)
+        if (!phoneView && !isPortraitScreen()) {
+            items += "두 쪽 보기: ${if (isTwoPageMode) "두 쪽" else "한 쪽"}" to {
+                showTwoPageModeDialog {
+                    // 두 페이지 모드 변경 완료 후 현재 페이지 다시 렌더링
+                    showPage(pageIndex)
                 }
             }
+        }
+        items += "위/아래 자르기…" to { showClippingDialog() }
+
+        AlertDialog.Builder(this)
+            .setTitle("보기")
+            .setItems(items.map { it.first }.toTypedArray()) { _, which -> items[which].second() }
             .setNegativeButton("닫기") { dialog, _ -> dialog.dismiss() }
             .show()
     }
