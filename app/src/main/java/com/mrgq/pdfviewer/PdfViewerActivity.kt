@@ -131,6 +131,8 @@ class PdfViewerActivity : AppCompatActivity() {
         private const val VOICE_STATUS_MS = 5_000L
         /** 손을 뗀 뒤에도 이만큼 더 듣는다 — 바로 떼면 끝 음절이 잘린다("50 마디" → "50 마", #084) */
         private const val VOICE_RELEASE_TAIL_MS = 600L
+        /** 🎙 를 이보다 짧게 눌렀다 떼면 말하려던 게 아니라 정지 단추로 쓴 것 — 조용히 접는다 (사용자 요청 2026-10-10) */
+        private const val VOICE_TAP_MS = 400L
         /** 👂 한 번 듣기가 끝나면 이만큼 뒤에 다시 듣는다 — 오류가 이어지면 두 배씩, [ALWAYS_BACKOFF_MAX_MS] 까지 */
         private const val ALWAYS_RESTART_MS = 250L
         private const val ALWAYS_BACKOFF_MAX_MS = 10_000L
@@ -5036,6 +5038,11 @@ class PdfViewerActivity : AppCompatActivity() {
     private var voiceButtonReady = false
     private val hideVoiceStatus = Runnable { binding.voiceStatus.visibility = View.GONE }
     private val stopVoiceListening = Runnable { voiceListener?.stop() }
+    /** 🎙 를 누른 때 — 짧게 누르기(정지)와 말하기를 가른다 */
+    private var voicePressedAtMs = 0L
+    private fun voiceHeldLongEnough() = SystemClock.uptimeMillis() - voicePressedAtMs >= VOICE_TAP_MS
+    /** 누른 채로 [VOICE_TAP_MS] 가 지나서야 "듣는 중"을 띄운다 — 짧게 눌러 정지할 때 글자가 번쩍이지 않게 */
+    private val showPushListening = Runnable { if (voicePushToTalk && binding.voiceButton.isActivated) showVoiceStatus("🎙 듣는 중…") }
 
     // 👂 계속 듣기 (#085): 🎙 를 누르지 않아도 듣기를 끝없이 다시 걸고, 호출어("메이트") 뒤의 말만 명령으로 실행한다
     /** 화면이 앞에 있다 — onResume ~ onPause */
@@ -5153,10 +5160,11 @@ class PdfViewerActivity : AppCompatActivity() {
         if (hideAfterMs > 0) binding.voiceStatus.postDelayed(hideVoiceStatus, hideAfterMs)
     }
 
-    /** 누르는 순간: 메트로놈 정지(§4.2) → 듣기 시작 */
+    /** 누르는 순간: 메트로놈 정지(§4.2) → 듣기 시작. 짧게 눌렀다 떼면 정지만 ([onVoiceRelease]) */
     private fun onVoicePress() {
         binding.voiceButton.removeCallbacks(stopVoiceListening)
         binding.voiceButton.removeCallbacks(restartAlwaysListening)
+        binding.voiceButton.removeCallbacks(showPushListening)
         if (micFollower != null) return showVoiceStatus("🎤 연주 추적을 멈춘 뒤에 말하세요", VOICE_STATUS_MS)
         if (androidx.core.content.ContextCompat.checkSelfPermission(this, android.Manifest.permission.RECORD_AUDIO) !=
             android.content.pm.PackageManager.PERMISSION_GRANTED
@@ -5168,8 +5176,10 @@ class PdfViewerActivity : AppCompatActivity() {
         val listener = voiceListener ?: VoiceListener(this, voiceCallback).also { voiceListener = it }
         if (listener.isActive) listener.cancel() // 👂 계속 듣는 중이었으면 접고 단추로
         voicePushToTalk = true
+        voicePressedAtMs = SystemClock.uptimeMillis()
         binding.voiceButton.isActivated = true
-        showVoiceStatus("🎙 …")
+        showVoiceStatus(null)
+        binding.voiceButton.postDelayed(showPushListening, VOICE_TAP_MS)
         listener.start(voiceHints())
     }
 
@@ -5179,8 +5189,17 @@ class PdfViewerActivity : AppCompatActivity() {
      */
     private fun onVoiceRelease() {
         binding.voiceButton.isActivated = false
+        binding.voiceButton.removeCallbacks(showPushListening)
         val listener = voiceListener ?: return
         if (!listener.isActive || !voicePushToTalk) return
+        // 짧게 눌렀다 뗐다 = 정지 단추 — 누르는 순간 이미 멈췄다. 듣기를 접고 아무것도 띄우지 않는다
+        if (!voiceHeldLongEnough()) {
+            voicePushToTalk = false
+            listener.cancel()
+            showVoiceStatus(null)
+            scheduleAlwaysListening()
+            return
+        }
         showVoiceStatus("🎙 알아듣는 중…")
         binding.voiceButton.postDelayed(stopVoiceListening, VOICE_RELEASE_TAIL_MS)
     }
@@ -5222,7 +5241,7 @@ class PdfViewerActivity : AppCompatActivity() {
 
     private val voiceCallback = object : VoiceListener.Callback {
         override fun onListening() {
-            if (voicePushToTalk) showVoiceStatus("🎙 듣는 중…")
+            if (voicePushToTalk && voiceHeldLongEnough()) showVoiceStatus("🎙 듣는 중…")
         }
 
         override fun onPartial(text: String) {
