@@ -6,6 +6,8 @@ sealed class Token {
     data class Word(val kw: Kw) : Token()
     data class Instrument(val key: String) : Token()
     data class Ordinal(val n: Int) : Token()
+    /** 사람 이름으로 부른 보표 — 값은 악보의 보표 이름 그대로 (#094, [PartNames]) */
+    data class Person(val staffName: String) : Token()
     /** 어휘에 없는 조각 — 조사 · 말끝이거나 모르는 말 */
     data class Other(val text: String) : Token()
 }
@@ -20,6 +22,7 @@ sealed class Token {
  *   번째 · bpm)일 때만 수로 읽는다. "이"는 "이 마디"(= 지금 마디)와 헷갈려 악기 뒤("바이올린 이")에서만, 레터 뒤에서는
  *   한 글자를 알파벳으로 남긴다("레터 이" = E). "한번"의 "번"은 단위로 보지 않는다
  * - **끝 음절이 잘린 단위**([VoiceLexicon.CLIPPED_UNITS]): 수 바로 뒤 말의 맨 끝 "마"는 마디("50 마" = 50마디)
+ * - **악보의 사람 이름**([PartNames], #094): 이 악보의 보표 이름을 받으면 어휘보다 먼저 찾는다 — "이수진"이 수 2 로 쪼개지지 않게
  *
  * Android 에 의존하지 않는다 — JVM 단위 테스트 대상.
  */
@@ -31,8 +34,9 @@ object CommandNormalizer {
     private val SINGLE_SYLLABLE_COUNTERS = setOf("번째", "째")
     private const val MAX_DIGITS = 4
 
-    fun normalize(text: String): List<Token> {
+    fun normalize(text: String, staffNames: List<String> = emptyList()): List<Token> {
         val compact = compact(text)
+        val names = PartNames.aliases(staffNames)
         val out = mutableListOf<Token>()
         val other = StringBuilder()
         fun flush() {
@@ -43,6 +47,14 @@ object CommandNormalizer {
         while (i < compact.length) {
             val c = compact[i]
             if (c == BOUNDARY) { flush(); i++; continue }
+            val name = names.firstOrNull { compact.startsWith(it.first, i) }
+            if (name != null) {
+                flush()
+                out += Token.Person(name.second)
+                i += name.first.length
+                i += PartNames.suffixLength(compact, i, name.first)
+                continue
+            }
             val word = keywordAt(compact, i)
             if (word != null) {
                 flush()

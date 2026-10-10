@@ -6,6 +6,7 @@ package com.mrgq.pdfviewer.voice
  *
  * - 번호 없이 말했는데 같은 악기가 번호로 여럿이면(Violin I · II) [Result.Ambiguous] — 둘 다 고르지 않고 묻는다
  * - 이름 없는 보표(null)가 맞은 보표 바로 아래에 이어지면 함께 — 피아노 · 하프의 아래 보표
+ * - 보표 이름으로 부른 파트([PartRef.staffName], 사람 이름 — #094)는 그 이름의 보표
  *
  * Android 에 의존하지 않는다 — JVM 단위 테스트 대상.
  */
@@ -69,11 +70,12 @@ object PartMatcher {
         val known = staves.map { (index, name) -> Triple(index, name, name?.let(::identify)) }
         val chosen = mutableSetOf<Int>()
         for (part in parts) {
-            val hits = known.filter { (_, _, id) ->
-                id != null && id.first == part.instrument && (part.number == null || id.second == part.number)
+            val hits = known.filter { (_, name, id) ->
+                if (part.staffName != null) name == part.staffName
+                else id != null && id.first == part.instrument && (part.number == null || id.second == part.number)
             }
             if (hits.isEmpty()) return Result.Missing(part)
-            if (part.number == null && hits.mapNotNull { it.third?.second }.distinct().size > 1) {
+            if (part.staffName == null && part.number == null && hits.mapNotNull { it.third?.second }.distinct().size > 1) {
                 return Result.Ambiguous(part, hits.mapNotNull { it.second })
             }
             for (hit in hits) {

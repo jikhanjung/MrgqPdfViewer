@@ -24,14 +24,16 @@ import com.mrgq.pdfviewer.voice.VoiceCommand.SetTempo
  */
 object CommandParser {
 
-    fun parse(text: String): ParseResult = parse(CommandNormalizer.normalize(text))
+    /** [staffNames] = 이 악보의 보표 이름 — 사람 이름 보표를 부를 수 있게 (#094) */
+    fun parse(text: String, staffNames: List<String> = emptyList()): ParseResult =
+        parse(CommandNormalizer.normalize(text, staffNames))
 
     /**
      * 음성 인식 후보 여럿(가능성 높은 순) → 쓸 후보와 그 결과. 첫 후보가 명령이 아니면 다음 후보를 보되, 첫 후보가 **일부러 한 말로
      * 막힌 것**(부정 · 상대 위치 · 둘)이면 그대로 둔다 — "57마디 말고"를 둘째 후보 "57마디"로 실행하지 않게. 후보가 없으면 null
      */
-    fun parseBest(candidates: List<String>): Pair<String, ParseResult>? {
-        val parsed = candidates.filter { it.isNotBlank() }.map { it to parse(it) }
+    fun parseBest(candidates: List<String>, staffNames: List<String> = emptyList()): Pair<String, ParseResult>? {
+        val parsed = candidates.filter { it.isNotBlank() }.map { it to parse(it, staffNames) }
         val first = parsed.firstOrNull() ?: return null
         val top = first.second
         if (top is ParseResult.Unrecognized && top.reason !in RETRYABLE) return first
@@ -114,6 +116,7 @@ object CommandParser {
                     i += 1 + used
                     continue
                 }
+                t is Token.Person -> parts += PartRef.named(t.staffName)
                 t == Token.Word(Kw.LETTER) -> {
                     val mark = when (next) {
                         is Token.Other -> VoiceLexicon.letterPrefix(next.text)?.toString()

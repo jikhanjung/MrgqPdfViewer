@@ -2,7 +2,7 @@
 
 마지막 갱신: 2026-10-10
 브랜치: `main` (origin/main 과 동기화)
-버전: **v0.7.4-beta.4** (versionCode 67, 마지막 정식 v0.7.3). 실기기는 앱 안 업데이트로 받는다(태블릿 · TV 모두 사전 릴리스 받기 켜 둠)
+버전: **v0.7.4-beta.5** (versionCode 68, 마지막 정식 v0.7.3). 실기기는 앱 안 업데이트로 받는다(태블릿 · TV 모두 사전 릴리스 받기 켜 둠)
 관련 문서: [CLAUDE.md](CLAUDE.md) (가이드 · 알아 둘 결정) · [TODOs.md](TODOs.md) (할 일 · **실기기 확인 목록**) · [CHANGELOG.md](CHANGELOG.md) · [devlog 인덱스](devlog/README.md) · [음성 명령 목록](docs/Voice_Commands.md)
 
 ---
@@ -69,7 +69,7 @@ v0.5.6(2026-10-06) 뒤로 사흘 동안 v0.7.3 까지. 큰 줄기 다섯:
   - Release verify 는 태그 == versionName · **versionCode > 직전 태그** · CHANGELOG `## [X.Y.Z]` 섹션을 검사한다
   - 태그만 푸시하고 기기에 안 뜬다면 릴리스가 안 만들어진 것이다(v0.7.1-beta.1 때 태그를 늦게 달아 TV 가 못 봤다)
   - 기능 하나 = 사전 릴리스 하나로 기기에서 시험하고, 확인분을 모아 정식으로 낸다(v0.6.0 · v0.7.0 · v0.7.2 처럼)
-- **devlog**: 단계마다 번호 devlog + `devlog/README.md` 인덱스. 사용자 말(결정)을 인용해 남긴다. 다음 번호 **094**
+- **devlog**: 단계마다 번호 devlog + `devlog/README.md` 인덱스. 사용자 말(결정)을 인용해 남긴다. 다음 번호 **095**
 
 ## 3. 자주 부딪힌 것
 

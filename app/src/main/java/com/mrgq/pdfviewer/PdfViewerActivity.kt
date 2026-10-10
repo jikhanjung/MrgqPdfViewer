@@ -42,6 +42,7 @@ import com.mrgq.pdfviewer.score.PartStaves
 import com.mrgq.pdfviewer.voice.CommandOutcome
 import com.mrgq.pdfviewer.voice.CommandParser
 import com.mrgq.pdfviewer.voice.PartMatcher
+import com.mrgq.pdfviewer.voice.PartNames
 import com.mrgq.pdfviewer.voice.PartRef
 import com.mrgq.pdfviewer.voice.ViewerCommands
 import com.mrgq.pdfviewer.voice.VoiceLexicon
@@ -707,7 +708,10 @@ class PdfViewerActivity : AppCompatActivity() {
             val pdfFile = musicRepository.syncPdfFile(file)
             if (pdfFile != null) {
                 currentPdfFileId = pdfFile.id
-                runOnUiThread { onPdfFileChangedForMetronome(pdfFile.id) }
+                runOnUiThread {
+                    onPdfFileChangedForMetronome(pdfFile.id)
+                    prefetchVoiceStaffNames()
+                }
                 Log.d("PdfViewerActivity", "PDF file record ready: ${pdfFile.id}")
             } else {
                 Log.e("PdfViewerActivity", "Failed to analyze PDF file: $pdfFilePath")
@@ -5064,8 +5068,8 @@ class PdfViewerActivity : AppCompatActivity() {
     private fun runTextCommand(text: String) {
         if (text.isBlank()) return
         voiceTextLast = text
-        val parsed = CommandParser.parse(text)
         lifecycleScope.launch {
+            val parsed = CommandParser.parse(text, voiceStaffNames())
             val report = runCommand(parsed)
             Log.i("VoiceCommand", "\"$text\" → $parsed → ${if (report.ok) "✓" else "✗"} ${report.message}")
             Toast.makeText(this@PdfViewerActivity, (if (report.ok) "✓ " else "✗ ") + report.message, Toast.LENGTH_LONG).show()
@@ -5096,6 +5100,7 @@ class PdfViewerActivity : AppCompatActivity() {
         binding.voiceButton.alpha = if (micFollower != null) 0.4f else 1f
         // 👂 = 계속 듣는 중 (단추는 그대로 누른 채 말하기로도 쓴다)
         binding.voiceButton.text = if (voiceAlwaysOn()) "👂" else "🎙"
+        prefetchVoiceStaffNames()
         if (show && !voiceButtonReady) {
             voiceButtonReady = true
             binding.voiceButton.setOnTouchListener { v, event ->
@@ -5226,10 +5231,40 @@ class PdfViewerActivity : AppCompatActivity() {
         binding.voiceButton.postDelayed(stopVoiceListening, VOICE_RELEASE_TAIL_MS)
     }
 
-    /** 이 악보에서 나올 말 — 인식이 이쪽으로 기울게 (Android 13+) */
+    /** 이 악보에서 나올 말 — 인식이 이쪽으로 기울게 (Android 13+). 사람 이름 보표는 부를 말(성 뺀 이름 포함, #094) */
     private fun voiceHints(): List<String> =
         VoiceLexicon.INSTRUMENT_LABELS.values.toList() +
-            musicXml?.takeIf { musicXmlFileId == currentPdfFileId }?.parts?.map { it.name }.orEmpty()
+            musicXml?.takeIf { musicXmlFileId == currentPdfFileId }?.parts?.map { it.name }.orEmpty() +
+            PartNames.hints(cachedVoiceStaffNames())
+
+    /** 음성 명령용 보표 목록 캐시 — (파일, 파트). 악보 분석은 DB 캐시라 파일마다 한 번 읽는다 (#094) */
+    private var voiceStaffParts: Pair<String, List<com.mrgq.pdfviewer.score.ScorePart>>? = null
+
+    /** 이 악보의 보표 이름(PDF, 없으면 MusicXML) — 사람 이름 보표를 말로 부를 수 있게. 못 읽으면 빈 목록 */
+    private suspend fun voiceStaffNames(): List<String> {
+        val fileId = currentPdfFileId ?: return emptyList()
+        if (voiceStaffParts?.first != fileId) {
+            val staves = withContext(Dispatchers.IO) {
+                try { musicRepository.getOrAnalyzeScoreStaves(fileId, File(pdfFilePath)) } catch (e: Exception) { null }
+            }
+            val parts = (staves?.let { ScoreParts.of(it) } as? ScoreParts.Result.Parts)?.parts.orEmpty()
+            if (currentPdfFileId == fileId) voiceStaffParts = fileId to parts
+        }
+        return cachedVoiceStaffNames()
+    }
+
+    /** 🎙 가 보이면 보표 이름을 미리 읽어 둔다 — 첫 듣기부터 사람 이름이 인식 힌트에 들어가게 */
+    private fun prefetchVoiceStaffNames() {
+        if (binding.voiceButton.visibility != View.VISIBLE) return
+        val fileId = currentPdfFileId ?: return
+        if (voiceStaffParts?.first != fileId) lifecycleScope.launch { voiceStaffNames() }
+    }
+
+    /** 이미 읽어 둔 보표 이름만 (기다리지 않는다) — 듣기 시작할 때의 힌트용 */
+    private fun cachedVoiceStaffNames(): List<String> {
+        val parts = voiceStaffParts?.takeIf { it.first == currentPdfFileId }?.second ?: return emptyList()
+        return parts.mapNotNull { knownPartName(it, parts.size) }
+    }
 
     private val voiceCallback = object : VoiceListener.Callback {
         override fun onListening() {
@@ -5284,16 +5319,16 @@ class PdfViewerActivity : AppCompatActivity() {
      */
     private fun runVoiceCandidates(candidates: List<String>, heard: List<String>, alwaysListening: Boolean) {
         val icon = if (alwaysListening) "👂" else "🎙"
-        val best = CommandParser.parseBest(candidates)
-        if (best == null) {
-            showVoiceStatus(if (alwaysListening) "👂 못 알아들었어요" else "🎙 못 알아들었어요 — 누른 채로 말하세요", VOICE_STATUS_MS)
-            logVoiceCommand(heard, null, null, alwaysListening)
-            scheduleAlwaysListening()
-            return
-        }
-        val (text, parsed) = best
-        showVoiceStatus("$icon “$text”")
         lifecycleScope.launch {
+            val best = CommandParser.parseBest(candidates, voiceStaffNames())
+            if (best == null) {
+                showVoiceStatus(if (alwaysListening) "👂 못 알아들었어요" else "🎙 못 알아들었어요 — 누른 채로 말하세요", VOICE_STATUS_MS)
+                logVoiceCommand(heard, null, null, alwaysListening)
+                scheduleAlwaysListening()
+                return@launch
+            }
+            val (text, parsed) = best
+            showVoiceStatus("$icon “$text”")
             val report = runCommand(parsed)
             showVoiceStatus("$icon “$text”\n" + (if (report.ok) "✓ " else "✗ ") + report.message, VOICE_STATUS_MS)
             logVoiceCommand(heard, text, report, alwaysListening)

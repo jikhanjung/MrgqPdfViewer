@@ -1,8 +1,13 @@
 package com.mrgq.pdfviewer.voice
 
 /** 파트 하나 — 악기 키([VoiceLexicon.INSTRUMENTS]) + 번호("바이올린 2"), 번호 없으면 null */
-data class PartRef(val instrument: String, val number: Int? = null) {
-    val label: String get() = (VoiceLexicon.INSTRUMENT_LABELS[instrument] ?: instrument) + (number?.let { " $it" } ?: "")
+data class PartRef(val instrument: String, val number: Int? = null, val staffName: String? = null) {
+    val label: String get() = staffName ?: ((VoiceLexicon.INSTRUMENT_LABELS[instrument] ?: instrument) + (number?.let { " $it" } ?: ""))
+
+    companion object {
+        /** 보표 이름 그대로 부른 파트 — 사람 이름 보표 (#094) */
+        fun named(staffName: String) = PartRef(instrument = "", staffName = staffName)
+    }
 }
 
 /** 음성 명령 (P12 §3.2). 값이 악보 · 상태에 맞는지는 실행하는 쪽이 검사한다(P12 §3.3). */
