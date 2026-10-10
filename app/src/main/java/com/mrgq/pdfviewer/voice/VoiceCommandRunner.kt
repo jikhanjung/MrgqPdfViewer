@@ -24,7 +24,7 @@ object VoiceCommandRunner {
     data class Report(val ok: Boolean, val message: String)
 
     suspend fun run(result: ParseResult, target: ViewerCommands, bareNumberIsTempo: Boolean = false): Report = when (result) {
-        is ParseResult.Unrecognized -> Report(false, reasonMessage(result.reason))
+        is ParseResult.Unrecognized -> Report(false, unrecognizedMessage(result, target))
         is ParseResult.BareNumber -> run(
             ParseResult.Commands(listOf(if (bareNumberIsTempo) SetTempo(result.value) else SelectMeasure(result.value))),
             target,
@@ -75,11 +75,21 @@ object VoiceCommandRunner {
         else -> null
     }
 
+    private suspend fun unrecognizedMessage(result: ParseResult.Unrecognized, target: ViewerCommands): String {
+        if (result.reason != Reason.UNKNOWN_PART) return reasonMessage(result.reason)
+        val what = result.heard?.let { "'$it' 파트를 이 악보에서 찾지 못했어요" } ?: "무슨 파트인지 못 알아들었어요"
+        return what + partChoices(target.partNames())
+    }
+
+    /** " — 이 악보: 김지한 · 박서연 · 보표 3" (모르면 "") */
+    fun partChoices(names: List<String>): String = if (names.isEmpty()) "" else " — 이 악보: " + names.joinToString(" · ")
+
     fun reasonMessage(reason: Reason): String = when (reason) {
         Reason.NOTHING -> "명령을 찾지 못했어요"
         Reason.NEGATION -> "'말고 · 아니 · 취소'가 있어 실행하지 않았어요"
         Reason.RELATIVE -> "'두 마디 전'처럼 상대 위치는 아직 몰라요 — 마디 번호로 말하세요"
         Reason.CONFLICT -> "위치나 템포가 둘이에요 — 하나만 말하세요"
         Reason.STRAY_NUMBER -> "무엇의 수인지 모르는 수가 있어요 — '57마디'처럼 단위를 붙이세요"
+        Reason.UNKNOWN_PART -> "무슨 파트인지 못 알아들었어요"
     }
 }

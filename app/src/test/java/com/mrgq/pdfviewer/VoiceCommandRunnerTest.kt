@@ -17,7 +17,7 @@ import org.junit.Test
 class VoiceCommandRunnerTest {
 
     /** 부른 명령을 적어 두는 가짜 악보 화면. [failOn] 에 든 명령은 실패한다 */
-    private class FakeViewer(private val failOn: Set<String> = emptySet()) : ViewerCommands {
+    private class FakeViewer(private val failOn: Set<String> = emptySet(), private val parts: List<String> = emptyList()) : ViewerCommands {
         val calls = mutableListOf<String>()
         private fun call(name: String): CommandOutcome {
             calls += name
@@ -39,6 +39,7 @@ class VoiceCommandRunnerTest {
         override suspend fun start() = call("start")
         override suspend fun stop() = call("stop")
         override suspend fun listen() = call("listen")
+        override suspend fun partNames() = parts
     }
 
     private fun run(text: String, viewer: FakeViewer = FakeViewer(), bareNumberIsTempo: Boolean = false) =
@@ -50,6 +51,16 @@ class VoiceCommandRunnerTest {
         assertEquals(listOf("tempo 72", "measure 57"), calls)
         assertTrue(report.ok)
         assertEquals("57마디부터 · ♩=72", report.message)
+    }
+
+    @Test
+    fun 파트를_못_찾으면_들린_말과_이_악보의_파트를_알린다() {
+        val viewer = FakeViewer(parts = listOf("김지한", "박서연", "보표 3"))
+        val (report, calls) = run("지환 파트 57마디부터", viewer)
+        assertFalse(report.ok)
+        assertEquals(emptyList<String>(), calls)
+        assertEquals("'지환' 파트를 이 악보에서 찾지 못했어요 — 이 악보: 김지한 · 박서연 · 보표 3", report.message)
+        assertEquals("무슨 파트인지 못 알아들었어요", run("파트 보여줘").first.message)
     }
 
     @Test

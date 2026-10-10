@@ -21,6 +21,7 @@ enum class Kw {
     STOP,         // 멈춰 · 정지 · 그만 — 👂 계속 듣기에서 연주를 멈추는 말 (#085)
     LISTEN,       // 듣기 · 듣고 넘기기 — 🎤 연주 듣고 넘기기 시작 (#087)
     PART,         // 파트 — 악기 이름 뒤에 붙어도 되고 안 붙어도 된다
+    STAFF,        // 보표 — "보표 2" = 위에서 둘째 보표(이름을 못 읽은 보표는 파트 보기 목록에 "보표 n", #098)
     FULL_SCORE,   // 총보
     LETTER,       // 레터 · 리허설 — 리허설 마크
     NEGATION,     // 말고 · 아니 · 취소 — 들리면 아무것도 실행하지 않는다
@@ -76,7 +77,7 @@ object VoiceLexicon {
         "예비박" to Kw.COUNT_IN, "카운트인" to Kw.COUNT_IN,
         "듣고넘기기" to Kw.LISTEN, "듣고넘겨" to Kw.LISTEN, "듣기" to Kw.LISTEN, "들어줘" to Kw.LISTEN,
         "멈춰" to Kw.STOP, "멈춤" to Kw.STOP, "멈추" to Kw.STOP, "정지" to Kw.STOP, "그만" to Kw.STOP, "스톱" to Kw.STOP,
-        "파트" to Kw.PART,
+        "파트" to Kw.PART, "보표" to Kw.STAFF,
         "총보" to Kw.FULL_SCORE, "풀스코어" to Kw.FULL_SCORE, "전체악보" to Kw.FULL_SCORE,
         "레터" to Kw.LETTER, "리허설" to Kw.LETTER, "연습번호" to Kw.LETTER,
         "말고" to Kw.NEGATION, "아니" to Kw.NEGATION, "취소" to Kw.NEGATION, "빼고" to Kw.NEGATION,
@@ -132,6 +133,8 @@ object VoiceLexicon {
     val PARTICLES: List<String> = listOf(
         "으로", "로", "에서", "에", "을", "를", "은", "는", "이", "가", "도", "만", "좀", "요",
         "까지", "해", "해줘", "해주세요", "주세요", "가자", "갑시다", "하자", "합시다", "할게요", "해볼게요",
+        "보여줘", "보여주세요", "보여", "줘", "보기", "보", // "파트보"의 "보"
+        "과", "와", "하고", "랑", "이랑", // "보표 1과 보표 2"
     )
 
     /** 공백을 지운 문자열에서 낱말 찾기 — 긴 것부터 */

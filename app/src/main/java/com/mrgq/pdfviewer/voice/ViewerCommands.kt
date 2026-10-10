@@ -33,6 +33,8 @@ interface ViewerCommands {
     /** 악보 연동 예비박 마디 수(1 · 2) — 전역 설정, 다음 시작부터 */
     suspend fun setCountIn(bars: Int): CommandOutcome
     suspend fun selectParts(parts: List<PartRef>): CommandOutcome
+    /** 이 악보에서 부를 수 있는 파트 이름(파트 보기 목록 그대로) — 파트를 못 찾았을 때 안내에 붙인다 (#098). 모르면 빈 목록 */
+    suspend fun partNames(): List<String> = emptyList()
     suspend fun showFullScore(): CommandOutcome
     /** 고른 마디(고르는 중이 아니면 지금 쪽 첫 마디)에서 예비박 뒤 바로. 마디를 못 읽은 악보면 악보 연동 없이 메트로놈만 */
     suspend fun start(): CommandOutcome

@@ -1,12 +1,18 @@
 package com.mrgq.pdfviewer.voice
 
 /** 파트 하나 — 악기 키([VoiceLexicon.INSTRUMENTS]) + 번호("바이올린 2"), 번호 없으면 null */
-data class PartRef(val instrument: String, val number: Int? = null, val staffName: String? = null) {
-    val label: String get() = staffName ?: ((VoiceLexicon.INSTRUMENT_LABELS[instrument] ?: instrument) + (number?.let { " $it" } ?: ""))
+data class PartRef(val instrument: String, val number: Int? = null, val staffName: String? = null, val staffNumber: Int? = null) {
+    val label: String get() = when {
+        staffNumber != null -> "보표 $staffNumber"
+        staffName != null -> staffName
+        else -> (VoiceLexicon.INSTRUMENT_LABELS[instrument] ?: instrument) + (number?.let { " $it" } ?: "")
+    }
 
     companion object {
         /** 보표 이름 그대로 부른 파트 — 사람 이름 보표 (#094) */
         fun named(staffName: String) = PartRef(instrument = "", staffName = staffName)
+        /** 위에서 [n] 째 보표 — "보표 2" (#098) */
+        fun staff(n: Int) = PartRef(instrument = "", staffNumber = n)
     }
 }
 
@@ -69,7 +75,8 @@ sealed class ParseResult {
     /** 수만 들렸다("칠십이") — 마디(고르기)인지 템포인지는 지금 화면이 정한다(P12 §3.2) */
     data class BareNumber(val value: Int) : ParseResult()
 
-    data class Unrecognized(val reason: Reason) : ParseResult()
+    /** [heard] = [Reason.UNKNOWN_PART] 일 때 파트 자리에서 들린 모르는 말("지환") — 없으면 null */
+    data class Unrecognized(val reason: Reason, val heard: String? = null) : ParseResult()
 
     enum class Reason {
         /** 명령으로 읽히는 것이 없다 */
@@ -82,5 +89,7 @@ sealed class ParseResult {
         CONFLICT,
         /** 어디에도 붙지 않은 수가 남았다 — 잘못 실행하느니 묻는다 */
         STRAY_NUMBER,
+        /** "파트"는 들렸는데 무슨 파트인지(악기 · 이름 · 보표 번호) 못 찾았다 (#098) */
+        UNKNOWN_PART,
     }
 }

@@ -4855,10 +4855,19 @@ class PdfViewerActivity : AppCompatActivity() {
                 is ScoreParts.Result.VaryingStaves -> return failed("시스템마다 보표 수가 달라 파트 보기를 못 해요")
             }
             return when (val match = PartMatcher.match(all.map { it.staffIndex to knownPartName(it, all.size) }, parts)) {
-                is PartMatcher.Result.Missing -> failed("${match.part.label} 파트가 없어요")
+                is PartMatcher.Result.Missing -> failed(
+                    "${match.part.label} 파트가 없어요" + VoiceCommandRunner.partChoices(all.map { partName(it, all.size) })
+                )
                 is PartMatcher.Result.Ambiguous -> failed("${match.part.label} 파트가 여럿이에요 (${match.names.joinToString()}) — 번호까지 말하세요")
                 is PartMatcher.Result.Staves -> applyPartStaves(fileId, match.staves.takeIf { it.size < all.size })
             }
+        }
+
+        override suspend fun partNames(): List<String> {
+            if (collaborationMode == CollaborationMode.CONDUCTOR) return emptyList() // 지휘자는 늘 총보
+            voiceStaffNames() // 보표 목록을 읽어 둔다
+            val parts = voiceStaffParts?.takeIf { it.first == currentPdfFileId }?.second ?: return emptyList()
+            return parts.map { partName(it, parts.size) }
         }
 
         override suspend fun showFullScore(): CommandOutcome {

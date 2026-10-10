@@ -71,7 +71,9 @@ object CommandNormalizer {
                 continue
             }
             val number = KoreanNumbers.prefixAt(compact, i)
-            if (number != null && acceptNumber(compact, i, number, out.lastOrNull(), other.isNotEmpty())) {
+            // "보표 일 이" — 보표 뒤에 이어지는 수는 보표 번호 목록
+            val afterStaff = out.asReversed().dropWhile { it is Token.Num }.firstOrNull() == Token.Word(Kw.STAFF)
+            if (number != null && (afterStaff && other.isEmpty() || acceptNumber(compact, i, number, out.lastOrNull(), other.isNotEmpty()))) {
                 flush()
                 out += Token.Num(number.value)
                 i += number.length

@@ -43,7 +43,10 @@ object CommandParser {
     }
 
     /** 잘못 들었을 수 있는 실패 — 다음 후보를 본다 */
-    private val RETRYABLE = setOf(Reason.NOTHING, Reason.STRAY_NUMBER)
+    private val RETRYABLE = setOf(Reason.NOTHING, Reason.STRAY_NUMBER, Reason.UNKNOWN_PART)
+
+    /** 수 뒤에 붙으면 그 수가 마디 · 쪽 · 빠르기인 말 */
+    private val UNITS = setOf(Kw.MEASURE, Kw.FROM, Kw.PAGE, Kw.BPM)
 
     fun parse(raw: List<Token>): ParseResult {
         if (raw.any { it == Token.Word(Kw.NEGATION) }) return ParseResult.Unrecognized(Reason.NEGATION)
@@ -117,6 +120,18 @@ object CommandParser {
                     continue
                 }
                 t is Token.Person -> parts += PartRef.named(t.staffName)
+                // "보표 2", "보표 1, 2" — 이름을 못 읽은 보표(파트 보기 목록의 "보표 n"). 단위가 붙은 수("57마디")는 보표 번호가 아니다
+                t == Token.Word(Kw.STAFF) && next is Token.Num -> {
+                    var j = i + 1
+                    while (true) {
+                        val n = tokens.getOrNull(j) as? Token.Num ?: break
+                        if ((tokens.getOrNull(skipCounters(tokens, j + 1)) as? Token.Word)?.kw in UNITS) break
+                        parts += PartRef.staff(n.value)
+                        j++
+                    }
+                    i = j
+                    continue
+                }
                 t == Token.Word(Kw.LETTER) -> {
                     val mark = when (next) {
                         is Token.Other -> VoiceLexicon.letterPrefix(next.text)?.toString()
@@ -127,6 +142,11 @@ object CommandParser {
                 }
             }
             i++
+        }
+        // "파트"는 들렸는데 무슨 파트인지 모른다 — 나머지(마디 등)만 실행하지 않고, 들린 말을 알려 준다 (#098)
+        if (parts.isEmpty() && Token.Word(Kw.PART) in tokens && VoiceCommand.ShowFullScore !in found) {
+            val heard = tokens.filterIsInstance<Token.Other>().joinToString(" ") { it.text }.ifEmpty { null }
+            return ParseResult.Unrecognized(Reason.UNKNOWN_PART, heard)
         }
         if (parts.isNotEmpty()) found += SelectParts(parts.distinct())
         // "메트로놈"만 = 시작, "메트로놈 정지" = 정지

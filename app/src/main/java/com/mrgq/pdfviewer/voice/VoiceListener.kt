@@ -104,7 +104,7 @@ class VoiceListener(context: Context, private val callback: Callback) {
 
         /** 명령 낱말 — 숫자 · 단위가 맞게 들리도록 */
         private val BASE_HINTS = listOf(
-            "마디", "마디부터", "템포", "쪽", "페이지", "처음부터", "다시", "이어서", "다음 쪽", "이전 쪽", "파트", "총보", "레터", "시작",
+            "마디", "마디부터", "템포", "쪽", "페이지", "처음부터", "다시", "이어서", "다음 쪽", "이전 쪽", "파트", "파트보", "보표", "총보", "레터", "시작",
         )
 
         fun isAvailable(context: Context): Boolean = SpeechRecognizer.isRecognitionAvailable(context)

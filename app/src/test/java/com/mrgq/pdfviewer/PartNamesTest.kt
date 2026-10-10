@@ -72,8 +72,46 @@ class PartNamesTest {
     }
 
     @Test
-    fun 이름을_모르면_전처럼() {
-        assertEquals(ParseResult.Unrecognized(Reason.NOTHING), CommandParser.parse("지한 파트"))
+    fun 파트는_들었는데_무슨_파트인지_모르면_들린_말과_함께() {
+        assertEquals(ParseResult.Unrecognized(Reason.UNKNOWN_PART, "지한"), CommandParser.parse("지한 파트"))
+        assertEquals(ParseResult.Unrecognized(Reason.UNKNOWN_PART, "지환"), CommandParser.parse("지환 파트", staves))
+        assertEquals(ParseResult.Unrecognized(Reason.UNKNOWN_PART), CommandParser.parse("파트 보여줘"))
+        // 파트를 모르면 나머지(마디)도 실행하지 않는다
+        assertEquals(ParseResult.Unrecognized(Reason.UNKNOWN_PART, "지환"), CommandParser.parse("지환 파트 57마디부터", staves))
+        // "파트" 없이 모르는 말만이면 전처럼
+        assertEquals(ParseResult.Unrecognized(Reason.NOTHING), CommandParser.parse("지환"))
+    }
+
+    @Test
+    fun 다른_후보에_맞는_이름이_있으면_그것() {
+        assertEquals("지한 파트" to ParseResult.Commands(listOf(named("김지한"))), CommandParser.parseBest(listOf("지환 파트", "지한 파트"), staves))
+    }
+
+    @Test
+    fun 보표_번호로_부르기() {
+        val staff1 = listOf(SelectParts(listOf(PartRef.staff(1))))
+        assertEquals(staff1, commands("보표 1 파트"))
+        assertEquals(staff1, commands("보표 일 파트"))
+        assertEquals(staff1, commands("보표일 파트"))
+        assertEquals(staff1, commands("보표 1 파트보"))
+        assertEquals(staff1, commands("보표 1 파트만 보여줘"))
+        assertEquals(ParseResult.Unrecognized(Reason.UNKNOWN_PART, "지환"), CommandParser.parse("지환 파트보", staves))
+        assertEquals(listOf(SelectParts(listOf(PartRef.staff(2)))), commands("보표 이"))
+        assertEquals(listOf(SelectParts(listOf(PartRef.staff(3))), GotoMeasure(10)), commands("보표 삼 10마디부터"))
+        assertEquals("보표 2", PartRef.staff(2).label)
+    }
+
+    @Test
+    fun 보표_여럿() {
+        val both = listOf(SelectParts(listOf(PartRef.staff(1), PartRef.staff(2))))
+        assertEquals(both, commands("보표 1 보표 2 파트보"))
+        assertEquals(both, commands("보표 1과 보표 2 파트"))
+        assertEquals(both, commands("보표 1, 2 파트보"))
+        assertEquals(both, commands("보표 일 이 파트"))
+        // 단위가 붙은 수는 보표 번호가 아니다
+        assertEquals(listOf(SelectParts(listOf(PartRef.staff(1))), GotoMeasure(57)), commands("보표 1 57마디부터"))
+        // 이름 · 악기와 섞어도
+        assertEquals(listOf(SelectParts(listOf(PartRef.named("김지한"), PartRef.staff(3)))), commands("지한 보표 3 파트"))
     }
 
     @Test
@@ -82,5 +120,13 @@ class PartNamesTest {
         assertEquals(PartMatcher.Result.Staves(setOf(1, 2)), PartMatcher.match(score, listOf(PartRef.named("박서연"))))
         assertEquals(PartMatcher.Result.Staves(setOf(0, 3)), PartMatcher.match(score, listOf(PartRef.named("김지한"), PartRef("cello"))))
         assertEquals(PartMatcher.Result.Missing(PartRef.named("이수진")), PartMatcher.match(score, listOf(PartRef.named("이수진"))))
+    }
+
+    @Test
+    fun 보표_번호는_그_보표_하나만() {
+        val unnamed = listOf(0 to null, 1 to null, 2 to null)
+        assertEquals(PartMatcher.Result.Staves(setOf(1)), PartMatcher.match(unnamed, listOf(PartRef.staff(2))))
+        assertEquals(PartMatcher.Result.Staves(setOf(0, 2)), PartMatcher.match(unnamed, listOf(PartRef.staff(1), PartRef.staff(3))))
+        assertEquals(PartMatcher.Result.Missing(PartRef.staff(9)), PartMatcher.match(unnamed, listOf(PartRef.staff(9))))
     }
 }
