@@ -168,6 +168,8 @@ MrgqPdfViewer 개발 로그 모음. 구현 기록은 `YYYYMMDD_NNN_` 형식(NNN 
 
 ## 🍎 iOS (2026-10-10)
 - [`P14`](20261010_P14_ios_app_plan.md) — **계획**: iPad 먼저, 순수 Kotlin 로직(음성 · 메트로놈 계산 · 합주 시계 · 마이크 추적 · 분석 해석기 · 파트 레이아웃 · 메모 모델)을 KMP 공용 모듈 `shared/` 로 떼어 공유, 화면 · PDF · 소리 · 마이크 · 음성 · 네트워크는 iOS 것(화면은 SwiftUI 제안). 분석은 처음엔 서버 `.layout.json` 만, 메트로놈은 링 버퍼(실시간 스레드에 Kotlin 안 넣음), 합주는 iPad 연주자부터(멀티캐스트 권한 · 로컬 네트워크). 단계: 0 Kotlin 2.x → 1 공용 모듈(Android 만, iOS 결정과 무관) → 2 iOS 대상 + macOS CI → 3 iPad 최소 뷰어 → 4 ScoreMate · 메트로놈 → 5 음성 → 6 합주 연주자 → 7 나머지. 결정 대기: Mac · 개발자 계정 · 화면 기술
+- [`P15`](20261010_P15_private_repo_releases_on_scoremate_plan.md) — **계획: 저장소 private 전환 — 릴리스 · 업데이트를 ScoreMate 서버로**. 정식 · beta 모두 서버가 배포 정본, 앱은 로그인 없이 서버 `latest/` 만 본다(전환 동안 GitHub 폴백). 순서: 서버(P16) → 앱 · CI(v0.7.5-beta) → 정식 v0.7.5 를 모든 기기에 → private → 폴백 정리. Actions 분(하루 약 170분 실측) 줄이기
+- [`P16`](20261010_P16_scoremate_app_release_server_requests.md) — **서버 요청: 앱 릴리스** — beta 버전(SemVer) · `notes` 저장 · 정식 / beta 최신 따로, 로그인 없는 `GET …/app-releases/android/latest/?channel=`, 판마다 고정 주소 → 서명 URL 302, 다운로드 페이지에서 GitHub 빼기, beta 최근 10개 보관
 
 ## 🔄 사전 릴리스 받기 (2026-10-07, v0.5.7)
 - [`073`](20261007_073_prerelease_updates.md) — 설정 **🧪 사전 릴리스(beta) 받기**(기본 꺼짐): 웹 릴리스 피드(`releases.atom`)에서 가장 높은 판(릴리스 없는 태그 · `-test` 는 건너뜀), 버전 비교를 SemVer 우선순위로. 0.5.7 정식 = 이 설정만, 메모는 0.6.0-beta.1
