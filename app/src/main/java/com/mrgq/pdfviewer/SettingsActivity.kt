@@ -744,7 +744,7 @@ class SettingsActivity : AppCompatActivity() {
             SettingsItem(
                 id = "voice_commands_toggle",
                 icon = "🎙",
-                title = "음성 명령 (시험)",
+                title = "음성 명령",
                 subtitle = when {
                     !com.mrgq.pdfviewer.voice.VoiceListener.isAvailable(this) -> "이 기기에는 음성 인식 서비스가 없습니다 (Google 앱 등)"
                     preferences.getBoolean(PdfViewerActivity.PREF_VOICE_COMMANDS, false) ->
@@ -759,6 +759,7 @@ class SettingsActivity : AppCompatActivity() {
                 icon = "👂",
                 title = "계속 듣기 (시험)",
                 subtitle = when {
+                    !PdfViewerActivity.VOICE_ALWAYS_AVAILABLE -> "지금은 쓸 수 없습니다 — 다듬는 중"
                     !preferences.getBoolean(PdfViewerActivity.PREF_VOICE_COMMANDS, false) -> "위의 🎙 음성 명령을 먼저 켜세요"
                     preferences.getBoolean(PdfViewerActivity.PREF_VOICE_ALWAYS, false) -> wakeWords().first().let { w ->
                         "켜짐 — 악보 화면에서 늘 듣다가 호출어 \"$w\" 뒤의 말만 실행(\"$w, 57마디부터\" · \"$w, 멈춰\"). " +
@@ -767,7 +768,8 @@ class SettingsActivity : AppCompatActivity() {
                     }
                     else -> "꺼짐 — 켜면 🎙 를 누르지 않고 \"${wakeWords().first()}, …\"로 명령합니다"
                 },
-                type = SettingsType.TOGGLE
+                type = SettingsType.TOGGLE,
+                enabled = PdfViewerActivity.VOICE_ALWAYS_AVAILABLE
             ).takeIf { !com.mrgq.pdfviewer.utils.DeviceForm.isTv(this) },
             // 🗣 계속 듣기의 호출어 (#091)
             SettingsItem(
@@ -778,7 +780,7 @@ class SettingsActivity : AppCompatActivity() {
                     (if (preferences.getString(PdfViewerActivity.PREF_VOICE_WAKE_WORDS, null).isNullOrBlank()) " (기본)" else "") +
                     " — 누르면 바꿉니다",
                 type = SettingsType.ACTION
-            ).takeIf { !com.mrgq.pdfviewer.utils.DeviceForm.isTv(this) },
+            ).takeIf { !com.mrgq.pdfviewer.utils.DeviceForm.isTv(this) && PdfViewerActivity.VOICE_ALWAYS_AVAILABLE },
             SettingsItem(
                 id = "voice_text_input_toggle",
                 icon = "⌨️",
@@ -1068,6 +1070,7 @@ class SettingsActivity : AppCompatActivity() {
                 showInfoPanel()
             }
             "voice_always_toggle" -> {
+                if (!PdfViewerActivity.VOICE_ALWAYS_AVAILABLE) return
                 if (!preferences.getBoolean(PdfViewerActivity.PREF_VOICE_COMMANDS, false)) return
                 val enable = !preferences.getBoolean(PdfViewerActivity.PREF_VOICE_ALWAYS, false)
                 preferences.edit().putBoolean(PdfViewerActivity.PREF_VOICE_ALWAYS, enable).apply()

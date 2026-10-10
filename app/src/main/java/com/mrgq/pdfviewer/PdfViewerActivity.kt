@@ -114,6 +114,8 @@ class PdfViewerActivity : AppCompatActivity() {
         const val PREF_VOICE_TEXT_INPUT = "voice_text_input"
         /** 👂 계속 듣기 (#085) — 🎙 를 누르지 않고 "메이트, …" */
         const val PREF_VOICE_ALWAYS = "voice_always_listen"
+        /** 👂 계속 듣기를 쓸 수 있나 — 잠시 꺼 둠(#093, 효용이 낮아 다듬을 때까지). 켜 둔 기기도 듣지 않는다 */
+        const val VOICE_ALWAYS_AVAILABLE = false
         /** 👂 계속 듣기의 호출어 (#091) — 쉼표로 여럿, 없으면 기본(메이트 · 매이트 · mate) */
         const val PREF_VOICE_WAKE_WORDS = "voice_wake_words"
         /** 휴대폰 악보 화면의 회전 모드 (#090) — 설정 → 표시 모드. 기본 기기 회전 */
@@ -5093,7 +5095,7 @@ class PdfViewerActivity : AppCompatActivity() {
         binding.voiceButton.visibility = if (show) View.VISIBLE else View.GONE
         binding.voiceButton.alpha = if (micFollower != null) 0.4f else 1f
         // 👂 = 계속 듣는 중 (단추는 그대로 누른 채 말하기로도 쓴다)
-        binding.voiceButton.text = if (preferences.getBoolean(PREF_VOICE_ALWAYS, false)) "👂" else "🎙"
+        binding.voiceButton.text = if (voiceAlwaysOn()) "👂" else "🎙"
         if (show && !voiceButtonReady) {
             voiceButtonReady = true
             binding.voiceButton.setOnTouchListener { v, event ->
@@ -5124,9 +5126,12 @@ class PdfViewerActivity : AppCompatActivity() {
         showVoiceStatus("👂 이 기기에서는 알림 소리를 끌 수 없어 듣기를 다시 걸 때 딸깍 소리가 날 수 있어요", VOICE_STATUS_MS)
     }
 
+    /** 👂 계속 듣기를 설정에서 켰고, 지금 쓸 수 있는 기능인가([VOICE_ALWAYS_AVAILABLE]) */
+    private fun voiceAlwaysOn(): Boolean = VOICE_ALWAYS_AVAILABLE && preferences.getBoolean(PREF_VOICE_ALWAYS, false)
+
     /** 👂 계속 듣기를 켰고, 화면이 앞에 있고, 🎙 단추가 보이고, 🎤 연주 추적이 마이크를 쓰지 않을 때(준비 중도 아닐 때) */
     private fun alwaysListenAllowed(): Boolean =
-        voiceResumed && preferences.getBoolean(PREF_VOICE_ALWAYS, false) &&
+        voiceResumed && voiceAlwaysOn() &&
             binding.voiceButton.visibility == View.VISIBLE && micFollower == null && !micFollowStarting
 
     private fun scheduleAlwaysListening(delayMs: Long = ALWAYS_RESTART_MS) {
