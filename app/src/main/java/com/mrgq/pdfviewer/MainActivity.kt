@@ -81,6 +81,10 @@ class MainActivity : AppCompatActivity() {
         
         // Set version number
         binding.versionText.text = "v${BuildConfig.VERSION_NAME}"
+        if (!com.mrgq.pdfviewer.utils.DeviceForm.isTv(this) && !com.mrgq.pdfviewer.utils.DeviceForm.isPhone(this)) {
+            // 태블릿(세로): 버전 칸이 좁아 "v0.7.4-beta" / ".5" 로 끝만 갈렸다 — 사전 릴리스 꼬리(-beta.5)는 처음부터 다음 줄로 (사용자 요청 2026-10-10)
+            binding.versionText.text = "v${BuildConfig.VERSION_NAME.replaceFirst("-", "\n-")}"
+        }
         if (com.mrgq.pdfviewer.utils.DeviceForm.isPhone(this)) {
             // 휴대폰: 앱 이름이 두 줄로 감기면 따로 둔 버전이 이름 칸 오른쪽 위에 떠 버린다 — 이름 끝("Viewer" 뒤)에 작게 붙인다 (2026-10-06)
             binding.versionText.visibility = View.GONE
