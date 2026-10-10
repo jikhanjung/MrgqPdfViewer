@@ -89,9 +89,9 @@ P12 1단계에서 음성 대신 글자로 같은 규칙을 시험하던 창이�
 
 ## 5. 단계
 1. ✅ **메뉴 재배치**(#095): 이름 · 겹침 없애기 · 못 쓰는 줄 숨기기. `showMetronomeMenu` · `showPerformerEnsembleMenu` · `showPdfDisplayOptions` 만 고친다. 작은 판 하나
-2. **예비박 첫 화면**: `buildMetronomeDialog`
-3. **결정 1 · 2**: 자르기 · 여백 대화상자, 휴대폰 회전 줄
-4. **문서**
+2. ✅ **예비박 첫 화면**(#096): `buildMetronomeDialog`
+3. ✅ **결정 1 · 2**(#097): 자르기 · 여백 대화상자, 휴대폰 회전 줄
+4. ✅ **문서**(#095 ~ #097)
    - CLAUDE.md: 주요 기능 "PDF 표시 옵션 … 중앙 여백 0-15%", 리모컨 키 매핑 "ENTER 길게 → PDF 표시 옵션", "DPAD_UP → 메트로놈 메뉴"
    - `docs/User_Manual.md` 의 "PDF 표시 옵션"
    - `docs/Voice_Commands.md` 의 "PDF 표시 옵션의 파트 보기 목록"

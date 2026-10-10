@@ -3682,6 +3682,16 @@ class PdfViewerActivity : AppCompatActivity() {
             max = 100
             progress = (preferences.getFloat(PREF_METRONOME_VOLUME, 0.6f) * 100).toInt()
         }
+        // 예비박: 악보 연동에서 시작 마디 앞에 몇 마디를 셀지 (기본 2, 전역 — #060). 자주 바꾸므로 첫 화면에 (P13 2단계)
+        val countInLabel = label()
+        val countInButtons = listOf(1, 2).associateWith { android.widget.Button(this).apply { isAllCaps = false } }
+        val countInRow = buttonRow().apply { countInButtons.values.forEach { addView(it) } }
+        countInButtons.forEach { (bars, button) ->
+            button.setOnClickListener {
+                preferences.edit().putInt(PREF_METRONOME_COUNT_IN_BARS, bars).apply()
+                render()
+            }
+        }
         // 구간이 둘 이상이면: 첫 화면이 어느 구간인지, 그리고 나머지 구간 목록 (누르면 그 구간 설정)
         val sectionHeader = label().apply { setTextColor(0xFF90CAF9.toInt()) }
         val otherSectionsLabel = label().apply { text = "다른 구간 — 박자가 바뀌는 곳마다 나뉩니다" }
@@ -3711,6 +3721,9 @@ class PdfViewerActivity : AppCompatActivity() {
             otherMeterButton.text = "✓ $meter"
             bpmLabel.text = "속도: $beatNote = $bpm BPM"
             volumeLabel.text = if (soundOn) "소리 크기: ${volumeSeek.progress}%" else "소리 크기: 클릭음 꺼짐 (박 표시만)"
+            val countIn = countInBarsSetting()
+            countInLabel.text = "예비박: ${countIn}마디 — 악보에서 마디를 골라 시작할 때"
+            countInButtons.forEach { (bars, button) -> button.text = (if (bars == countIn) "✓ " else "") + (if (bars == 1) "한 마디" else "두 마디") }
         }
 
         // 실행 중이면 바로 들린다 (다음 박부터)
@@ -3774,16 +3787,6 @@ class PdfViewerActivity : AppCompatActivity() {
                 setTextColor(0xFFFFD54F.toInt())
                 setPadding(0, 4, 0, 4)
             }
-            // 예비박: 악보 연동에서 시작 마디 앞에 몇 마디를 셀지 (기본 2, 전역 설정 — #060)
-            val countInLabel = label().apply { text = "예비박 (악보 연동으로 시작할 때 · 모든 파일 공통)" }
-            val countInButtons = listOf(1, 2).associateWith { android.widget.Button(this).apply { isAllCaps = false } }
-            val countInRow = buttonRow().apply { countInButtons.values.forEach { addView(it) } }
-            countInButtons.forEach { (bars, button) ->
-                button.setOnClickListener {
-                    preferences.edit().putInt(PREF_METRONOME_COUNT_IN_BARS, bars).apply()
-                    render()
-                }
-            }
             val scoreHint = if (scoreMeter != null) "악보에서 읽은 박자표는 $scoreMeter 입니다. " else ""
             val hint = hintText(
                 scoreHint + "박은 박자표 아래 숫자의 음표이고 BPM 도 그 음표 기준입니다(6/8 이면 8분음표). " +
@@ -3799,10 +3802,8 @@ class PdfViewerActivity : AppCompatActivity() {
             dottedButton.setOnClickListener { selectDotted(true) }
 
             val views = listOf<View>(accentLabel) + presetRows +
-                listOf(numeratorLabel, numeratorSeek, denominatorRow, beatUnitLabel, beatUnitRow, beatUnitHint, countInLabel, countInRow, hint)
+                listOf(numeratorLabel, numeratorSeek, denominatorRow, beatUnitLabel, beatUnitRow, beatUnitHint, hint)
             detailDialog("박자 상세", views) {
-                val countIn = countInBarsSetting()
-                countInButtons.forEach { (bars, button) -> button.text = (if (bars == countIn) "✓ " else "") + "${bars}마디" }
                 val beats = meter.beatsPerBar(dotted)
                 val medium = (1 until beats).filter { meter.accentAt(it, dotted) == Accent.MEDIUM }
                 val accents = if (medium.isEmpty()) {
@@ -4074,8 +4075,9 @@ class PdfViewerActivity : AppCompatActivity() {
                 header(meterLabel, ::showMeterDetail), meterRow,
                 header(bpmLabel, ::showTempoDetail), bpmSeek,
                 header(volumeLabel, ::showSoundDetail), volumeSeek,
+                countInLabel, countInRow,
             ) + sectionList + hintText(
-                "템포 · 박자는 이 파일에, 소리는 모든 파일에 저장됩니다. " +
+                "템포 · 박자는 이 파일에, 소리 · 예비박은 모든 파일에 저장됩니다. " +
                     "악보 화면에서 ↑ 키로 연주 메뉴(일시정지 · 이어서 · 정지)를 열 수 있습니다."
             )
         )
@@ -5730,6 +5732,27 @@ class PdfViewerActivity : AppCompatActivity() {
         else -> android.content.pm.ActivityInfo.SCREEN_ORIENTATION_FULL_USER
     }
 
+    private fun phoneOrientationName(mode: String): String = when (mode) {
+        PHONE_ORIENTATION_LANDSCAPE -> "가로"
+        PHONE_ORIENTATION_PORTRAIT -> "세로"
+        else -> "기기 회전"
+    }
+
+    /** 보기 메뉴의 회전 모드 (P13 3단계) — 고르면 바로 그 방향으로. 돌면 새 폭으로 다시 그린다(#090) */
+    private fun showPhoneOrientationDialog() {
+        val modes = listOf(PHONE_ORIENTATION_AUTO, PHONE_ORIENTATION_LANDSCAPE, PHONE_ORIENTATION_PORTRAIT)
+        val current = modes.indexOf(phoneOrientationMode()).coerceAtLeast(0)
+        AlertDialog.Builder(this)
+            .setTitle("회전")
+            .setSingleChoiceItems(modes.map(::phoneOrientationName).toTypedArray(), current) { dialog, which ->
+                preferences.edit().putString(PREF_PHONE_ORIENTATION, modes[which]).apply()
+                dialog.dismiss()
+                requestedOrientation = phoneOrientationRequest()
+            }
+            .setNegativeButton("닫기", null)
+            .show()
+    }
+
     /** 휴대폰 렌더 폭 — 고정 방향이면 그 방향의 폭, 기기 회전이면 지금 폭 */
     private fun phoneRenderWidth(width: Int, height: Int): Int = when (phoneOrientationMode()) {
         PHONE_ORIENTATION_LANDSCAPE -> maxOf(width, height)
@@ -5793,7 +5816,9 @@ class PdfViewerActivity : AppCompatActivity() {
                 }
             }
         }
-        items += "위/아래 자르기…" to { showClippingDialog() }
+        items += (if (!phoneView && !isPortraitScreen() && isTwoPageMode) "자르기 · 여백…" else "위/아래 자르기…") to { showClippingDialog() }
+        // 휴대폰 회전 모드 (#090) — 앱 설정 → 표시 모드와 같은 값, 악보를 보다가 바로 바꾼다
+        if (phoneView) items += "회전: ${phoneOrientationName(phoneOrientationMode())}" to { showPhoneOrientationDialog() }
 
         AlertDialog.Builder(this)
             .setTitle("보기")
@@ -6102,486 +6127,128 @@ class PdfViewerActivity : AppCompatActivity() {
     }
     
     /**
-     * 현재 클리핑 설정에 해당하는 선택 항목 찾기 (deprecated - 슬라이더 UI로 대체됨)
-     */
-    @Deprecated("No longer needed with slider UI")
-    private fun getCurrentClippingSelection(): Int {
-        return when {
-            currentTopClipping == 0f && currentBottomClipping == 0f -> 0 // 클리핑 없음
-            currentTopClipping == 0.05f && currentBottomClipping == 0f -> 1 // 위 5%
-            currentTopClipping == 0.10f && currentBottomClipping == 0f -> 2 // 위 10%
-            currentTopClipping == 0.15f && currentBottomClipping == 0f -> 3 // 위 15%
-            currentTopClipping == 0f && currentBottomClipping == 0.05f -> 4 // 아래 5%
-            currentTopClipping == 0f && currentBottomClipping == 0.10f -> 5 // 아래 10%
-            currentTopClipping == 0f && currentBottomClipping == 0.15f -> 6 // 아래 15%
-            currentTopClipping == 0.05f && currentBottomClipping == 0.05f -> 7 // 위/아래 각 5%
-            currentTopClipping == 0.10f && currentBottomClipping == 0.10f -> 8 // 위/아래 각 10%
-            else -> -1 // 사용자 정의
-        }
-    }
-    
-    /**
-     * 위/아래 클리핑 설정 다이얼로그
+     * 위/아래 자르기 · 가운데 여백 (보기 메뉴, P13 3단계) — 위 · 아래는 0~15%, 가운데 여백(0~15%)은 두 쪽일 때만.
+     * 슬라이더를 움직이면 0.2초 뒤 미리 보이고, 적용하면 이 파일에 저장, 취소하면 되돌린다
      */
     private fun showClippingDialog() {
-        // 커스텀 레이아웃 생성
+        val withPadding = isTwoPageMode
         val dialogView = android.widget.LinearLayout(this).apply {
             orientation = android.widget.LinearLayout.VERTICAL
             setPadding(50, 30, 50, 30)
         }
-        
-        // 위쪽 클리핑 레이블
-        val topLabel = android.widget.TextView(this).apply {
-            text = "위쪽 클리핑: ${(currentTopClipping * 100).toInt()}%"
-            textSize = 16f
-            setPadding(0, 0, 0, 10)
+        fun slider(label: String, value: Float): Pair<android.widget.TextView, android.widget.SeekBar> {
+            val text = android.widget.TextView(this).apply {
+                text = "$label: ${(value * 100).toInt()}%"
+                textSize = 16f
+                setPadding(0, 0, 0, 10)
+            }
+            val seek = android.widget.SeekBar(this).apply {
+                max = 15 // 0-15%
+                progress = (value * 100).toInt()
+                setPadding(0, 0, 0, 30)
+            }
+            dialogView.addView(text)
+            dialogView.addView(seek)
+            return text to seek
         }
-        dialogView.addView(topLabel)
-        
-        // 위쪽 클리핑 슬라이더 (0-30%)
-        val topSeekBar = android.widget.SeekBar(this).apply {
-            max = 15  // 0-15%
-            progress = (currentTopClipping * 100).toInt()
-            setPadding(0, 0, 0, 30)
-        }
-        dialogView.addView(topSeekBar)
-        
-        // 아래쪽 클리핑 레이블
-        val bottomLabel = android.widget.TextView(this).apply {
-            text = "아래쪽 클리핑: ${(currentBottomClipping * 100).toInt()}%"
-            textSize = 16f
-            setPadding(0, 0, 0, 10)
-        }
-        dialogView.addView(bottomLabel)
-        
-        // 아래쪽 클리핑 슬라이더 (0-30%)
-        val bottomSeekBar = android.widget.SeekBar(this).apply {
-            max = 15  // 0-15%
-            progress = (currentBottomClipping * 100).toInt()
-            setPadding(0, 0, 0, 20)
-        }
-        dialogView.addView(bottomSeekBar)
-        
-        // 실시간 미리보기를 위한 변수
-        var previewHandler: android.os.Handler? = null
-        var previewRunnable: Runnable? = null
-        
-        // 원래 설정 저장
+        val (topLabel, topSeekBar) = slider("위쪽 자르기", currentTopClipping)
+        val (bottomLabel, bottomSeekBar) = slider("아래쪽 자르기", currentBottomClipping)
+        val padding = if (withPadding) slider("가운데 여백 (두 쪽 사이)", currentCenterPadding) else null
+
         val originalTop = currentTopClipping
         val originalBottom = currentBottomClipping
-        
+        val originalPadding = currentCenterPadding
+
+        // 임시로 적용해 다시 그린다 (저장하지 않음)
         val applyPreview = {
-            val topPercent = topSeekBar.progress / 100f
-            val bottomPercent = bottomSeekBar.progress / 100f
-            
-            // 임시로 설정 적용 (저장하지 않음)
-            currentTopClipping = topPercent
-            currentBottomClipping = bottomPercent
-            
-            // 페이지 다시 렌더링
+            currentTopClipping = topSeekBar.progress / 100f
+            currentBottomClipping = bottomSeekBar.progress / 100f
+            padding?.let { currentCenterPadding = it.second.progress / 100f }
             forceDirectRendering = true
             showPage(pageIndex)
-            
-            Log.d("PdfViewerActivity", "미리보기 적용: 위 ${(topPercent * 100).toInt()}%, 아래 ${(bottomPercent * 100).toInt()}%")
         }
-        
-        // 빠른 설정 버튼들
+        val restore = {
+            currentTopClipping = originalTop
+            currentBottomClipping = originalBottom
+            currentCenterPadding = originalPadding
+            forceDirectRendering = true
+            showPage(pageIndex)
+        }
+
         val quickButtonsLayout = android.widget.LinearLayout(this).apply {
             orientation = android.widget.LinearLayout.HORIZONTAL
             gravity = android.view.Gravity.CENTER
-            setPadding(0, 20, 0, 10)
+            setPadding(0, 0, 0, 10)
         }
-        
-        val resetButton = android.widget.Button(this).apply {
+        quickButtonsLayout.addView(android.widget.Button(this).apply {
             text = "초기화"
             setOnClickListener {
                 topSeekBar.progress = 0
                 bottomSeekBar.progress = 0
+                padding?.second?.progress = 0
                 applyPreview()
             }
-        }
-        quickButtonsLayout.addView(resetButton)
-        
-        val bothButton = android.widget.Button(this).apply {
+        })
+        quickButtonsLayout.addView(android.widget.Button(this).apply {
             text = "위/아래 5%"
             setOnClickListener {
                 topSeekBar.progress = 5
                 bottomSeekBar.progress = 5
                 applyPreview()
             }
-        }
-        quickButtonsLayout.addView(bothButton)
-        
+        })
         dialogView.addView(quickButtonsLayout)
-        
-        // 미리보기 텍스트
-        val previewLabel = android.widget.TextView(this).apply {
-            text = "실시간 미리보기가 적용됩니다"
+        dialogView.addView(android.widget.TextView(this).apply {
+            text = "움직이면 바로 미리 보입니다 · 이 파일에 저장"
             textSize = 12f
             setTextColor(android.graphics.Color.GRAY)
             gravity = android.view.Gravity.CENTER
-            setPadding(0, 10, 0, 0)
-        }
-        dialogView.addView(previewLabel)
-        
-        val setupPreview = { _: android.widget.SeekBar ->
-            previewRunnable?.let { previewHandler?.removeCallbacks(it) }
-            previewRunnable = Runnable { applyPreview() }
-            previewHandler = android.os.Handler(android.os.Looper.getMainLooper())
-            previewHandler?.postDelayed(previewRunnable!!, 200) // 200ms 딜레이
-        }
-        
-        // 슬라이더에 실시간 미리보기 연결
-        topSeekBar.setOnSeekBarChangeListener(object : android.widget.SeekBar.OnSeekBarChangeListener {
-            override fun onProgressChanged(seekBar: android.widget.SeekBar?, progress: Int, fromUser: Boolean) {
-                topLabel.text = "위쪽 클리핑: ${progress}%"
-                if (fromUser) setupPreview(seekBar!!)
-            }
-            override fun onStartTrackingTouch(seekBar: android.widget.SeekBar?) {}
-            override fun onStopTrackingTouch(seekBar: android.widget.SeekBar?) {}
         })
-        
-        bottomSeekBar.setOnSeekBarChangeListener(object : android.widget.SeekBar.OnSeekBarChangeListener {
-            override fun onProgressChanged(seekBar: android.widget.SeekBar?, progress: Int, fromUser: Boolean) {
-                bottomLabel.text = "아래쪽 클리핑: ${progress}%"
-                if (fromUser) setupPreview(seekBar!!)
-            }
-            override fun onStartTrackingTouch(seekBar: android.widget.SeekBar?) {}
-            override fun onStopTrackingTouch(seekBar: android.widget.SeekBar?) {}
-        })
-        
-        AlertDialog.Builder(this)
-            .setTitle("클리핑 설정")
-            .setView(dialogView)
-            .setPositiveButton("적용") { _, _ ->
-                val topPercent = topSeekBar.progress / 100f
-                val bottomPercent = bottomSeekBar.progress / 100f
-                
-                saveClippingSettings(topPercent, bottomPercent)
-                Toast.makeText(this, "위 ${(topPercent * 100).toInt()}%, 아래 ${(bottomPercent * 100).toInt()}% 클리핑을 적용했습니다", Toast.LENGTH_SHORT).show()
-                
-                Log.d("PdfViewerActivity", "=== 클리핑 설정 적용 ===")
-                Log.d("PdfViewerActivity", "위: ${(topPercent * 100).toInt()}%, 아래: ${(bottomPercent * 100).toInt()}%")
-                
-                registerSettingsCallback()
-                forceDirectRendering = true
-                showPage(pageIndex)
-                
-                // 설정 완료 후 PDF 표시 옵션으로 돌아가기
-                showPdfDisplayOptions()
-            }
-            .setNegativeButton("취소") { _, _ ->
-                // 원래 설정으로 복원
-                currentTopClipping = originalTop
-                currentBottomClipping = originalBottom
-                forceDirectRendering = true
-                showPage(pageIndex)
-            }
-            .setOnCancelListener {
-                // 취소 시에도 원래 설정으로 복원
-                currentTopClipping = originalTop
-                currentBottomClipping = originalBottom
-                forceDirectRendering = true
-                showPage(pageIndex)
-            }
-            .show()
-    }
-    
-    /**
-     * 사용자 정의 클리핑 설정 다이얼로그 (deprecated - showClippingDialog로 통합됨)
-     */
-    @Deprecated("Use showClippingDialog instead", ReplaceWith("showClippingDialog()"))
-    private fun showCustomClippingDialog() {
-        // 커스텀 레이아웃 생성
-        val dialogView = android.widget.LinearLayout(this).apply {
-            orientation = android.widget.LinearLayout.VERTICAL
-            setPadding(50, 30, 50, 30)
-        }
-        
-        // 위쪽 클리핑 레이블
-        val topLabel = android.widget.TextView(this).apply {
-            text = "위쪽 클리핑: ${(currentTopClipping * 100).toInt()}%"
-            textSize = 16f
-            setPadding(0, 0, 0, 10)
-        }
-        dialogView.addView(topLabel)
-        
-        // 위쪽 클리핑 슬라이더 (0-30%)
-        val topSeekBar = android.widget.SeekBar(this).apply {
-            max = 15  // 0-15%
-            progress = (currentTopClipping * 100).toInt()
-            setPadding(0, 0, 0, 30)
+
+        val previewHandler = android.os.Handler(android.os.Looper.getMainLooper())
+        val previewRunnable = Runnable { applyPreview() }
+        fun android.widget.SeekBar.follow(label: android.widget.TextView, name: String) {
             setOnSeekBarChangeListener(object : android.widget.SeekBar.OnSeekBarChangeListener {
                 override fun onProgressChanged(seekBar: android.widget.SeekBar?, progress: Int, fromUser: Boolean) {
-                    topLabel.text = "위쪽 클리핑: ${progress}%"
+                    label.text = "$name: $progress%"
+                    if (fromUser) {
+                        previewHandler.removeCallbacks(previewRunnable)
+                        previewHandler.postDelayed(previewRunnable, 200)
+                    }
                 }
                 override fun onStartTrackingTouch(seekBar: android.widget.SeekBar?) {}
                 override fun onStopTrackingTouch(seekBar: android.widget.SeekBar?) {}
             })
         }
-        dialogView.addView(topSeekBar)
-        
-        // 아래쪽 클리핑 레이블
-        val bottomLabel = android.widget.TextView(this).apply {
-            text = "아래쪽 클리핑: ${(currentBottomClipping * 100).toInt()}%"
-            textSize = 16f
-            setPadding(0, 0, 0, 10)
-        }
-        dialogView.addView(bottomLabel)
-        
-        // 아래쪽 클리핑 슬라이더 (0-30%)
-        val bottomSeekBar = android.widget.SeekBar(this).apply {
-            max = 15  // 0-15%
-            progress = (currentBottomClipping * 100).toInt()
-            setPadding(0, 0, 0, 20)
-            setOnSeekBarChangeListener(object : android.widget.SeekBar.OnSeekBarChangeListener {
-                override fun onProgressChanged(seekBar: android.widget.SeekBar?, progress: Int, fromUser: Boolean) {
-                    bottomLabel.text = "아래쪽 클리핑: ${progress}%"
-                }
-                override fun onStartTrackingTouch(seekBar: android.widget.SeekBar?) {}
-                override fun onStopTrackingTouch(seekBar: android.widget.SeekBar?) {}
-            })
-        }
-        dialogView.addView(bottomSeekBar)
-        
-        // 미리보기 텍스트
-        val previewLabel = android.widget.TextView(this).apply {
-            text = "실시간 미리보기가 적용됩니다"
-            textSize = 12f
-            setTextColor(android.graphics.Color.GRAY)
-            gravity = android.view.Gravity.CENTER
-        }
-        dialogView.addView(previewLabel)
-        
-        // 실시간 미리보기를 위한 변수
-        var previewHandler: android.os.Handler? = null
-        var previewRunnable: Runnable? = null
-        
-        val applyPreview = {
-            val topPercent = topSeekBar.progress / 100f
-            val bottomPercent = bottomSeekBar.progress / 100f
-            
-            // 임시로 설정 적용 (저장하지 않음)
-            val oldTop = currentTopClipping
-            val oldBottom = currentBottomClipping
-            currentTopClipping = topPercent
-            currentBottomClipping = bottomPercent
-            
-            // 페이지 다시 렌더링
-            forceDirectRendering = true
-            showPage(pageIndex)
-            
-            Log.d("PdfViewerActivity", "미리보기 적용: 위 ${(topPercent * 100).toInt()}%, 아래 ${(bottomPercent * 100).toInt()}%")
-        }
-        
-        val setupPreview = { _: android.widget.SeekBar ->
-            previewRunnable?.let { previewHandler?.removeCallbacks(it) }
-            previewRunnable = Runnable { applyPreview() }
-            previewHandler = android.os.Handler(android.os.Looper.getMainLooper())
-            previewHandler?.postDelayed(previewRunnable!!, 200) // 200ms 딜레이
-        }
-        
-        // 슬라이더에 실시간 미리보기 연결
-        topSeekBar.setOnSeekBarChangeListener(object : android.widget.SeekBar.OnSeekBarChangeListener {
-            override fun onProgressChanged(seekBar: android.widget.SeekBar?, progress: Int, fromUser: Boolean) {
-                topLabel.text = "위쪽 클리핑: ${progress}%"
-                if (fromUser) setupPreview(seekBar!!)
-            }
-            override fun onStartTrackingTouch(seekBar: android.widget.SeekBar?) {}
-            override fun onStopTrackingTouch(seekBar: android.widget.SeekBar?) {}
-        })
-        
-        bottomSeekBar.setOnSeekBarChangeListener(object : android.widget.SeekBar.OnSeekBarChangeListener {
-            override fun onProgressChanged(seekBar: android.widget.SeekBar?, progress: Int, fromUser: Boolean) {
-                bottomLabel.text = "아래쪽 클리핑: ${progress}%"
-                if (fromUser) setupPreview(seekBar!!)
-            }
-            override fun onStartTrackingTouch(seekBar: android.widget.SeekBar?) {}
-            override fun onStopTrackingTouch(seekBar: android.widget.SeekBar?) {}
-        })
-        
+        topSeekBar.follow(topLabel, "위쪽 자르기")
+        bottomSeekBar.follow(bottomLabel, "아래쪽 자르기")
+        padding?.let { (label, seek) -> seek.follow(label, "가운데 여백 (두 쪽 사이)") }
+
         AlertDialog.Builder(this)
-            .setTitle("사용자 정의 클리핑 설정")
+            .setTitle(if (withPadding) "자르기 · 여백" else "위/아래 자르기")
             .setView(dialogView)
             .setPositiveButton("적용") { _, _ ->
-                val topPercent = topSeekBar.progress / 100f
-                val bottomPercent = bottomSeekBar.progress / 100f
-                
-                saveClippingSettings(topPercent, bottomPercent)
-                Toast.makeText(this, "위 ${(topPercent * 100).toInt()}%, 아래 ${(bottomPercent * 100).toInt()}% 클리핑을 적용했습니다", Toast.LENGTH_SHORT).show()
-                
-                Log.d("PdfViewerActivity", "=== 사용자 정의 클리핑 설정 적용 ===")
-                Log.d("PdfViewerActivity", "위: ${(topPercent * 100).toInt()}%, 아래: ${(bottomPercent * 100).toInt()}%")
-                
+                previewHandler.removeCallbacks(previewRunnable)
+                val top = topSeekBar.progress / 100f
+                val bottom = bottomSeekBar.progress / 100f
+                val center = padding?.second?.progress?.div(100f) ?: originalPadding
+                saveClippingSettings(top, bottom, center)
+                currentTopClipping = top
+                currentBottomClipping = bottom
+                currentCenterPadding = center
                 registerSettingsCallback()
                 forceDirectRendering = true
                 showPage(pageIndex)
-            }
-            .setNegativeButton("취소") { _, _ ->
-                // 원래 설정으로 복원
-                forceDirectRendering = true
-                showPage(pageIndex)
-            }
-            .setOnCancelListener {
-                // 취소 시에도 원래 설정으로 복원
-                forceDirectRendering = true
-                showPage(pageIndex)
-            }
-            .show()
-    }
-    
-    /**
-     * 현재 여백 설정에 해당하는 선택 항목 찾기
-     */
-    @Deprecated("No longer needed with slider UI")
-    private fun getCurrentPaddingSelection(): Int {
-        return when {
-            currentCenterPadding == 0f -> 0    // 여백 없음
-            currentCenterPadding == 0.05f -> 1   // 5%
-            currentCenterPadding == 0.10f -> 2   // 10%
-            else -> -1 // 사용자 정의
-        }
-    }
-    
-    /**
-     * 가운데 여백 설정 다이얼로그
-     */
-    private fun showPaddingDialog() {
-        // 커스텀 레이아웃 생성
-        val dialogView = android.widget.LinearLayout(this).apply {
-            orientation = android.widget.LinearLayout.VERTICAL
-            setPadding(50, 30, 50, 30)
-        }
-        
-        // 가운데 여백 레이블
-        val paddingLabel = android.widget.TextView(this).apply {
-            text = "가운데 여백: ${(currentCenterPadding * 100).toInt()}%"
-            textSize = 16f
-            setPadding(0, 0, 0, 10)
-        }
-        dialogView.addView(paddingLabel)
-        
-        // 가운데 여백 슬라이더 (0-15%)
-        val paddingSeekBar = android.widget.SeekBar(this).apply {
-            max = 15  // 0-15%
-            progress = (currentCenterPadding * 100).toInt()
-            setPadding(0, 0, 0, 20)
-        }
-        dialogView.addView(paddingSeekBar)
-        
-        // 실시간 미리보기를 위한 변수
-        var previewHandler: android.os.Handler? = null
-        var previewRunnable: Runnable? = null
-        
-        // 원래 설정 저장
-        val originalPadding = currentCenterPadding
-        
-        val applyPreview = {
-            val paddingPercent = paddingSeekBar.progress / 100f
-            
-            // 임시로 설정 적용 (저장하지 않음)
-            currentCenterPadding = paddingPercent
-            
-            // 페이지 다시 렌더링
-            forceDirectRendering = true
-            showPage(pageIndex)
-            
-            Log.d("PdfViewerActivity", "미리보기 적용: 가운데 여백 ${(paddingPercent * 100).toInt()}%")
-        }
-        
-        // 빠른 설정 버튼들
-        val quickButtonsLayout = android.widget.LinearLayout(this).apply {
-            orientation = android.widget.LinearLayout.HORIZONTAL
-            gravity = android.view.Gravity.CENTER
-            setPadding(0, 20, 0, 10)
-        }
-        
-        val resetButton = android.widget.Button(this).apply {
-            text = "여백 없음"
-            setOnClickListener {
-                paddingSeekBar.progress = 0
-                applyPreview()
-            }
-        }
-        quickButtonsLayout.addView(resetButton)
-        
-        val preset5Button = android.widget.Button(this).apply {
-            text = "5%"
-            setOnClickListener {
-                paddingSeekBar.progress = 5
-                applyPreview()
-            }
-        }
-        quickButtonsLayout.addView(preset5Button)
-        
-        val preset10Button = android.widget.Button(this).apply {
-            text = "10%"
-            setOnClickListener {
-                paddingSeekBar.progress = 10
-                applyPreview()
-            }
-        }
-        quickButtonsLayout.addView(preset10Button)
-        
-        dialogView.addView(quickButtonsLayout)
-        
-        // 미리보기 텍스트
-        val previewLabel = android.widget.TextView(this).apply {
-            text = "실시간 미리보기가 적용됩니다"
-            textSize = 12f
-            setTextColor(android.graphics.Color.GRAY)
-            gravity = android.view.Gravity.CENTER
-            setPadding(0, 10, 0, 0)
-        }
-        dialogView.addView(previewLabel)
-        
-        val setupPreview = { _: android.widget.SeekBar ->
-            previewRunnable?.let { previewHandler?.removeCallbacks(it) }
-            previewRunnable = Runnable { applyPreview() }
-            previewHandler = android.os.Handler(android.os.Looper.getMainLooper())
-            previewHandler?.postDelayed(previewRunnable!!, 200) // 200ms 딜레이
-        }
-        
-        // 슬라이더에 실시간 미리보기 연결
-        paddingSeekBar.setOnSeekBarChangeListener(object : android.widget.SeekBar.OnSeekBarChangeListener {
-            override fun onProgressChanged(seekBar: android.widget.SeekBar?, progress: Int, fromUser: Boolean) {
-                paddingLabel.text = "가운데 여백: ${progress}%"
-                if (fromUser) setupPreview(seekBar!!)
-            }
-            override fun onStartTrackingTouch(seekBar: android.widget.SeekBar?) {}
-            override fun onStopTrackingTouch(seekBar: android.widget.SeekBar?) {}
-        })
-        
-        AlertDialog.Builder(this)
-            .setTitle("가운데 여백 설정")
-            .setView(dialogView)
-            .setPositiveButton("적용") { _, _ ->
-                val paddingPercent = paddingSeekBar.progress / 100f
-                
-                savePaddingSettings(paddingPercent)
-                Toast.makeText(this, "가운데 여백 ${(paddingPercent * 100).toInt()}%를 적용했습니다", Toast.LENGTH_SHORT).show()
-                
-                Log.d("PdfViewerActivity", "=== 가운데 여백 설정 적용 ===")
-                Log.d("PdfViewerActivity", "여백: ${(paddingPercent * 100).toInt()}%")
-                
-                registerSettingsCallback()
-                forceDirectRendering = true
-                showPage(pageIndex)
-                
-                // 설정 완료 후 PDF 표시 옵션으로 돌아가기
+                // 적용 뒤 보기 메뉴로 돌아간다
                 showPdfDisplayOptions()
             }
             .setNegativeButton("취소") { _, _ ->
-                // 원래 설정으로 복원
-                currentCenterPadding = originalPadding
-                forceDirectRendering = true
-                showPage(pageIndex)
+                previewHandler.removeCallbacks(previewRunnable)
+                restore()
             }
             .setOnCancelListener {
-                // 취소 시에도 원래 설정으로 복원
-                currentCenterPadding = originalPadding
-                forceDirectRendering = true
-                showPage(pageIndex)
+                previewHandler.removeCallbacks(previewRunnable)
+                restore()
             }
             .show()
     }
@@ -6667,82 +6334,28 @@ class PdfViewerActivity : AppCompatActivity() {
         }
     }
     
-    /**
-     * 클리핑 설정을 데이터베이스에 저장
-     */
-    private fun saveClippingSettings(topPercent: Float, bottomPercent: Float) {
+    /** 위/아래 자르기 · 가운데 여백을 이 파일의 표시 설정에 함께 저장 — 따로 저장하면 읽고 쓰는 사이에 서로 덮는다 */
+    private fun saveClippingSettings(topPercent: Float, bottomPercent: Float, centerPadding: Float) {
         currentPdfFileId?.let { fileId ->
             CoroutineScope(Dispatchers.IO).launch {
                 try {
                     val currentPrefs = musicRepository.getUserPreference(fileId)
-                    val updatedPrefs = if (currentPrefs != null) {
-                        currentPrefs.copy(
-                            topClippingPercent = topPercent,
-                            bottomClippingPercent = bottomPercent,
-                            updatedAt = System.currentTimeMillis()
-                        )
-                    } else {
-                        // 기본 설정으로 새로 생성
-                        UserPreference(
-                            pdfFileId = fileId,
-                            displayMode = DisplayMode.AUTO,
-                            topClippingPercent = topPercent,
-                            bottomClippingPercent = bottomPercent
-                        )
-                    }
+                    val updatedPrefs = currentPrefs?.copy(
+                        topClippingPercent = topPercent,
+                        bottomClippingPercent = bottomPercent,
+                        centerPadding = centerPadding,
+                        updatedAt = System.currentTimeMillis()
+                    ) ?: UserPreference(
+                        pdfFileId = fileId,
+                        displayMode = DisplayMode.AUTO,
+                        topClippingPercent = topPercent,
+                        bottomClippingPercent = bottomPercent,
+                        centerPadding = centerPadding
+                    )
                     musicRepository.insertUserPreference(updatedPrefs)
-                    
-                    // Update current settings
-                    withContext(Dispatchers.Main) {
-                        Log.d("PdfViewerActivity", "=== 클리핑 설정 업데이트 ===")
-                        Log.d("PdfViewerActivity", "이전: 위 ${currentTopClipping * 100}%, 아래 ${currentBottomClipping * 100}%")
-                        currentTopClipping = topPercent
-                        currentBottomClipping = bottomPercent
-                        Log.d("PdfViewerActivity", "이후: 위 ${currentTopClipping * 100}%, 아래 ${currentBottomClipping * 100}%")
-                    }
-                    
-                    Log.d("PdfViewerActivity", "클리핑 설정 저장 완료: 위 ${topPercent * 100}%, 아래 ${bottomPercent * 100}%")
+                    Log.d("PdfViewerActivity", "자르기 · 여백 저장: 위 ${topPercent * 100}%, 아래 ${bottomPercent * 100}%, 여백 ${centerPadding * 100}%")
                 } catch (e: Exception) {
-                    Log.e("PdfViewerActivity", "클리핑 설정 저장 실패", e)
-                }
-            }
-        }
-    }
-    
-    /**
-     * 여백 설정을 데이터베이스에 저장
-     */
-    private fun savePaddingSettings(padding: Float) {
-        currentPdfFileId?.let { fileId ->
-            CoroutineScope(Dispatchers.IO).launch {
-                try {
-                    val currentPrefs = musicRepository.getUserPreference(fileId)
-                    val updatedPrefs = if (currentPrefs != null) {
-                        currentPrefs.copy(
-                            centerPadding = padding,
-                            updatedAt = System.currentTimeMillis()
-                        )
-                    } else {
-                        // 기본 설정으로 새로 생성
-                        UserPreference(
-                            pdfFileId = fileId,
-                            displayMode = DisplayMode.AUTO,
-                            centerPadding = padding
-                        )
-                    }
-                    musicRepository.insertUserPreference(updatedPrefs)
-                    
-                    // Update current settings
-                    withContext(Dispatchers.Main) {
-                        Log.d("PdfViewerActivity", "=== 여백 설정 업데이트 ===")
-                        Log.d("PdfViewerActivity", "이전: ${(currentCenterPadding * 100).toInt()}%")
-                        currentCenterPadding = padding
-                        Log.d("PdfViewerActivity", "이후: ${(currentCenterPadding * 100).toInt()}%")
-                    }
-                    
-                    Log.d("PdfViewerActivity", "여백 설정 저장 완료: ${(padding * 100).toInt()}%")
-                } catch (e: Exception) {
-                    Log.e("PdfViewerActivity", "여백 설정 저장 실패", e)
+                    Log.e("PdfViewerActivity", "자르기 · 여백 저장 실패", e)
                 }
             }
         }
