@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <androidx.cardview.widget.CardView xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:layout_marginVertical="4dp"
@@ -27,7 +28,7 @@
                 android:id="@+id/conductorName"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Android TV (지휘자)"
+                tools:text="Android TV (지휘자)"
                 android:textColor="@color/tv_text_primary"
                 android:textSize="@dimen/body_text_size"
                 android:textStyle="bold"
@@ -37,7 +38,7 @@
                 android:id="@+id/conductorAddress"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="192.168.1.100:9090"
+                tools:text="192.168.1.100:9090"
                 android:textColor="@color/tv_text_secondary"
                 android:textSize="@dimen/small_text_size"
                 android:layout_marginBottom="2dp" />
@@ -46,7 +47,7 @@
                 android:id="@+id/conductorTimestamp"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="발견: 22:04:35"
+                tools:text="발견: 22:04:35"
                 android:textColor="@color/tv_text_secondary"
                 android:textSize="@dimen/small_text_size" />
 
@@ -57,7 +58,7 @@
             android:id="@+id/connectToConductorBtn"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="연결"
+            android:text="@string/main_connect"
             android:textSize="@dimen/small_text_size"
             android:backgroundTint="@color/tv_primary"
             android:textColor="@color/tv_text_primary"

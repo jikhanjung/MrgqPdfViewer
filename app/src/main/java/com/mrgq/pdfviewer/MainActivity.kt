@@ -144,7 +144,7 @@ class MainActivity : AppCompatActivity() {
     private suspend fun runScoreMateSync(quiet: Boolean, background: Boolean = false) {
         if (GlobalCollaborationManager.getInstance().getCurrentMode() != CollaborationMode.NONE) return
         if (scoreMateSyncing) {
-            if (!quiet) Toast.makeText(this, "ScoreMate 동기화가 이미 진행 중입니다", Toast.LENGTH_SHORT).show()
+            if (!quiet) Toast.makeText(this, getString(R.string.main_sync_already_running), Toast.LENGTH_SHORT).show()
             return
         }
         scoreMateSyncing = true
@@ -166,7 +166,7 @@ class MainActivity : AppCompatActivity() {
         if (summary != null && (report.changed || !quiet || report.errors.isNotEmpty())) {
             Toast.makeText(this, summary, Toast.LENGTH_LONG).show()
         } else if (summary == null && !quiet) {
-            Toast.makeText(this, "ScoreMate: 바뀐 악보가 없습니다", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, getString(R.string.main_sync_no_changes), Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -207,7 +207,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun cloudLabel(score: com.mrgq.pdfviewer.scoremate.SyncedScore): String =
-        listOfNotNull(score.ensembleName ?: "내 악보", score.partName.takeIf { it.isNotBlank() }, "판 ${score.versionNumber}")
+        listOfNotNull(score.ensembleName ?: getString(R.string.main_cloud_my_scores), score.partName.takeIf { it.isNotBlank() }, getString(R.string.main_cloud_version, score.versionNumber))
             .joinToString(" · ")
 
     private val autoUpdateCheck: Runnable = object : Runnable {
@@ -305,7 +305,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun setupLibraryHeader() {
         binding.scoreMateSyncBtn.setOnClickListener {
-            Toast.makeText(this, "ScoreMate 동기화 중…", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, getString(R.string.main_sync_running), Toast.LENGTH_SHORT).show()
             lifecycleScope.launch { runScoreMateSync(quiet = false) }
         }
         // 당겨서 동기화 (P17 4단계) — 켜는 조건은 showLibrary. 목록이 맨 위일 때만 당겨진다(빈 화면 안내도 그 틀 안)
@@ -425,20 +425,20 @@ class MainActivity : AppCompatActivity() {
             val missing = entries.size - shown.size
             // 세트리스트 이름은 줄에 이미 보인다 — 여기는 아직 받지 않은 곡이 있을 때만 알린다
             // "ScoreMate" 는 첫 줄 앱 이름 옆에 있다 — 여기는 아직 받지 않은 곡이 있을 때만
-            binding.librarySource.text = if (missing > 0) "${entries.size}곡 중 ${shown.size}곡" else ""
-            binding.emptyTitle.text = "이 세트리스트의 악보를 아직 받지 않았습니다"
-            binding.emptyHint.text = "🔄 동기화 를 누르세요"
+            binding.librarySource.text = if (missing > 0) getString(R.string.main_setlist_missing, entries.size, shown.size) else ""
+            binding.emptyTitle.text = getString(R.string.main_empty_setlist_title)
+            binding.emptyHint.text = getString(R.string.main_empty_setlist_hint)
         } else if (scoreMateLinked) {
             // 받은 세트리스트가 없다 — 곡목에 없는 악보는 보이지 않는다
             shown = emptyList()
             binding.librarySource.text = ""
-            binding.emptyTitle.text = "받은 세트리스트가 없습니다"
-            binding.emptyHint.text = "웹에서 이 $device 로 보낼 세트리스트를 고른 뒤 🔄 동기화 를 누르세요"
+            binding.emptyTitle.text = getString(R.string.main_empty_no_setlists_title)
+            binding.emptyHint.text = getString(R.string.main_empty_no_setlists_hint, device)
         } else {
             shown = allPdfFiles
-            binding.librarySource.text = "이 기기 파일 ${allPdfFiles.size}"
-            binding.emptyTitle.text = "PDF 파일이 없습니다"
-            binding.emptyHint.text = "설정에서 웹서버를 통해 파일을 업로드하세요"
+            binding.librarySource.text = getString(R.string.main_local_file_count, allPdfFiles.size)
+            binding.emptyTitle.text = getString(R.string.main_empty_local_title)
+            binding.emptyHint.text = getString(R.string.main_empty_local_hint)
         }
         // 비었으면 자리도 비운다 — 세트리스트 줄이 왼쪽부터
         binding.librarySource.visibility = if (binding.librarySource.text.isNullOrEmpty()) View.GONE else View.VISIBLE
@@ -461,13 +461,13 @@ class MainActivity : AppCompatActivity() {
         val currentMode = globalManager.getCurrentMode()
         
         val options = when (currentMode) {
-            CollaborationMode.NONE -> arrayOf("지휘자 모드 시작", "연주자 모드 시작", "취소")
-            CollaborationMode.CONDUCTOR -> arrayOf("지휘자 모드 종료", "취소")
-            CollaborationMode.PERFORMER -> arrayOf("연주자 모드 종료", "취소")
+            CollaborationMode.NONE -> arrayOf(getString(R.string.main_ensemble_start_conductor), getString(R.string.main_ensemble_start_performer), getString(R.string.cancel))
+            CollaborationMode.CONDUCTOR -> arrayOf(getString(R.string.main_ensemble_stop_conductor), getString(R.string.cancel))
+            CollaborationMode.PERFORMER -> arrayOf(getString(R.string.main_ensemble_stop_performer), getString(R.string.cancel))
         }
         
         androidx.appcompat.app.AlertDialog.Builder(this)
-            .setTitle("합주 모드")
+            .setTitle(getString(R.string.main_ensemble_mode_title))
             .setItems(options) { _, which ->
                 when (currentMode) {
                     CollaborationMode.NONE -> {
@@ -502,7 +502,7 @@ class MainActivity : AppCompatActivity() {
         val success = globalManager.activateConductorMode()
         
         if (success) {
-            Toast.makeText(this, "지휘자 모드가 시작되었습니다", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, getString(R.string.main_conductor_started), Toast.LENGTH_SHORT).show()
             
             // STEP 2: Setup ALL callbacks AFTER mode activation (so they don't get cleared)
             Log.d("MainActivity", "🎯 Setting up conductor callbacks")
@@ -513,7 +513,7 @@ class MainActivity : AppCompatActivity() {
             
             Log.d("MainActivity", "🎯 Conductor mode ready - waiting for performers")
         } else {
-            Toast.makeText(this, "지휘자 모드 시작 실패", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, getString(R.string.main_conductor_start_failed), Toast.LENGTH_SHORT).show()
         }
     }
     
@@ -533,13 +533,13 @@ class MainActivity : AppCompatActivity() {
     
     private fun showManualConnectionOption() {
         androidx.appcompat.app.AlertDialog.Builder(this)
-            .setTitle("지휘자 연결")
-            .setMessage("자동 발견에 실패했습니다.\n수동으로 지휘자 IP를 입력하시겠습니까?")
-            .setPositiveButton("수동 입력") { _, _ ->
+            .setTitle(getString(R.string.main_conductor_connect_title))
+            .setMessage(getString(R.string.main_discovery_failed_message))
+            .setPositiveButton(getString(R.string.main_manual_entry)) { _, _ ->
                 showManualConnectionDialog()
             }
-            .setNegativeButton("계속 자동 발견", null)
-            .setNeutralButton("연주자 모드 종료") { _, _ ->
+            .setNegativeButton(getString(R.string.main_keep_discovering), null)
+            .setNeutralButton(getString(R.string.main_ensemble_stop_performer)) { _, _ ->
                 stopCollaborationMode()
             }
             .show()
@@ -561,7 +561,7 @@ class MainActivity : AppCompatActivity() {
         
         if (success) {
             updateCollaborationStatus()
-            Toast.makeText(this, "연주자 모드 시작 - 지휘자 자동 검색 중...", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, getString(R.string.main_performer_searching), Toast.LENGTH_SHORT).show()
             
             // STEP 2: Setup ALL callbacks AFTER mode activation (so they don't get cleared)
             Log.d("MainActivity", "🎯 Setting up collaboration callbacks")
@@ -577,11 +577,11 @@ class MainActivity : AppCompatActivity() {
                     // Auto-connect to discovered conductor
                     val connected = globalManager.connectToDiscoveredConductor(conductorInfo)
                     if (connected) {
-                        Toast.makeText(this, "지휘자 발견 - 연결 중...", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(this, getString(R.string.main_conductor_found_connecting), Toast.LENGTH_SHORT).show()
                         // Stop discovery after successful connection attempt
                         globalManager.stopConductorDiscovery()
                     } else {
-                        Toast.makeText(this, "지휘자 연결 실패", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(this, getString(R.string.main_conductor_connect_failed), Toast.LENGTH_SHORT).show()
                     }
                 }
             }
@@ -589,7 +589,7 @@ class MainActivity : AppCompatActivity() {
             globalManager.setOnDiscoveryTimeout {
                 runOnUiThread {
                     Log.d("MainActivity", "🎯 Discovery timeout in UI")
-                    Toast.makeText(this, "지휘자를 찾을 수 없습니다. 수동 연결을 시도해보세요.", Toast.LENGTH_LONG).show()
+                    Toast.makeText(this, getString(R.string.main_conductor_not_found), Toast.LENGTH_LONG).show()
                 }
             }
             
@@ -598,28 +598,28 @@ class MainActivity : AppCompatActivity() {
             val discoveryStarted = globalManager.startConductorDiscovery()
             
             if (!discoveryStarted) {
-                Toast.makeText(this, "자동 검색 시작 실패", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, getString(R.string.main_discovery_start_failed), Toast.LENGTH_SHORT).show()
             }
         } else {
-            Toast.makeText(this, "연주자 모드 시작 실패", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, getString(R.string.main_performer_start_failed), Toast.LENGTH_SHORT).show()
         }
     }
     
     private fun showConductorFoundDialog(conductorInfo: com.mrgq.pdfviewer.ConductorDiscovery.ConductorInfo) {
         androidx.appcompat.app.AlertDialog.Builder(this)
-            .setTitle("지휘자 발견")
-            .setMessage("${conductorInfo.name}\nIP: ${conductorInfo.ipAddress}\n\n연결하시겠습니까?")
-            .setPositiveButton("연결") { _, _ ->
+            .setTitle(getString(R.string.main_conductor_found_title))
+            .setMessage(getString(R.string.main_conductor_found_message, conductorInfo.name, conductorInfo.ipAddress))
+            .setPositiveButton(getString(R.string.main_connect)) { _, _ ->
                 val globalManager = GlobalCollaborationManager.getInstance()
                 val connected = globalManager.connectToDiscoveredConductor(conductorInfo)
                 if (connected) {
-                    Toast.makeText(this, "지휘자에 연결 중...", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this, getString(R.string.main_connecting_to_conductor), Toast.LENGTH_SHORT).show()
                     // 상태 업데이트는 콜백에서 처리되도록 함
                 } else {
-                    Toast.makeText(this, "연결 실패", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this, getString(R.string.main_connect_failed), Toast.LENGTH_SHORT).show()
                 }
             }
-            .setNegativeButton("취소", null)
+            .setNegativeButton(getString(R.string.cancel), null)
             .show()
     }
     
@@ -630,7 +630,7 @@ class MainActivity : AppCompatActivity() {
         if (globalManager.getCurrentMode() != CollaborationMode.PERFORMER) {
             val success = globalManager.activatePerformerMode()
             if (!success) {
-                Toast.makeText(this, "연주자 모드 시작 실패", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, getString(R.string.main_performer_start_failed), Toast.LENGTH_SHORT).show()
                 return
             }
             updateCollaborationStatus()
@@ -641,18 +641,18 @@ class MainActivity : AppCompatActivity() {
         input.inputType = android.text.InputType.TYPE_CLASS_TEXT
         
         androidx.appcompat.app.AlertDialog.Builder(this)
-            .setTitle("수동 연결")
-            .setMessage("지휘자의 IP 주소를 입력하세요:")
+            .setTitle(getString(R.string.main_manual_connect_title))
+            .setMessage(getString(R.string.main_manual_connect_message))
             .setView(input)
-            .setPositiveButton("연결") { _, _ ->
+            .setPositiveButton(getString(R.string.main_connect)) { _, _ ->
                 val ip = input.text.toString().trim()
                 if (ip.isNotEmpty()) {
                     connectToManualConductor(ip)
                 } else {
-                    Toast.makeText(this, "IP 주소를 입력해주세요", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this, getString(R.string.main_enter_ip), Toast.LENGTH_SHORT).show()
                 }
             }
-            .setNegativeButton("취소", null)
+            .setNegativeButton(getString(R.string.cancel), null)
             .show()
     }
     
@@ -664,17 +664,17 @@ class MainActivity : AppCompatActivity() {
         val connected = globalManager.connectToConductor(ip, 9090, "$deviceName (연주자)")
         
         if (connected) {
-            Toast.makeText(this, "지휘자에 연결 중... ($ip)", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, getString(R.string.main_connecting_to_conductor_ip, ip), Toast.LENGTH_SHORT).show()
             // 상태 업데이트는 콜백에서 처리되도록 함
         } else {
-            Toast.makeText(this, "연결 실패. IP 주소와 지휘자 상태를 확인해주세요.", Toast.LENGTH_LONG).show()
+            Toast.makeText(this, getString(R.string.main_manual_connect_failed), Toast.LENGTH_LONG).show()
         }
     }
     
     private fun stopCollaborationMode() {
         val globalManager = GlobalCollaborationManager.getInstance()
         globalManager.deactivateCollaborationMode()
-        Toast.makeText(this, "합주 모드가 종료되었습니다", Toast.LENGTH_SHORT).show()
+        Toast.makeText(this, getString(R.string.main_ensemble_stopped), Toast.LENGTH_SHORT).show()
         updateCollaborationStatus()
     }
     
@@ -831,7 +831,7 @@ class MainActivity : AppCompatActivity() {
         // 지휘자가 합주를 끝냈다 — 이 기기도 끝났다
         globalCollaborationManager.setOnEnsembleEnded {
             if (isDestroyed) return@setOnEnsembleEnded
-            Toast.makeText(this, "지휘자가 합주를 끝냈습니다 — 합주 모드 종료", Toast.LENGTH_LONG).show()
+            Toast.makeText(this, getString(R.string.main_ensemble_ended_by_conductor), Toast.LENGTH_LONG).show()
             updateCollaborationStatus()
         }
         
@@ -847,7 +847,7 @@ class MainActivity : AppCompatActivity() {
             runOnUiThread {
                 Log.d("MainActivity", "🎼 지휘자 모드: 연주자 연결됨 - $deviceName")
                 updateCollaborationStatus()
-                Toast.makeText(this, "연주자 '$deviceName'이 연결되었습니다", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, getString(R.string.main_performer_connected, deviceName), Toast.LENGTH_SHORT).show()
             }
         }
         
@@ -855,7 +855,7 @@ class MainActivity : AppCompatActivity() {
             runOnUiThread {
                 Log.d("MainActivity", "🎼 지휘자 모드: 연주자 연결 해제됨")
                 updateCollaborationStatus()
-                Toast.makeText(this, "연주자 연결이 해제되었습니다", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, getString(R.string.main_performer_disconnected), Toast.LENGTH_SHORT).show()
             }
         }
         
@@ -879,9 +879,9 @@ class MainActivity : AppCompatActivity() {
                 
                 // 연결 성공 시에만 토스트 메시지 표시
                 if (isConnected) {
-                    Toast.makeText(this, "지휘자에 연결되었습니다", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this, getString(R.string.main_conductor_connected), Toast.LENGTH_SHORT).show()
                 } else {
-                    Toast.makeText(this, "지휘자와의 연결이 끊어졌습니다", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this, getString(R.string.main_conductor_disconnected), Toast.LENGTH_SHORT).show()
                 }
             }
         }
@@ -946,7 +946,7 @@ class MainActivity : AppCompatActivity() {
                     if (conductorAddress.isNotEmpty()) {
                         showDownloadDialog(fileName, conductorAddress, resolution.target, resolution.cached, page)
                     } else {
-                        Toast.makeText(this@MainActivity, "요청된 파일을 찾을 수 없습니다: $fileName", Toast.LENGTH_LONG).show()
+                        Toast.makeText(this@MainActivity, getString(R.string.main_requested_file_not_found, fileName), Toast.LENGTH_LONG).show()
                     }
                 }
             }
@@ -975,14 +975,14 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun showDownloadDialog(fileName: String, conductorAddress: String, target: File, cached: Boolean, page: Int) {
-        val where = if (cached) "\n(이 기기의 ScoreMate 에 없는 악보 — 합주용으로만 받아 두고 목록에는 넣지 않습니다)" else ""
+        val where = if (cached) "\n" + getString(R.string.main_download_cached_note) else ""
         androidx.appcompat.app.AlertDialog.Builder(this)
-            .setTitle("파일 다운로드")
-            .setMessage("'$fileName' 파일이 없습니다.\n지휘자로부터 다운로드하시겠습니까?$where")
-            .setPositiveButton("다운로드") { _, _ ->
+            .setTitle(getString(R.string.main_download_title))
+            .setMessage(getString(R.string.main_download_message, fileName, where))
+            .setPositiveButton(getString(R.string.main_download)) { _, _ ->
                 downloadFileFromConductor(fileName, conductorAddress, target, cached, page)
             }
-            .setNegativeButton("취소", null)
+            .setNegativeButton(getString(R.string.cancel), null)
             .show()
     }
 
@@ -993,7 +993,7 @@ class MainActivity : AppCompatActivity() {
         Log.d("MainActivity", "🎼 연주자 모드: 파일 다운로드 시작 - $fileServerUrl → $target")
 
         val progressDialog = androidx.appcompat.app.AlertDialog.Builder(this)
-            .setTitle("다운로드 중...")
+            .setTitle(getString(R.string.main_downloading))
             .setMessage("$fileName\n0%")
             .setCancelable(false)
             .create()
@@ -1025,14 +1025,14 @@ class MainActivity : AppCompatActivity() {
                 }
                 if (!part.renameTo(target)) {
                     target.delete()
-                    if (!part.renameTo(target)) throw java.io.IOException("받은 파일을 저장하지 못했습니다")
+                    if (!part.renameTo(target)) throw java.io.IOException(this@MainActivity.getString(R.string.main_download_save_failed))
                 }
                 if (cached) com.mrgq.pdfviewer.ensemble.EnsembleFiles.trimCache(ensembleCacheDir, keep = target)
 
                 withContext(Dispatchers.Main) {
                     progressDialog.dismiss()
                     Log.d("MainActivity", "🎼 연주자 모드: 파일 다운로드 완료 - $target")
-                    Toast.makeText(this@MainActivity, "파일 다운로드 완료: $fileName", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this@MainActivity, getString(R.string.main_download_done, fileName), Toast.LENGTH_SHORT).show()
                     if (!cached) loadPdfFiles() // 로컬 서재에 들어간다
                     openRemoteFile(target.path, page)
                 }
@@ -1041,7 +1041,7 @@ class MainActivity : AppCompatActivity() {
                 Log.e("MainActivity", "🎼 연주자 모드: 파일 다운로드 오류", e)
                 withContext(Dispatchers.Main) {
                     progressDialog.dismiss()
-                    Toast.makeText(this@MainActivity, "다운로드 오류: ${e.message}", Toast.LENGTH_LONG).show()
+                    Toast.makeText(this@MainActivity, getString(R.string.main_download_error, e.message), Toast.LENGTH_LONG).show()
                 }
             }
         }
@@ -1084,12 +1084,12 @@ class MainActivity : AppCompatActivity() {
     
     private fun showDeleteConfirmationDialog(pdfFile: PdfFile) {
         androidx.appcompat.app.AlertDialog.Builder(this)
-            .setTitle("파일 삭제")
-            .setMessage("${pdfFile.name} 파일을 삭제하시겠습니까?")
-            .setPositiveButton("삭제") { _, _ ->
+            .setTitle(getString(R.string.main_delete_title))
+            .setMessage(getString(R.string.main_delete_message, pdfFile.name))
+            .setPositiveButton(getString(R.string.main_delete)) { _, _ ->
                 deletePdfFile(pdfFile)
             }
-            .setNegativeButton("취소", null)
+            .setNegativeButton(getString(R.string.cancel), null)
             .show()
     }
     
@@ -1107,15 +1107,15 @@ class MainActivity : AppCompatActivity() {
                 
                 withContext(Dispatchers.Main) {
                     if (deleted) {
-                        Toast.makeText(this@MainActivity, "파일이 삭제되었습니다", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(this@MainActivity, getString(R.string.main_deleted), Toast.LENGTH_SHORT).show()
                         loadPdfFiles()
                     } else {
-                        Toast.makeText(this@MainActivity, "파일 삭제 실패", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(this@MainActivity, getString(R.string.main_delete_failed), Toast.LENGTH_SHORT).show()
                     }
                 }
             } catch (e: Exception) {
                 withContext(Dispatchers.Main) {
-                    Toast.makeText(this@MainActivity, "삭제 중 오류 발생: ${e.message}", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this@MainActivity, getString(R.string.main_delete_error, e.message), Toast.LENGTH_SHORT).show()
                 }
             }
         }
@@ -1141,10 +1141,10 @@ class MainActivity : AppCompatActivity() {
     
     private fun updateFileManagementUI() {
         if (isFileManagementMode) {
-            binding.fileManageBtn.text = "완료"
+            binding.fileManageBtn.text = getString(R.string.main_file_manage_done)
             binding.fileManageBtn.alpha = 1.0f
         } else {
-            binding.fileManageBtn.text = "파일관리"
+            binding.fileManageBtn.text = getString(R.string.main_file_manage)
             binding.fileManageBtn.alpha = 0.7f
         }
     }
@@ -1156,7 +1156,7 @@ class MainActivity : AppCompatActivity() {
         when (currentMode) {
             CollaborationMode.CONDUCTOR -> {
                 val clientCount = globalCollaborationManager.getConnectedClientCount()
-                binding.collaborationStatus.text = "🎼 지휘자 모드 활성 (연결된 연주자: ${clientCount}명)"
+                binding.collaborationStatus.text = getString(R.string.main_status_conductor, clientCount)
                 binding.collaborationStatus.visibility = android.view.View.VISIBLE
                 binding.collaborationStatus.setTextColor(ContextCompat.getColor(this, R.color.tv_secondary)) // 녹색으로 변경
             }
@@ -1174,19 +1174,19 @@ class MainActivity : AppCompatActivity() {
                 
                 // 더 관대한 연결 상태 판단: isConnected가 true이면 연결된 것으로 간주
                 if (isConnected) {
-                    val displayIp = if (conductorIp.isNotEmpty()) conductorIp else "지휘자"
-                    binding.collaborationStatus.text = "🎵 연주자 모드 (지휘자: $displayIp)"
+                    val displayIp = if (conductorIp.isNotEmpty()) conductorIp else getString(R.string.main_status_conductor_fallback)
+                    binding.collaborationStatus.text = getString(R.string.main_status_performer, displayIp)
                     binding.collaborationStatus.setTextColor(ContextCompat.getColor(this, R.color.tv_secondary)) // 녹색으로 변경
                     Log.d("MainActivity", "🎼 UI 업데이트: 연결됨 상태로 표시 - '$displayIp'")
                 } else {
-                    binding.collaborationStatus.text = "🎵 연주자 모드 (연결 끊김)"
+                    binding.collaborationStatus.text = getString(R.string.main_status_performer_disconnected)
                     binding.collaborationStatus.setTextColor(ContextCompat.getColor(this, R.color.tv_error))
                     Log.d("MainActivity", "🎼 UI 업데이트: 연결 끊김 상태로 표시")
                 }
                 binding.collaborationStatus.visibility = android.view.View.VISIBLE
             }
             CollaborationMode.NONE -> {
-                binding.collaborationStatus.text = "합주 모드: 비활성"
+                binding.collaborationStatus.text = getString(R.string.main_status_off)
                 binding.collaborationStatus.visibility = android.view.View.VISIBLE
                 binding.collaborationStatus.setTextColor(ContextCompat.getColor(this, R.color.tv_text_secondary))
             }

@@ -10,6 +10,7 @@ import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
 import com.mrgq.pdfviewer.R
 import com.mrgq.pdfviewer.model.PdfFile
+import com.mrgq.pdfviewer.utils.AppLanguage
 import com.mrgq.pdfviewer.utils.PdfDocumentInfo
 import java.text.SimpleDateFormat
 import java.util.*
@@ -104,6 +105,7 @@ class PdfFileAdapter(
             currentItem = pdfFile
             currentPosition = position
             // 세트리스트로 볼 때는 곡 순서를 앞에 (#064). ScoreMate 악보면 제목 옆에 파트(Full Score 등)를 작고 흐리게 (사용자 요청 2026-09-28)
+            val context = itemView.context
             val title = pdfFile.setlistPosition?.let { "$it. ${pdfFile.shownName}" } ?: pdfFile.shownName
             val part = pdfFile.partName?.takeIf { it.isNotBlank() && pdfFile.serverTitle != null }
             fileNameText.text = android.text.SpannableStringBuilder(title).apply {
@@ -115,15 +117,15 @@ class PdfFileAdapter(
                 }
                 if (part != null) small("   $part", 0xFFB0B0B0.toInt())
                 // 악보 메모 (P11) — 있으면 ✏️, 서버에 올리지 못한 것이 있으면 "동기화 필요" (사용자 요청 2026-10-08)
-                if (pdfFile.notesUnsent) small("   ✏️ 동기화 필요", 0xFFFFB74D.toInt())
+                if (pdfFile.notesUnsent) small("   " + context.getString(R.string.main_notes_sync_needed), 0xFFFFB74D.toInt())
                 else if (pdfFile.hasNotes) small("   ✏️", 0xFFB0B0B0.toInt())
             }
 
             // 둘째 줄 — ScoreMate 악보면 "작곡 ○○ · 편곡 ○○"(서버 곡 정보), 아니면 PDF 문서 정보(제목 · 작성자). 없으면 줄을 숨긴다
             val serverLine = if (pdfFile.serverTitle != null) {
                 listOfNotNull(
-                    pdfFile.composer?.takeIf { it.isNotBlank() }?.let { "작곡 $it" },
-                    pdfFile.arranger?.takeIf { it.isNotBlank() }?.let { "편곡 $it" },
+                    pdfFile.composer?.takeIf { it.isNotBlank() }?.let { context.getString(R.string.main_composer, it) },
+                    pdfFile.arranger?.takeIf { it.isNotBlank() }?.let { context.getString(R.string.main_arranger, it) },
                 ).joinToString(" · ").takeIf { it.isNotEmpty() }
             } else {
                 null
@@ -133,11 +135,12 @@ class PdfFileAdapter(
             docInfoText.text = subtitle ?: ""
             docInfoText.visibility = if (subtitle != null) View.VISIBLE else View.GONE
             
-            // Format file info
-            val dateFormat = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault())
+            // Format file info — 날짜는 앱 언어로, 크기 숫자는 Locale.US (P18 §4.2)
+            val dateFormat = SimpleDateFormat("yyyy-MM-dd HH:mm", AppLanguage.locale(context))
             val modifiedDate = dateFormat.format(Date(pdfFile.lastModified))
             val fileSize = formatFileSize(pdfFile.size)
-            val pageInfo = if (pdfFile.pageCount > 0) "${pdfFile.pageCount}페이지" else "페이지 수 알 수 없음"
+            val pageInfo = if (pdfFile.pageCount > 0) context.resources.getQuantityString(R.plurals.main_page_count, pdfFile.pageCount, pdfFile.pageCount)
+                else context.getString(R.string.main_page_count_unknown)
             // ScoreMate 악보여도 ☁️ · 앙상블 · 파트 · 판은 싣지 않는다 — 서재가 이미 ScoreMate 이고 파트는 제목 옆에 (사용자 요청 2026-09-28)
             val notes = pdfFile.setlistNotes?.takeIf { it.isNotBlank() }?.let { "📝 $it • " } ?: ""
             fileInfoText.text = "$notes$fileSize • $pageInfo • $modifiedDate"
@@ -151,7 +154,7 @@ class PdfFileAdapter(
             val k = 1024
             val sizes = arrayOf("B", "KB", "MB", "GB")
             val i = (ln(bytes.toDouble()) / ln(k.toDouble())).toInt()
-            return "%.1f %s".format(bytes / k.toDouble().pow(i.toDouble()), sizes[i])
+            return String.format(Locale.US, "%.1f %s", bytes / k.toDouble().pow(i.toDouble()), sizes[i])
         }
     }
     

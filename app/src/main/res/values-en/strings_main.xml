@@ -1,0 +1,100 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- English: score list · home · splash (P18 step 2) -->
+<resources>
+    <string name="main_device_tv">TV</string>
+    <string name="main_device_tablet">tablet</string>
+    <string name="main_device_phone">phone</string>
+
+    <string name="main_splash_tagline">Smart score reader for TV, tablet and phone</string>
+
+    <string name="main_ensemble_button">Ensemble</string>
+    <string name="main_settings_button">Settings</string>
+    <string name="main_sync_button">🔄 Sync</string>
+    <string name="main_sort">Sort</string>
+    <string name="main_sort_by_name">Name</string>
+    <string name="main_sort_by_time">Date</string>
+    <string name="main_file_manage">Manage files</string>
+    <string name="main_file_manage_done">Done</string>
+
+    <string name="main_sync_running">Syncing with ScoreMate…</string>
+    <string name="main_sync_already_running">ScoreMate sync is already running</string>
+    <string name="main_sync_no_changes">ScoreMate: no changed scores</string>
+    <string name="main_cloud_my_scores">My scores</string>
+    <string name="main_cloud_version">v%1$d</string>
+
+    <string name="main_setlist_missing">%2$d of %1$d songs</string>
+    <string name="main_empty_setlist_title">Scores in this setlist haven\'t been downloaded yet</string>
+    <string name="main_empty_setlist_hint">Press 🔄 Sync</string>
+    <string name="main_empty_no_setlists_title">No setlists received</string>
+    <string name="main_empty_no_setlists_hint">On the web, choose a setlist to send to this %1$s, then press 🔄 Sync</string>
+    <string name="main_local_file_count">Files on this device: %1$d</string>
+    <string name="main_empty_local_title">No PDF files</string>
+    <string name="main_empty_local_hint">Upload files through the web server in Settings</string>
+
+    <string name="main_notes_sync_needed">✏️ Needs sync</string>
+    <string name="main_composer">Composer: %1$s</string>
+    <string name="main_arranger">Arranger: %1$s</string>
+    <plurals name="main_page_count">
+        <item quantity="one">%1$d page</item>
+        <item quantity="other">%1$d pages</item>
+    </plurals>
+    <string name="main_page_count_unknown">Page count unknown</string>
+    <string name="main_delete">Delete</string>
+
+    <string name="main_status_off">Ensemble: off</string>
+    <string name="main_status_conductor">🎼 Conductor mode (performers: %1$d)</string>
+    <string name="main_status_performer">🎵 Performer mode (conductor: %1$s)</string>
+    <string name="main_status_performer_disconnected">🎵 Performer mode (disconnected)</string>
+    <string name="main_status_conductor_fallback">conductor</string>
+
+    <string name="main_ensemble_mode_title">Ensemble mode</string>
+    <string name="main_ensemble_start_conductor">Start conductor mode</string>
+    <string name="main_ensemble_start_performer">Start performer mode</string>
+    <string name="main_ensemble_stop_conductor">Stop conductor mode</string>
+    <string name="main_ensemble_stop_performer">Stop performer mode</string>
+    <string name="main_conductor_started">Conductor mode started</string>
+    <string name="main_conductor_start_failed">Couldn\'t start conductor mode</string>
+    <string name="main_conductor_connect_title">Connect to conductor</string>
+    <string name="main_discovery_failed_message">Couldn\'t find a conductor automatically.\nEnter the conductor\'s IP address manually?</string>
+    <string name="main_manual_entry">Enter manually</string>
+    <string name="main_keep_discovering">Keep searching</string>
+    <string name="main_performer_searching">Performer mode started - searching for a conductor...</string>
+    <string name="main_conductor_found_connecting">Conductor found - connecting...</string>
+    <string name="main_conductor_connect_failed">Couldn\'t connect to the conductor</string>
+    <string name="main_conductor_not_found">No conductor found. Try connecting manually.</string>
+    <string name="main_discovery_start_failed">Couldn\'t start searching</string>
+    <string name="main_performer_start_failed">Couldn\'t start performer mode</string>
+    <string name="main_conductor_found_title">Conductor found</string>
+    <string name="main_conductor_found_message">%1$s\nIP: %2$s\n\nConnect?</string>
+    <string name="main_connect">Connect</string>
+    <string name="main_connecting_to_conductor">Connecting to the conductor...</string>
+    <string name="main_connect_failed">Connection failed</string>
+    <string name="main_manual_connect_title">Manual connection</string>
+    <string name="main_manual_connect_message">Enter the conductor\'s IP address:</string>
+    <string name="main_enter_ip">Please enter an IP address</string>
+    <string name="main_connecting_to_conductor_ip">Connecting to the conductor... (%1$s)</string>
+    <string name="main_manual_connect_failed">Connection failed. Check the IP address and the conductor.</string>
+    <string name="main_ensemble_stopped">Ensemble mode ended</string>
+    <string name="main_ensemble_ended_by_conductor">The conductor ended the ensemble — ensemble mode off</string>
+    <string name="main_performer_connected">Performer \'%1$s\' connected</string>
+    <string name="main_performer_disconnected">A performer disconnected</string>
+    <string name="main_conductor_connected">Connected to the conductor</string>
+    <string name="main_conductor_disconnected">Lost connection to the conductor</string>
+    <string name="main_conductor_found_at">Found: %1$s</string>
+
+    <string name="main_requested_file_not_found">Requested file not found: %1$s</string>
+    <string name="main_download_title">Download file</string>
+    <string name="main_download_message">\'%1$s\' isn\'t on this device.\nDownload it from the conductor?%2$s</string>
+    <string name="main_download_cached_note">(Not in this device\'s ScoreMate — kept for the ensemble only, not added to the list)</string>
+    <string name="main_download">Download</string>
+    <string name="main_downloading">Downloading...</string>
+    <string name="main_download_save_failed">Couldn\'t save the downloaded file</string>
+    <string name="main_download_done">Downloaded: %1$s</string>
+    <string name="main_download_error">Download error: %1$s</string>
+
+    <string name="main_delete_title">Delete file</string>
+    <string name="main_delete_message">Delete %1$s?</string>
+    <string name="main_deleted">File deleted</string>
+    <string name="main_delete_failed">Couldn\'t delete the file</string>
+    <string name="main_delete_error">Error while deleting: %1$s</string>
+</resources>

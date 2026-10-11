@@ -61,7 +61,7 @@
         android:id="@+id/deleteButton"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="삭제"
+        android:text="@string/main_delete"
         android:textSize="11sp"
         android:textColor="@color/delete_button_text_color"
         android:background="@drawable/elegant_delete_button_background"

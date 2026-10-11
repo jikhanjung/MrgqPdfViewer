@@ -5,6 +5,7 @@ import android.app.UiModeManager
 import android.content.Context
 import android.content.pm.ActivityInfo
 import android.content.res.Configuration
+import com.mrgq.pdfviewer.R
 
 /**
  * 이 기기가 TV 인가 · 화면 방향 (세로 태블릿, 2026-09-28).
@@ -22,12 +23,14 @@ object DeviceForm {
     fun isPhone(context: Context): Boolean =
         !isTv(context) && context.resources.configuration.smallestScreenWidthDp < 600
 
-    /** 화면 문구의 기기 이름 — "이 TV 연결" · "이 태블릿 연결" */
-    fun noun(context: Context): String = when {
-        isTv(context) -> "TV"
-        context.resources.configuration.smallestScreenWidthDp >= 600 -> "태블릿"
-        else -> "휴대폰"
-    }
+    /** 화면 문구의 기기 이름 — "이 TV 연결" · "이 태블릿 연결" (앱 언어로, P18) */
+    fun noun(context: Context): String = context.getString(
+        when {
+            isTv(context) -> R.string.main_device_tv
+            context.resources.configuration.smallestScreenWidthDp >= 600 -> R.string.main_device_tablet
+            else -> R.string.main_device_phone
+        }
+    )
 
     /** 액티비티 onCreate 에서 — TV 가 아니면 세로로 */
     fun applyOrientation(activity: Activity) {

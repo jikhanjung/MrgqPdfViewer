@@ -1,0 +1,109 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 곡 목록 · 첫 화면 · 스플래시 (P18 2단계). 영어는 values-en/strings_main.xml -->
+<resources>
+    <!-- 기기 이름 (DeviceForm.noun) — "이 TV 연결" · "이 태블릿 연결" -->
+    <string name="main_device_tv">TV</string>
+    <string name="main_device_tablet">태블릿</string>
+    <string name="main_device_phone">휴대폰</string>
+
+    <!-- 스플래시 -->
+    <string name="main_splash_tagline">TV · 태블릿 · 휴대폰을 위한 스마트 악보 리더</string>
+
+    <!-- 첫 화면 머리줄 · 정렬 줄 -->
+    <string name="main_ensemble_button">합주</string>
+    <string name="main_settings_button">설정</string>
+    <string name="main_sync_button">🔄 동기화</string>
+    <string name="main_sort">정렬</string>
+    <string name="main_sort_by_name">이름순</string>
+    <string name="main_sort_by_time">시간순</string>
+    <string name="main_file_manage">파일관리</string>
+    <string name="main_file_manage_done">완료</string>
+
+    <!-- ScoreMate 동기화 -->
+    <string name="main_sync_running">ScoreMate 동기화 중…</string>
+    <string name="main_sync_already_running">ScoreMate 동기화가 이미 진행 중입니다</string>
+    <string name="main_sync_no_changes">ScoreMate: 바뀐 악보가 없습니다</string>
+    <string name="main_cloud_my_scores">내 악보</string>
+    <string name="main_cloud_version">판 %1$d</string>
+
+    <!-- 세트리스트 · 빈 화면 안내 -->
+    <string name="main_setlist_missing">%1$d곡 중 %2$d곡</string>
+    <string name="main_empty_setlist_title">이 세트리스트의 악보를 아직 받지 않았습니다</string>
+    <string name="main_empty_setlist_hint">🔄 동기화 를 누르세요</string>
+    <string name="main_empty_no_setlists_title">받은 세트리스트가 없습니다</string>
+    <string name="main_empty_no_setlists_hint">웹에서 이 %1$s 로 보낼 세트리스트를 고른 뒤 🔄 동기화 를 누르세요</string>
+    <string name="main_local_file_count">이 기기 파일 %1$d</string>
+    <string name="main_empty_local_title">PDF 파일이 없습니다</string>
+    <string name="main_empty_local_hint">설정에서 웹서버를 통해 파일을 업로드하세요</string>
+
+    <!-- 목록 카드 -->
+    <string name="main_notes_sync_needed">✏️ 동기화 필요</string>
+    <string name="main_composer">작곡 %1$s</string>
+    <string name="main_arranger">편곡 %1$s</string>
+    <plurals name="main_page_count">
+        <item quantity="other">%1$d페이지</item>
+    </plurals>
+    <string name="main_page_count_unknown">페이지 수 알 수 없음</string>
+    <string name="main_delete">삭제</string>
+
+    <!-- 합주 상태 -->
+    <string name="main_status_off">합주 모드: 비활성</string>
+    <string name="main_status_conductor">🎼 지휘자 모드 활성 (연결된 연주자: %1$d명)</string>
+    <string name="main_status_performer">🎵 연주자 모드 (지휘자: %1$s)</string>
+    <string name="main_status_performer_disconnected">🎵 연주자 모드 (연결 끊김)</string>
+    <string name="main_status_conductor_fallback">지휘자</string>
+
+    <!-- 합주 대화상자 · 알림 -->
+    <string name="main_ensemble_mode_title">합주 모드</string>
+    <string name="main_ensemble_start_conductor">지휘자 모드 시작</string>
+    <string name="main_ensemble_start_performer">연주자 모드 시작</string>
+    <string name="main_ensemble_stop_conductor">지휘자 모드 종료</string>
+    <string name="main_ensemble_stop_performer">연주자 모드 종료</string>
+    <string name="main_conductor_started">지휘자 모드가 시작되었습니다</string>
+    <string name="main_conductor_start_failed">지휘자 모드 시작 실패</string>
+    <string name="main_conductor_connect_title">지휘자 연결</string>
+    <string name="main_discovery_failed_message">자동 발견에 실패했습니다.\n수동으로 지휘자 IP를 입력하시겠습니까?</string>
+    <string name="main_manual_entry">수동 입력</string>
+    <string name="main_keep_discovering">계속 자동 발견</string>
+    <string name="main_performer_searching">연주자 모드 시작 - 지휘자 자동 검색 중...</string>
+    <string name="main_conductor_found_connecting">지휘자 발견 - 연결 중...</string>
+    <string name="main_conductor_connect_failed">지휘자 연결 실패</string>
+    <string name="main_conductor_not_found">지휘자를 찾을 수 없습니다. 수동 연결을 시도해보세요.</string>
+    <string name="main_discovery_start_failed">자동 검색 시작 실패</string>
+    <string name="main_performer_start_failed">연주자 모드 시작 실패</string>
+    <string name="main_conductor_found_title">지휘자 발견</string>
+    <string name="main_conductor_found_message">%1$s\nIP: %2$s\n\n연결하시겠습니까?</string>
+    <string name="main_connect">연결</string>
+    <string name="main_connecting_to_conductor">지휘자에 연결 중...</string>
+    <string name="main_connect_failed">연결 실패</string>
+    <string name="main_manual_connect_title">수동 연결</string>
+    <string name="main_manual_connect_message">지휘자의 IP 주소를 입력하세요:</string>
+    <string name="main_enter_ip">IP 주소를 입력해주세요</string>
+    <string name="main_connecting_to_conductor_ip">지휘자에 연결 중... (%1$s)</string>
+    <string name="main_manual_connect_failed">연결 실패. IP 주소와 지휘자 상태를 확인해주세요.</string>
+    <string name="main_ensemble_stopped">합주 모드가 종료되었습니다</string>
+    <string name="main_ensemble_ended_by_conductor">지휘자가 합주를 끝냈습니다 — 합주 모드 종료</string>
+    <string name="main_performer_connected">연주자 \'%1$s\'이 연결되었습니다</string>
+    <string name="main_performer_disconnected">연주자 연결이 해제되었습니다</string>
+    <string name="main_conductor_connected">지휘자에 연결되었습니다</string>
+    <string name="main_conductor_disconnected">지휘자와의 연결이 끊어졌습니다</string>
+    <string name="main_conductor_found_at">발견: %1$s</string>
+
+    <!-- 합주 파일 받기 -->
+    <string name="main_requested_file_not_found">요청된 파일을 찾을 수 없습니다: %1$s</string>
+    <string name="main_download_title">파일 다운로드</string>
+    <string name="main_download_message">\'%1$s\' 파일이 없습니다.\n지휘자로부터 다운로드하시겠습니까?%2$s</string>
+    <string name="main_download_cached_note">(이 기기의 ScoreMate 에 없는 악보 — 합주용으로만 받아 두고 목록에는 넣지 않습니다)</string>
+    <string name="main_download">다운로드</string>
+    <string name="main_downloading">다운로드 중...</string>
+    <string name="main_download_save_failed">받은 파일을 저장하지 못했습니다</string>
+    <string name="main_download_done">파일 다운로드 완료: %1$s</string>
+    <string name="main_download_error">다운로드 오류: %1$s</string>
+
+    <!-- 파일 삭제 -->
+    <string name="main_delete_title">파일 삭제</string>
+    <string name="main_delete_message">%1$s 파일을 삭제하시겠습니까?</string>
+    <string name="main_deleted">파일이 삭제되었습니다</string>
+    <string name="main_delete_failed">파일 삭제 실패</string>
+    <string name="main_delete_error">삭제 중 오류 발생: %1$s</string>
+</resources>
