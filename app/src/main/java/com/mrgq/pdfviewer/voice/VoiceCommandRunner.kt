@@ -1,5 +1,6 @@
 package com.mrgq.pdfviewer.voice
 
+import com.mrgq.pdfviewer.R
 import com.mrgq.pdfviewer.metronome.MetronomeClock
 import com.mrgq.pdfviewer.voice.ParseResult.Reason
 import com.mrgq.pdfviewer.voice.VoiceCommand.GotoMeasure
@@ -11,7 +12,8 @@ import com.mrgq.pdfviewer.voice.VoiceCommand.SelectParts
 import com.mrgq.pdfviewer.voice.VoiceCommand.SetTempo
 
 /**
- * 읽은 결과([ParseResult]) → 명령 층([ViewerCommands]) 실행. 화면에 보일 한 줄을 돌려준다.
+ * 읽은 결과([ParseResult]) → 명령 층([ViewerCommands]) 실행. 화면에 보일 한 줄을 돌려준다 — 글이 아니라 키([VoiceText]),
+ * 화면이 `report.text.resolve(context)` 로 앱 언어의 글을 만든다 (P18).
  *
  * - 값 범위(템포 20 ~ 240, 마디 · 쪽 1 이상)는 **아무것도 하기 전에** 본다 — 하나라도 벗어나면 하나도 실행하지 않는다
  * - 명령은 [ParseResult.Commands] 의 순서(템포 · 파트 → 위치 → 시작)대로, 하나가 실패하면 거기서 멈추고 앞에서 한 것을 알린다
@@ -21,10 +23,11 @@ import com.mrgq.pdfviewer.voice.VoiceCommand.SetTempo
  */
 object VoiceCommandRunner {
 
-    data class Report(val ok: Boolean, val message: String)
+    /** [text] = 화면에 보일 한 줄 — `text.resolve(context)` */
+    data class Report(val ok: Boolean, val text: VoiceText)
 
     suspend fun run(result: ParseResult, target: ViewerCommands, bareNumberIsTempo: Boolean = false): Report = when (result) {
-        is ParseResult.Unrecognized -> Report(false, unrecognizedMessage(result, target))
+        is ParseResult.Unrecognized -> Report(false, unrecognizedText(result, target))
         is ParseResult.BareNumber -> run(
             ParseResult.Commands(listOf(if (bareNumberIsTempo) SetTempo(result.value) else SelectMeasure(result.value))),
             target,
@@ -38,12 +41,12 @@ object VoiceCommandRunner {
         for (command in result.commands) {
             val outcome = dispatch(command, target)
             if (outcome is CommandOutcome.Failed) {
-                val before = ParseResult.Commands(done).label
-                return Report(false, if (done.isEmpty()) outcome.message else "$before 했지만 — ${outcome.message}")
+                val before = ParseResult.Commands(done).text
+                return Report(false, if (done.isEmpty()) outcome.text else VoiceText.of(R.string.voice_done_but, before, outcome.text))
             }
             done += command
         }
-        return Report(true, result.label)
+        return Report(true, result.text)
     }
 
     private suspend fun dispatch(command: VoiceCommand, target: ViewerCommands): CommandOutcome = when (command) {
@@ -72,32 +75,43 @@ object VoiceCommandRunner {
     fun inRange(result: ParseResult): Boolean =
         result !is ParseResult.Commands || result.commands.none { rangeError(it) != null }
 
-    private fun rangeError(command: VoiceCommand): String? = when {
+    private fun rangeError(command: VoiceCommand): VoiceText? = when {
         command is SetTempo && command.bpm !in MetronomeClock.MIN_BPM..MetronomeClock.MAX_BPM ->
-            "템포 ${command.bpm} 은 쓸 수 없어요 (${MetronomeClock.MIN_BPM} ~ ${MetronomeClock.MAX_BPM})"
-        command is SetCountIn && command.bars !in 1..2 -> "예비박은 한 마디나 두 마디만 돼요"
-        command is GotoMeasure && command.measure < 1 -> "${command.measure}마디는 없어요"
-        command is SelectMeasure && command.measure < 1 -> "${command.measure}마디는 없어요"
-        command is GotoPage && command.page < 1 -> "${command.page}쪽은 없어요"
+            VoiceText.of(R.string.voice_tempo_out_of_range, command.bpm, MetronomeClock.MIN_BPM, MetronomeClock.MAX_BPM)
+        command is SetCountIn && command.bars !in 1..2 -> VoiceText.of(R.string.voice_count_in_range)
+        command is GotoMeasure && command.measure < 1 -> VoiceText.of(R.string.voice_no_measure, command.measure)
+        command is SelectMeasure && command.measure < 1 -> VoiceText.of(R.string.voice_no_measure, command.measure)
+        command is GotoPage && command.page < 1 -> VoiceText.of(R.string.voice_no_page, command.page)
         else -> null
     }
 
-    private suspend fun unrecognizedMessage(result: ParseResult.Unrecognized, target: ViewerCommands): String {
-        if (result.reason != Reason.UNKNOWN_PART) return reasonMessage(result.reason)
-        val what = result.heard?.let { "'$it' 파트를 이 악보에서 찾지 못했어요" } ?: "무슨 파트인지 못 알아들었어요"
-        return what + partChoices(target.partNames())
+    private suspend fun unrecognizedText(result: ParseResult.Unrecognized, target: ViewerCommands): VoiceText {
+        if (result.reason != Reason.UNKNOWN_PART) return reasonText(result.reason)
+        val what = result.heard?.let { VoiceText.of(R.string.voice_part_not_found_heard, it) } ?: VoiceText.of(R.string.voice_part_not_heard)
+        return withPartChoices(what, target.partNames())
     }
 
-    /** " — 이 악보: 김지한 · 박서연 · 보표 3" (모르면 "") */
-    fun partChoices(names: List<String>): String = if (names.isEmpty()) "" else " — 이 악보: " + names.joinToString(" · ")
+    /** "[message] — 이 악보: 김지한 · 박서연 · 보표 3" (파트 이름을 모르면 [message] 그대로) */
+    fun withPartChoices(message: VoiceText, names: List<String>): VoiceText =
+        if (names.isEmpty()) message else VoiceText.of(R.string.voice_with_part_choices, message, names.joinToString(" · "))
 
-    fun reasonMessage(reason: Reason): String = when (reason) {
-        Reason.NOTHING -> "명령을 찾지 못했어요"
-        Reason.NEGATION -> "'말고 · 아니 · 취소'가 있어 실행하지 않았어요"
-        Reason.RELATIVE -> "'두 마디 전'처럼 상대 위치는 아직 몰라요 — 마디 번호로 말하세요"
-        Reason.CONFLICT -> "위치나 템포가 둘이에요 — 하나만 말하세요"
-        Reason.STRAY_NUMBER -> "무엇의 수인지 모르는 수가 있어요 — '57마디'처럼 단위를 붙이세요"
-        Reason.UNKNOWN_PART -> "무슨 파트인지 못 알아들었어요"
-        Reason.CHATTER -> "대화로 들려 실행하지 않았어요 — 파트를 바꾸려면 '첼로 파트'처럼 말하세요"
-    }
+    /** 말한 파트가 악보에 없다([PartMatcher.Result.Missing]) — "첼로 파트가 없어요 — 이 악보: …" */
+    fun partMissing(part: PartRef, names: List<String>): VoiceText =
+        withPartChoices(VoiceText.of(R.string.voice_part_missing, part.text), names)
+
+    /** 번호 없이 말한 파트가 여럿([PartMatcher.Result.Ambiguous]) — "바이올린 파트가 여럿이에요 (Violin I, Violin II) — 번호까지 말하세요" */
+    fun partAmbiguous(part: PartRef, names: List<String>): VoiceText =
+        VoiceText.of(R.string.voice_part_ambiguous, part.text, names.joinToString())
+
+    fun reasonText(reason: Reason): VoiceText = VoiceText.of(
+        when (reason) {
+            Reason.NOTHING -> R.string.voice_reason_nothing
+            Reason.NEGATION -> R.string.voice_reason_negation
+            Reason.RELATIVE -> R.string.voice_reason_relative
+            Reason.CONFLICT -> R.string.voice_reason_conflict
+            Reason.STRAY_NUMBER -> R.string.voice_reason_stray_number
+            Reason.UNKNOWN_PART -> R.string.voice_part_not_heard
+            Reason.CHATTER -> R.string.voice_reason_chatter
+        },
+    )
 }

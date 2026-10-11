@@ -1,0 +1,87 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 🎙 Voice commands (voice/, P18 step 8). Korean base: values/strings_voice.xml -->
+<resources>
+    <!-- Commands — the result line ("From measure 57 · ♩=72") -->
+    <string name="voice_cmd_select_measure">Select measure %1$d</string>
+    <string name="voice_cmd_goto_measure">From measure %1$d</string>
+    <string name="voice_cmd_goto_start">From the beginning</string>
+    <string name="voice_cmd_restart">Again</string>
+    <string name="voice_cmd_resume">Resume</string>
+    <string name="voice_cmd_rehearsal_mark">Letter %1$s</string>
+    <string name="voice_cmd_next_page">Next page</string>
+    <string name="voice_cmd_previous_page">Previous page</string>
+    <string name="voice_cmd_goto_page">Page %1$d</string>
+    <string name="voice_cmd_last_page">Last page</string>
+    <string name="voice_cmd_tempo">♩=%1$d</string>
+    <string name="voice_cmd_count_in">%1$d-bar count-in</string>
+    <string name="voice_cmd_select_parts">%1$s part</string>
+    <string name="voice_cmd_full_score">Full score</string>
+    <string name="voice_cmd_listen">🎤 Listen</string>
+    <string name="voice_cmd_listen_from_start">🎤 Listen from the beginning</string>
+    <string name="voice_cmd_listen_resume">🎤 Resume listening</string>
+    <string name="voice_cmd_stop">Stop</string>
+    <string name="voice_cmd_start">Start</string>
+
+    <!-- Part names -->
+    <string name="voice_staff_n">Staff %1$d</string>
+    <string name="voice_part_numbered">%1$s %2$d</string>
+    <string name="voice_instrument_violin">Violin</string>
+    <string name="voice_instrument_viola">Viola</string>
+    <string name="voice_instrument_cello">Cello</string>
+    <string name="voice_instrument_bass">Bass</string>
+    <string name="voice_instrument_flute">Flute</string>
+    <string name="voice_instrument_piccolo">Piccolo</string>
+    <string name="voice_instrument_oboe">Oboe</string>
+    <string name="voice_instrument_clarinet">Clarinet</string>
+    <string name="voice_instrument_bassoon">Bassoon</string>
+    <string name="voice_instrument_horn">Horn</string>
+    <string name="voice_instrument_trumpet">Trumpet</string>
+    <string name="voice_instrument_trombone">Trombone</string>
+    <string name="voice_instrument_tuba">Tuba</string>
+    <string name="voice_instrument_timpani">Timpani</string>
+    <string name="voice_instrument_percussion">Percussion</string>
+    <string name="voice_instrument_piano">Piano</string>
+    <string name="voice_instrument_harp">Harp</string>
+    <string name="voice_instrument_guitar">Guitar</string>
+    <string name="voice_instrument_soprano">Soprano</string>
+    <string name="voice_instrument_alto">Alto</string>
+    <string name="voice_instrument_tenor">Tenor</string>
+
+    <!-- Results · reasons (VoiceCommandRunner) -->
+    <string name="voice_done_but">%1$s done — but %2$s</string>
+    <string name="voice_tempo_out_of_range">Can\'t use tempo %1$d (%2$d–%3$d)</string>
+    <string name="voice_count_in_range">The count-in can only be one or two bars</string>
+    <string name="voice_no_measure">There\'s no measure %1$d</string>
+    <string name="voice_no_page">There\'s no page %1$d</string>
+    <string name="voice_part_not_heard">Didn\'t catch which part</string>
+    <string name="voice_part_not_found_heard">Couldn\'t find the part \'%1$s\' in this score</string>
+    <string name="voice_with_part_choices">%1$s — this score: %2$s</string>
+    <string name="voice_part_missing">There\'s no %1$s part</string>
+    <string name="voice_part_ambiguous">There are several %1$s parts (%2$s) — say the number too</string>
+    <string name="voice_reason_nothing">No command found</string>
+    <string name="voice_reason_negation">Heard \'not\' or \'cancel\', so nothing was done</string>
+    <string name="voice_reason_relative">Relative positions like \'two bars back\' aren\'t supported yet — say a measure number</string>
+    <string name="voice_reason_conflict">Heard two positions or tempos — say just one</string>
+    <string name="voice_reason_stray_number">Not sure what a number is for — add a unit, like \'measure 57\'</string>
+    <string name="voice_reason_chatter">Sounded like conversation, so nothing was done — to switch parts, say \'cello part\'</string>
+
+    <!-- Wake word (WakeWord) -->
+    <string name="voice_wake_word_too_short">\"%1$s\" — use at least two letters</string>
+    <string name="voice_wake_word_is_command">\"%1$s\" — this reads as a command. Choose another word</string>
+
+    <!-- Speech recognition errors (VoiceListener) -->
+    <string name="voice_error_not_started">Couldn\'t start speech recognition — check device Settings → System → Languages &amp; input → Voice input (default recognizer)</string>
+    <string name="voice_error_no_match">Didn\'t catch that — hold the button while you speak</string>
+    <string name="voice_error_network">Can\'t reach the speech recognition server — check the internet connection</string>
+    <string name="voice_error_permission">Microphone permission is needed</string>
+    <string name="voice_error_busy">Speech recognition is in use elsewhere</string>
+    <string name="voice_error_language">%1$s speech recognition isn\'t available — check the microphone permission of the recognition app (Google · Speech Recognition &amp; Synthesis)</string>
+    <string name="voice_error_other">Speech recognition error (%1$d)</string>
+    <string name="voice_language_name_korean">Korean</string>
+    <string name="voice_language_name_english">English</string>
+
+    <!-- Settings "Voice command language" (VoiceLanguage) -->
+    <string name="voice_language_title">Voice command language</string>
+    <string name="voice_language_follow_app">Same as app language</string>
+    <string name="voice_language_follow_app_now">Same as app language (now %1$s)</string>
+</resources>

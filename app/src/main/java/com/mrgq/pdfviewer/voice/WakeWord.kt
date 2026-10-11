@@ -1,5 +1,7 @@
 package com.mrgq.pdfviewer.voice
 
+import com.mrgq.pdfviewer.R
+
 /**
  * 👂 계속 듣기의 호출어 찾기 (#085). 버튼 없이 들을 때는 "메이트, 57마디부터"처럼 **호출어 뒤의 말만** 명령으로 읽는다 —
  * 악보 이야기("57마디에서 첼로가 커요")가 명령으로 실행되지 않게.
@@ -28,10 +30,14 @@ object WakeWord {
     /** 목록 → 설정 글자 */
     fun toSetting(words: List<String>): String = words.joinToString(", ")
 
-    /** 호출어로 쓸 수 없는 까닭 — 쓸 수 있으면 null. 너무 짧거나 그 자체가 명령으로 읽히면 안 된다 */
-    fun problem(word: String): String? = when {
-        word.filterNot { it.isWhitespace() }.length < 2 -> "\"$word\" — 두 글자 이상으로 정하세요"
-        CommandParser.parse(word) !is ParseResult.Unrecognized -> "\"$word\" — 명령으로 읽히는 말이에요. 다른 말로 정하세요"
+    /**
+     * 호출어로 쓸 수 없는 까닭 — 쓸 수 있으면 null. 너무 짧거나 그 자체가 명령으로 읽히면 안 된다(한국어 · 영어 어느 쪽으로든, P18).
+     * 화면은 `problemText(w)?.resolve(context)`
+     */
+    fun problemText(word: String): VoiceText? = when {
+        word.filterNot { it.isWhitespace() }.length < 2 -> VoiceText.of(R.string.voice_wake_word_too_short, word)
+        VoiceLanguage.values().any { it.parse(word) !is ParseResult.Unrecognized } ->
+            VoiceText.of(R.string.voice_wake_word_is_command, word)
         else -> null
     }
 

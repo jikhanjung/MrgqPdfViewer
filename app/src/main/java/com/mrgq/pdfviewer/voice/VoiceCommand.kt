@@ -1,14 +1,42 @@
 package com.mrgq.pdfviewer.voice
 
+import com.mrgq.pdfviewer.R
+
 /** 파트 하나 — 악기 키([VoiceLexicon.INSTRUMENTS]) + 번호("바이올린 2"), 번호 없으면 null */
 data class PartRef(val instrument: String, val number: Int? = null, val staffName: String? = null, val staffNumber: Int? = null) {
+    /** 한국어 설명 — 기록 · 테스트용(화면에는 [text], P18) */
     val label: String get() = when {
         staffNumber != null -> "보표 $staffNumber"
         staffName != null -> staffName
         else -> (VoiceLexicon.INSTRUMENT_LABELS[instrument] ?: instrument) + (number?.let { " $it" } ?: "")
     }
 
+    /** 화면에 보일 이름 — "보표 2" · 보표 이름 그대로 · "바이올린 2" (P18) */
+    val text: VoiceText get() = when {
+        staffNumber != null -> VoiceText.of(R.string.voice_staff_n, staffNumber)
+        staffName != null -> VoiceText.Plain(staffName)
+        else -> {
+            val name = INSTRUMENT_TEXTS[instrument]?.let { VoiceText.of(it) } ?: VoiceText.Plain(instrument)
+            if (number == null) name else VoiceText.of(R.string.voice_part_numbered, name, number)
+        }
+    }
+
     companion object {
+        /** 악기 키 → 화면 이름 키 ([VoiceLexicon.INSTRUMENT_LABELS] 와 같은 키들) */
+        val INSTRUMENT_TEXTS: Map<String, Int> = mapOf(
+            "violin" to R.string.voice_instrument_violin, "viola" to R.string.voice_instrument_viola,
+            "cello" to R.string.voice_instrument_cello, "bass" to R.string.voice_instrument_bass,
+            "flute" to R.string.voice_instrument_flute, "piccolo" to R.string.voice_instrument_piccolo,
+            "oboe" to R.string.voice_instrument_oboe, "clarinet" to R.string.voice_instrument_clarinet,
+            "bassoon" to R.string.voice_instrument_bassoon, "horn" to R.string.voice_instrument_horn,
+            "trumpet" to R.string.voice_instrument_trumpet, "trombone" to R.string.voice_instrument_trombone,
+            "tuba" to R.string.voice_instrument_tuba, "timpani" to R.string.voice_instrument_timpani,
+            "percussion" to R.string.voice_instrument_percussion, "piano" to R.string.voice_instrument_piano,
+            "harp" to R.string.voice_instrument_harp, "guitar" to R.string.voice_instrument_guitar,
+            "soprano" to R.string.voice_instrument_soprano, "alto" to R.string.voice_instrument_alto,
+            "tenor" to R.string.voice_instrument_tenor,
+        )
+
         /** 보표 이름 그대로 부른 파트 — 사람 이름 보표 (#094) */
         fun named(staffName: String) = PartRef(instrument = "", staffName = staffName)
         /** 위에서 [n] 째 보표 — "보표 2" (#098) */
@@ -18,7 +46,31 @@ data class PartRef(val instrument: String, val number: Int? = null, val staffNam
 
 /** 음성 명령 (P12 §3.2). 값이 악보 · 상태에 맞는지는 실행하는 쪽이 검사한다(P12 §3.3). */
 sealed class VoiceCommand {
+    /** 한국어 설명 — 기록 · 테스트용(실녹음 표 `VoiceRecordingsTest` 의 기대값). 화면에는 [text] (P18) */
     abstract val label: String
+
+    /** 화면에 보일 글 — 앱 언어로 (P18) */
+    val text: VoiceText get() = when (this) {
+        is SelectMeasure -> VoiceText.of(R.string.voice_cmd_select_measure, measure)
+        is GotoMeasure -> VoiceText.of(R.string.voice_cmd_goto_measure, measure)
+        GotoStart -> VoiceText.of(R.string.voice_cmd_goto_start)
+        Restart -> VoiceText.of(R.string.voice_cmd_restart)
+        Resume -> VoiceText.of(R.string.voice_cmd_resume)
+        is GotoRehearsalMark -> VoiceText.of(R.string.voice_cmd_rehearsal_mark, mark)
+        NextPage -> VoiceText.of(R.string.voice_cmd_next_page)
+        PreviousPage -> VoiceText.of(R.string.voice_cmd_previous_page)
+        is GotoPage -> VoiceText.of(R.string.voice_cmd_goto_page, page)
+        LastPage -> VoiceText.of(R.string.voice_cmd_last_page)
+        is SetTempo -> VoiceText.of(R.string.voice_cmd_tempo, bpm)
+        is SetCountIn -> VoiceText.of(R.string.voice_cmd_count_in, bars)
+        is SelectParts -> VoiceText.of(R.string.voice_cmd_select_parts, VoiceText.Joined(parts.map { it.text }))
+        ShowFullScore -> VoiceText.of(R.string.voice_cmd_full_score)
+        Listen -> VoiceText.of(R.string.voice_cmd_listen)
+        ListenFromStart -> VoiceText.of(R.string.voice_cmd_listen_from_start)
+        ListenResume -> VoiceText.of(R.string.voice_cmd_listen_resume)
+        Stop -> VoiceText.of(R.string.voice_cmd_stop)
+        Start -> VoiceText.of(R.string.voice_cmd_start)
+    }
 
     // ── 위치 — 한 발화에 하나만 ──
     /** "57마디" — 그 마디를 시작 마디로 고르기만 한다(시작은 "시작" · 마디 탭) */
@@ -75,7 +127,11 @@ sealed class VoiceCommand {
 sealed class ParseResult {
     /** 실행할 명령 — 실행 순서(템포 · 파트 → 위치 → 시작). [label] 은 화면에 보일 "57마디 · ♩=72" */
     data class Commands(val commands: List<VoiceCommand>) : ParseResult() {
-        val label: String get() = commands.sortedBy { if (it.isPosition) 0 else 1 }.joinToString(" · ") { it.label }
+        /** 한국어 설명 — 기록 · 테스트용 */
+        val label: String get() = shown.joinToString(" · ") { it.label }
+        /** 화면에 보일 글 — 위치 먼저 */
+        val text: VoiceText get() = VoiceText.Joined(shown.map { it.text })
+        private val shown: List<VoiceCommand> get() = commands.sortedBy { if (it.isPosition) 0 else 1 }
     }
 
     /** 수만 들렸다("칠십이") — 마디(고르기)인지 템포인지는 지금 화면이 정한다(P12 §3.2) */

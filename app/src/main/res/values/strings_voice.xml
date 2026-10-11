@@ -1,0 +1,87 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 🎙 음성 명령 (voice/, P18 8단계). 영어는 values-en/strings_voice.xml. 인식 어휘(VoiceLexicon 등)는 문법이라 코드에 둔다 -->
+<resources>
+    <!-- 명령 — 실행 결과 줄("57마디부터 · ♩=72") -->
+    <string name="voice_cmd_select_measure">%1$d마디 선택</string>
+    <string name="voice_cmd_goto_measure">%1$d마디부터</string>
+    <string name="voice_cmd_goto_start">처음부터</string>
+    <string name="voice_cmd_restart">다시</string>
+    <string name="voice_cmd_resume">이어서</string>
+    <string name="voice_cmd_rehearsal_mark">레터 %1$s</string>
+    <string name="voice_cmd_next_page">다음 쪽</string>
+    <string name="voice_cmd_previous_page">이전 쪽</string>
+    <string name="voice_cmd_goto_page">%1$d쪽</string>
+    <string name="voice_cmd_last_page">마지막 쪽</string>
+    <string name="voice_cmd_tempo">♩=%1$d</string>
+    <string name="voice_cmd_count_in">예비박 %1$d마디</string>
+    <string name="voice_cmd_select_parts">%1$s 파트</string>
+    <string name="voice_cmd_full_score">총보</string>
+    <string name="voice_cmd_listen">🎤 연주 듣기</string>
+    <string name="voice_cmd_listen_from_start">🎤 처음부터 듣기</string>
+    <string name="voice_cmd_listen_resume">🎤 이어서 듣기</string>
+    <string name="voice_cmd_stop">정지</string>
+    <string name="voice_cmd_start">시작</string>
+
+    <!-- 파트 이름 -->
+    <string name="voice_staff_n">보표 %1$d</string>
+    <string name="voice_part_numbered">%1$s %2$d</string>
+    <string name="voice_instrument_violin">바이올린</string>
+    <string name="voice_instrument_viola">비올라</string>
+    <string name="voice_instrument_cello">첼로</string>
+    <string name="voice_instrument_bass">베이스</string>
+    <string name="voice_instrument_flute">플루트</string>
+    <string name="voice_instrument_piccolo">피콜로</string>
+    <string name="voice_instrument_oboe">오보에</string>
+    <string name="voice_instrument_clarinet">클라리넷</string>
+    <string name="voice_instrument_bassoon">바순</string>
+    <string name="voice_instrument_horn">호른</string>
+    <string name="voice_instrument_trumpet">트럼펫</string>
+    <string name="voice_instrument_trombone">트롬본</string>
+    <string name="voice_instrument_tuba">튜바</string>
+    <string name="voice_instrument_timpani">팀파니</string>
+    <string name="voice_instrument_percussion">타악기</string>
+    <string name="voice_instrument_piano">피아노</string>
+    <string name="voice_instrument_harp">하프</string>
+    <string name="voice_instrument_guitar">기타</string>
+    <string name="voice_instrument_soprano">소프라노</string>
+    <string name="voice_instrument_alto">알토</string>
+    <string name="voice_instrument_tenor">테너</string>
+
+    <!-- 실행 결과 · 실패 이유 (VoiceCommandRunner) -->
+    <string name="voice_done_but">%1$s 했지만 — %2$s</string>
+    <string name="voice_tempo_out_of_range">템포 %1$d 은 쓸 수 없어요 (%2$d ~ %3$d)</string>
+    <string name="voice_count_in_range">예비박은 한 마디나 두 마디만 돼요</string>
+    <string name="voice_no_measure">%1$d마디는 없어요</string>
+    <string name="voice_no_page">%1$d쪽은 없어요</string>
+    <string name="voice_part_not_heard">무슨 파트인지 못 알아들었어요</string>
+    <string name="voice_part_not_found_heard">\'%1$s\' 파트를 이 악보에서 찾지 못했어요</string>
+    <string name="voice_with_part_choices">%1$s — 이 악보: %2$s</string>
+    <string name="voice_part_missing">%1$s 파트가 없어요</string>
+    <string name="voice_part_ambiguous">%1$s 파트가 여럿이에요 (%2$s) — 번호까지 말하세요</string>
+    <string name="voice_reason_nothing">명령을 찾지 못했어요</string>
+    <string name="voice_reason_negation">\'말고 · 아니 · 취소\'가 있어 실행하지 않았어요</string>
+    <string name="voice_reason_relative">\'두 마디 전\'처럼 상대 위치는 아직 몰라요 — 마디 번호로 말하세요</string>
+    <string name="voice_reason_conflict">위치나 템포가 둘이에요 — 하나만 말하세요</string>
+    <string name="voice_reason_stray_number">무엇의 수인지 모르는 수가 있어요 — \'57마디\'처럼 단위를 붙이세요</string>
+    <string name="voice_reason_chatter">대화로 들려 실행하지 않았어요 — 파트를 바꾸려면 \'첼로 파트\'처럼 말하세요</string>
+
+    <!-- 호출어 (WakeWord) -->
+    <string name="voice_wake_word_too_short">\"%1$s\" — 두 글자 이상으로 정하세요</string>
+    <string name="voice_wake_word_is_command">\"%1$s\" — 명령으로 읽히는 말이에요. 다른 말로 정하세요</string>
+
+    <!-- 음성 인식 오류 (VoiceListener) -->
+    <string name="voice_error_not_started">음성 인식을 시작하지 못했어요 — 기기 설정 → 시스템 → 언어 및 입력 → 음성 입력(기본 음성 인식)을 확인하세요</string>
+    <string name="voice_error_no_match">못 알아들었어요 — 누른 채로 말하세요</string>
+    <string name="voice_error_network">음성 인식 서버에 닿지 않아요 — 인터넷 연결을 확인하세요</string>
+    <string name="voice_error_permission">마이크 권한이 필요해요</string>
+    <string name="voice_error_busy">음성 인식이 다른 곳에서 쓰이고 있어요</string>
+    <string name="voice_error_language">%1$s 음성 인식을 쓸 수 없어요 — 음성 인식 앱(Google · 음성 인식 및 합성)의 마이크 권한을 확인하세요</string>
+    <string name="voice_error_other">음성 인식 오류 (%1$d)</string>
+    <string name="voice_language_name_korean">한국어</string>
+    <string name="voice_language_name_english">영어</string>
+
+    <!-- 설정 "음성 명령 언어" (VoiceLanguage) -->
+    <string name="voice_language_title">음성 명령 언어</string>
+    <string name="voice_language_follow_app">앱 언어 따름</string>
+    <string name="voice_language_follow_app_now">앱 언어 따름 (지금 %1$s)</string>
+</resources>

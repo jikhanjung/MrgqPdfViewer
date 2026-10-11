@@ -285,12 +285,17 @@ class VoiceCommandTest {
 
     @Test
     fun 짧거나_명령인_말은_호출어로_쓰지_않는다() {
-        assertNull(WakeWord.problem("메이트"))
-        assertNull(WakeWord.problem("마에스트로"))
-        assertTrue(WakeWord.problem("가") != null)
-        assertTrue(WakeWord.problem("시작") != null)
-        assertTrue(WakeWord.problem("다음 쪽") != null)
-        assertTrue(WakeWord.problem("72") != null)
+        assertNull(WakeWord.problemText("메이트"))
+        assertNull(WakeWord.problemText("마에스트로"))
+        assertNull(WakeWord.problemText("mate"))
+        assertTrue(WakeWord.problemText("가") != null)
+        assertTrue(WakeWord.problemText("시작") != null)
+        assertTrue(WakeWord.problemText("다음 쪽") != null)
+        assertTrue(WakeWord.problemText("72") != null)
+        // 영어로 읽어도 명령이면 안 된다 (P18)
+        assertTrue(WakeWord.problemText("next page") != null)
+        assertEquals("\"가\" — 두 글자 이상으로 정하세요", VoiceTestStrings.ko(WakeWord.problemText("가")!!))
+        assertEquals("\"시작\" — 명령으로 읽히는 말이에요. 다른 말로 정하세요", VoiceTestStrings.ko(WakeWord.problemText("시작")!!))
     }
 
     @Test
@@ -312,6 +317,8 @@ class VoiceCommandTest {
     fun 화면_표시는_위치_먼저() {
         assertEquals("57마디부터 · ♩=72", (CommandParser.parse("57마디부터 템포 72") as ParseResult.Commands).label)
         assertEquals("57마디 선택 · ♩=72", (CommandParser.parse("57마디 템포 72") as ParseResult.Commands).label)
+        // 화면 글(P18 — 키)도 한국어로 채우면 같다
+        assertEquals("57마디부터 · ♩=72", VoiceTestStrings.ko((CommandParser.parse("57마디부터 템포 72") as ParseResult.Commands).text))
     }
 
     @Test
