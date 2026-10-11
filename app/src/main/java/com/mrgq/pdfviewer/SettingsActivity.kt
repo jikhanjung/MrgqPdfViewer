@@ -884,7 +884,7 @@ class SettingsActivity : AppCompatActivity() {
                 id = "update_on_start_toggle",
                 icon = "🔔",
                 title = "자동 업데이트 확인",
-                subtitle = if (UpdateController.isCheckOnStartup(this)) "켜짐 — 파일 목록에서 10분마다 확인해 새 버전이 있으면 알려 줍니다" else "꺼짐",
+                subtitle = if (UpdateController.isCheckOnStartup(this)) "켜짐 — 파일 목록 · 설정 화면에서 10분마다 확인해 새 버전이 있으면 알려 줍니다" else "꺼짐",
                 type = SettingsType.TOGGLE,
                 checked = UpdateController.isCheckOnStartup(this)
             ),
@@ -1693,7 +1693,23 @@ class SettingsActivity : AppCompatActivity() {
             .show()
     }
     
+    /**
+     * 설정 화면에서도 새 버전 자동 확인 (#124) — 파일 목록과 같은 10분 시계(`UpdateController.checkIfDue`)를 1분마다 두드린다.
+     * 대화상자가 떠 있거나 합주 중이면 건너뛰고, onPause 에서 멈춘다. 자동 확인을 꺼 두었으면 하지 않는다
+     */
+    private val autoUpdateCheck: Runnable = object : Runnable {
+        override fun run() {
+            if (!isFinishing && hasWindowFocus() && UpdateController.isCheckOnStartup(this@SettingsActivity) &&
+                GlobalCollaborationManager.getInstance().getCurrentMode() == CollaborationMode.NONE
+            ) {
+                updateController.checkIfDue()
+            }
+            binding.root.postDelayed(this, UPDATE_CHECK_TICK_MS)
+        }
+    }
+
     override fun onPause() {
+        binding.root.removeCallbacks(autoUpdateCheck)
         stopRecordingPlayback()
         super.onPause()
         com.mrgq.pdfviewer.ensemble.VersionNotice.detach()
@@ -1703,6 +1719,8 @@ class SettingsActivity : AppCompatActivity() {
         super.onResume()
         com.mrgq.pdfviewer.ensemble.VersionNotice.attach(this) // 합주 상대와 버전이 다르면 대화상자로 (#061)
         updateController.onResume()
+        binding.root.removeCallbacks(autoUpdateCheck)
+        binding.root.postDelayed(autoUpdateCheck, UPDATE_CHECK_FIRST_DELAY_MS)
         checkWebServerStatus()
         // 메인 화면으로 돌아올 때 전체 메뉴를 다시 로드하여 웹서버 상태 반영 (두 칸은 상세 칸이 늘 보이므로 늘 다시 읽는다)
         if (twoPane || binding.detailPanelLayout.visibility == android.view.View.GONE) {
@@ -1946,6 +1964,10 @@ class SettingsActivity : AppCompatActivity() {
     }
 
     companion object {
+        /** 설정 화면에서 자동 업데이트 확인을 두드리는 간격 — 실제 확인은 UpdateController 가 10분마다 한 번(파일 목록과 같은 시계, #124) */
+        private const val UPDATE_CHECK_TICK_MS = 60_000L
+        /** 화면이 뜬 뒤 첫 두드림 */
+        private const val UPDATE_CHECK_FIRST_DELAY_MS = 1500L
         /** 두 칸: 왼쪽 포커스가 이만큼 머물면 오른쪽을 그 카테고리로 */
         private const val PANE_PREVIEW_DELAY_MS = 150L
         /** 이만큼 넓은 태블릿은 두 칸 (샤오신패드 12.7 세로 ≈ 791dp, iPad 세로 ≈ 820pt) */
