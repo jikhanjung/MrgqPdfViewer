@@ -3,7 +3,7 @@
 마지막 갱신: 2026-10-11
 브랜치: `main` (origin/main 과 동기화)
 버전: **v0.7.5-beta.12** (versionCode 84 — P17 터치 껍질 1차 완료 + TV · 넓은 태블릿 설정 두 칸 #106 · #107 + 음성 안내 #108 + 실녹음 평가 1차 #109 · #110 + 미디어 소리 0 안내 #111 + 리허설 마크 #112 + 처음부터 · 이어서 듣기 #113, 실기기 확인 전). 정식은 v0.7.4. 실기기는 앱 안 업데이트로 받는다(태블릿 · TV 모두 사전 릴리스 받기 켜 둠)
-관련 문서: [CLAUDE.md](CLAUDE.md) (가이드 · 알아 둘 결정) · [TODOs.md](TODOs.md) (할 일 · **실기기 확인 목록**) · [CHANGELOG.md](CHANGELOG.md) · [devlog 인덱스](devlog/README.md) · [음성 명령 목록](docs/Voice_Commands.md)
+관련 문서: [CLAUDE.md](CLAUDE.md) (가이드 · 알아 둘 결정) · [TODOs.md](TODOs.md) (할 일 · **실기기 확인 목록**) · [CHANGELOG.md](CHANGELOG.md) · [devlog 인덱스](devlog/README.md) · [음성 명령 목록](docs/Voice_Commands.md) · [사례집](docs/Voice_Command_Examples.md)
 
 ---
 
@@ -86,7 +86,7 @@ v0.5.6(2026-10-06) 뒤로 나흘 동안 v0.7.4 까지. 큰 줄기 여섯:
 - **합주 메시지를 바꾸면** `EnsembleVersion.CURRENT` 를 그 판의 앱 버전으로 올린다(#086)
   - 옛 기기가 무시해도 박 · 쪽이 어긋나지 않는 **선택 필드 추가**(예: `roll_start` #088)는 올리지 않는다
   - 비교는 기기마다 따로 하므로 양쪽에 새 판이 깔려야 안내가 사라진다
-- **음성 명령을 더하면** `docs/Voice_Commands.md` 도 고친다. 규칙의 정본은 `voice/` 와 `VoiceCommandTest`
+- **음성 명령을 더하면** `docs/Voice_Commands.md` 와 사례집 `docs/Voice_Command_Examples.md` 도 고친다. 규칙의 정본은 `voice/` 와 `VoiceCommandTest`
   - 원칙은 **"모르면 실행하지 않는다"** — 부정 · 상대 위치 · 둘 · 남는 수는 실행하지 않는다
 - **마이크는 하나**: 🎤 연주 듣기 · 🎙 단추 · 👂 계속 듣기는 동시에 쓰지 않는다
   - 듣기가 시작되면 👂 는 준비 중부터 쉬고(`micFollowStarting`) 🎙 는 흐려진다. 듣는 동안 멈추기는 ↑ 메뉴

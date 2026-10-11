@@ -1,7 +1,8 @@
 # 🎙 음성 명령 목록
 
-> MRGQ PDF Viewer **v0.7.4-beta.3** 기준. 태블릿 · 휴대폰만 지원하고, TV 에는 없습니다.
-> 설계는 [`devlog/P12`](../devlog/20261009_P12_voice_commands_plan.md), 구현 기록은 devlog 081 ~ 085 · 087 · 091 에 있습니다.
+> MRGQ PDF Viewer **v0.7.5-beta.12** 기준. 태블릿 · 휴대폰만 지원하고, TV 에는 없습니다.
+> 상황별로 어떻게 말하고 무엇이 뜨는지는 **[사례집 `Voice_Command_Examples.md`](Voice_Command_Examples.md)**.
+> 설계는 [`devlog/P12`](../devlog/20261009_P12_voice_commands_plan.md), 구현 기록은 devlog 081 ~ 085 · 087 · 091 · 094 · 098 · 108 ~ 113 에 있습니다.
 > 명령을 고치거나 더하면 이 문서도 함께 고칩니다. 규칙의 정본은 코드 `voice/`(`VoiceLexicon` · `CommandNormalizer` · `CommandParser`)와 단위 테스트 `VoiceCommandTest` 입니다.
 
 ## 켜기 · 쓰는 법
