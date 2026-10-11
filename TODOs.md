@@ -101,6 +101,14 @@
 - [ ] 4. 사용자가 GitHub 에서 private 으로 → 업데이트 확인 · 다운로드 페이지 확인. 같은 때 Instrumentation 을 릴리스 커밋 · 수동만으로
 - [ ] 5. GitHub 폴백 코드 · 문서 정리 (CLAUDE.md `.guides` 규칙 다시 정하기)
 
+## 🌐 언어 설정 · 영어 화면 (P18, 사용자 요청 2026-10-11)
+
+계획 [`P18`](devlog/20261011_P18_i18n_language_setting_plan.md) — 화면 글 약 960개를 리소스로 옮겨 `values-en`. 한국어 화면은 그대로, 단계마다 beta.
+- [x] 정할 것(P18 §9) — 모두 추천대로: 시스템 따름 · 한국어 · English, 기본 = 시스템 따름, `values/` = 한국어, 음성 명령 영어는 화면 뒤 좁게, 웹 업로드 페이지는 7단계, docs 영어는 User_Manual 만, CHANGELOG · notes 는 한국어, lint 게이트는 6단계, 0 ~ 6 = beta 여럿 → 정식 하나
+- [ ] 0. 틀 — `locales_config` · `autoStoreLocales` · 설정 "언어" 줄 · `values-en` 41개 · 용어집 `docs/Glossary_ko_en.md`
+- [ ] 1. 설정 화면 · 2. 곡 목록 · 첫 화면 · 3. 악보 화면 메뉴 · 4. 악보 화면 나머지(4a · 4b · 4c) · 5. ScoreMate · 업데이트 · 그 밖 · 6. lint 게이트 → 정식
+- [ ] 7. 웹 업로드 페이지 · 8. 음성 명령 영어(좁게) · 9. User_Manual 영어판
+
 ## 🧭 악보 화면 메뉴 정리 (P13, 사용자 요청 2026-10-10)
 
 지금 모습 [`docs/Viewer_Menus.md`](docs/Viewer_Menus.md), 정리안 [`devlog P13`](devlog/20261010_P13_viewer_menu_reorg_plan.md).
