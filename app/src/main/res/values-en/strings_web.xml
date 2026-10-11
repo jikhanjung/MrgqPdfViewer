@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Web upload server activity log (shown in Settings — follows the app language, P18 step 7).
+     The upload page and responses follow the browser language: server/WebText.kt -->
+<resources>
+    <string name="web_log_page_opened">📄 Page opened - %1$s</string>
+    <string name="web_log_list_requested">📋 File list requested - %1$s</string>
+    <string name="web_log_delete_requested">🗑️ Delete requested: %1$s - %2$s</string>
+    <string name="web_log_delete_all_requested">🗑️ Delete all requested - %1$s</string>
+    <string name="web_log_upload_started">📤 Upload started - %1$s</string>
+    <string name="web_log_unknown_request">❓ Unknown request: %1$s %2$s - %3$s</string>
+    <string name="web_log_saving">💾 Saving: %1$s</string>
+    <string name="web_log_saved">✅ Saved: %1$s (%2$s)</string>
+    <string name="web_log_save_failed">❌ Couldn\'t save: %1$s</string>
+    <plurals name="web_log_upload_done">
+        <item quantity="one">🎉 Upload complete: %1$d file (%2$s)</item>
+        <item quantity="other">🎉 Upload complete: %1$d files (%2$s)</item>
+    </plurals>
+    <string name="web_log_upload_no_pdf">❌ Upload failed: no PDF files</string>
+    <string name="web_log_deleted">✅ Deleted: %1$s</string>
+    <string name="web_log_delete_failed">❌ Couldn\'t delete: %1$s</string>
+    <string name="web_log_not_found">❌ File not found: %1$s</string>
+    <plurals name="web_log_delete_all_done">
+        <item quantity="one">🧹 Deleted all: %1$d file</item>
+        <item quantity="other">🧹 Deleted all: %1$d files</item>
+    </plurals>
+    <string name="web_log_delete_all_partial">⚠️ Delete all partly failed: %1$d deleted, %2$d failed</string>
+</resources>
