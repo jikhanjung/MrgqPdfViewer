@@ -3649,6 +3649,8 @@ class PdfViewerActivity : AppCompatActivity() {
     /**
      * 메트로놈 대화상자. 첫 화면은 박자(주요 박자 버튼) · 속도 · 소리 크기 세 가지만 두고, 나머지는 각 줄의 "상세…"로 뺀다.
      * 상세 버튼은 슬라이더 옆이 아니라 제목 줄에 있다 — 슬라이더가 좌우 키를 쓰므로 리모컨으로는 위/아래로만 닿는다.
+     * 태블릿 · 휴대폰(P17 3단계)은 ←→ 제약이 없으므로 첫 화면의 박자 · 속도 · 소리 상세를 **그 줄 아래에 펼쳐** 한 화면(스크롤)으로 —
+     * 구간(둘째부터) 화면은 그대로 따로 연다.
      */
     private fun buildMetronomeDialog(fileId: String?, initial: MetronomeSettings) {
         var bpm = initial.bpm.coerceIn(MetronomeClock.MIN_BPM, MetronomeClock.MAX_BPM)
@@ -3710,12 +3712,15 @@ class PdfViewerActivity : AppCompatActivity() {
             setPadding(50, 30, 50, 30)
             views.forEach { addView(it) }
         }
-        /** 제목 줄 — 왼쪽에 항목과 지금 값, 오른쪽에 "상세…" */
-        fun header(title: android.widget.TextView, detail: () -> Unit) = android.widget.LinearLayout(this).apply {
+        // 터치 기기: 첫 화면의 상세를 대화상자 대신 이 상자에 펼친다 (P17 3단계) — 펼치는 동안만 [inlineTarget] 이 있다
+        val inline = touchShell()
+        var inlineTarget: android.widget.LinearLayout? = null
+        /** 제목 줄 — 왼쪽에 항목과 지금 값, 오른쪽에 "상세…"(그 상세를 아래에 펼쳐 둔 줄은 없음) */
+        fun header(title: android.widget.TextView, detail: () -> Unit, inlined: Boolean = false) = android.widget.LinearLayout(this).apply {
             orientation = android.widget.LinearLayout.HORIZONTAL
             gravity = android.view.Gravity.CENTER_VERTICAL
             addView(title, android.widget.LinearLayout.LayoutParams(0, android.widget.LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
-            addView(android.widget.Button(this@PdfViewerActivity).apply {
+            if (!inlined) addView(android.widget.Button(this@PdfViewerActivity).apply {
                 text = "상세…"
                 isAllCaps = false
                 setOnClickListener { detail() }
@@ -3723,6 +3728,12 @@ class PdfViewerActivity : AppCompatActivity() {
         }
         fun detailDialog(title: String, views: List<View>, renderer: () -> Unit) {
             renderers += renderer
+            inlineTarget?.let { box ->
+                // 펼친 상세는 대화상자가 닫힐 때까지 함께 그린다
+                views.forEach { box.addView(it) }
+                render()
+                return
+            }
             render()
             AlertDialog.Builder(this)
                 .setTitle(title)
@@ -3912,7 +3923,8 @@ class PdfViewerActivity : AppCompatActivity() {
                 })
             }
             val hint = hintText("BPM 은 1분에 박이 몇 번인지이고, 박은 박자 단위 음표입니다. 실행 중에 바꾸면 다음 박부터 적용됩니다.")
-            detailDialog("속도 상세", listOf(tempoLabel, steps, hint)) {
+            // 펼쳐 둘 때는 위 "속도:" 줄이 같은 값을 보이므로 단추 · 설명만
+            detailDialog("속도 상세", if (inlineTarget != null) listOf(steps, hint) else listOf(tempoLabel, steps, hint)) {
                 tempoLabel.text = "${meter.beatNoteName(dotted)} = $bpm BPM"
             }
         }
@@ -4134,23 +4146,38 @@ class PdfViewerActivity : AppCompatActivity() {
         bpmSeek.onProgress { bpm = MetronomeClock.MIN_BPM + it; render(); applyToEngine() }
         volumeSeek.onProgress { render(); applyToEngine() }
         primaryButtons.forEach { (ts, button) -> button.setOnClickListener { selectMeter(ts) } }
-        otherMeterButton.setOnClickListener { showMeterDetail() }
+        // 펼쳐 둔 화면에서는 박자 상세가 이미 아래에 있다 — 이 단추는 지금 박자 표시만
+        if (!inline) otherMeterButton.setOnClickListener { showMeterDetail() }
         sectionButtons.forEachIndexed { i, button -> button.setOnClickListener { showSectionDetail(i + 1) } }
 
         render()
         val sectionTop = if (spans.size > 1) listOf<View>(sectionHeader) else emptyList()
         val sectionList = if (spans.size > 1) listOf<View>(otherSectionsLabel) + sectionButtons else emptyList()
+        fun detailBox() = android.widget.LinearLayout(this).apply { orientation = android.widget.LinearLayout.VERTICAL }
+        val meterBox = detailBox()
+        val tempoBox = detailBox()
+        val soundBox = detailBox()
         val content = column(
             sectionTop + listOf(
-                header(meterLabel, ::showMeterDetail), meterRow,
-                header(bpmLabel, ::showTempoDetail), bpmSeek,
-                header(volumeLabel, ::showSoundDetail), volumeSeek,
+                header(meterLabel, ::showMeterDetail, inline), meterRow, meterBox,
+                header(bpmLabel, ::showTempoDetail, inline), bpmSeek, tempoBox,
+                header(volumeLabel, ::showSoundDetail, inline), volumeSeek, soundBox,
                 countInLabel, countInRow,
             ) + sectionList + hintText(
                 "템포 · 박자는 이 파일에, 소리 · 예비박은 모든 파일에 저장됩니다. " +
                     "악보 화면에서 ↑ 키로 연주 메뉴(일시정지 · 이어서 · 정지)를 열 수 있습니다."
             )
         )
+
+        if (inline) {
+            inlineTarget = meterBox
+            showMeterDetail()
+            inlineTarget = tempoBox
+            showTempoDetail()
+            inlineTarget = soundBox
+            showSoundDetail()
+            inlineTarget = null
+        }
 
         val dialog = AlertDialog.Builder(this)
             .setTitle("메트로놈")
