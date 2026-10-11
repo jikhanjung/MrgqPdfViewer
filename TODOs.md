@@ -83,9 +83,9 @@
 계획 [`P15`](devlog/20261010_P15_private_repo_releases_on_scoremate_plan.md), 서버 요청 [`P16`](devlog/20261010_P16_scoremate_app_release_server_requests.md).
 - [x] 정할 것(P15 §4) — 모두 추천대로: Instrumentation 은 private 전환 때 릴리스 커밋 · 수동만으로 · GitHub Release 계속(보관용) · 업데이트도 설정의 서버 주소 · 옛 beta 안 올림
 - [ ] 0. 서버 P16 배포 (서버 세션)
-- [ ] 1. 앱 `update/` 서버 먼저 + GitHub 폴백, CI beta · notes 올리기 · Android Build paths-ignore → v0.7.5-beta.1
-- [ ] 2. beta 기기가 서버 경로로 업데이트되는지 (v0.7.5-beta.2)
-- [ ] 3. 정식 v0.7.5 → 모든 기기(Z18TV × 2 · Google TV Streamer · 태블릿 · 휴대폰) ≥ v0.7.5 확인
+- [ ] 1. 앱 `update/` 서버 먼저 + GitHub 폴백, CI beta · notes 올리기 · Android Build paths-ignore → 그때의 다음 beta (v0.7.5-beta.1 은 P17 0단계가 씀)
+- [ ] 2. beta 기기가 서버 경로로 업데이트되는지 (그 다음 beta)
+- [ ] 3. 그 뒤 첫 정식 → 모든 기기(Z18TV × 2 · Google TV Streamer · 태블릿 · 휴대폰) ≥ 그 정식 확인
 - [ ] 4. 사용자가 GitHub 에서 private 으로 → 업데이트 확인 · 다운로드 페이지 확인. 같은 때 Instrumentation 을 릴리스 커밋 · 수동만으로
 - [ ] 5. GitHub 폴백 코드 · 문서 정리 (CLAUDE.md `.guides` 규칙 다시 정하기)
 
