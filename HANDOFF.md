@@ -2,7 +2,7 @@
 
 마지막 갱신: 2026-10-11
 브랜치: `main` (origin/main 과 동기화)
-버전: **v0.7.7** (versionCode 99, 2026-10-11 정식 — beta.1 ~ beta.6 묶음: 업데이트 기기 기록 #120 · 에뮬레이터 제외 #121 · 설정 Android 스타일 #122 · 🎙 칸 · 업데이트 단추 #123 · 설정 화면 자동 확인 #124). 다음: P18 언어 설정 → v0.8.0-beta. 실기기는 앱 안 업데이트로 받는다(태블릿 · TV 모두 사전 릴리스 받기 켜 둠)
+버전: **v0.8.0-beta.1** (versionCode 100 — P18 언어 설정 0단계 #125). 정식은 **v0.7.7** ( 2026-10-11 정식 — beta.1 ~ beta.6 묶음: 업데이트 기기 기록 #120 · 에뮬레이터 제외 #121 · 설정 Android 스타일 #122 · 🎙 칸 · 업데이트 단추 #123 · 설정 화면 자동 확인 #124). 다음: P18 언어 설정 → v0.8.0-beta. 실기기는 앱 안 업데이트로 받는다(태블릿 · TV 모두 사전 릴리스 받기 켜 둠)
 관련 문서: [CLAUDE.md](CLAUDE.md) (가이드 · 알아 둘 결정) · [TODOs.md](TODOs.md) (할 일 · **실기기 확인 목록**) · [CHANGELOG.md](CHANGELOG.md) · [devlog 인덱스](devlog/README.md) · [음성 명령 목록](docs/Voice_Commands.md) · [사례집](docs/Voice_Command_Examples.md)
 
 ---
