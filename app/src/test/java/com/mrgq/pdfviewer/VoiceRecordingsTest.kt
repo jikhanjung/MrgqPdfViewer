@@ -112,6 +112,11 @@ class VoiceRecordingsTest {
         assertEquals("첼로 파트", heard("첼로 파트 좀 보여 줘"))
         assertEquals("57마디부터 · 첼로 파트", heard("첼로 57마디부터"))
         assertEquals("김민수 파트", heard("민수야", names = listOf("김민수", "이서연")))
+        // 부탁하는 말끝은 대화가 아니다
+        assertEquals("첼로 파트", heard("첼로 보여줄래"))
+        assertEquals("첼로 파트", heard("첼로로 바꿔 줘"))
+        assertEquals("첼로 파트", heard("첼로 좀 보여 줄래요"))
+        assertEquals("김민수 파트", heard("민수 부탁해요", names = listOf("김민수", "이서연")))
         // 첫 후보가 대화처럼 들려도 다음 후보가 명령이면 그것("하진 하트" → "하진 파트", 실녹음)
         assertEquals("하진 파트", heard("하진 하트", "하진 파트", names = moldau))
     }
