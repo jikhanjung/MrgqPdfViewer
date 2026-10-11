@@ -12,12 +12,24 @@ import javax.xml.parsers.DocumentBuilderFactory
  * @param parts 파트 (문서 순서 = 총보 위→아래가 보통이다). [XmlPart.staves] 는 그 파트가 차지하는 보표 수 (피아노 2)
  * @param measures 마디마다 박자 (첫 파트 기준, 앞 마디 것을 이어 쓴다) — PDF 분석과 맞춰 보는 데 쓴다
  * @param notes 파트마다 소리 나는 음 — 붙임줄은 하나로 합쳤고, 꾸밈음은 뺐다
+ * @param rehearsals 리허설 마크(레터 A · B … 또는 번호) — 모든 파트에서 모아 마디 순서대로, 같은 마디의 같은 글은 하나 (P12 4단계, #112)
  */
 data class MusicXmlScore(
     val parts: List<XmlPart>,
     val measures: List<XmlMeasure>,
     val notes: List<List<XmlNote>>,
+    val rehearsals: List<XmlRehearsal> = emptyList(),
 ) {
+    /**
+     * 리허설 마크 [mark]("B", "12")가 붙은 마디 순서(0부터) — 없으면 null. 글자 크기 · 괄호 · 공백은 보지 않는다("[B]" = "b").
+     * 같은 마크가 여럿이면 첫 것
+     */
+    fun rehearsalMeasure(mark: String): Int? {
+        val key = rehearsalKey(mark)
+        if (key.isEmpty()) return null
+        return rehearsals.firstOrNull { rehearsalKey(it.text) == key }?.measure
+    }
+
     /** 파트 [part] 가 차지하는 보표 순번들 (총보 위부터 0) — 파트 순서대로 보표 수를 쌓는다 */
     fun stavesOf(part: Int): IntRange {
         val start = parts.take(part).sumOf { it.staves }
@@ -38,6 +50,12 @@ data class MusicXmlScore(
 }
 
 data class XmlPart(val id: String, val name: String, val staves: Int)
+
+/** 리허설 마크 — [measure] 는 마디 순서(0부터), [text] 는 적힌 글("B", "12") */
+data class XmlRehearsal(val measure: Int, val text: String)
+
+/** 리허설 마크 비교용 — 글자 · 숫자만, 대문자로 */
+internal fun rehearsalKey(text: String): String = text.filter { it.isLetterOrDigit() }.uppercase()
 
 /** 마디 하나 — [index] 는 문서 순서(0부터), [number] 는 적힌 번호(못갖춘마디 "0" 등) */
 data class XmlMeasure(val index: Int, val number: String, val beats: Int, val beatType: Int)
@@ -92,19 +110,26 @@ object MusicXmlReader {
         val parts = ArrayList<XmlPart>()
         val notes = ArrayList<List<XmlNote>>()
         var measures: List<XmlMeasure> = emptyList()
+        val rehearsals = ArrayList<XmlRehearsal>()
         for ((p, part) in partElements.withIndex()) {
-            val (partNotes, partMeasures, staves) = readPart(part)
+            val read = readPart(part)
             val id = part.getAttribute("id")
-            parts += XmlPart(id, names[id]?.takeIf { it.isNotEmpty() } ?: "파트 ${p + 1}", staves)
-            notes += partNotes
-            if (p == 0) measures = partMeasures
+            parts += XmlPart(id, names[id]?.takeIf { it.isNotEmpty() } ?: "파트 ${p + 1}", read.staves)
+            notes += read.notes
+            if (p == 0) measures = read.measures
+            // 리허설 마크는 보통 맨 위 파트에만, 편집기에 따라 모든 파트에 — 모아서 같은 것은 하나로
+            rehearsals += read.rehearsals
         }
-        return MusicXmlScore(parts, measures, notes)
+        val marks = rehearsals.distinctBy { it.measure to rehearsalKey(it.text) }.sortedBy { it.measure }
+        return MusicXmlScore(parts, measures, notes, marks)
     }
 
-    private fun readPart(part: Element): Triple<List<XmlNote>, List<XmlMeasure>, Int> {
+    private class PartRead(val notes: List<XmlNote>, val measures: List<XmlMeasure>, val staves: Int, val rehearsals: List<XmlRehearsal>)
+
+    private fun readPart(part: Element): PartRead {
         val out = ArrayList<XmlNote>()
         val measures = ArrayList<XmlMeasure>()
+        val rehearsals = ArrayList<XmlRehearsal>()
         var divisions = 1.0
         var beats = 4
         var beatType = 4
@@ -124,6 +149,9 @@ object MusicXmlReader {
                             t.child("beats")?.textContent?.trim()?.toIntOrNull()?.let { beats = it }
                             t.child("beat-type")?.textContent?.trim()?.toIntOrNull()?.let { beatType = it }
                         }
+                    }
+                    "direction" -> node.children("direction-type").flatMap { it.children("rehearsal") }.forEach { r ->
+                        r.textContent?.trim()?.takeIf { it.isNotEmpty() }?.let { rehearsals += XmlRehearsal(m, it) }
                     }
                     "backup" -> cursor -= node.durationQuarters(divisions)
                     "forward" -> cursor += node.durationQuarters(divisions)
@@ -154,7 +182,7 @@ object MusicXmlReader {
             }
             measures += XmlMeasure(m, measure.getAttribute("number"), beats, beatType)
         }
-        return Triple(out, measures, staves)
+        return PartRead(out, measures, staves, rehearsals)
     }
 
     private val STEPS = mapOf('C' to 0, 'D' to 2, 'E' to 4, 'F' to 5, 'G' to 7, 'A' to 9, 'B' to 11)

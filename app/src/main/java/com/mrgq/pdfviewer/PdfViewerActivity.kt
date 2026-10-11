@@ -4942,7 +4942,27 @@ class PdfViewerActivity : AppCompatActivity() {
             return followFrom("${at}마디") { it.firstOrNull { m -> m.measureNumber == at } }
         }
 
-        override suspend fun gotoRehearsalMark(mark: String) = failed("레터(리허설 마크)는 아직 몰라요 — 마디 번호로 말하세요")
+        /**
+         * "레터 B" — PDF 옆 MusicXML 의 리허설 마크(`<rehearsal>`)가 붙은 마디부터 (P12 4단계, #112). MusicXML 마디 순서 → 악보 마디 번호는
+         * 반주 · 듣기와 같은 맞추기([MusicXmlMatch]), 안 맞으면 MusicXML 에 적힌 마디 번호로. PDF 에 찍힌 마크는 아직 읽지 않는다
+         */
+        override suspend fun gotoRehearsalMark(mark: String): CommandOutcome {
+            val fileId = currentPdfFileId ?: return failed("악보를 아직 여는 중이에요")
+            val score = musicXml?.takeIf { musicXmlFileId == fileId }
+                ?: return failed("레터는 MusicXML 이 있는 악보에서만 알아요 — 마디 번호로 말하세요")
+            val index = score.rehearsalMeasure(mark) ?: return failed(
+                if (score.rehearsals.isEmpty()) "이 악보에는 레터(리허설 마크)가 없어요 — 마디 번호로 말하세요"
+                else "레터 $mark 가 없어요 — 이 악보: " + score.rehearsals.joinToString(" · ") { it.text },
+            )
+            val measures = withContext(Dispatchers.IO) {
+                try { musicRepository.getOrAnalyzeScoreMeasures(fileId, File(pdfFilePath)) } catch (e: Exception) { null }
+            }
+            val match = measures?.takeIf { it.isNotEmpty() }?.let { com.mrgq.pdfviewer.metronome.MusicXmlMatch.check(score, it) }
+            val number = match?.takeIf { it.ok }?.measureNumberOf(index)
+                ?: score.measures.getOrNull(index)?.number?.toIntOrNull()
+                ?: return failed("레터 $mark 의 마디를 악보에서 찾지 못했어요")
+            return gotoMeasure(number)
+        }
 
         override suspend fun nextPage(): CommandOutcome {
             if (isInputBlocked()) return failed("지휘자가 방금 넘겨 잠시 넘길 수 없어요")

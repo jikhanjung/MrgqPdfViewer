@@ -148,4 +148,37 @@ class MusicXmlAccompanimentTest {
         voices.mixInto(IntArray(1000), 2000, 1000, 1f)
         assertEquals(0, voices.activeCount)
     }
+
+    @Test
+    fun 리허설_마크() {
+        // 맨 위 파트에 B(2마디) · [C](3마디), 둘째 파트에도 같은 B — 하나로 (P12 4단계, #112)
+        val marked = """
+            <score-partwise version="4.0">
+              <part-list><score-part id="P1"/><score-part id="P2"/></part-list>
+              <part id="P1">
+                <measure number="1"><attributes><divisions>1</divisions><time><beats>4</beats><beat-type>4</beat-type></time></attributes>
+                  <note><rest/><duration>4</duration></note></measure>
+                <measure number="2"><direction placement="above"><direction-type><rehearsal>B</rehearsal></direction-type></direction>
+                  <note><rest/><duration>4</duration></note></measure>
+                <measure number="3"><direction><direction-type><rehearsal enclosure="square"> [C] </rehearsal></direction-type></direction>
+                  <note><rest/><duration>4</duration></note></measure>
+              </part>
+              <part id="P2">
+                <measure number="1"><note><rest/><duration>4</duration></note></measure>
+                <measure number="2"><direction><direction-type><rehearsal>B</rehearsal></direction-type></direction>
+                  <note><rest/><duration>4</duration></note></measure>
+                <measure number="3"><note><rest/><duration>4</duration></note></measure>
+              </part>
+            </score-partwise>
+        """.trimIndent()
+        val read = MusicXmlReader.read(marked.byteInputStream())!!
+        assertEquals(listOf("B", "[C]"), read.rehearsals.map { it.text })
+        assertEquals(1, read.rehearsalMeasure("B"))
+        assertEquals(1, read.rehearsalMeasure("b"))
+        assertEquals(2, read.rehearsalMeasure("C"))
+        assertNull(read.rehearsalMeasure("D"))
+        assertNull(read.rehearsalMeasure(""))
+        // 마크가 없는 악보
+        assertTrue(score.rehearsals.isEmpty())
+    }
 }
