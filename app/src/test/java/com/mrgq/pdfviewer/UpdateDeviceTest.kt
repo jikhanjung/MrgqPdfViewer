@@ -3,7 +3,7 @@ package com.mrgq.pdfviewer
 import com.mrgq.pdfviewer.update.ReleaseInfo
 import com.mrgq.pdfviewer.update.UpdateClient
 import com.mrgq.pdfviewer.update.UpdateDevice
-import com.sun.net.httpserver.HttpServer
+import fi.iki.elonen.NanoHTTPD
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -12,8 +12,8 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
+import java.io.ByteArrayInputStream
 import java.io.File
-import java.net.InetSocketAddress
 import java.nio.file.Files
 import java.security.MessageDigest
 import java.util.Collections
@@ -56,45 +56,52 @@ class UpdateDeviceTest {
 
     // ── 실제 HTTP: 확인 · 받기 첫 요청에만 머리글, 302 뒤 저장소 요청에는 없음 ─────────────
 
-    private lateinit var http: HttpServer
-    private lateinit var base: String
     private val seen = Collections.synchronizedList(mutableListOf<Pair<String, String?>>())
     private val apkBytes = ByteArray(1000) { it.toByte() }
     private lateinit var dir: File
+    private lateinit var base: String
+
+    /** 앱 서버 흉내 — latest · 판 받기(302 → 저장소) · 저장소. 단위 테스트에서 JDK HttpServer 는 못 쓰므로 앱의 NanoHTTPD 로 */
+    private val http = object : NanoHTTPD("127.0.0.1", 0) {
+        val sha = MessageDigest.getInstance("SHA-256").digest(apkBytes).joinToString("") { "%02x".format(it) }
+
+        override fun serve(session: IHTTPSession): Response {
+            val install = session.headers["x-mrgq-install"]
+            val releases = ReleaseInfo.SCOREMATE_RELEASES_PATH
+            return when {
+                session.uri.startsWith("${releases}latest/") -> {
+                    seen += "latest" to install
+                    newFixedLengthResponse(
+                        Response.Status.OK, "application/json",
+                        """{"version":"v0.7.7-beta.2","prerelease":true,"apk":"a.apk","size":${apkBytes.size},
+                        "sha256":"$sha","notes":"n","download_url":"$base${releases}v0.7.7-beta.2/apk/"}""",
+                    )
+                }
+                session.uri.startsWith("${releases}v0.7.7-beta.2/apk/") -> {
+                    seen += "apk" to install
+                    newFixedLengthResponse(Response.Status.REDIRECT, "text/plain", "").apply {
+                        addHeader("Location", "/storage/a.apk?sig=x")
+                    }
+                }
+                session.uri.startsWith("/storage/") -> {
+                    seen += "storage" to install
+                    newFixedLengthResponse(Response.Status.OK, "application/octet-stream", ByteArrayInputStream(apkBytes), apkBytes.size.toLong())
+                }
+                else -> newFixedLengthResponse(Response.Status.NOT_FOUND, "text/plain", "")
+            }
+        }
+    }
 
     @Before
     fun startServer() {
-        http = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0)
-        base = "http://127.0.0.1:${http.address.port}"
-        val sha = MessageDigest.getInstance("SHA-256").digest(apkBytes).joinToString("") { "%02x".format(it) }
-        fun record(path: String, ex: com.sun.net.httpserver.HttpExchange) {
-            seen += path to ex.requestHeaders.getFirst("X-Mrgq-Install")
-        }
-        http.createContext("${ReleaseInfo.SCOREMATE_RELEASES_PATH}latest/") { ex ->
-            record("latest", ex)
-            val body = """{"version":"v0.7.7-beta.2","prerelease":true,"apk":"a.apk","size":${apkBytes.size},
-                "sha256":"$sha","notes":"n","download_url":"$base${ReleaseInfo.SCOREMATE_RELEASES_PATH}v0.7.7-beta.2/apk/"}""".toByteArray()
-            ex.sendResponseHeaders(200, body.size.toLong())
-            ex.responseBody.use { it.write(body) }
-        }
-        http.createContext("${ReleaseInfo.SCOREMATE_RELEASES_PATH}v0.7.7-beta.2/apk/") { ex ->
-            record("apk", ex)
-            ex.responseHeaders.add("Location", "/storage/a.apk?sig=x")
-            ex.sendResponseHeaders(302, -1)
-            ex.close()
-        }
-        http.createContext("/storage/") { ex ->
-            record("storage", ex)
-            ex.sendResponseHeaders(200, apkBytes.size.toLong())
-            ex.responseBody.use { it.write(apkBytes) }
-        }
-        http.start()
+        http.start(NanoHTTPD.SOCKET_READ_TIMEOUT, false)
+        base = "http://127.0.0.1:${http.listeningPort}"
         dir = Files.createTempDirectory("updates").toFile()
     }
 
     @After
     fun stopServer() {
-        http.stop(0)
+        http.stop()
         dir.deleteRecursively()
     }
 
