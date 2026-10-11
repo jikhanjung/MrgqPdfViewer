@@ -1,0 +1,261 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 설정 화면 (P18 1단계). 영어는 values-en/strings_settings.xml — 키를 더하면 거기에도 -->
+<resources>
+    <!-- 공통 -->
+    <string name="settings_title">설정</string>
+    <string name="settings_back">돌아가기</string>
+    <string name="settings_detail_title">상세 설정</string>
+    <string name="settings_apply">적용</string>
+    <string name="settings_save">저장</string>
+    <string name="settings_close">닫기</string>
+    <string name="settings_clear">지우기</string>
+    <string name="settings_delete">지우기</string>
+    <string name="settings_default">기본값</string>
+    <string name="settings_off">꺼짐</string>
+    <string name="settings_enabled">활성화됨</string>
+    <string name="settings_disabled">비활성화됨</string>
+    <string name="settings_this_device">이 %1$s</string>
+
+    <!-- 카테고리 (왼쪽 목록) -->
+    <string name="settings_cat_files">파일 관리</string>
+    <string name="settings_cat_files_summary">저장된 PDF 파일: %1$d개</string>
+    <string name="settings_cat_web">웹서버</string>
+    <string name="settings_cat_collab">협업 모드</string>
+    <string name="settings_cat_collab_summary">합주 설정 관리</string>
+    <string name="settings_cat_animation">애니메이션 &amp; 사운드</string>
+    <string name="settings_cat_animation_summary">페이지 전환 효과 설정</string>
+    <string name="settings_cat_voice">음성 명령</string>
+    <string name="settings_cat_voice_summary">누르고 말하기 · 계속 듣기</string>
+    <string name="settings_cat_recordings">녹음 기록</string>
+    <string name="settings_cat_display">표시 모드</string>
+    <string name="settings_cat_display_summary">저장된 설정: %1$d개</string>
+    <string name="settings_cat_info">앱 정보</string>
+
+    <!-- 파일 관리 -->
+    <string name="settings_delete_all_pdf">모든 PDF 파일 삭제</string>
+    <string name="settings_delete_all_pdf_desc">저장된 모든 PDF 파일을 삭제합니다</string>
+    <string name="settings_delete_all_pdf_none">삭제할 PDF 파일이 없습니다</string>
+    <string name="settings_delete_all_pdf_confirm">모든 PDF 파일(%1$d개)을 삭제하시겠습니까?\n이 작업은 되돌릴 수 없습니다.</string>
+    <string name="settings_delete_button">삭제</string>
+    <string name="settings_delete_all_pdf_done">%1$d개 파일이 삭제되었습니다</string>
+    <string name="settings_delete_all_pdf_partial">%1$d개 파일 삭제 완료, %2$d개 파일 삭제 실패</string>
+
+    <!-- 웹서버 -->
+    <string name="settings_web_unavailable_linked">ScoreMate 연결 중에는 쓸 수 없음</string>
+    <string name="settings_web_running">실행 중 (%1$s:%2$d)</string>
+    <string name="settings_web_stopped">중지됨</string>
+    <string name="settings_web_linked_title">ScoreMate 에 연결된 TV 에서는 쓸 수 없습니다</string>
+    <string name="settings_web_linked_desc">악보는 ScoreMate 웹에 올리고 동기화하세요. 웹서버를 쓰려면 설정 → ScoreMate 에서 연결을 해제하세요</string>
+    <string name="settings_web_start">웹서버 시작</string>
+    <string name="settings_web_stop">웹서버 중지</string>
+    <string name="settings_web_status">현재 상태: %1$s</string>
+    <string name="settings_web_port">포트 설정</string>
+    <string name="settings_web_port_current">현재 포트: %1$d</string>
+    <string name="settings_web_log">활동 로그</string>
+    <string name="settings_web_log_desc">실시간 웹서버 활동이 아래에 표시됩니다</string>
+    <string name="settings_web_log_title">웹서버 활동 로그</string>
+    <string name="settings_web_log_placeholder">웹서버 로그가 여기에 표시됩니다...</string>
+    <string name="settings_web_log_started">✅ 웹서버 시작됨 - http://%1$s:%2$d</string>
+    <string name="settings_web_log_waiting">📁 업로드 대기 중...</string>
+    <string name="settings_web_log_stopped">⏹️ 웹서버 중지됨</string>
+    <string name="settings_web_started_toast">웹서버가 시작되었습니다\nhttp://%1$s:%2$d</string>
+    <string name="settings_web_start_failed">웹서버 시작 실패</string>
+    <string name="settings_web_stopped_toast">웹서버가 중지되었습니다</string>
+    <string name="settings_web_linked_toast">ScoreMate 에 연결된 TV 에서는 웹서버를 쓸 수 없습니다</string>
+    <string name="settings_web_port_hint">포트 번호 (1024-65535)</string>
+    <string name="settings_web_port_title">웹서버 포트 설정</string>
+    <string name="settings_web_port_saved">포트 설정이 저장되었습니다: %1$d</string>
+    <string name="settings_web_port_range">포트 번호는 1024-65535 범위여야 합니다</string>
+    <string name="settings_web_port_invalid">유효한 포트 번호를 입력해주세요</string>
+    <string name="settings_web_port_empty">포트 번호를 입력해주세요</string>
+    <string name="settings_web_running_title">웹서버 실행 중</string>
+    <string name="settings_web_exit_settings_message">웹서버가 실행 중입니다 (%1$s:%2$d)\n\n설정을 나가면 웹서버가 중지됩니다.\n계속하시겠습니까?</string>
+    <string name="settings_web_exit_panel_message">웹서버가 실행 중입니다 (%1$s:%2$d)\n\n웹서버 설정을 나가면 웹서버가 중지됩니다.\n계속하시겠습니까?</string>
+    <string name="settings_web_leave">나가기</string>
+    <string name="settings_web_stay">머물기</string>
+
+    <!-- 협업 모드 -->
+    <string name="settings_ensemble_header">합주</string>
+    <string name="settings_collab_info">협업 모드 정보</string>
+    <string name="settings_collab_info_desc">메인 화면에서 협업 모드를 시작할 수 있습니다</string>
+    <string name="settings_ensemble_sound">합주 메트로놈 소리 (연주자)</string>
+    <string name="settings_ensemble_sound_on">켜짐 — 연주자 기기도 지휘자 메트로놈에 맞춰 소리를 냅니다</string>
+    <string name="settings_ensemble_sound_off">꺼짐 — 연주자 기기는 박 표시 · 현재 마디 · 넘김만 따라갑니다</string>
+    <string name="settings_ensemble_sound_on_toast">연주자 기기도 메트로놈 소리를 냅니다</string>
+    <string name="settings_ensemble_sound_off_toast">연주자 기기는 메트로놈 소리를 내지 않습니다</string>
+    <string name="settings_sync_turn_header">동기 넘김 (시험)</string>
+    <string name="settings_sync_turn">동기 페이지 넘김</string>
+    <string name="settings_sync_turn_on_desc">현재: ON · 예약 후 모든 기기 동시 넘김</string>
+    <string name="settings_sync_turn_off_desc">현재: OFF · 신호 즉시 넘김(기존)</string>
+    <string name="settings_sync_turn_on_toast">동기 페이지 넘김 ON (예약 후 동시 넘김)</string>
+    <string name="settings_sync_turn_off_toast">동기 페이지 넘김 OFF (즉시 넘김)</string>
+    <string name="settings_sync_lead">예약 시간</string>
+    <string name="settings_sync_lead_desc">현재: %1$dms · 누른 뒤 넘기까지 여유</string>
+    <string name="settings_sync_lead_hint">밀리초 (500-5000)</string>
+    <string name="settings_sync_lead_title">예약 시간 설정</string>
+    <string name="settings_sync_lead_message">지휘자가 페이지 넘김을 누른 뒤 실제로 넘어가기까지의 시간(ms)입니다.\n모든 기기가 이 시각에 동시에 넘깁니다. (권장 1000~2500)</string>
+    <string name="settings_sync_lead_saved">예약 시간이 %1$dms로 변경되었습니다</string>
+    <string name="settings_sync_lead_range">500-5000 사이의 값을 입력하세요</string>
+    <string name="settings_advanced_header">고급</string>
+    <string name="settings_input_block_current">현재: %1$dms</string>
+    <string name="settings_input_block_hint">밀리초 (100-2000)</string>
+    <string name="settings_input_block_saved">입력 차단 시간이 %1$dms로 변경되었습니다</string>
+    <string name="settings_input_block_range">100-2000 사이의 값을 입력하세요</string>
+    <string name="settings_invalid_number">올바른 숫자를 입력하세요</string>
+    <string name="settings_message_queue_disabled">비활성화됨 (성능 최적화)</string>
+    <string name="settings_message_queue_title">메시지 큐 시스템</string>
+    <string name="settings_message_queue_message">메시지 큐 시스템은 성능 최적화를 위해 비활성화되었습니다.\n\n협업 메시지는 이제 직접 처리되어 더 빠른 반응 속도를 제공합니다.</string>
+
+    <!-- ScoreMate -->
+    <string name="settings_scoremate_linked_summary">연결됨 — %1$s</string>
+    <string name="settings_scoremate_unlinked_summary">연결 안 됨 — 악보 서버에 이 %1$s 연결</string>
+    <string name="settings_scoremate_link_header">연결</string>
+    <string name="settings_scoremate_linked">연결됨</string>
+    <string name="settings_scoremate_unlinked">연결 안 됨</string>
+    <string name="settings_scoremate_unlinked_desc">휴대폰으로 QR 을 찍어 ScoreMate 계정에 이 %1$s 를 연결합니다</string>
+    <string name="settings_scoremate_check">연결 확인</string>
+    <string name="settings_scoremate_check_desc">서버에서 이 %1$s 정보 받기</string>
+    <string name="settings_scoremate_unlink">연결 해제</string>
+    <string name="settings_scoremate_unlink_desc">이 %1$s 의 ScoreMate 연결을 끊습니다</string>
+    <string name="settings_scoremate_link">이 %1$s 연결</string>
+    <string name="settings_scoremate_link_desc">화면의 QR 코드 · 연결 코드로 휴대폰에서 연결</string>
+    <string name="settings_scoremate_server">서버 주소</string>
+    <string name="settings_scoremate_scores_header">악보</string>
+    <string name="settings_scoremate_sync">지금 동기화</string>
+    <string name="settings_scoremate_sync_desc">앙상블 · 내 악보를 받습니다 (앱을 켤 때도 저절로). 받은 악보는 파일 목록에 ☁️</string>
+    <string name="settings_scoremate_unhide">숨긴 악보 다시 받기</string>
+    <string name="settings_scoremate_unhide_desc">TV 에서 지운 서버 악보를 다음 동기화에 다시 받습니다</string>
+    <string name="settings_scoremate_linked_toast">ScoreMate 에 연결되었습니다 — 파일 목록에는 ScoreMate 악보가 보입니다</string>
+    <string name="settings_scoremate_check_title">ScoreMate 연결 확인</string>
+    <string name="settings_scoremate_check_message">이 %1$s: %2$s\n서버: %3$s\n마지막 접속: %4$s</string>
+    <string name="settings_scoremate_syncing">ScoreMate 동기화 중…</string>
+    <string name="settings_scoremate_no_changes">ScoreMate: 바뀐 악보가 없습니다</string>
+    <string name="settings_scoremate_no_hidden">숨긴 악보가 없습니다</string>
+    <string name="settings_scoremate_unlink_title">ScoreMate 연결 해제</string>
+    <string name="settings_scoremate_unlink_message">이 %1$s 의 ScoreMate 연결을 끊습니다. 다시 쓰려면 휴대폰으로 다시 연결해야 합니다.\n\n받아 둔 악보는 어떻게 할까요? 남기면 이 기기 파일로 옮겨져 연결 해제 뒤의 파일 목록에 보입니다.</string>
+    <string name="settings_scoremate_unlink_keep">해제 · 악보 남기기</string>
+    <string name="settings_scoremate_unlink_delete">해제 · 악보 지우기</string>
+    <string name="settings_scoremate_unlinked_toast">ScoreMate 연결을 해제했습니다</string>
+    <string name="settings_scoremate_unlinked_local_toast">이 %1$s 에서 연결을 해제했습니다 (서버에 닿지 못함 — 웹의 TV 화면에서도 해제하세요)</string>
+    <string name="settings_scoremate_server_title">ScoreMate 서버 주소</string>
+    <string name="settings_scoremate_server_message">보통은 바꿀 필요가 없습니다 (개발 서버용). 비우면 기본값.</string>
+    <string name="settings_scoremate_server_invalid">서버 주소를 해석할 수 없습니다</string>
+
+    <!-- 애니메이션 & 사운드 -->
+    <string name="settings_page_turn_animation">페이지 전환 애니메이션</string>
+    <string name="settings_page_turn_sound">페이지 넘기기 사운드</string>
+    <string name="settings_sound_volume">사운드 볼륨</string>
+    <string name="settings_page_info_shown">표시함</string>
+    <string name="settings_page_info_hidden">숨김</string>
+    <string name="settings_animation_on_toast">페이지 전환 애니메이션이 활성화되었습니다</string>
+    <string name="settings_animation_off_toast">페이지 전환 애니메이션이 비활성화되었습니다</string>
+    <string name="settings_sound_on_toast">페이지 넘기기 사운드가 활성화되었습니다</string>
+    <string name="settings_sound_off_toast">페이지 넘기기 사운드가 비활성화되었습니다</string>
+    <string name="settings_page_info_on_toast">페이지 정보가 표시됩니다</string>
+    <string name="settings_page_info_off_toast">페이지 정보가 숨겨집니다</string>
+    <string name="settings_volume_saved">볼륨이 %1$d%%로 설정되었습니다</string>
+    <string name="settings_volume_hint">슬라이더를 드래그하여 볼륨을 조절하세요</string>
+    <string name="settings_speed_instant">즉시</string>
+    <string name="settings_speed_fast">빠르게</string>
+    <string name="settings_speed_normal">보통</string>
+    <string name="settings_speed_slow">느리게</string>
+    <string name="settings_speed_very_slow">매우 느리게</string>
+    <string name="settings_speed_with_ms">%1$s (%2$dms)</string>
+    <string name="settings_speed_title">페이지 넘기기 애니메이션 속도</string>
+    <string name="settings_speed_saved">애니메이션 속도가 변경되었습니다: %1$s</string>
+
+    <!-- 표시 모드 -->
+    <string name="settings_phone_orientation">회전 모드 (악보 화면)</string>
+    <string name="settings_orientation_auto">기기 회전</string>
+    <string name="settings_orientation_landscape">가로</string>
+    <string name="settings_orientation_portrait">세로</string>
+    <string name="settings_orientation_auto_desc">기기 회전 — 휴대폰을 돌리는 대로(기기의 자동 회전 · 회전 잠금을 따름)</string>
+    <string name="settings_orientation_landscape_desc">가로 — 휴대폰을 돌려도 가로(시스템 1 ~ 2개씩)</string>
+    <string name="settings_orientation_portrait_desc">세로 — 휴대폰을 돌려도 세로(보통 한 쪽 전체)</string>
+    <string name="settings_view_display_modes">설정 목록 보기</string>
+    <string name="settings_view_display_modes_desc">저장된 파일별 표시 모드를 확인합니다</string>
+    <string name="settings_reset_display_modes">설정 초기화</string>
+    <string name="settings_reset_display_modes_desc">모든 파일의 표시 모드를 초기화합니다</string>
+    <string name="settings_reset_display_modes_title">표시 모드 초기화</string>
+    <string name="settings_reset_display_modes_confirm">모든 파일의 표시 모드 설정을 초기화하시겠습니까?\n이 작업은 되돌릴 수 없습니다.</string>
+    <string name="settings_reset_button">초기화</string>
+    <string name="settings_reset_display_modes_done">모든 표시 모드 설정이 초기화되었습니다</string>
+    <string name="settings_reset_display_modes_error">설정 초기화 중 오류가 발생했습니다</string>
+    <string name="settings_display_modes_empty">저장된 표시 모드 설정이 없습니다</string>
+    <string name="settings_display_modes_load_error">설정 목록을 불러오는 중 오류가 발생했습니다</string>
+    <string name="settings_display_mode_auto">자동</string>
+    <string name="settings_display_mode_single">한 페이지</string>
+    <string name="settings_display_mode_double">두 페이지</string>
+    <string name="settings_display_modes_title">저장된 표시 모드 설정</string>
+
+    <!-- 앱 정보 · 업데이트 -->
+    <string name="settings_update_header">업데이트</string>
+    <string name="settings_app_version">앱 버전</string>
+    <string name="settings_check_update">업데이트 확인</string>
+    <string name="settings_check_update_desc">ScoreMate 서버에서 새 버전 찾기</string>
+    <string name="settings_auto_update">자동 업데이트 확인</string>
+    <string name="settings_auto_update_on">켜짐 — 파일 목록 · 설정 화면에서 10분마다 확인해 새 버전이 있으면 알려 줍니다</string>
+    <string name="settings_prerelease">사전 릴리스(beta) 받기</string>
+    <string name="settings_prerelease_on">켜짐 — 시험 중인 판도 받습니다. 확인 전 기능이 포함될 수 있습니다</string>
+    <string name="settings_prerelease_off">꺼짐 — 정식 릴리스만 받습니다</string>
+    <string name="settings_prerelease_on_toast">사전 릴리스도 받습니다 — 확인 전 기능이 포함될 수 있습니다</string>
+    <string name="settings_about_header">정보</string>
+    <string name="settings_app_info_desc">MRGQ PDF Viewer — TV · 태블릿 · 휴대폰을 위한 스마트 악보 리더</string>
+
+    <!-- 음성 명령 -->
+    <string name="settings_voice_press_header">누르고 말하기</string>
+    <string name="settings_voice_unavailable">이 기기에는 음성 인식 서비스가 없습니다 — 누르면 설치 안내 (Google \"음성 인식 및 합성\")</string>
+    <string name="settings_voice_on">켜짐 — 악보 화면 오른쪽 아래 🎙 를 누른 채로 \"57마디부터 템포 72\" · \"다음 쪽\" · \"첼로 파트\". 기기의 음성 인식(대개 인터넷)을 씁니다</string>
+    <string name="settings_voice_off">꺼짐 — 켜면 악보 화면에 🎙 단추가 생깁니다</string>
+    <string name="settings_voice_always">계속 듣기 (시험)</string>
+    <string name="settings_voice_always_unavailable">지금은 쓸 수 없습니다 — 다듬는 중</string>
+    <string name="settings_voice_always_needs_voice">위의 🎙 음성 명령을 먼저 켜세요</string>
+    <string name="settings_voice_always_on">켜짐 — 악보 화면에서 늘 듣다가 호출어 \"%1$s\" 뒤의 말만 실행(\"%1$s, 57마디부터\" · \"%1$s, 멈춰\"). 연주 중에도 듣습니다. 듣는 동안 알림 소리를 끕니다(휴대폰은 전화가 진동으로 올 수 있음). 듣는 소리는 계속 기기의 음성 인식(대개 Google, 인터넷)으로 갑니다</string>
+    <string name="settings_voice_always_off">꺼짐 — 켜면 🎙 를 누르지 않고 \"%1$s, …\"로 명령합니다</string>
+    <string name="settings_wake_words">호출어 (계속 듣기)</string>
+    <string name="settings_wake_words_desc">%1$s — 누르면 바꿉니다</string>
+    <string name="settings_wake_words_desc_default">%1$s (기본) — 누르면 바꿉니다</string>
+    <string name="settings_wake_title">🗣 호출어</string>
+    <string name="settings_wake_help">👂 계속 듣기에서 이 말 뒤의 말만 명령으로 실행합니다. 쉼표로 여럿 — 음성 인식이 달리 적는 표기도 함께 넣으면 좋습니다 (예: 마에스트로, maestro). 비우면 기본(메이트)</string>
+    <string name="settings_wake_not_saved">저장하지 않았습니다 — %1$s</string>
+    <string name="settings_recognizer_missing_title">음성 인식 서비스가 없습니다</string>
+    <string name="settings_recognizer_missing_message">🎙 음성 명령은 기기의 음성 인식을 씁니다.\n\n1. Google \"음성 인식 및 합성\"(Speech Recognition &amp; Synthesis)을 설치합니다\n2. 기기 설정 → 앱 → 음성 인식 및 합성 → 권한 → 마이크를 허용합니다\n3. 이 화면으로 돌아와 🎙 음성 명령을 켭니다\n\nGoogle 앱만 있는 중국판 롬 태블릿은 그 안의 인식 서비스가 꺼져 있어 따로 설치해야 합니다.</string>
+    <string name="settings_recognizer_open_store">스토어에서 열기</string>
+    <string name="settings_recognizer_no_store">스토어 · 브라우저를 열 수 없습니다 — %1$s 를 찾아 설치하세요</string>
+
+    <!-- 녹음 기록 -->
+    <string name="settings_recordings_none">없음</string>
+    <string name="settings_recordings_summary">%1$d개 · %2$s</string>
+    <string name="settings_rec_folder">저장 위치</string>
+    <string name="settings_rec_folder_desc">내부 저장소/Android/data/%1$s/files/recordings · %2$d개 · %3$s</string>
+    <string name="settings_rec_empty">녹음이 없습니다</string>
+    <string name="settings_rec_empty_desc">악보 화면 ↑ 메뉴의 🎤 연주 듣고 넘기기가 소리와 추적 기록을 남깁니다</string>
+    <string name="settings_rec_from_measure">%1$d마디부터</string>
+    <string name="settings_rec_turns">넘김 %1$d번</string>
+    <string name="settings_rec_to_page">%1$d쪽까지</string>
+    <string name="settings_rec_practice">연습 녹음</string>
+    <string name="settings_rec_delete_all">모두 지우기</string>
+    <string name="settings_rec_delete_all_desc">녹음 %1$d개 (%2$s) 를 지웁니다</string>
+    <string name="settings_rec_recorded">녹음: %1$s</string>
+    <string name="settings_rec_length">길이: %1$s · %2$s</string>
+    <string name="settings_rec_tempo">기준 빠르기: ♩=%1$s</string>
+    <string name="settings_rec_start">연주 시작: %1$s — %2$s</string>
+    <string name="settings_rec_measure">%1$d마디</string>
+    <string name="settings_rec_turns_detail">쪽 넘김 %1$d번 · 반 쪽 %2$d번</string>
+    <string name="settings_rec_last_position">마지막 위치: %1$d마디</string>
+    <string name="settings_rec_relocations">재위치 %1$d번</string>
+    <string name="settings_rec_manual_turns">손으로 넘김 %1$d번</string>
+    <string name="settings_rec_play">▶ 재생</string>
+    <string name="settings_rec_stop">■ 정지</string>
+    <string name="settings_rec_share">📤 공유</string>
+    <string name="settings_rec_delete">🗑️ 지우기</string>
+    <string name="settings_rec_delete_confirm">이 녹음을 지울까요?\n%1$s</string>
+    <string name="settings_rec_deleted">지웠습니다</string>
+    <string name="settings_rec_media_volume_zero">미디어 소리가 0 이에요 — 볼륨 키(위)로 올리세요</string>
+    <string name="settings_rec_cannot_play">재생할 수 없습니다</string>
+    <string name="settings_rec_send">녹음 보내기</string>
+    <string name="settings_rec_cannot_share">공유할 수 없습니다: %1$s</string>
+    <string name="settings_rec_delete_all_title">녹음 모두 지우기</string>
+    <string name="settings_rec_delete_all_confirm">녹음 %1$d개 (%2$s) 를 모두 지웁니다. 되돌릴 수 없습니다.</string>
+    <string name="settings_rec_all_deleted">모두 지웠습니다</string>
+</resources>
