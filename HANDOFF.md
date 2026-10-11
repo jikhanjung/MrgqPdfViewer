@@ -2,7 +2,7 @@
 
 마지막 갱신: 2026-10-11
 브랜치: `main` (origin/main 과 동기화)
-버전: **v0.7.5-beta.2** (versionCode 74, P17 1단계 — 태블릿 · 휴대폰 메뉴 하단 시트). 정식은 v0.7.4. 실기기는 앱 안 업데이트로 받는다(태블릿 · TV 모두 사전 릴리스 받기 켜 둠)
+버전: **v0.7.5-beta.3** (versionCode 75, P17 2단계 — 태블릿 · 휴대폰 도구 막대 · 두 번 탭 없앰). 정식은 v0.7.4. 실기기는 앱 안 업데이트로 받는다(태블릿 · TV 모두 사전 릴리스 받기 켜 둠)
 관련 문서: [CLAUDE.md](CLAUDE.md) (가이드 · 알아 둘 결정) · [TODOs.md](TODOs.md) (할 일 · **실기기 확인 목록**) · [CHANGELOG.md](CHANGELOG.md) · [devlog 인덱스](devlog/README.md) · [음성 명령 목록](docs/Voice_Commands.md)
 
 ---
