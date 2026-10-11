@@ -36,7 +36,7 @@ class CollaborationServerManager(
         private const val DEFAULT_PORT = 9090
     }
     
-    fun startServer(port: Int = DEFAULT_PORT, useSSL: Boolean = false): Boolean {
+    fun startServer(port: Int = DEFAULT_PORT): Boolean {
         return try {
             if (webSocketServer != null) {
                 Log.d(TAG, "Server already running, stopping first")
@@ -75,21 +75,14 @@ class CollaborationServerManager(
                 return false
             }
             
-            // Create WebSocket server with SSL support if enabled
-            webSocketServer = if (useSSL && context != null) {
-                Log.d(TAG, "Creating WSS (secure) WebSocket server")
-                SimpleWebSocketServer(port, this, context, true)
-            } else {
-                Log.d(TAG, "Creating WS (regular) WebSocket server")
-                SimpleWebSocketServer(port, this, null, false)
-            }
+            // 평문 WS (WSS 는 v0.1.8 에 롤백)
+            webSocketServer = SimpleWebSocketServer(port, this)
             
             val started = webSocketServer?.start() ?: false
             
             if (started) {
                 serverStarted = true
-                val protocol = if (useSSL) "WSS" else "WS"
-                Log.d(TAG, "$protocol WebSocket server started on port $port - serverStarted flag set to true")
+                Log.d(TAG, "WS WebSocket server started on port $port - serverStarted flag set to true")
             } else {
                 serverStarted = false
                 Log.e(TAG, "Failed to start WebSocket server - serverStarted flag set to false")
