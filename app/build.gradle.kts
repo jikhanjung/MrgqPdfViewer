@@ -16,8 +16,8 @@ android {
         // 원래 21 이었으나 검증 부담만 있고 쓰는 기기가 없어 2026-09-13 에 올렸다 (devlog #048, #049)
         minSdk = 30
         targetSdk = 30  // Android TV OS 11
-        versionCode = 80
-        versionName = "0.7.5-beta.8"
+        versionCode = 81
+        versionName = "0.7.5-beta.9"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
