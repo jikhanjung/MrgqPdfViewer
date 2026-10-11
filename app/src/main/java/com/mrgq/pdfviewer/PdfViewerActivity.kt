@@ -114,6 +114,8 @@ class PdfViewerActivity : AppCompatActivity() {
         private const val PREF_ACCOMPANIMENT = "metronome_accompaniment"
         /** 반주 소리 크기 — 메트로놈 클릭과 따로 (사용자 요청 2026-09-28), 0~1 */
         private const val PREF_ACCOMPANIMENT_VOLUME = "metronome_accompaniment_volume"
+        /** 반주가 MusicXML 셈여림(p · f · sf · 크레셴도)을 따른다 — 반주 설정에서 끔 (#115) */
+        private const val PREF_ACCOMPANIMENT_DYNAMICS = "metronome_accompaniment_dynamics"
         private const val DEFAULT_COUNT_IN_BARS = 2
         /** 👂 계속 듣기 (#085) — 🎙 를 누르지 않고 "메이트, …" */
         const val PREF_VOICE_ALWAYS = "voice_always_listen"
@@ -4843,6 +4845,7 @@ class PdfViewerActivity : AppCompatActivity() {
             ViewerMenus.Accompaniment(
                 preferences.getBoolean(PREF_ACCOMPANIMENT, true),
                 (preferences.getFloat(PREF_ACCOMPANIMENT_VOLUME, 0.6f) * 100).toInt(),
+                preferences.getBoolean(PREF_ACCOMPANIMENT_DYNAMICS, true),
             )
         }
         val menu = ViewerMenus.play(ViewerMenus.PlayState(
@@ -6162,7 +6165,9 @@ class PdfViewerActivity : AppCompatActivity() {
         val mine = partViewStaves
         val play = score.parts.indices.filter { p -> mine == null || score.stavesOf(p).none { it in mine } }.toSet()
         if (play.isEmpty()) return null
-        val accompaniment = com.mrgq.pdfviewer.metronome.Accompaniment.build(score, follower, play, match::measureNumberOf)
+        val accompaniment = com.mrgq.pdfviewer.metronome.Accompaniment.build(
+            score, follower, play, match::measureNumberOf, dynamics = preferences.getBoolean(PREF_ACCOMPANIMENT_DYNAMICS, true),
+        )
         Toast.makeText(this, "반주: ${play.joinToString { score.parts[it].name }}", Toast.LENGTH_SHORT).show()
         Log.i("PdfViewerActivity", "반주: 파트 $play, 음 ${accompaniment.size}개")
         return accompaniment
@@ -6230,8 +6235,21 @@ class PdfViewerActivity : AppCompatActivity() {
             val current = follower
             metronome.accompaniment = if (on && current != null && followState == FollowState.PLAYING) accompanimentFor(current) else null
         }
+        // 셈여림 따르기 (#114 · #115) — 끄면 모든 음을 같은 크기로. 연주 중이면 바로 다시 만든다
+        val hasDynamics = score.notes.any { part -> part.any { it.velocity != 1f } }
+        val dynamicsToggle = android.widget.CheckBox(this).apply {
+            text = "셈여림 따르기 (p · f · 크레셴도)" + if (hasDynamics) "" else " — 이 곡에는 셈여림표가 없습니다"
+            textSize = 16f
+            isChecked = preferences.getBoolean(PREF_ACCOMPANIMENT_DYNAMICS, true)
+            setOnCheckedChangeListener { _, on ->
+                preferences.edit().putBoolean(PREF_ACCOMPANIMENT_DYNAMICS, on).apply()
+                val current = follower
+                if (toggle.isChecked && current != null && followState == FollowState.PLAYING) metronome.accompaniment = accompanimentFor(current)
+            }
+        }
         layout.addView(info)
         layout.addView(toggle)
+        layout.addView(dynamicsToggle)
         layout.addView(volumeLabel)
         layout.addView(seek)
         AlertDialog.Builder(this)

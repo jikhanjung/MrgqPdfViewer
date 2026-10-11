@@ -253,4 +253,68 @@ class MusicXmlAccompanimentTest {
         assertTrue(full > 0)
         assertEquals(0.5, half.toDouble() / full, 0.02)
     }
+
+    /** p 크레셴도 → f(2마디), mf 디미누엔도 → 끝에 표 없음(4마디) — #115 */
+    private val wedgeXml = """
+        <score-partwise version="4.0">
+          <part-list><score-part id="P1"/></part-list>
+          <part id="P1">
+            <measure number="1"><attributes><divisions>1</divisions><time><beats>4</beats><beat-type>4</beat-type></time></attributes>
+              <direction><direction-type><dynamics><p/></dynamics></direction-type></direction>
+              <direction><direction-type><wedge type="crescendo"/></direction-type></direction>
+              <note><pitch><step>C</step><octave>4</octave></pitch><duration>1</duration></note>
+              <note><pitch><step>D</step><octave>4</octave></pitch><duration>1</duration></note>
+              <note><pitch><step>E</step><octave>4</octave></pitch><duration>1</duration></note>
+              <note><pitch><step>F</step><octave>4</octave></pitch><duration>1</duration></note>
+            </measure>
+            <measure number="2">
+              <direction><direction-type><wedge type="stop"/></direction-type></direction>
+              <direction><direction-type><dynamics><f/></dynamics></direction-type></direction>
+              <note><pitch><step>G</step><octave>4</octave></pitch><duration>4</duration></note>
+            </measure>
+            <measure number="3">
+              <direction><direction-type><dynamics><mf/></dynamics></direction-type></direction>
+              <direction><direction-type><wedge type="diminuendo"/></direction-type></direction>
+              <note><pitch><step>A</step><octave>4</octave></pitch><duration>2</duration></note>
+              <note><pitch><step>B</step><octave>4</octave></pitch><duration>2</duration></note>
+            </measure>
+            <measure number="4">
+              <direction><direction-type><wedge type="stop"/></direction-type></direction>
+              <note><pitch><step>C</step><octave>5</octave></pitch><duration>4</duration></note>
+            </measure>
+          </part>
+        </score-partwise>
+    """.trimIndent()
+
+    @Test
+    fun 크레셴도_디미누엔도() {
+        val read = MusicXmlReader.read(wedgeXml.byteInputStream())!!
+        val p = Dynamics.LEVELS.getValue("p")
+        val f = Dynamics.LEVELS.getValue("f")
+        val mf = Dynamics.LEVELS.getValue("mf")
+        val mp = Dynamics.LEVELS.getValue("mp")
+        val v = read.notes[0].map { it.velocity }
+        // p → f 를 네 박에 고르게, 끝의 f 는 그대로
+        listOf(p, p + (f - p) * 0.25f, p + (f - p) * 0.5f, p + (f - p) * 0.75f, f).forEachIndexed { i, want -> assertEquals(want, v[i], 1e-4f) }
+        // mf 디미누엔도, 끝에 표가 없으면 한 단계 아래(mp)까지 — 그 뒤도 mp
+        assertEquals(mf, v[5], 1e-4f)
+        assertEquals(mf + (mp - mf) * 0.5f, v[6], 1e-4f)
+        assertEquals(mp, v[7], 1e-4f)
+        assertEquals(Dynamics.LEVELS.getValue("ff"), Dynamics.step(f, 1))
+        assertEquals(Dynamics.LEVELS.getValue("pppp"), Dynamics.step(Dynamics.LEVELS.getValue("pppp"), -1))
+    }
+
+    @Test
+    fun 셈여림을_끄면_반주는_모두_같은_크기() {
+        val read = MusicXmlReader.read(wedgeXml.byteInputStream())!!
+        val measures = (1..4).map { measure(it, 4, 4) }
+        val match = MusicXmlMatch.check(read, measures)
+        assertTrue(match.ok)
+        val follower = ScoreFollower(measures, 1, dottedBeat = false)
+        val on = Accompaniment.build(read, follower, setOf(0), match::measureNumberOf)
+        val off = Accompaniment.build(read, follower, setOf(0), match::measureNumberOf, dynamics = false)
+        assertTrue(on.velocities.any { it < 1f })
+        assertTrue(off.velocities.all { it == 1f })
+        assertEquals(on.size, off.size)
+    }
 }

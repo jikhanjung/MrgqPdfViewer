@@ -84,6 +84,14 @@ object Dynamics {
     const val UNMARKED = 0.74f
     /** `<sound dynamics="X">` — 포르테(MIDI 90)에 대한 백분율 */
     fun ofSound(percent: Double): Float = (LEVELS.getValue("f") * percent / 100.0).toFloat().coerceIn(0.05f, 1f)
+
+    private val ORDER: List<Float> = LEVELS.values.distinct().sorted()
+
+    /** [level] 에서 셈여림 [by] 단계 위(+) · 아래(−) — 크레셴도 · 디미누엔도 끝에 표가 없을 때의 목표 (#115) */
+    fun step(level: Float, by: Int): Float {
+        val at = ORDER.indices.minByOrNull { kotlin.math.abs(ORDER[it] - level) } ?: return level
+        return ORDER[(at + by).coerceIn(0, ORDER.lastIndex)]
+    }
 }
 
 /**
@@ -158,6 +166,13 @@ object MusicXmlReader {
         var accentAt: Pair<Int, Double>? = null
         var accentLevel = 0f
         var anyDynamics = false
+        // 크레셴도 · 디미누엔도(#115): 곡 처음부터의 시각(4분음표)으로 — 셈여림표의 자리, 쐐기 구간, 음마다 시각 · 지금 셈여림을 따르는 음인가
+        var measureStart = 0.0
+        val marks = ArrayList<Pair<Double, Float>>()
+        val wedges = ArrayList<Triple<Double, Double, Boolean>>()
+        var openWedge: Pair<Double, Boolean>? = null
+        val noteTimes = ArrayList<Double>()
+        val noteFollowsDynamic = ArrayList<Boolean>()
         var divisions = 1.0
         var beats = 4
         var beatType = 4
@@ -185,7 +200,7 @@ object MusicXmlReader {
                         for (marks in node.children("direction-type").flatMap { it.children("dynamics") }) {
                             for (mark in marks.childElements()) {
                                 val name = mark.tagName
-                                Dynamics.LEVELS[name]?.let { dynamic = it; anyDynamics = true }
+                                Dynamics.LEVELS[name]?.let { dynamic = it; anyDynamics = true; marks += (measureStart + cursor) to it }
                                 Dynamics.ACCENTS[name]?.let { level ->
                                     accentNext = level
                                     anyDynamics = true
@@ -195,10 +210,27 @@ object MusicXmlReader {
                                 }
                             }
                         }
+                        // 쐐기 — 열고 닫는 자리. 겹친 쐐기(성부마다)는 가장 최근 것만
+                        for (wedge in node.children("direction-type").flatMap { it.children("wedge") }) {
+                            val at = measureStart + cursor
+                            when (wedge.getAttribute("type")) {
+                                "crescendo" -> { openWedge = at to true; anyDynamics = true }
+                                "diminuendo" -> { openWedge = at to false; anyDynamics = true }
+                                "stop" -> openWedge?.let { (from, up) -> if (at > from) wedges += Triple(from, at, up); openWedge = null }
+                            }
+                        }
                         // 편집기가 적어 둔 재생 크기가 있으면 그것을 따른다
-                        node.child("sound")?.getAttribute("dynamics")?.toDoubleOrNull()?.let { dynamic = Dynamics.ofSound(it); anyDynamics = true }
+                        node.child("sound")?.getAttribute("dynamics")?.toDoubleOrNull()?.let {
+                            dynamic = Dynamics.ofSound(it)
+                            anyDynamics = true
+                            marks += (measureStart + cursor) to Dynamics.ofSound(it)
+                        }
                     }
-                    "sound" -> node.getAttribute("dynamics").toDoubleOrNull()?.let { dynamic = Dynamics.ofSound(it); anyDynamics = true }
+                    "sound" -> node.getAttribute("dynamics").toDoubleOrNull()?.let {
+                        dynamic = Dynamics.ofSound(it)
+                        anyDynamics = true
+                        marks += (measureStart + cursor) to Dynamics.ofSound(it)
+                    }
                     "backup" -> cursor -= node.durationQuarters(divisions)
                     "forward" -> cursor += node.durationQuarters(divisions)
                     "note" -> {
@@ -232,18 +264,56 @@ object MusicXmlReader {
                             val accent = accentLevel.takeIf { accentAt == m to onset }
                             val velocity = own ?: accent ?: dynamic ?: -1f
                             out += XmlNote(m, onset, duration, midi, velocity)
+                            noteTimes += measureStart + onset
+                            noteFollowsDynamic += own == null && accent == null
                             if ("start" in ties) openTies[midi] = out.size - 1 else openTies.remove(midi)
                         }
                     }
                 }
             }
             measures += XmlMeasure(m, measure.getAttribute("number"), beats, beatType)
+            measureStart += beats * 4.0 / beatType
         }
         // 셈여림표가 하나도 없는 파트는 모두 1(예전과 같은 크기), 있으면 첫 표 앞의 음은 보통(mf)
         val unmarked = if (anyDynamics) Dynamics.UNMARKED else 1f
         for (i in out.indices) if (out[i].velocity < 0f) out[i] = out[i].copy(velocity = unmarked)
+        applyWedges(out, noteTimes, noteFollowsDynamic, marks.sortedBy { it.first }, wedges, unmarked)
         return PartRead(out, measures, staves, rehearsals)
     }
+
+    /**
+     * 크레셴도 · 디미누엔도 (#115) — 쐐기 [from, to) 안의 음을 시작 셈여림에서 목표까지 고르게. 목표는 끝 자리(한 마디 안)의 셈여림표가
+     * 쐐기 방향과 맞으면 그것, 아니면 한 단계 위 · 아래이고 그때는 다음 셈여림표까지 그 크기로 간다.
+     * 한 음 세게(sf 등)와 음에 적힌 크기는 건드리지 않는다
+     */
+    private fun applyWedges(
+        notes: ArrayList<XmlNote>,
+        times: List<Double>,
+        followsDynamic: List<Boolean>,
+        marks: List<Pair<Double, Float>>,
+        wedges: List<Triple<Double, Double, Boolean>>,
+        unmarked: Float,
+    ) {
+        val eps = 1e-6
+        for ((from, to, up) in wedges) {
+            val start = marks.lastOrNull { it.first <= from + eps }?.second ?: unmarked
+            val atEnd = marks.firstOrNull { it.first >= to - eps && it.first <= to + WEDGE_TARGET_REACH }
+            val reached = atEnd?.takeIf { (up && it.second > start) || (!up && it.second < start) }?.second
+            val target = reached ?: Dynamics.step(start, if (up) 1 else -1)
+            // 끝에 표가 없으면 다음 표까지 목표 크기로 남는다
+            val until = if (reached != null) to else marks.firstOrNull { it.first > to + eps }?.first ?: Double.MAX_VALUE
+            for (i in notes.indices) {
+                if (!followsDynamic[i]) continue
+                val t = times[i]
+                if (t < from - eps || t >= until - eps) continue
+                val v = if (t < to) start + (target - start) * ((t - from) / (to - from)).toFloat() else target
+                notes[i] = notes[i].copy(velocity = v)
+            }
+        }
+    }
+
+    /** 쐐기 끝에서 이만큼(4분음표) 안의 셈여림표를 목표로 본다 — 보통 끝 자리 바로 그 음에 붙는다 */
+    private const val WEDGE_TARGET_REACH = 1.0
 
     private val STEPS = mapOf('C' to 0, 'D' to 2, 'E' to 4, 'F' to 5, 'G' to 7, 'A' to 9, 'B' to 11)
 

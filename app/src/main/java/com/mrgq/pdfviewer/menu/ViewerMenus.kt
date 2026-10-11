@@ -50,8 +50,8 @@ object ViewerMenus {
         val accompaniment: Accompaniment?,
     )
 
-    /** PDF 옆에 MusicXML 이 있을 때만 */
-    data class Accompaniment(val on: Boolean, val volumePercent: Int)
+    /** PDF 옆에 MusicXML 이 있을 때만. [dynamics] = 셈여림 따르기(#115) — 끈 때만 줄에 보인다 */
+    data class Accompaniment(val on: Boolean, val volumePercent: Int, val dynamics: Boolean = true)
 
     data class PerformerState(val following: Boolean, val canRejoin: Boolean, val soundOn: Boolean)
 
@@ -93,7 +93,8 @@ object ViewerMenus {
         // 연주(소리 · 시간)만 — 파트 보기 · 메모는 보기 메뉴에 (P13)
         items += MenuItem(MenuAction.METRONOME_SETTINGS, "메트로놈 설정…")
         s.accompaniment?.let {
-            items += MenuItem(MenuAction.ACCOMPANIMENT, "반주 (MusicXML)", if (it.on) "켜짐 · 크기 ${it.volumePercent}%" else "꺼짐")
+            val value = if (it.on) "켜짐 · 크기 ${it.volumePercent}%" + (if (it.dynamics) "" else " · 셈여림 끔") else "꺼짐"
+            items += MenuItem(MenuAction.ACCOMPANIMENT, "반주 (MusicXML)", value)
         }
         return Menu(if (s.paused) "연주 — 일시정지" else "연주", items)
     }
