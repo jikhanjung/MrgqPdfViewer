@@ -2,7 +2,7 @@
 
 마지막 갱신: 2026-10-11
 브랜치: `main` (origin/main 과 동기화)
-버전: **v0.7.7-beta.1** (versionCode 93 — 업데이트 요청에 기기 정보 #120, 서버 기록은 서버 세션 구현 중). 정식은 v0.7.6(2026-10-11, P15 3단계 = 모든 기기 ≥ v0.7.6 확인 대기). 실기기는 앱 안 업데이트로 받는다(태블릿 · TV 모두 사전 릴리스 받기 켜 둠)
+버전: **v0.7.7-beta.2** (versionCode 94 — 확인용. beta.1 = 업데이트 요청에 기기 정보 #120, 서버 0.22.0 기록 · 0.22.1 받기 406 고침). 정식은 v0.7.6(2026-10-11, P15 3단계 = 모든 기기 ≥ v0.7.6 확인 대기). 실기기는 앱 안 업데이트로 받는다(태블릿 · TV 모두 사전 릴리스 받기 켜 둠)
 관련 문서: [CLAUDE.md](CLAUDE.md) (가이드 · 알아 둘 결정) · [TODOs.md](TODOs.md) (할 일 · **실기기 확인 목록**) · [CHANGELOG.md](CHANGELOG.md) · [devlog 인덱스](devlog/README.md) · [음성 명령 목록](docs/Voice_Commands.md) · [사례집](docs/Voice_Command_Examples.md)
 
 ---
