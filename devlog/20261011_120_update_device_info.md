@@ -34,4 +34,5 @@ P15 3단계("모든 기기 ≥ v0.7.6")를 기기마다 설정 → 앱 정보를
 
 ## 확인
 - [x] 서버 0.22.1 뒤 태블릿이 v0.7.7-beta.1 을 서버에서 받음(받기 200 — v0.7.6 앱이라 기기 정보 없음), 그 뒤 check 기록: 0.7.7-beta.1 · tablet · LENOVO TB371FC · Android 13 · beta · 연결 기기 맞음 (2026-10-11 11:55 UTC, 서버 세션)
-- [ ] v0.7.7-beta.2(확인용)를 받을 때 download 줄에 모델 · install · device, install 의 "마지막 받은 판"
+- [x] v0.7.7-beta.2(확인용) 받기 기록 (2026-10-11 21:09 KST, 서버 세션): 태블릿(tablet · LENOVO TB371FC · Android 13 · 연결 기기 "小新Pad Pro 12.7") · TV(tv · SkyworthDigital 4K Google TV Stick · Android 14 · 연결 기기 "Z18TV_Test") 모두 download 줄 · 마지막 받은 판 v0.7.7-beta.2
+- ⚠️ CI 에뮬레이터(sdk_gphone64_x86_64 · sdk_gphone_x86)도 install 로 잡혔다 — 계측 · 스모크가 앱을 띄우면 자동 확인이 운영 서버로 간다
