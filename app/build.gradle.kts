@@ -23,13 +23,16 @@ android {
     }
     signingConfigs {
         create("release") {
-            // Load signing properties
-            val signingPropsFile = rootProject.file("signing.properties")
-            if (signingPropsFile.exists()) {
+            // Load signing properties — 로컬은 signing/(.gitignore), CI 는 루트에 만든다(build.yml).
+            // storeFile 은 properties 파일이 있는 디렉토리 기준
+            val signingPropsFile = listOf("signing/signing.properties", "signing.properties")
+                .map { rootProject.file(it) }
+                .firstOrNull { it.exists() }
+            if (signingPropsFile != null) {
                 val signingProps = Properties()
                 signingPropsFile.inputStream().use { signingProps.load(it) }
-                
-                storeFile = rootProject.file(signingProps.getProperty("storeFile"))
+
+                storeFile = signingPropsFile.parentFile.resolve(signingProps.getProperty("storeFile"))
                 storePassword = signingProps.getProperty("storePassword")
                 keyAlias = signingProps.getProperty("keyAlias")
                 keyPassword = signingProps.getProperty("keyPassword")

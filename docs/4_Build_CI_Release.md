@@ -64,11 +64,14 @@
 - 릴리스 본문에 서명 상태를 자동으로 적고(가이드 §2 "컴파일된 것과 검증된 것을 혼동하지 말 것"),
   secrets 가 빠져 debug 키로 폴백하면 경고를 단다. ScoreMate 서버 업로드(`APP_RELEASE_TOKEN`)는 릴리스 키일 때만 한다.
 - **keystore 백업**: 원본 keystore 파일과 두 비밀번호 · alias 를 저장소 · CI 밖에 따로 보관한다(잃으면 기존 설치본을 더는 업데이트할 수 없다 —
-  모든 기기에서 지우고 새 키로 다시 설치해야 한다).
-  ⚠️ **2026-10-06 현재 따로 백업한 기록이 없다.** secrets 는 다시 꺼낼 수 없고, 지금 쓰는 Linux PC 에도 keystore 가 없다.
-  가장 유력한 원본: **예전 Windows PC 의 `D:\projects\MrgqPdfViewer\`** — `signing.properties`(storeFile · 비밀번호 · alias)와
-  keystore 파일(둘 다 `.gitignore`). 찾으면 저장소 밖 두 곳에 보관하고 위치를 여기에 적는다. 못 찾으면 원본을 되살리려 하지 말고
-  새 키 + 백업 → 기기마다 한 번 지우고 다시 설치(secrets 값을 꺼내는 워크플로는 공개 저장소라 쓰지 않는다).
+  모든 기기에서 지우고 새 키로 다시 설치해야 한다). secrets 는 다시 꺼낼 수 없다.
+  ✅ **2026-10-11 백업함** — 원본은 Windows PC 의 `D:\projects\MrgqPdfViewer\signing\`(`mrgq-pdf-viewer-key.jks` ·
+  `signing.properties` · `README.txt`, 디렉토리째 `.gitignore`). 인증서 SHA-256 `DE:CE:29:81:…:57:34` 가
+  릴리스 APK(v0.7.5-beta.16) 서명과 같음을 확인했다. 사본(체크섬 확인):
+  1. 같은 PC 의 다른 디스크 — `E:\Backup\signing-keys\MrgqPdfViewer\`
+  2. Google Drive — `내 드라이브/Backup/signing-keys/MrgqPdfViewer/`
+  - 로컬 빌드는 `signing/signing.properties` 를 먼저, 없으면 루트 `signing.properties`(CI 가 만든다)를 읽고,
+    `storeFile` 은 그 properties 파일이 있는 디렉토리 기준이다(`app/build.gradle.kts`).
 
 ### 미도입 (해도 되는 것)
 - **빌드 메타데이터 embed** (§5) — 커밋 SHA·빌드 날짜를 앱에 심어 About 화면에 표시.
@@ -200,7 +203,7 @@ v* 태그 푸시
    `NoClassDefFoundError` 로 죽는다 (Z18TV Pro 실측 시도, devlog #049) — keep 규칙이 먼저 필요하다
 6. **빌드 메타데이터(커밋 SHA) 를 앱에 심고 About 에 표시** — APK 만 보고 어느 커밋인지 알 수 있게
 7. **릴리스 스크립트** — 수동 단계 줄이기 (`versionCode` 누락은 verify 가 막는다, 2026-10-06)
-8. [x] ~~정식 릴리스 키 등록~~ (2026-09-05) — 남은 것: keystore 백업 위치를 §1 에 적기
+8. [x] ~~정식 릴리스 키 등록~~ (2026-09-05) · ~~keystore 백업~~ (2026-10-11, 위치는 §1)
 
 ---
 
