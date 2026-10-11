@@ -197,8 +197,8 @@ object MusicXmlReader {
                         node.children("direction-type").flatMap { it.children("rehearsal") }.forEach { r ->
                             r.textContent?.trim()?.takeIf { it.isNotEmpty() }?.let { rehearsals += XmlRehearsal(m, it) }
                         }
-                        for (marks in node.children("direction-type").flatMap { it.children("dynamics") }) {
-                            for (mark in marks.childElements()) {
+                        for (dynamicsElement in node.children("direction-type").flatMap { it.children("dynamics") }) {
+                            for (mark in dynamicsElement.childElements()) {
                                 val name = mark.tagName
                                 Dynamics.LEVELS[name]?.let { dynamic = it; anyDynamics = true; marks += (measureStart + cursor) to it }
                                 Dynamics.ACCENTS[name]?.let { level ->
