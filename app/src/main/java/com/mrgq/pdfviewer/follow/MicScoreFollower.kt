@@ -45,7 +45,8 @@ class MicScoreFollower(
 
         fun onTurn(turn: PageTurnDecider.Turn)
 
-        fun onError(message: String)
+        /** [message] = 예외 메시지 — 없으면 null (화면이 "마이크 오류"를 붙인다, P18) */
+        fun onError(message: String?)
     }
 
     private val main = Handler(Looper.getMainLooper())
@@ -180,7 +181,7 @@ class MicScoreFollower(
             }
         } catch (e: Exception) {
             Log.w(TAG, "추적 중 오류", e)
-            main.post { listener.onError(e.message ?: "마이크 오류") }
+            main.post { listener.onError(e.message) }
         } finally {
             try {
                 record.stop()

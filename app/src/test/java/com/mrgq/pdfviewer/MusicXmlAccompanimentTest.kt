@@ -5,6 +5,7 @@ import com.mrgq.pdfviewer.metronome.Accompaniment
 import com.mrgq.pdfviewer.metronome.AccompanimentVoices
 import com.mrgq.pdfviewer.metronome.MusicXmlMatch
 import com.mrgq.pdfviewer.metronome.ScoreFollower
+import com.mrgq.pdfviewer.menu.Text
 import com.mrgq.pdfviewer.score.Dynamics
 import com.mrgq.pdfviewer.score.MusicXmlReader
 import com.mrgq.pdfviewer.score.XmlNote
@@ -89,10 +90,10 @@ class MusicXmlAccompanimentTest {
         assertTrue(MusicXmlMatch.check(score, listOf(measure(1, 6, 8), measure(2, null, null))).ok)
         val fewer = MusicXmlMatch.check(score, listOf(measure(1, 6, 8)))
         assertFalse(fewer.ok)
-        assertTrue(fewer.reason!!.contains("마디 수"))
+        assertEquals(Text.of(R.string.viewer_xml_match_measure_count, 1, 2), fewer.reason)
         val otherMeter = MusicXmlMatch.check(score, listOf(measure(1, 3, 4), measure(2, 6, 8)))
         assertFalse(otherMeter.ok)
-        assertTrue(otherMeter.reason!!.contains("1마디"))
+        assertEquals(Text.of(R.string.viewer_xml_match_meter, 1, 3, 4, 6, 8), otherMeter.reason)
     }
 
     @Test

@@ -1,5 +1,8 @@
 package com.mrgq.pdfviewer.menu
 
+import androidx.annotation.StringRes
+import com.mrgq.pdfviewer.R
+
 /**
  * 악보 화면 메뉴의 **내용** (P17 0단계) — 어떤 줄이 어떤 순서로, 어떤 값으로 보이는가. 그리는 것은 기기마다 따로:
  * TV 는 목록 대화상자(지금 모습, `docs/Viewer_Menus.md`), 터치 기기는 하단 시트(P17 1단계).
@@ -21,20 +24,30 @@ enum class MenuAction {
 }
 
 /**
- * 메뉴 줄 하나. [value] 가 있으면 TV 는 "이름: 값" 으로 보인다. [checked] 가 있으면 켜기 · 끄기 줄 — 터치 기기는 스위치로 그린다
+ * 화면 글 (P18) — 리소스 키 + 인자. 이 파일은 Android 에 의존하지 않으므로 글 대신 키를 담고, 화면 쪽이 `resolve(context)` 로 글을 만든다.
+ * [Plain] = 사용자 데이터(파트 이름 등) — 번역하지 않는다. 인자에 [Text] 가 있으면 그것도 글로 바꿔 끼운다
+ */
+sealed class Text {
+    data class Res(@StringRes val id: Int, val args: List<Any?> = emptyList()) : Text()
+    data class Plain(val value: String) : Text()
+
+    companion object {
+        fun of(@StringRes id: Int, vararg args: Any?): Text = Res(id, args.toList())
+    }
+}
+
+/**
+ * 메뉴 줄 하나. [value] 가 있으면 TV 는 "이름: 값" 으로 보인다(`viewer_menu_label_value`). [checked] 가 있으면 켜기 · 끄기 줄 — 터치 기기는 스위치로 그린다
  */
 data class MenuItem(
     val action: MenuAction,
-    val label: String,
-    val value: String? = null,
+    val label: Text,
+    val value: Text? = null,
     val checked: Boolean? = null,
-) {
-    /** TV 목록 대화상자에 쓰는 글 — 지금 모습 그대로 */
-    val text: String get() = if (value != null) "$label: $value" else label
-}
+)
 
 /** [closeButton] = 아래 "닫기" (보기 메뉴) */
-data class Menu(val title: String, val items: List<MenuItem>, val closeButton: Boolean = false)
+data class Menu(val title: Text, val items: List<MenuItem>, val closeButton: Boolean = false)
 
 object ViewerMenus {
 
@@ -72,62 +85,82 @@ object ViewerMenus {
         val items = mutableListOf<MenuItem>()
         if (s.micCapable) {
             items += when {
-                s.micListening -> MenuItem(MenuAction.MIC_STOP, "🎤 듣기 멈춤")
-                s.selectedMeasure != null -> MenuItem(MenuAction.MIC_FROM_SELECTION, "🎤 ${s.selectedMeasure}마디부터 연주 듣고 넘기기")
-                else -> MenuItem(MenuAction.MIC_FROM_PAGE, "🎤 연주 듣고 넘기기 — 이 쪽 첫 마디부터")
+                s.micListening -> MenuItem(MenuAction.MIC_STOP, Text.of(R.string.viewer_menu_mic_stop))
+                s.selectedMeasure != null -> MenuItem(MenuAction.MIC_FROM_SELECTION, Text.of(R.string.viewer_menu_mic_from_measure, s.selectedMeasure))
+                else -> MenuItem(MenuAction.MIC_FROM_PAGE, Text.of(R.string.viewer_menu_mic_from_page))
             }
         }
         when {
             s.selectedMeasure != null -> {
-                items += MenuItem(MenuAction.START_SELECTED, "▶ ${s.selectedMeasure}마디부터 시작 (예비박 ${s.countInBars}마디 뒤)")
-                items += MenuItem(MenuAction.CANCEL_SELECTION, "마디 고르기 취소")
+                items += MenuItem(MenuAction.START_SELECTED, Text.of(R.string.viewer_menu_start_selected, s.selectedMeasure, s.countInBars))
+                items += MenuItem(MenuAction.CANCEL_SELECTION, Text.of(R.string.viewer_menu_cancel_selection))
             }
             s.paused -> {
-                items += MenuItem(MenuAction.RESUME, "이어서 — ${s.pausedMeasure}번 마디부터 (예비박 ${s.countInBars}마디 뒤)")
-                items += MenuItem(MenuAction.RESELECT, "마디 골라 다시 시작")
-                items += MenuItem(MenuAction.STOP, "정지")
+                items += MenuItem(MenuAction.RESUME, Text.of(R.string.viewer_menu_resume, s.pausedMeasure, s.countInBars))
+                items += MenuItem(MenuAction.RESELECT, Text.of(R.string.viewer_menu_reselect))
+                items += MenuItem(MenuAction.STOP, Text.of(R.string.viewer_menu_stop))
             }
-            s.running -> items += MenuItem(MenuAction.STOP, "정지")
-            else -> items += MenuItem(MenuAction.START, "시작 — 악보에서 마디 고르기")
+            s.running -> items += MenuItem(MenuAction.STOP, Text.of(R.string.viewer_menu_stop))
+            else -> items += MenuItem(MenuAction.START, Text.of(R.string.viewer_menu_start))
         }
         // 연주(소리 · 시간)만 — 파트 보기 · 메모는 보기 메뉴에 (P13)
-        items += MenuItem(MenuAction.METRONOME_SETTINGS, "메트로놈 설정…")
+        items += MenuItem(MenuAction.METRONOME_SETTINGS, Text.of(R.string.viewer_menu_metronome_settings))
         s.accompaniment?.let {
-            val value = if (it.on) "켜짐 · 크기 ${it.volumePercent}%" + (if (it.dynamics) "" else " · 악상기호 끔") else "꺼짐"
-            items += MenuItem(MenuAction.ACCOMPANIMENT, "반주 (MusicXML)", value)
+            val value = when {
+                !it.on -> Text.of(R.string.viewer_menu_off)
+                it.dynamics -> Text.of(R.string.viewer_menu_accompaniment_on, it.volumePercent)
+                else -> Text.of(R.string.viewer_menu_accompaniment_on_no_dynamics, it.volumePercent)
+            }
+            items += MenuItem(MenuAction.ACCOMPANIMENT, Text.of(R.string.viewer_menu_accompaniment), value)
         }
-        return Menu(if (s.paused) "연주 — 일시정지" else "연주", items)
+        return Menu(Text.of(if (s.paused) R.string.viewer_menu_play_title_paused else R.string.viewer_menu_play_title), items)
     }
 
     /** 합주 연주자의 연주 메뉴 — 템포 · 박자 · 시작은 지휘자를 따른다. 소리는 누르면 바로 켬 ↔ 끔 */
     fun performer(s: PerformerState): Menu {
         val items = mutableListOf<MenuItem>()
         when {
-            s.following -> items += MenuItem(MenuAction.DETACH, "이 기기만 빠지기")
-            s.canRejoin -> items += MenuItem(MenuAction.REJOIN, "지휘자 연주에 다시 합류 — 지금 연주 중인 마디로")
+            s.following -> items += MenuItem(MenuAction.DETACH, Text.of(R.string.viewer_menu_detach))
+            s.canRejoin -> items += MenuItem(MenuAction.REJOIN, Text.of(R.string.viewer_menu_rejoin))
         }
-        items += MenuItem(MenuAction.ENSEMBLE_SOUND, "메트로놈 소리", if (s.soundOn) "켬" else "끔", checked = s.soundOn)
+        items += MenuItem(
+            MenuAction.ENSEMBLE_SOUND, Text.of(R.string.viewer_menu_ensemble_sound),
+            Text.of(if (s.soundOn) R.string.viewer_menu_sound_on else R.string.viewer_menu_sound_off), checked = s.soundOn,
+        )
         val title = when {
-            s.following -> "연주 — 지휘자를 따라가는 중"
-            s.canRejoin -> "연주 — 이 기기는 빠져 있음"
-            else -> "연주 — 지휘자가 시작하면 따라갑니다"
+            s.following -> R.string.viewer_menu_performer_title_following
+            s.canRejoin -> R.string.viewer_menu_performer_title_detached
+            else -> R.string.viewer_menu_performer_title_waiting
         }
-        return Menu(title, items)
+        return Menu(Text.of(title), items)
     }
 
     /** 보기 메뉴 — 화면에 무엇을 어떻게 보일지만 */
     fun view(s: ViewState): Menu {
         val items = mutableListOf<MenuItem>()
         // 지휘자는 늘 총보 (P07 4단계)
-        if (!s.conductor) items += MenuItem(MenuAction.PART_VIEW, "파트 보기", s.partViewName ?: "전체 악보")
-        items += MenuItem(MenuAction.MEASURE_BOXES, "마디 박스", onOff(s.measureBoxes), checked = s.measureBoxes)
-        items += MenuItem(MenuAction.SHOW_NOTES, "메모 보이기", onOff(s.notesVisible), checked = s.notesVisible)
-        if (s.notesWritable) items += MenuItem(MenuAction.NOTE_MODE, if (s.noteEditMode) "✏️ 메모 끝" else "✏️ 메모 쓰기")
-        if (s.twoPageCapable) items += MenuItem(MenuAction.TWO_PAGE, "두 쪽 보기", if (s.twoPage) "두 쪽" else "한 쪽")
-        items += MenuItem(MenuAction.CLIPPING, if (s.twoPageCapable && s.twoPage) "자르기 · 여백…" else "위/아래 자르기…")
-        s.phoneRotation?.let { items += MenuItem(MenuAction.PHONE_ROTATION, "회전", it) }
-        return Menu("보기", items, closeButton = true)
+        if (!s.conductor) {
+            val part = s.partViewName?.let { Text.Plain(it) } ?: Text.of(R.string.viewer_menu_full_score)
+            items += MenuItem(MenuAction.PART_VIEW, Text.of(R.string.viewer_menu_part_view), part)
+        }
+        items += MenuItem(MenuAction.MEASURE_BOXES, Text.of(R.string.viewer_menu_measure_boxes), onOff(s.measureBoxes), checked = s.measureBoxes)
+        items += MenuItem(MenuAction.SHOW_NOTES, Text.of(R.string.viewer_menu_show_notes), onOff(s.notesVisible), checked = s.notesVisible)
+        if (s.notesWritable) {
+            items += MenuItem(MenuAction.NOTE_MODE, Text.of(if (s.noteEditMode) R.string.viewer_menu_note_mode_end else R.string.viewer_menu_note_mode_start))
+        }
+        if (s.twoPageCapable) {
+            items += MenuItem(
+                MenuAction.TWO_PAGE, Text.of(R.string.viewer_menu_two_page),
+                Text.of(if (s.twoPage) R.string.viewer_menu_two_page_double else R.string.viewer_menu_two_page_single),
+            )
+        }
+        items += MenuItem(
+            MenuAction.CLIPPING,
+            Text.of(if (s.twoPageCapable && s.twoPage) R.string.viewer_menu_clipping_padding else R.string.viewer_menu_clipping),
+        )
+        s.phoneRotation?.let { items += MenuItem(MenuAction.PHONE_ROTATION, Text.of(R.string.viewer_menu_rotation), Text.Plain(it)) }
+        return Menu(Text.of(R.string.viewer_menu_view_title), items, closeButton = true)
     }
 
-    private fun onOff(on: Boolean) = if (on) "켜짐" else "꺼짐"
+    private fun onOff(on: Boolean) = Text.of(if (on) R.string.viewer_menu_on else R.string.viewer_menu_off)
 }

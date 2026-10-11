@@ -42,6 +42,8 @@ import com.mrgq.pdfviewer.score.PartStaves
 import com.mrgq.pdfviewer.menu.Menu
 import com.mrgq.pdfviewer.menu.MenuAction
 import com.mrgq.pdfviewer.menu.ViewerMenus
+import com.mrgq.pdfviewer.menu.resolve
+import com.mrgq.pdfviewer.menu.tvText
 import com.mrgq.pdfviewer.voice.CommandOutcome
 import com.mrgq.pdfviewer.voice.CommandParser
 import com.mrgq.pdfviewer.voice.ListenFrom
@@ -92,7 +94,6 @@ class PdfViewerActivity : AppCompatActivity() {
         private const val PREF_NOTE_WIDTH = "note_pen_width"
         private const val PREF_NOTE_TEXT_SIZE = "note_text_size"
         private val NOTE_WIDTH_LABELS = listOf("╌", "─", "━")
-        private val NOTE_TEXT_SIZE_LABELS = listOf("가", "가", "가")
         private val NOTE_TEXT_SIZE_SP = floatArrayOf(13f, 18f, 24f)
         /** 획 줄이기 허용 오차 (pt) — 오선 두께(≈ 0.5pt)보다 작게 */
         private const val STROKE_TOLERANCE_PT = 0.25f
@@ -466,7 +467,7 @@ class PdfViewerActivity : AppCompatActivity() {
             pdfFileName = fileNameList[currentFileIndex]
             Log.d("PdfViewerActivity", "SELECTED FILE: '$pdfFileName' at '$pdfFilePath'")
         } else {
-            Toast.makeText(this, "잘못된 파일 인덱스입니다", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, getString(R.string.viewer_error_bad_file_index), Toast.LENGTH_SHORT).show()
             finish()
             return
         }
@@ -511,7 +512,7 @@ class PdfViewerActivity : AppCompatActivity() {
                 
                 if (!file.exists()) {
                     withContext(Dispatchers.Main) {
-                        Toast.makeText(this@PdfViewerActivity, "파일을 찾을 수 없습니다: $pdfFileName", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(this@PdfViewerActivity, getString(R.string.viewer_error_file_not_found, pdfFileName), Toast.LENGTH_SHORT).show()
                         finish()
                     }
                     return@launch
@@ -582,14 +583,14 @@ class PdfViewerActivity : AppCompatActivity() {
                             showPage(initialPageIndex)
                         }
                     } else {
-                        Toast.makeText(this@PdfViewerActivity, "PDF 파일에 페이지가 없습니다", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(this@PdfViewerActivity, getString(R.string.viewer_error_no_pages), Toast.LENGTH_SHORT).show()
                         finish()
                     }
                 }
             } catch (e: Exception) {
                 Log.e("PdfViewerActivity", "Error loading PDF", e)
                 withContext(Dispatchers.Main) {
-                    Toast.makeText(this@PdfViewerActivity, "PDF 열기 실패: ${e.message}", Toast.LENGTH_LONG).show()
+                    Toast.makeText(this@PdfViewerActivity, getString(R.string.viewer_error_open_failed, e.message), Toast.LENGTH_LONG).show()
                     finish()
                 }
             }
@@ -792,14 +793,14 @@ class PdfViewerActivity : AppCompatActivity() {
         
         // Message text
         val messageText = android.widget.TextView(this).apply {
-            text = "세로 PDF를 가로 화면에서 보고 있습니다.\n'$pdfFileName' 파일을 어떻게 표시하시겠습니까?"
+            text = getString(R.string.viewer_two_page_message, pdfFileName)
             textSize = 16f
             setPadding(0, 0, 0, 30)
         }
         
         // Checkbox for "remember choice"
         val rememberCheckbox = android.widget.CheckBox(this).apply {
-            text = "이 선택을 기억하기"
+            text = getString(R.string.viewer_two_page_remember)
             isChecked = true
             textSize = 14f
             setPadding(0, 20, 0, 0)
@@ -809,9 +810,9 @@ class PdfViewerActivity : AppCompatActivity() {
         linearLayout.addView(rememberCheckbox)
         
         AlertDialog.Builder(this)
-            .setTitle("페이지 표시 모드")
+            .setTitle(R.string.viewer_two_page_title)
             .setView(linearLayout)
-            .setPositiveButton("두 페이지씩 보기") { _, _ ->
+            .setPositiveButton(R.string.viewer_two_page_double) { _, _ ->
                 isTwoPageMode = true
                 if (rememberCheckbox.isChecked) {
                     saveDisplayModePreference(DisplayMode.DOUBLE)
@@ -821,7 +822,7 @@ class PdfViewerActivity : AppCompatActivity() {
                 }
                 onComplete()
             }
-            .setNegativeButton("한 페이지씩 보기") { _, _ ->
+            .setNegativeButton(R.string.viewer_two_page_single) { _, _ ->
                 isTwoPageMode = false
                 if (rememberCheckbox.isChecked) {
                     saveDisplayModePreference(DisplayMode.SINGLE)
@@ -1304,7 +1305,8 @@ class PdfViewerActivity : AppCompatActivity() {
         
         // Add cache info for debugging (only show if cache exists)
         val cacheInfo = pageCache?.let { cache ->
-            " [${cache.getCacheInfo()}]"
+            val (cached, rendering) = cache.cacheCounts()
+            " [${getString(R.string.viewer_cache_info, cached, rendering)}]"
         } ?: ""
         
         binding.pageInfo.text = "$fileInfo$pageInfo$cacheInfo"
@@ -1317,7 +1319,7 @@ class PdfViewerActivity : AppCompatActivity() {
     private fun partSourceInfo(pages: IntRange): String {
         if (partViewStaves == null) return ""
         val source = partViewLayout?.sourcePages(pages)?.let { r ->
-            if (r.first == r.last) " (총보 ${r.first + 1}쪽)" else " (총보 ${r.first + 1}~${r.last + 1}쪽)"
+            if (r.first == r.last) getString(R.string.viewer_part_source_page, r.first + 1) else getString(R.string.viewer_part_source_pages, r.first + 1, r.last + 1)
         }.orEmpty()
         return " · ${partViewName.orEmpty()}$source"
     }
@@ -1365,7 +1367,7 @@ class PdfViewerActivity : AppCompatActivity() {
                 
                 if (!file.exists() || !file.canRead()) {
                     withContext(Dispatchers.Main) {
-                        Toast.makeText(this@PdfViewerActivity, "파일을 읽을 수 없습니다: $fileName", Toast.LENGTH_LONG).show()
+                        Toast.makeText(this@PdfViewerActivity, getString(R.string.viewer_error_cannot_read_file, fileName), Toast.LENGTH_LONG).show()
                         collaborationMode = originalMode
                         finish()
                     }
@@ -1414,7 +1416,7 @@ class PdfViewerActivity : AppCompatActivity() {
                             Log.d("PdfViewerActivity", "🎼 연주자 모드: 파일 '$fileName' 로드 완료, 페이지 $targetPage 로 이동 완료")
                         }
                     } else {
-                        Toast.makeText(this@PdfViewerActivity, "빈 PDF 파일입니다: $fileName", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(this@PdfViewerActivity, getString(R.string.viewer_error_empty_pdf, fileName), Toast.LENGTH_SHORT).show()
                         collaborationMode = originalMode
                         finish()
                     }
@@ -1422,7 +1424,7 @@ class PdfViewerActivity : AppCompatActivity() {
             } catch (e: Exception) {
                 Log.e("PdfViewerActivity", "Error loading file for collaboration", e)
                 withContext(Dispatchers.Main) {
-                    Toast.makeText(this@PdfViewerActivity, "파일 로드 실패: ${e.message}", Toast.LENGTH_LONG).show()
+                    Toast.makeText(this@PdfViewerActivity, getString(R.string.viewer_error_load_failed, e.message), Toast.LENGTH_LONG).show()
                     collaborationMode = originalMode
                     finish()
                 }
@@ -1465,7 +1467,7 @@ class PdfViewerActivity : AppCompatActivity() {
                 // 파일 존재 확인
                 if (!file.exists()) {
                     withContext(Dispatchers.Main) {
-                        Toast.makeText(this@PdfViewerActivity, "파일을 찾을 수 없습니다: $fileName", Toast.LENGTH_LONG).show()
+                        Toast.makeText(this@PdfViewerActivity, getString(R.string.viewer_error_file_not_found, fileName), Toast.LENGTH_LONG).show()
                         // 파일 목록을 다시 로드하고 현재 액티비티 종료
                         finish()
                     }
@@ -1474,7 +1476,7 @@ class PdfViewerActivity : AppCompatActivity() {
                 
                 if (!file.canRead()) {
                     withContext(Dispatchers.Main) {
-                        Toast.makeText(this@PdfViewerActivity, "파일을 읽을 수 없습니다: $fileName", Toast.LENGTH_LONG).show()
+                        Toast.makeText(this@PdfViewerActivity, getString(R.string.viewer_error_cannot_read_file, fileName), Toast.LENGTH_LONG).show()
                         finish()
                     }
                     return@launch
@@ -1553,7 +1555,7 @@ class PdfViewerActivity : AppCompatActivity() {
                             }
                         }
                     } else {
-                        Toast.makeText(this@PdfViewerActivity, "빈 PDF 파일입니다: $fileName", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(this@PdfViewerActivity, getString(R.string.viewer_error_empty_pdf, fileName), Toast.LENGTH_SHORT).show()
                         finish()
                     }
                 }
@@ -1563,7 +1565,7 @@ class PdfViewerActivity : AppCompatActivity() {
                 Log.e("PdfViewerActivity", "Exception message: ${e.message}")
                 e.printStackTrace()
                 withContext(Dispatchers.Main) {
-                    Toast.makeText(this@PdfViewerActivity, "파일 열기 실패: $fileName - ${e.message}", Toast.LENGTH_LONG).show()
+                    Toast.makeText(this@PdfViewerActivity, getString(R.string.viewer_error_file_open_failed, fileName, e.message), Toast.LENGTH_LONG).show()
                     finish()
                 }
             }
@@ -1597,7 +1599,7 @@ class PdfViewerActivity : AppCompatActivity() {
                 detachFromEnsemble()
             } else {
                 stopMetronome()
-                Toast.makeText(this, "메트로놈 정지", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, getString(R.string.viewer_metronome_stopped), Toast.LENGTH_SHORT).show()
             }
             return true
         }
@@ -1815,7 +1817,7 @@ class PdfViewerActivity : AppCompatActivity() {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         if (requestCode == REQUEST_VOICE) {
             val granted = grantResults.firstOrNull() == android.content.pm.PackageManager.PERMISSION_GRANTED
-            showVoiceStatus(if (granted) "🎙 이제 단추를 누른 채로 말하세요" else "🎙 마이크 권한이 없어 들을 수 없어요", VOICE_STATUS_MS)
+            showVoiceStatus(getString(if (granted) R.string.viewer_voice_permission_granted else R.string.viewer_voice_permission_denied), VOICE_STATUS_MS)
             if (granted) scheduleAlwaysListening()
             return
         }
@@ -1823,7 +1825,7 @@ class PdfViewerActivity : AppCompatActivity() {
         if (grantResults.firstOrNull() == android.content.pm.PackageManager.PERMISSION_GRANTED) startMicFollow()
         else {
             micStartAt = null
-            Toast.makeText(this, "마이크 권한이 없어 들을 수 없습니다", Toast.LENGTH_LONG).show()
+            Toast.makeText(this, getString(R.string.viewer_mic_permission_denied), Toast.LENGTH_LONG).show()
         }
     }
 
@@ -1893,8 +1895,8 @@ class PdfViewerActivity : AppCompatActivity() {
 
     /** 메모를 이 화면에 그릴 수 없는 까닭 — null 이면 그릴 수 있다 */
     private fun notesBlockedReason(): String? = when {
-        partViewLayout != null -> "파트 보기에서는 아직 메모를 쓸 수 없습니다 — 전체 악보에서"
-        activeLayer.broken -> "메모 파일을 읽지 못해 쓰지 않습니다"
+        partViewLayout != null -> getString(R.string.viewer_notes_blocked_part_view)
+        activeLayer.broken -> getString(R.string.viewer_notes_blocked_broken)
         else -> null
     }
 
@@ -1948,8 +1950,8 @@ class PdfViewerActivity : AppCompatActivity() {
                     layer.writable = layer.conductor && opened.loaded.sync?.writable == true
                     layer.ready = true
                     if (!layer.conductor) {
-                        if (opened.broken) toast("메모 파일을 읽지 못했습니다 — 이 악보에는 메모를 쓰지 않습니다")
-                        if (opened.newEdition) toast("악보가 새 판입니다 — 메모 자리가 어긋날 수 있습니다")
+                        if (opened.broken) toast(getString(R.string.viewer_notes_file_broken))
+                        if (opened.newEdition) toast(getString(R.string.viewer_notes_new_edition))
                     }
                     updateNoteToolbar()
                     refreshNotes()
@@ -1997,7 +1999,7 @@ class PdfViewerActivity : AppCompatActivity() {
         commitPendingNote()
         notePen.cancel()
         conductorActive = !conductorActive
-        toast(if (conductorActive) "지휘자 메모에 씁니다 — 앙상블 모두에게 보입니다" else "내 메모에 씁니다")
+        toast(getString(if (conductorActive) R.string.viewer_notes_layer_conductor else R.string.viewer_notes_layer_mine))
         refreshNotes()
         updateNoteToolbar()
     }
@@ -2029,7 +2031,7 @@ class PdfViewerActivity : AppCompatActivity() {
         val input = android.widget.EditText(this).apply {
             setText(existing?.text.orEmpty())
             setSelection(text.length)
-            hint = "예: rit. · 숨 · 4 · 활 바꿈"
+            hint = getString(R.string.viewer_note_text_hint)
             minLines = 1
             maxLines = 4
             inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_FLAG_MULTI_LINE
@@ -2057,12 +2059,12 @@ class PdfViewerActivity : AppCompatActivity() {
             refreshNotes()
         }
         val dialog = AlertDialog.Builder(this)
-            .setTitle(if (existing != null) "글자 고치기" else "글자 넣기")
+            .setTitle(if (existing != null) R.string.viewer_note_text_edit_title else R.string.viewer_note_text_add_title)
             .setView(frame)
-            .setPositiveButton("확인") { _, _ -> commit() }
-            .setNegativeButton("취소", null)
+            .setPositiveButton(R.string.ok) { _, _ -> commit() }
+            .setNegativeButton(R.string.cancel, null)
             .apply {
-                if (existing != null) setNeutralButton("지우기") { _, _ ->
+                if (existing != null) setNeutralButton(R.string.viewer_note_text_delete) { _, _ ->
                     notes.remove(listOf(existing))
                     saveNotes()
                     refreshNotes()
@@ -2083,7 +2085,7 @@ class PdfViewerActivity : AppCompatActivity() {
         val pdf = File(path)
         com.mrgq.pdfviewer.notes.ScoreNotesFile.saveAsync(layer.fileOf(pdf), pdf, layer.notes.notes.toList(), layer.unknown) { e ->
             Log.e("PdfViewerActivity", "메모 저장 실패: $path", e)
-            runOnUiThread { toast("메모를 저장하지 못했습니다") }
+            runOnUiThread { toast(getString(R.string.viewer_notes_save_failed)) }
         }
         updateNoteToolbar()
     }
@@ -2098,13 +2100,13 @@ class PdfViewerActivity : AppCompatActivity() {
     /** 보표 이름 — 그 보표 번호에 이름이 적힌 시스템이 하나라도 있으면 그것 (보통 첫 시스템만 이름이 있다) */
     private fun staffName(staff: com.mrgq.pdfviewer.database.entity.ScoreStaff): String {
         val named = noteStaves.firstOrNull { it.staffIndex == staff.staffIndex && !it.label.isNullOrBlank() }
-        return com.mrgq.pdfviewer.notes.NoteStaff.labelOf(named ?: staff)
+        return com.mrgq.pdfviewer.notes.NoteStaff.labelOf(named ?: staff) ?: getString(R.string.viewer_staff_n, staff.staffIndex + 1)
     }
 
     private fun showStaffHint(page: Int, attachment: com.mrgq.pdfviewer.notes.NoteStaff.Attachment?) {
         binding.noteLayer.removeCallbacks(noteHintClear)
         if (attachment == null) {
-            binding.noteLayer.staffHint(null, if (noteStaves.isEmpty()) null else "전체 악보", true)
+            binding.noteLayer.staffHint(null, if (noteStaves.isEmpty()) null else getString(R.string.viewer_full_score), true)
             return
         }
         binding.noteLayer.staffHint(staffBandRect(page, attachment.staff), staffName(attachment.staff), attachment.sure)
@@ -2200,7 +2202,7 @@ class PdfViewerActivity : AppCompatActivity() {
                 ensureNoteStaves()
                 commitPendingNote()
                 val picked = noteAt(page, x, y, com.mrgq.pdfviewer.notes.NotePen.PICK_PX / pxPerPt(page)) ?: return false
-                picked.author?.let { toast("$it 님 메모") } // 지휘자 메모 — 누가 썼는지
+                picked.author?.let { toast(this@PdfViewerActivity.getString(R.string.viewer_notes_author, it)) } // 지휘자 메모 — 누가 썼는지
                 noteMoving = picked
                 noteMovePreview = picked
                 binding.noteLayer.select(notePlacements().firstOrNull { it.pageIndex == page }, picked)
@@ -2523,7 +2525,7 @@ class PdfViewerActivity : AppCompatActivity() {
         noteUndoButton = button("↶") { undoNote() }
         noteRedoButton = button("↷") { redoNote() }
         // 그리는 중이면 "확인" = 묶음을 메모 하나로, 아니면 "끝" = 메모 모드 닫기
-        noteDoneButton = button("끝", textSp = 18f) { if (hasPendingNote()) commitPendingNote() else exitNoteMode() }
+        noteDoneButton = button(getString(R.string.viewer_note_done), textSp = 18f) { if (hasPendingNote()) commitPendingNote() else exitNoteMode() }
         updateNoteToolbar()
     }
 
@@ -2532,15 +2534,15 @@ class PdfViewerActivity : AppCompatActivity() {
     private fun updateNoteToolbar() {
         val text = notePen.tool == com.mrgq.pdfviewer.notes.NotePen.Tool.TEXT
         noteSizeButtons.forEachIndexed { i, b ->
-            b.text = if (text) NOTE_TEXT_SIZE_LABELS[i] else NOTE_WIDTH_LABELS[i]
+            b.text = if (text) getString(R.string.viewer_note_text_size_glyph) else NOTE_WIDTH_LABELS[i]
             b.textSize = if (text) NOTE_TEXT_SIZE_SP[i] else 22f
         }
         for ((b, selected) in noteToolButtons) b.setBackgroundColor(if (selected()) 0x5590CAF9 else 0)
         noteUndoButton?.alpha = if (notes.canUndo || hasPendingNote()) 1f else 0.35f
         noteRedoButton?.alpha = if (notes.canRedo || notePendingRedo.isNotEmpty()) 1f else 0.35f
-        noteDoneButton?.text = if (hasPendingNote()) "확인" else "끝"
+        noteDoneButton?.text = getString(if (hasPendingNote()) R.string.ok else R.string.viewer_note_done)
         noteLayerButton?.visibility = if (conductorNotes.writable) View.VISIBLE else View.GONE
-        noteLayerButton?.text = if (activeLayer.conductor) "🎼 지휘자" else "👤 내 메모"
+        noteLayerButton?.text = getString(if (activeLayer.conductor) R.string.viewer_note_layer_conductor else R.string.viewer_note_layer_mine)
         noteLayerButton?.setBackgroundColor(if (activeLayer.conductor) 0x997E57C2.toInt() else 0)
         noteDoneButton?.setBackgroundColor(if (hasPendingNote()) 0xCC43A047.toInt() else 0)
     }
@@ -2550,7 +2552,7 @@ class PdfViewerActivity : AppCompatActivity() {
         preferences.edit().putBoolean(PREF_SHOW_NOTES, show).apply()
         if (!show) exitNoteMode()
         refreshNotes()
-        if (announce) toast(if (show) "메모 보이기" else "메모 숨김")
+        if (announce) toast(getString(if (show) R.string.viewer_notes_shown else R.string.viewer_notes_hidden))
     }
 
     // ── 마이크로 연주를 듣고 넘기기 — 태블릿 지휘자 (P10) ─────────────────────────────────
@@ -2603,10 +2605,10 @@ class PdfViewerActivity : AppCompatActivity() {
 
     /** 연주 듣고 넘기기를 시작할 수 없는 까닭 — 시작할 수 있으면 null (P10 §3.1). 마디 · MusicXML 맞춤은 시작하면서 본다 */
     private fun micFollowBlocker(): String? = when {
-        currentPdfFileId == null -> "악보를 아직 여는 중입니다"
-        collaborationMode == CollaborationMode.PERFORMER -> "연주자 기기에서는 쓸 수 없습니다 — 지휘자가 넘깁니다"
-        partViewLayout != null -> "전체 악보에서만 쓸 수 있습니다 (파트 보기를 끄세요)"
-        musicXml == null || musicXmlFileId != currentPdfFileId -> "이 곡의 MusicXML 이 없어 들을 수 없습니다"
+        currentPdfFileId == null -> getString(R.string.viewer_mic_blocked_opening)
+        collaborationMode == CollaborationMode.PERFORMER -> getString(R.string.viewer_mic_blocked_performer)
+        partViewLayout != null -> getString(R.string.viewer_mic_blocked_part_view)
+        musicXml == null || musicXmlFileId != currentPdfFileId -> getString(R.string.viewer_mic_blocked_no_xml)
         else -> null
     }
 
@@ -2626,9 +2628,9 @@ class PdfViewerActivity : AppCompatActivity() {
         val file = File(pdfFilePath)
         lifecycleScope.launch {
             val measures = withContext(Dispatchers.IO) { musicRepository.getOrAnalyzeScoreMeasures(fileId, file) }
-            if (measures.isNullOrEmpty() || currentPdfFileId != fileId) return@launch toast("악보에서 마디를 찾지 못해 들을 수 없습니다")
+            if (measures.isNullOrEmpty() || currentPdfFileId != fileId) return@launch toast(getString(R.string.viewer_mic_no_measures))
             val match = com.mrgq.pdfviewer.metronome.MusicXmlMatch.check(score, measures)
-            if (!match.ok) return@launch toast("MusicXML 이 악보와 맞지 않습니다: ${match.reason}")
+            if (!match.ok) return@launch toast(getString(R.string.viewer_mic_xml_mismatch, match.reason?.resolve(this@PdfViewerActivity)))
             val byNumber = measures.associateBy { it.measureNumber }
             val mapped = score.measures.indices.map { byNumber[match.measureNumberOf(it)] }
             var lastPage = 0
@@ -2638,9 +2640,9 @@ class PdfViewerActivity : AppCompatActivity() {
             val startMeasure = if (at != null) {
                 // 고른 마디 — 같은 쪽의 같은 번호(MusicXML 순서에서 처음 나오는 것)
                 mapped.indexOfFirst { it != null && it.measureNumber == at.measureNumber && it.pageIndex == at.pageIndex }
-                    .takeIf { it >= 0 } ?: return@launch toast("${at.measureNumber}마디를 MusicXML 에서 찾지 못했습니다")
+                    .takeIf { it >= 0 } ?: return@launch toast(getString(R.string.viewer_mic_measure_not_in_xml, at.measureNumber))
             } else {
-                pageOf.indexOfFirst { it >= here }.takeIf { it >= 0 } ?: return@launch toast("이 쪽에 마디가 없습니다")
+                pageOf.indexOfFirst { it >= here }.takeIf { it >= 0 } ?: return@launch toast(getString(R.string.viewer_mic_no_measure_on_page))
             }
             // 기준 빠르기 = 이 곡 메트로놈 템포 (박 → 4분음표)
             val meter = metronome.timeSignature
@@ -2664,19 +2666,19 @@ class PdfViewerActivity : AppCompatActivity() {
             val follower = com.mrgq.pdfviewer.follow.MicScoreFollower(
                 chroma, pageOf, lowerHalf, startMeasure, pageOf[startMeasure], wav, info, micListener,
             )
-            if (!follower.start()) return@launch toast("마이크를 열지 못했습니다")
+            if (!follower.start()) return@launch toast(getString(R.string.viewer_mic_open_failed))
             micFollower = follower
             // 두 쪽 연주자: 시작 쪽이 펼침 오른쪽이면 왼쪽 자리를 바로 다음 쪽으로 — 듣기 시작 신호 (#088)
             if (collaborationMode == CollaborationMode.CONDUCTOR) {
                 globalCollaborationManager.broadcastPageChange(pageOf[startMeasure] + 1, pdfFileName, roll = true, rollStart = true)
             }
             micMeasures = mapped
-            binding.micStatus.text = "🎤 대기"
+            binding.micStatus.text = getString(R.string.viewer_mic_status_waiting)
             binding.micStatus.visibility = View.VISIBLE
             micWaitingMeasure = mapped[startMeasure] // 시작을 찾을 때까지 이 마디만 연하게 (#089)
             refreshVoiceButton()
             refreshScoreOverlay()
-            Toast.makeText(this@PdfViewerActivity, "🎤 ${mapped[startMeasure]?.measureNumber}번 마디부터 듣습니다 — 연주를 시작하세요", Toast.LENGTH_LONG).show()
+            Toast.makeText(this@PdfViewerActivity, getString(R.string.viewer_mic_listening_from, mapped[startMeasure]?.measureNumber), Toast.LENGTH_LONG).show()
         }.invokeOnCompletion {
             binding.voiceButton.post {
                 micFollowStarting = false
@@ -2700,13 +2702,13 @@ class PdfViewerActivity : AppCompatActivity() {
         binding.micStatus.visibility = View.GONE
         refreshVoiceButton()
         refreshScoreOverlay()
-        if (announce) Toast.makeText(this, "🎤 듣기 멈춤 — 기록은 recordings 에", Toast.LENGTH_SHORT).show()
+        if (announce) Toast.makeText(this, getString(R.string.viewer_mic_stopped), Toast.LENGTH_SHORT).show()
     }
 
     private val micListener = object : com.mrgq.pdfviewer.follow.MicScoreFollower.Listener {
         override fun onListening() {
             if (micFollower == null) return
-            binding.micStatus.text = "🎤 듣는 중"
+            binding.micStatus.text = getString(R.string.viewer_mic_status_listening)
             micWaitingMeasure = null // 시작을 찾았다 — 이제 지금 시스템 표시 (#089)
             refreshScoreOverlay()
         }
@@ -2738,8 +2740,8 @@ class PdfViewerActivity : AppCompatActivity() {
             }
         }
 
-        override fun onError(message: String) {
-            toast("🎤 $message")
+        override fun onError(message: String?) {
+            toast("🎤 " + (message ?: getString(R.string.viewer_mic_error)))
             stopMicFollow()
         }
     }
@@ -2753,7 +2755,7 @@ class PdfViewerActivity : AppCompatActivity() {
         f.anchor(m.pageIndex, index)
         micWaitingMeasure = null // 손으로 짚은 곳이 곧 시작
         binding.pdfView.performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS)
-        toast("🎤 ${m.measureNumber}마디부터 다시 맞춥니다")
+        toast(getString(R.string.viewer_mic_reanchor, m.measureNumber))
         return true
     }
 
@@ -2836,15 +2838,15 @@ class PdfViewerActivity : AppCompatActivity() {
             }, android.widget.LinearLayout.LayoutParams(android.view.ViewGroup.LayoutParams.WRAP_CONTENT, height))
         }
         if (selected != null) {
-            button("▶ ${selected.measureNumber}마디부터 시작") { startFollowing() }
-            if (canListen) button("🎤 ${selected.measureNumber}마디부터 듣기") { startMicFollowFromSelection() }
-            button("취소") { cancelMeasureSelection() }
+            button(getString(R.string.viewer_bar_start_from, selected.measureNumber)) { startFollowing() }
+            if (canListen) button(getString(R.string.viewer_bar_listen_from, selected.measureNumber)) { startMicFollowFromSelection() }
+            button(getString(R.string.cancel)) { cancelMeasureSelection() }
             button("⋯") { showMetronomeMenu() } // 연주 메뉴(메트로놈 설정 · 반주) — 예전 고르는 중 두 번 탭
             return
         }
-        button("▶ 연주") { showMetronomeMenu() }
-        button("👁 보기") { showPdfDisplayOptions() }
-        if (notesWritable()) button("✏️ 메모") {
+        button(getString(R.string.viewer_bar_play)) { showMetronomeMenu() }
+        button(getString(R.string.viewer_bar_view)) { showPdfDisplayOptions() }
+        if (notesWritable()) button(getString(R.string.viewer_bar_notes)) {
             toggleNoteMode()
             refreshViewerBars()
         }
@@ -2958,7 +2960,7 @@ class PdfViewerActivity : AppCompatActivity() {
         // 오른쪽 네비게이션 설정 (다음 파일 또는 없음)
         if (hasNextFile) {
             binding.rightNavigation.visibility = View.VISIBLE
-            binding.rightNavText.text = "다음 파일"
+            binding.rightNavText.text = getString(R.string.viewer_nav_next_file)
             binding.rightNavSubText.text = fileNameList[currentFileIndex + 1]
         } else {
             binding.rightNavigation.visibility = View.GONE
@@ -2973,7 +2975,7 @@ class PdfViewerActivity : AppCompatActivity() {
         // 왼쪽 네비게이션 설정 (이전 파일 또는 없음)
         if (hasPreviousFile) {
             binding.leftNavigation.visibility = View.VISIBLE
-            binding.leftNavText.text = "이전 파일"
+            binding.leftNavText.text = getString(R.string.viewer_nav_previous_file)
             binding.leftNavSubText.text = fileNameList[currentFileIndex - 1]
         } else {
             binding.leftNavigation.visibility = View.GONE
@@ -3034,7 +3036,7 @@ class PdfViewerActivity : AppCompatActivity() {
         globalCollaborationManager.setOnServerClientConnected { clientId, deviceName ->
             runOnUiThread {
                 Log.d("PdfViewerActivity", "🎵 지휘자 모드: 새 연주자 연결됨 - $deviceName")
-                Toast.makeText(this@PdfViewerActivity, "$deviceName 연결됨", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this@PdfViewerActivity, getString(R.string.viewer_ensemble_device_connected, deviceName), Toast.LENGTH_SHORT).show()
                 updateCollaborationStatus()
                 
                 // Send current file and page to newly connected client
@@ -3051,7 +3053,7 @@ class PdfViewerActivity : AppCompatActivity() {
         
         globalCollaborationManager.setOnServerClientDisconnected { clientId ->
             runOnUiThread {
-                Toast.makeText(this@PdfViewerActivity, "기기 연결 해제됨", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this@PdfViewerActivity, getString(R.string.viewer_ensemble_device_disconnected), Toast.LENGTH_SHORT).show()
                 updateCollaborationStatus()
             }
         }
@@ -3100,7 +3102,7 @@ class PdfViewerActivity : AppCompatActivity() {
             if (metronome.isRunning || followState != FollowState.OFF) stopMetronome()
             updateCollaborationStatus()
             refreshScoreOverlay()
-            Toast.makeText(this, "지휘자가 합주를 끝냈습니다 — 합주 모드 종료", Toast.LENGTH_LONG).show()
+            Toast.makeText(this, getString(R.string.viewer_ensemble_ended), Toast.LENGTH_LONG).show()
         }
 
         globalCollaborationManager.setOnFollowPositionReceived { file, measure ->
@@ -3119,8 +3121,8 @@ class PdfViewerActivity : AppCompatActivity() {
         
         globalCollaborationManager.setOnClientConnectionStatusChanged { isConnected ->
             runOnUiThread {
-                val status = if (isConnected) "연결됨" else "연결 끊김"
-                Toast.makeText(this@PdfViewerActivity, "지휘자: $status", Toast.LENGTH_SHORT).show()
+                val status = getString(if (isConnected) R.string.viewer_ensemble_connected else R.string.viewer_ensemble_disconnected)
+                Toast.makeText(this@PdfViewerActivity, getString(R.string.viewer_ensemble_conductor_status, status), Toast.LENGTH_SHORT).show()
                 updateCollaborationStatus()
             }
         }
@@ -3359,7 +3361,7 @@ class PdfViewerActivity : AppCompatActivity() {
                 if (conductorAddress.isNotEmpty()) {
                     showDownloadDialog(file, conductorAddress, targetPage, resolution.target, resolution.cached)
                 } else {
-                    Toast.makeText(this, "요청된 파일을 찾을 수 없습니다: $file", Toast.LENGTH_LONG).show()
+                    Toast.makeText(this, getString(R.string.viewer_ensemble_file_not_found, file), Toast.LENGTH_LONG).show()
                 }
             }
         }
@@ -3369,13 +3371,13 @@ class PdfViewerActivity : AppCompatActivity() {
         when (collaborationMode) {
             CollaborationMode.CONDUCTOR -> {
                 val clientCount = globalCollaborationManager.getConnectedClientCount()
-                binding.collaborationStatus.text = "지휘자: ${clientCount}명 연결"
+                binding.collaborationStatus.text = getString(R.string.viewer_ensemble_conductor_clients, clientCount)
                 binding.collaborationStatus.visibility = View.VISIBLE
             }
             CollaborationMode.PERFORMER -> {
                 val isConnected = globalCollaborationManager.isClientConnected()
-                val status = if (isConnected) "연결됨" else "연결 끊김"
-                binding.collaborationStatus.text = "연주자: $status"
+                val status = getString(if (isConnected) R.string.viewer_ensemble_connected else R.string.viewer_ensemble_disconnected)
+                binding.collaborationStatus.text = getString(R.string.viewer_ensemble_performer_status, status)
                 binding.collaborationStatus.visibility = View.VISIBLE
             }
             CollaborationMode.NONE -> {
@@ -3389,22 +3391,22 @@ class PdfViewerActivity : AppCompatActivity() {
         val fileServerUrl = "http://$ipOnly:8090"
         
         AlertDialog.Builder(this)
-            .setTitle("파일 다운로드")
+            .setTitle(R.string.viewer_download_title)
             .setMessage(
-                "'$fileName' 파일이 없습니다.\n지휘자로부터 다운로드하시겠습니까?" +
-                    if (cached) "\n(이 기기의 ScoreMate 에 없는 악보 — 합주용으로만 받아 두고 목록에는 넣지 않습니다)" else ""
+                getString(R.string.viewer_download_message, fileName) +
+                    if (cached) getString(R.string.viewer_download_cached_note) else ""
             )
-            .setPositiveButton("다운로드") { _, _ ->
+            .setPositiveButton(R.string.viewer_download) { _, _ ->
                 downloadFileFromConductor(fileName, fileServerUrl, targetPage, target, cached)
             }
-            .setNegativeButton("취소", null)
+            .setNegativeButton(R.string.cancel, null)
             .show()
     }
     
     /** [target] 으로 받는다 — 연결하지 않은 TV 는 PDFs/, 연결된 TV 에서 ScoreMate 에 없는 악보는 캐시 (#063) */
     private fun downloadFileFromConductor(fileName: String, serverUrl: String, targetPage: Int, target: File, cached: Boolean) {
         val progressDialog = AlertDialog.Builder(this)
-            .setTitle("다운로드 중...")
+            .setTitle(R.string.viewer_downloading)
             .setMessage("$fileName\n0%")
             .setCancelable(false)
             .create()
@@ -3451,13 +3453,13 @@ class PdfViewerActivity : AppCompatActivity() {
                 input.close()
                 if (!partPath.renameTo(downloadPath)) {
                     downloadPath.delete()
-                    if (!partPath.renameTo(downloadPath)) throw java.io.IOException("받은 파일을 저장하지 못했습니다")
+                    if (!partPath.renameTo(downloadPath)) throw java.io.IOException(getString(R.string.viewer_download_save_failed))
                 }
                 if (cached) com.mrgq.pdfviewer.ensemble.EnsembleFiles.trimCache(downloadPath.parentFile!!, keep = downloadPath)
                 
                 withContext(Dispatchers.Main) {
                     progressDialog.dismiss()
-                    Toast.makeText(this@PdfViewerActivity, "다운로드 완료: $fileName", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this@PdfViewerActivity, getString(R.string.viewer_download_done, fileName), Toast.LENGTH_SHORT).show()
                     
                     // Refresh file list and load the downloaded file with target page
                     refreshFileListAndLoad(downloadPath.name, downloadPath.absolutePath, targetPage)
@@ -3467,7 +3469,7 @@ class PdfViewerActivity : AppCompatActivity() {
                 Log.e("PdfViewerActivity", "Download failed", e)
                 withContext(Dispatchers.Main) {
                     progressDialog.dismiss()
-                    Toast.makeText(this@PdfViewerActivity, "다운로드 실패: ${e.message}", Toast.LENGTH_LONG).show()
+                    Toast.makeText(this@PdfViewerActivity, getString(R.string.viewer_download_failed, e.message), Toast.LENGTH_LONG).show()
                 }
             }
         }
@@ -3516,7 +3518,7 @@ class PdfViewerActivity : AppCompatActivity() {
                 
                 if (!file.exists()) {
                     withContext(Dispatchers.Main) {
-                        Toast.makeText(this@PdfViewerActivity, "파일을 찾을 수 없습니다: $pdfFileName", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(this@PdfViewerActivity, getString(R.string.viewer_error_file_not_found, pdfFileName), Toast.LENGTH_SHORT).show()
                         finish()
                     }
                     return@launch
@@ -3557,14 +3559,14 @@ class PdfViewerActivity : AppCompatActivity() {
                             Log.d("PdfViewerActivity", "🎼 다운로드된 파일 로드 완료, 페이지 $targetPage 로 이동")
                         }
                     } else {
-                        Toast.makeText(this@PdfViewerActivity, "PDF 파일에 페이지가 없습니다", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(this@PdfViewerActivity, getString(R.string.viewer_error_no_pages), Toast.LENGTH_SHORT).show()
                         finish()
                     }
                 }
             } catch (e: Exception) {
                 Log.e("PdfViewerActivity", "Error loading downloaded PDF", e)
                 withContext(Dispatchers.Main) {
-                    Toast.makeText(this@PdfViewerActivity, "PDF 열기 실패: ${e.message}", Toast.LENGTH_LONG).show()
+                    Toast.makeText(this@PdfViewerActivity, getString(R.string.viewer_error_open_failed, e.message), Toast.LENGTH_LONG).show()
                     finish()
                 }
             }
@@ -3650,7 +3652,7 @@ class PdfViewerActivity : AppCompatActivity() {
         if (fileId == null) return null
         if (scoreMeasuresFileId != fileId) {
             val analyzed = withContext(Dispatchers.IO) { musicRepository.getPdfFileById(fileId)?.scoreAnalyzedAt != null }
-            if (!analyzed) Toast.makeText(this, "악보 박자표 읽는 중…", Toast.LENGTH_SHORT).show()
+            if (!analyzed) Toast.makeText(this, getString(R.string.viewer_metronome_reading_meter), Toast.LENGTH_SHORT).show()
         }
         return scoreMeasuresFor(fileId)
     }
@@ -3673,12 +3675,12 @@ class PdfViewerActivity : AppCompatActivity() {
         fun sectionSetting(span: SectionSpan) = sectionSettings[span.startMeasure] ?: TempoSectionSetting(span.startMeasure)
         fun currentSectionSettings() = spans.drop(1).mapNotNull { sectionSettings[it.startMeasure] }
         fun resolvedSections() = TempoSections.resolve(spans, bpm, dotted, currentSectionSettings())
-        fun rangeText(span: SectionSpan) = "${span.startMeasure}~${span.endMeasure}마디 (${span.measureCount}마디)"
-        fun tempoText(section: TempoSection) = "${section.meter.beatNoteName(section.dotted)} = ${Math.round(section.bpm)}"
+        fun rangeText(span: SectionSpan) = getString(R.string.viewer_section_range, span.startMeasure, span.endMeasure, span.measureCount)
+        fun tempoText(section: TempoSection) = "${noteName(section.meter, section.dotted)} = ${Math.round(section.bpm)}"
         fun relationName(relation: TempoRelation) = when (relation) {
-            TempoRelation.NOTE -> "음표 길이 그대로"
-            TempoRelation.BEAT -> "박 길이 그대로"
-            TempoRelation.SET -> "직접 입력"
+            TempoRelation.NOTE -> getString(R.string.viewer_tempo_relation_note)
+            TempoRelation.BEAT -> getString(R.string.viewer_tempo_relation_beat)
+            TempoRelation.SET -> getString(R.string.viewer_tempo_relation_set)
         }
 
         // 열려 있는 상세 대화상자도 같은 값을 보여 준다. 그리는 동안 슬라이더를 옮겨도 사용자 입력으로 보지 않는다
@@ -3730,7 +3732,7 @@ class PdfViewerActivity : AppCompatActivity() {
             gravity = android.view.Gravity.CENTER_VERTICAL
             addView(title, android.widget.LinearLayout.LayoutParams(0, android.widget.LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
             if (!inlined) addView(android.widget.Button(this@PdfViewerActivity).apply {
-                text = "상세…"
+                text = getString(R.string.viewer_detail)
                 isAllCaps = false
                 setOnClickListener { detail() }
             })
@@ -3747,7 +3749,7 @@ class PdfViewerActivity : AppCompatActivity() {
             AlertDialog.Builder(this)
                 .setTitle(title)
                 .setView(android.widget.ScrollView(this).apply { addView(column(views)) })
-                .setPositiveButton("완료", null)
+                .setPositiveButton(R.string.viewer_done, null)
                 .setOnDismissListener { renderers.remove(renderer) }
                 .show()
         }
@@ -3784,7 +3786,7 @@ class PdfViewerActivity : AppCompatActivity() {
         }
         // 구간이 둘 이상이면: 첫 화면이 어느 구간인지, 그리고 나머지 구간 목록 (누르면 그 구간 설정)
         val sectionHeader = label().apply { setTextColor(0xFF90CAF9.toInt()) }
-        val otherSectionsLabel = label().apply { text = "다른 구간 — 박자가 바뀌는 곳마다 나뉩니다" }
+        val otherSectionsLabel = label().apply { text = getString(R.string.viewer_sections_other) }
         val sectionButtons = spans.drop(1).map {
             android.widget.Button(this).apply {
                 isAllCaps = false
@@ -3794,26 +3796,30 @@ class PdfViewerActivity : AppCompatActivity() {
         if (spans.size > 1) {
             renderers += {
                 val resolved = resolvedSections()
-                sectionHeader.text = "구간 1 / ${spans.size} · ${rangeText(spans[0])} · ${spans[0].meter} — 아래 설정은 이 구간"
+                sectionHeader.text = getString(R.string.viewer_section_first_header, spans.size, rangeText(spans[0]), spans[0].meter.toString())
                 sectionButtons.forEachIndexed { i, button ->
                     val section = resolved[i + 1]
-                    button.text = "구간 ${i + 2} · ${rangeText(section.span)} · ${section.meter}\n" +
-                        "${relationName(section.relation)} · ${tempoText(section)}"
+                    button.text = getString(
+                        R.string.viewer_section_button, i + 2, rangeText(section.span), section.meter.toString(),
+                        relationName(section.relation), tempoText(section),
+                    )
                 }
             }
         }
         renderers += {
-            val beatNote = meter.beatNoteName(dotted)
-            val fromScore = if (meter == scoreMeter) " · 악보 박자표" else ""
-            meterLabel.text = "박자: $meter — $beatNote ${meter.beatsPerBar(dotted)}박$fromScore"
+            val beatNote = noteName(meter, dotted)
+            val fromScore = if (meter == scoreMeter) getString(R.string.viewer_meter_from_score) else ""
+            meterLabel.text = getString(R.string.viewer_meter_label, meter.toString(), beatNote, meter.beatsPerBar(dotted), fromScore)
             primaryButtons.forEach { (ts, button) -> button.text = if (ts == meter) "✓ $ts" else "$ts" }
             otherMeterButton.visibility = if (meter in TimeSignature.PRIMARY) View.GONE else View.VISIBLE
             otherMeterButton.text = "✓ $meter"
-            bpmLabel.text = "속도: $beatNote = $bpm BPM"
-            volumeLabel.text = if (soundOn) "소리 크기: ${volumeSeek.progress}%" else "소리 크기: 클릭음 꺼짐 (박 표시만)"
+            bpmLabel.text = getString(R.string.viewer_tempo_label, beatNote, bpm)
+            volumeLabel.text = if (soundOn) getString(R.string.viewer_volume_label, volumeSeek.progress) else getString(R.string.viewer_volume_click_off)
             val countIn = countInBarsSetting()
-            countInLabel.text = "예비박: ${countIn}마디 — 악보에서 마디를 골라 시작할 때"
-            countInButtons.forEach { (bars, button) -> button.text = (if (bars == countIn) "✓ " else "") + (if (bars == 1) "한 마디" else "두 마디") }
+            countInLabel.text = getString(R.string.viewer_count_in_label, countIn)
+            countInButtons.forEach { (bars, button) ->
+                button.text = (if (bars == countIn) "✓ " else "") + getString(if (bars == 1) R.string.viewer_count_in_one else R.string.viewer_count_in_two)
+            }
         }
 
         // 실행 중이면 바로 들린다 (다음 박부터)
@@ -3865,7 +3871,7 @@ class PdfViewerActivity : AppCompatActivity() {
             val denominatorRow = buttonRow().apply { denominatorButtons.values.forEach { addView(it) } }
             // 박 단위: 겹박자에서만 — 분모 음표(6/8 = 8분음표 6박)로 셀지 점음표(점4분음표 2박)로 셀지 (#052).
             // 곡 빠르기에 따라 달라서 자동으로 바꾸지 않고 파일마다 고른다. 바꿔도 빠르기는 그대로 (BPM 을 3배로 환산)
-            val beatUnitLabel = label().apply { text = "세는 단위 — 바꿔도 빠르기는 그대로입니다" }
+            val beatUnitLabel = label().apply { text = getString(R.string.viewer_beat_unit_label) }
             val eighthButton = android.widget.Button(this).apply { isAllCaps = false }
             val dottedButton = android.widget.Button(this).apply { isAllCaps = false }
             val beatUnitRow = buttonRow().apply {
@@ -3877,12 +3883,9 @@ class PdfViewerActivity : AppCompatActivity() {
                 setTextColor(0xFFFFD54F.toInt())
                 setPadding(0, 4, 0, 4)
             }
-            val scoreHint = if (scoreMeter != null) "악보에서 읽은 박자표는 $scoreMeter 입니다. " else ""
+            val scoreHint = if (scoreMeter != null) getString(R.string.viewer_meter_score_hint, scoreMeter.toString()) else ""
             val hint = hintText(
-                scoreHint + "박은 박자표 아래 숫자의 음표이고 BPM 도 그 음표 기준입니다(6/8 이면 8분음표). " +
-                    "6/8 같은 겹박자는 점음표로 셀 수도 있습니다(6/8 이면 점4분음표 2박).\n" +
-                    "악보에서 박자표를 읽을 수 있으면 처음엔 그 박자로 채워집니다. 시작을 누른 뒤 악보에서 시작 마디를 고르면 " +
-                    "예비박 뒤(화면 가운데에 남은 마디 수) 현재 마디를 표시하며 페이지를 넘기고, 이때 마디 길이와 강박은 악보 박자표를 따릅니다."
+                scoreHint + getString(R.string.viewer_meter_detail_hint)
             )
 
             numeratorSeek.onProgress { selectMeter(TimeSignature(MetronomeClock.MIN_BEATS + it, meter.denominator)) }
@@ -3893,29 +3896,28 @@ class PdfViewerActivity : AppCompatActivity() {
 
             val views = listOf<View>(accentLabel) + presetRows +
                 listOf(numeratorLabel, numeratorSeek, denominatorRow, beatUnitLabel, beatUnitRow, beatUnitHint, hint)
-            detailDialog("박자 상세", views) {
+            detailDialog(getString(R.string.viewer_meter_detail_title), views) {
                 val beats = meter.beatsPerBar(dotted)
                 val medium = (1 until beats).filter { meter.accentAt(it, dotted) == Accent.MEDIUM }
                 val accents = if (medium.isEmpty()) {
-                    "첫 박 강조"
+                    getString(R.string.viewer_accent_first)
                 } else {
-                    "1박 강 · ${medium.joinToString("·") { "${it + 1}" }}박 중간"
+                    getString(R.string.viewer_accent_medium, medium.joinToString("·") { "${it + 1}" })
                 }
-                accentLabel.text = "$meter — ${meter.beatNoteName(dotted)} ${beats}박, $accents"
+                accentLabel.text = getString(R.string.viewer_accent_label, meter.toString(), noteName(meter, dotted), beats, accents)
                 presetButtons.forEach { (ts, button) -> button.text = if (ts == meter) "✓ $ts" else "$ts" }
-                numeratorLabel.text = "직접 고르기 — 마디당 박 수(위 숫자) ${meter.numerator}, 박 단위(아래 숫자):"
+                numeratorLabel.text = getString(R.string.viewer_meter_numerator_label, meter.numerator)
                 numeratorSeek.progress = meter.numerator - MetronomeClock.MIN_BEATS
                 denominatorButtons.forEach { (d, button) -> button.text = if (d == meter.denominator) "✓ /$d" else "/$d" }
 
                 val compound = meter.isCompound
                 beatUnitLabel.visibility = if (compound) View.VISIBLE else View.GONE
                 beatUnitRow.visibility = if (compound) View.VISIBLE else View.GONE
-                eighthButton.text = (if (!dotted) "✓ " else "") + "${meter.beatNoteName(false)} ${meter.beatsPerBar(false)}박"
-                dottedButton.text = (if (dotted) "✓ " else "") + "${meter.beatNoteName(true)} ${meter.beatsPerBar(true)}박"
+                eighthButton.text = (if (!dotted) "✓ " else "") + getString(R.string.viewer_beats_of, noteName(meter, false), meter.beatsPerBar(false))
+                dottedButton.text = (if (dotted) "✓ " else "") + getString(R.string.viewer_beats_of, noteName(meter, true), meter.beatsPerBar(true))
                 val fast = compound && !dotted && bpm > COMPOUND_FAST_BPM
                 beatUnitHint.visibility = if (fast) View.VISIBLE else View.GONE
-                beatUnitHint.text = "빠른 곡이면 ${meter.beatNoteName(true)}로 세는 편이 편할 수 있습니다 " +
-                    "(${meter.beatNoteName(true)} = ${Math.round(bpm / 3.0)})"
+                beatUnitHint.text = getString(R.string.viewer_beat_unit_fast_hint, noteName(meter, true), Math.round(bpm / 3.0))
             }
         }
 
@@ -3931,17 +3933,17 @@ class PdfViewerActivity : AppCompatActivity() {
                     }
                 })
             }
-            val hint = hintText("BPM 은 1분에 박이 몇 번인지이고, 박은 박자 단위 음표입니다. 실행 중에 바꾸면 다음 박부터 적용됩니다.")
+            val hint = hintText(getString(R.string.viewer_tempo_detail_hint))
             // 펼쳐 둘 때는 위 "속도:" 줄이 같은 값을 보이므로 단추 · 설명만
-            detailDialog("속도 상세", if (inlineTarget != null) listOf(steps, hint) else listOf(tempoLabel, steps, hint)) {
-                tempoLabel.text = "${meter.beatNoteName(dotted)} = $bpm BPM"
+            detailDialog(getString(R.string.viewer_tempo_detail_title), if (inlineTarget != null) listOf(steps, hint) else listOf(tempoLabel, steps, hint)) {
+                tempoLabel.text = "${noteName(meter, dotted)} = $bpm BPM"
             }
         }
 
         // 소리 상세: 클릭음 끄기 (박 표시 · 악보 연동은 그대로)
         fun showSoundDetail() {
             val soundCheck = android.widget.CheckBox(this).apply {
-                text = "클릭음"
+                text = getString(R.string.viewer_click_sound)
                 isChecked = soundOn
                 setOnCheckedChangeListener { _, checked ->
                     soundOn = checked
@@ -3949,8 +3951,8 @@ class PdfViewerActivity : AppCompatActivity() {
                     applyToEngine()
                 }
             }
-            val hint = hintText("끄면 소리 없이 박 표시 · 현재 마디 · 페이지 넘김만 합니다. 소리 설정은 모든 파일에 공통입니다.")
-            detailDialog("소리 상세", listOf(soundCheck, hint)) {}
+            val hint = hintText(getString(R.string.viewer_sound_detail_hint))
+            detailDialog(getString(R.string.viewer_sound_detail_title), listOf(soundCheck, hint)) {}
         }
 
         // 구간 화면 (둘째 구간부터, #057) — 첫 화면과 같은 짜임: 박자 · 속도 · 소리 크기, 줄마다 "상세…".
@@ -3990,32 +3992,31 @@ class PdfViewerActivity : AppCompatActivity() {
             }
             fun renderBeatUnit(eighth: android.widget.Button, dottedUnit: android.widget.Button) {
                 val d = setting().dotted
-                eighth.text = (if (!d) "✓ " else "") + "${span.meter.beatNoteName(false)} ${span.meter.beatsPerBar(false)}박"
-                dottedUnit.text = (if (d) "✓ " else "") + "${span.meter.beatNoteName(true)} ${span.meter.beatsPerBar(true)}박"
+                eighth.text = (if (!d) "✓ " else "") + getString(R.string.viewer_beats_of, noteName(span.meter, false), span.meter.beatsPerBar(false))
+                dottedUnit.text = (if (d) "✓ " else "") + getString(R.string.viewer_beats_of, noteName(span.meter, true), span.meter.beatsPerBar(true))
             }
 
             // 박자 상세: 강세 · 세는 단위 · 박자는 악보를 따른다는 설명
             fun showSectionMeterDetail() {
                 val accentLabel = label()
-                val beatUnitLabel = label().apply { text = "세는 단위 — 바꿔도 빠르기는 그대로입니다" }
+                val beatUnitLabel = label().apply { text = getString(R.string.viewer_beat_unit_label) }
                 val (beatUnitRow, eighth, dottedUnit) = beatUnitButtons()
                 val compound = span.meter.isCompound
                 beatUnitLabel.visibility = if (compound) View.VISIBLE else View.GONE
                 beatUnitRow.visibility = if (compound) View.VISIBLE else View.GONE
                 val hint = hintText(
-                    "이 구간의 박자는 악보 박자표(${span.meter})를 따릅니다. 박은 박자표 아래 숫자의 음표이고, " +
-                        "6/8 같은 겹박자는 점음표로 셀 수도 있습니다(6/8 이면 점4분음표 2박)."
+                    getString(R.string.viewer_section_meter_hint, span.meter.toString())
                 )
-                detailDialog("구간 ${index + 1} — 박자 상세", listOf(accentLabel, beatUnitLabel, beatUnitRow, hint)) {
+                detailDialog(getString(R.string.viewer_section_meter_detail_title, index + 1), listOf(accentLabel, beatUnitLabel, beatUnitRow, hint)) {
                     val d = setting().dotted
                     val beats = span.meter.beatsPerBar(d)
                     val medium = (1 until beats).filter { span.meter.accentAt(it, d) == Accent.MEDIUM }
                     val accents = if (medium.isEmpty()) {
-                        "첫 박 강조"
+                        getString(R.string.viewer_accent_first)
                     } else {
-                        "1박 강 · ${medium.joinToString("·") { "${it + 1}" }}박 중간"
+                        getString(R.string.viewer_accent_medium, medium.joinToString("·") { "${it + 1}" })
                     }
-                    accentLabel.text = "${span.meter} — ${span.meter.beatNoteName(d)} ${beats}박, $accents"
+                    accentLabel.text = getString(R.string.viewer_accent_label, span.meter.toString(), noteName(span.meter, d), beats, accents)
                     renderBeatUnit(eighth, dottedUnit)
                 }
             }
@@ -4026,7 +4027,7 @@ class PdfViewerActivity : AppCompatActivity() {
                     textSize = 13f
                     setPadding(0, 0, 0, 10)
                 }
-                val relationLabel = label().apply { text = "앞 구간에서 빠르기를 이어받는 방법" }
+                val relationLabel = label().apply { text = getString(R.string.viewer_tempo_relation_label) }
                 val relationButtons = TempoRelation.values().associateWith { relation ->
                     android.widget.Button(this).apply {
                         isAllCaps = false
@@ -4062,25 +4063,23 @@ class PdfViewerActivity : AppCompatActivity() {
                     })
                 }
                 val hint = hintText(
-                    "'음표 길이 그대로'는 앞 구간의 같은 음표가 같은 길이(4/4 → 6/8 이면 8분음표 = 8분음표), " +
-                        "'박 길이 그대로'는 앞 구간 한 박 = 이 구간 한 박입니다. 둘 다 앞 구간 빠르기를 바꾸면 함께 바뀝니다. " +
-                        "±로 바꾸면 '직접 입력'이 됩니다."
+                    getString(R.string.viewer_tempo_relation_hint)
                 )
                 detailDialog(
-                    "구간 ${index + 1} — 속도 상세",
+                    getString(R.string.viewer_section_tempo_detail_title, index + 1),
                     listOf(previousLabel, relationLabel, relationColumn, tempoLabel, steps, hint),
                 ) {
                     val resolved = resolvedSections()
                     val previous = resolved[index - 1]
                     val s = setting()
-                    previousLabel.text = "앞 구간 (구간 $index): ${rangeText(previous.span)} · ${previous.meter} · ${tempoText(previous)}"
+                    previousLabel.text = getString(R.string.viewer_section_previous, index, rangeText(previous.span), previous.meter.toString(), tempoText(previous))
                     relationButtons.forEach { (relation, button) ->
                         val mark = if (relation == s.relation) "✓ " else ""
                         button.text = if (relation == TempoRelation.SET) {
                             mark + relationName(relation)
                         } else {
                             val value = TempoSections.bpmFor(previous, span, s.dotted, relation, s.bpm)
-                            "$mark${relationName(relation)} → ${span.meter.beatNoteName(s.dotted)} = ${Math.round(value)}"
+                            "$mark${relationName(relation)} → ${noteName(span.meter, s.dotted)} = ${Math.round(value)}"
                         }
                     }
                     tempoLabel.text = tempoText(resolved[index]) + " BPM"
@@ -4093,7 +4092,7 @@ class PdfViewerActivity : AppCompatActivity() {
             val meterRowLabel = label()
             val (beatUnitRow, eighth, dottedUnit) = beatUnitButtons()
             val meterNote = android.widget.TextView(this).apply {
-                text = "박자는 악보 박자표를 따릅니다"
+                text = getString(R.string.viewer_section_meter_note)
                 textSize = 13f
                 setTextColor(android.graphics.Color.GRAY)
                 gravity = android.view.Gravity.CENTER
@@ -4124,28 +4123,27 @@ class PdfViewerActivity : AppCompatActivity() {
                 header(meterRowLabel, ::showSectionMeterDetail), beatUnitRow, meterNote,
                 header(tempoRowLabel, ::showSectionTempoDetail), tempoSeek, warning,
                 header(volumeRowLabel, ::showSoundDetail), sectionVolumeSeek,
-                hintText("이 구간의 빠르기 · 세는 단위는 이 파일에 저장되고, 악보 연동(시작 마디를 고르고 시작)에서 쓰입니다."),
+                hintText(getString(R.string.viewer_section_hint)),
             )
-            detailDialog("메트로놈 — 구간 ${index + 1} / ${spans.size}", views) {
+            detailDialog(getString(R.string.viewer_section_dialog_title, index + 1, spans.size), views) {
                 val resolved = resolvedSections()
                 val section = resolved[index]
                 val s = setting()
-                sectionTitle.text = "구간 ${index + 1} / ${spans.size} · ${rangeText(span)} · ${span.meter}"
-                meterRowLabel.text = "박자: ${span.meter} — ${span.meter.beatNoteName(s.dotted)} ${span.meter.beatsPerBar(s.dotted)}박 · 악보 박자표"
+                sectionTitle.text = getString(R.string.viewer_section_title, index + 1, spans.size, rangeText(span), span.meter.toString())
+                meterRowLabel.text = getString(R.string.viewer_section_meter_label, span.meter.toString(), noteName(span.meter, s.dotted), span.meter.beatsPerBar(s.dotted))
                 renderBeatUnit(eighth, dottedUnit)
-                tempoRowLabel.text = "속도: ${tempoText(section)} BPM · ${relationName(section.relation)}"
+                tempoRowLabel.text = getString(R.string.viewer_section_tempo_label, tempoText(section), relationName(section.relation))
                 tempoSeek.progress = Math.round(section.bpm).toInt().coerceIn(MetronomeClock.MIN_BPM, MetronomeClock.MAX_BPM) -
                     MetronomeClock.MIN_BPM
                 val tooFast = section.bpm > MetronomeClock.MAX_BPM
                 val fastCompound = compound && !s.dotted && section.bpm > COMPOUND_FAST_BPM
                 warning.visibility = if (tooFast || fastCompound) View.VISIBLE else View.GONE
                 warning.text = when {
-                    fastCompound -> "박이 빠릅니다 — ${span.meter.beatNoteName(true)}로 세면 " +
-                        "${span.meter.beatNoteName(true)} = ${Math.round(section.bpm / 3.0)} 입니다"
-                    tooFast -> "박이 1분에 ${Math.round(section.bpm)}번으로 빠릅니다 — 속도 상세에서 다른 이어받기를 고르세요"
+                    fastCompound -> getString(R.string.viewer_section_fast_compound, noteName(span.meter, true), Math.round(section.bpm / 3.0))
+                    tooFast -> getString(R.string.viewer_section_too_fast, Math.round(section.bpm))
                     else -> ""
                 }
-                volumeRowLabel.text = if (soundOn) "소리 크기: ${volumeSeek.progress}%" else "소리 크기: 클릭음 꺼짐 (박 표시만)"
+                volumeRowLabel.text = if (soundOn) getString(R.string.viewer_volume_label, volumeSeek.progress) else getString(R.string.viewer_volume_click_off)
                 sectionVolumeSeek.progress = volumeSeek.progress
             }
             // 처음 포커스는 첫 화면처럼 박자 줄 — 겹박자면 세는 단위 버튼, 아니면 속도 슬라이더
@@ -4173,8 +4171,7 @@ class PdfViewerActivity : AppCompatActivity() {
                 header(volumeLabel, ::showSoundDetail, inline), volumeSeek, soundBox,
                 countInLabel, countInRow,
             ) + sectionList + hintText(
-                "템포 · 박자는 이 파일에, 소리 · 예비박은 모든 파일에 저장됩니다. " +
-                    "악보 화면에서 ↑ 키로 연주 메뉴(일시정지 · 이어서 · 정지)를 열 수 있습니다."
+                getString(R.string.viewer_metronome_hint)
             )
         )
 
@@ -4189,9 +4186,9 @@ class PdfViewerActivity : AppCompatActivity() {
         }
 
         val dialog = AlertDialog.Builder(this)
-            .setTitle("메트로놈")
+            .setTitle(R.string.viewer_metronome_title)
             .setView(android.widget.ScrollView(this).apply { addView(content) })
-            .setPositiveButton(if (metronome.isRunning || followState != FollowState.OFF) "정지" else "시작") { _, _ ->
+            .setPositiveButton(if (metronome.isRunning || followState != FollowState.OFF) R.string.viewer_stop else R.string.viewer_start) { _, _ ->
                 if (metronome.isRunning || followState != FollowState.OFF) {
                     stopMetronome()
                 } else {
@@ -4199,7 +4196,7 @@ class PdfViewerActivity : AppCompatActivity() {
                     startMetronomeFromDialog()
                 }
             }
-            .setNegativeButton("닫기", null)
+            .setNegativeButton(R.string.viewer_close, null)
             .setOnDismissListener {
                 preferences.edit()
                     .putBoolean(PREF_METRONOME_SOUND, soundOn)
@@ -4232,7 +4229,7 @@ class PdfViewerActivity : AppCompatActivity() {
         binding.metronomeBeat.postOnAnimation(metronomeTicker)
         refreshViewerBars()
         if (!withSound) {
-            Toast.makeText(this, "소리 장치를 열지 못해 박 표시만 합니다", Toast.LENGTH_LONG).show()
+            Toast.makeText(this, getString(R.string.viewer_metronome_no_audio), Toast.LENGTH_LONG).show()
         }
     }
 
@@ -4376,7 +4373,7 @@ class PdfViewerActivity : AppCompatActivity() {
                 performerDetachedRunId = null
                 if (ensembleRole == EnsembleRole.FOLLOWING) {
                     stopMetronome()
-                    Toast.makeText(this, "지휘자가 메트로놈을 멈췄습니다", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this, getString(R.string.viewer_ensemble_metronome_stopped), Toast.LENGTH_SHORT).show()
                 }
             }
             EnsembleRun.State.PAUSED, EnsembleRun.State.SELECTING -> showEnsembleFocus(run)
@@ -4401,7 +4398,7 @@ class PdfViewerActivity : AppCompatActivity() {
             // 시계 동기는 연결 직후 1초 안에 끝난다 — 끝나면 onClockSynced 가 다시 부른다
             if (!clockWaitNoticeShown) {
                 clockWaitNoticeShown = true
-                Toast.makeText(this, "지휘자와 시계를 맞추는 중…", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, getString(R.string.viewer_ensemble_clock_syncing), Toast.LENGTH_SHORT).show()
             }
             return
         }
@@ -4443,7 +4440,7 @@ class PdfViewerActivity : AppCompatActivity() {
             schedule.barPosition = { index -> scoreFollower.barPositionAt(index) }
             followState = FollowState.PLAYING
         } else if (run.startMeasure != null) {
-            Toast.makeText(this, "이 기기 악보에서 ${run.startMeasure}번 마디를 찾지 못해 박만 따라갑니다", Toast.LENGTH_LONG).show()
+            Toast.makeText(this, getString(R.string.viewer_ensemble_measure_missing, run.startMeasure), Toast.LENGTH_LONG).show()
         }
         // 표시용 — 저장하지 않는다 (지휘자 설정이다)
         metronome.bpm = run.timeline.bpm
@@ -4588,7 +4585,7 @@ class PdfViewerActivity : AppCompatActivity() {
     private fun detachFromEnsemble() {
         performerDetachedRunId = performerRun?.runId
         stopMetronome()
-        Toast.makeText(this, "이 기기만 메트로놈 연동에서 빠졌습니다 — ↑ 로 다시 합류", Toast.LENGTH_SHORT).show()
+        Toast.makeText(this, getString(R.string.viewer_ensemble_detached), Toast.LENGTH_SHORT).show()
     }
 
     private fun canRejoinEnsemble(): Boolean {
@@ -4632,9 +4629,9 @@ class PdfViewerActivity : AppCompatActivity() {
         if (touchShell()) return showMenuSheet(build, onDismiss, onChosen)
         val menu = build()
         AlertDialog.Builder(this)
-            .setTitle(menu.title)
-            .setItems(menu.items.map { it.text }.toTypedArray()) { _, which -> onChosen(menu.items[which].action) }
-            .apply { if (menu.closeButton) setNegativeButton("닫기") { dialog, _ -> dialog.dismiss() } }
+            .setTitle(menu.title.resolve(this))
+            .setItems(menu.items.map { it.tvText(this) }.toTypedArray()) { _, which -> onChosen(menu.items[which].action) }
+            .apply { if (menu.closeButton) setNegativeButton(R.string.viewer_close) { dialog, _ -> dialog.dismiss() } }
             .setOnDismissListener { onDismiss() }
             .show()
     }
@@ -4652,11 +4649,11 @@ class PdfViewerActivity : AppCompatActivity() {
 
         fun render() {
             val menu = build()
-            title.text = menu.title
+            title.text = menu.title.resolve(this)
             rows.removeAllViews()
             for (item in menu.items) {
                 val row = layoutInflater.cloneInContext(sheet.context).inflate(R.layout.item_menu_sheet_row, rows, false)
-                row.findViewById<android.widget.TextView>(R.id.rowLabel).text = item.label
+                row.findViewById<android.widget.TextView>(R.id.rowLabel).text = item.label.resolve(this)
                 val toggle = item.checked
                 if (toggle != null) {
                     row.findViewById<com.google.android.material.switchmaterial.SwitchMaterial>(R.id.rowSwitch).apply {
@@ -4666,7 +4663,7 @@ class PdfViewerActivity : AppCompatActivity() {
                 } else if (item.value != null) {
                     row.findViewById<android.widget.TextView>(R.id.rowValue).apply {
                         visibility = View.VISIBLE
-                        text = item.value
+                        text = item.value.resolve(this@PdfViewerActivity)
                     }
                 }
                 row.setOnClickListener {
@@ -4689,14 +4686,14 @@ class PdfViewerActivity : AppCompatActivity() {
     /** 연주자의 메트로놈 설정 — 이 기기가 소리를 낼지만 고른다. 템포 · 박자는 지휘자 것 */
     private fun showPerformerMetronomeSettings() {
         val soundOn = preferences.getBoolean(PREF_ENSEMBLE_SOUND, false)
-        val choices = arrayOf("소리 끔 — 박 표시 · 현재 마디 · 넘김만 따라갑니다", "소리 켬 — 지휘자 메트로놈에 맞춰 이 기기도 소리를 냅니다")
+        val choices = arrayOf(getString(R.string.viewer_performer_sound_off_choice), getString(R.string.viewer_performer_sound_on_choice))
         AlertDialog.Builder(this)
-            .setTitle("메트로놈 설정 (연주자)")
+            .setTitle(R.string.viewer_performer_metronome_title)
             .setSingleChoiceItems(choices, if (soundOn) 1 else 0) { dialog, which ->
                 setPerformerSound(which == 1)
                 dialog.dismiss()
             }
-            .setNegativeButton("닫기", null)
+            .setNegativeButton(R.string.viewer_close, null)
             .show()
     }
 
@@ -4707,7 +4704,7 @@ class PdfViewerActivity : AppCompatActivity() {
         if (ensembleRole == EnsembleRole.FOLLOWING && metronome.isRunning && schedule != null) {
             metronome.startScheduled(schedule, withSound = on)
         }
-        if (announce) Toast.makeText(this, if (on) "이 기기도 메트로놈 소리를 냅니다" else "이 기기는 메트로놈 소리를 내지 않습니다", Toast.LENGTH_SHORT).show()
+        if (announce) Toast.makeText(this, getString(if (on) R.string.viewer_performer_sound_on else R.string.viewer_performer_sound_off), Toast.LENGTH_SHORT).show()
     }
 
     /** 다른 곡으로 넘어가면 멈춘다 — 템포가 파일별이라 이전 곡 템포로 계속 도는 건 틀린 동작이다. */
@@ -4731,7 +4728,7 @@ class PdfViewerActivity : AppCompatActivity() {
             return
         }
         val cached = if (scoreMeasuresFileId == fileId) scoreMeasures else null
-        if (cached == null) Toast.makeText(this, "악보 분석 중…", Toast.LENGTH_SHORT).show()
+        if (cached == null) Toast.makeText(this, getString(R.string.viewer_analyzing_score), Toast.LENGTH_SHORT).show()
         val file = File(pdfFilePath)
         lifecycleScope.launch {
             val measures = cached ?: withContext(Dispatchers.IO) { measuresForView(fileId, file) }
@@ -4743,7 +4740,7 @@ class PdfViewerActivity : AppCompatActivity() {
             val startable = ScoreFollower.startableMeasures(measures.orEmpty())
             if (startable.isEmpty()) {
                 if (!measures.isNullOrEmpty()) {
-                    Toast.makeText(this@PdfViewerActivity, "악보에서 박자표를 읽지 못해 악보 연동 없이 시작합니다", Toast.LENGTH_LONG).show()
+                    Toast.makeText(this@PdfViewerActivity, getString(R.string.viewer_follow_no_meter), Toast.LENGTH_LONG).show()
                 }
                 startMetronome()
             } else {
@@ -4767,9 +4764,10 @@ class PdfViewerActivity : AppCompatActivity() {
         refreshScoreOverlay()
         broadcastConductorCursor()
         if (at == null) {
-            val hint = if (com.mrgq.pdfviewer.utils.DeviceForm.isTv(this)) "←→ 마디, ↑↓ 줄, OK 시작, 뒤로 취소 (연주 중 ↑ 메뉴)"
-                else "마디를 탭해 고르고 한 번 더 탭하면 시작, 두 번 탭 = 메뉴(🎤 그 마디부터 듣기)"
-            Toast.makeText(this, "시작할 마디를 고르세요 — $hint", Toast.LENGTH_LONG).show()
+            val hint = getString(
+                if (com.mrgq.pdfviewer.utils.DeviceForm.isTv(this)) R.string.viewer_select_hint_tv else R.string.viewer_select_hint_touch,
+            )
+            Toast.makeText(this, getString(R.string.viewer_select_start_measure, hint), Toast.LENGTH_LONG).show()
         }
     }
 
@@ -4865,7 +4863,7 @@ class PdfViewerActivity : AppCompatActivity() {
             metronomeMenuShowing = false
             if (!chosen && followState == FollowState.PAUSED) {
                 stopMetronome()
-                Toast.makeText(this, "메트로놈 정지", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, getString(R.string.viewer_metronome_stopped), Toast.LENGTH_SHORT).show()
             }
         }) { action ->
             chosen = true
@@ -4921,7 +4919,7 @@ class PdfViewerActivity : AppCompatActivity() {
                 is MeasureTarget.Unavailable -> return target.outcome
                 is MeasureTarget.Ready -> target
             }
-            val at = startable.firstOrNull { it.measureNumber == measure } ?: return noSuchMeasure("${measure}마디", startable)
+            val at = startable.firstOrNull { it.measureNumber == measure } ?: return noSuchMeasure(getString(R.string.viewer_voice_measure_n, measure), startable)
             if (followState == FollowState.SELECTING && followFileId == fileId) {
                 followMeasures = startable
                 moveCursor(startable.indexOf(at) - cursorIndex)
@@ -4929,25 +4927,25 @@ class PdfViewerActivity : AppCompatActivity() {
             }
             if (metronome.isRunning || followState != FollowState.OFF) stopMetronome()
             // 마디를 탭해 시작할 때 이 파일의 설정(방금 바꾼 템포 포함)으로 — ↑ 메뉴 "시작"과 같다
-            if (!loadSavedMetronomeSettings(fileId)) return failed("다른 곡으로 넘어갔어요")
+            if (!loadSavedMetronomeSettings(fileId)) return failed(getString(R.string.viewer_voice_file_changed))
             enterMeasureSelection(fileId, startable, at)
             return CommandOutcome.Done
         }
 
-        override suspend fun gotoMeasure(measure: Int) = followFrom("${measure}마디") { it.firstOrNull { m -> m.measureNumber == measure } }
+        override suspend fun gotoMeasure(measure: Int) = followFrom(getString(R.string.viewer_voice_measure_n, measure)) { it.firstOrNull { m -> m.measureNumber == measure } }
 
-        override suspend fun gotoStart() = followFrom("처음") { it.firstOrNull() }
+        override suspend fun gotoStart() = followFrom(getString(R.string.viewer_voice_the_start)) { it.firstOrNull() }
 
         override suspend fun restart(): CommandOutcome {
             val at = lastFollowStart?.takeIf { it.first == currentPdfFileId }?.second
-                ?: return failed("다시 시작할 마디가 없어요 — 이 곡에서 아직 시작한 적이 없어요")
-            return followFrom("${at}마디") { it.firstOrNull { m -> m.measureNumber == at } }
+                ?: return failed(getString(R.string.viewer_voice_no_restart))
+            return followFrom(getString(R.string.viewer_voice_measure_n, at)) { it.firstOrNull { m -> m.measureNumber == at } }
         }
 
         override suspend fun resume(): CommandOutcome {
             val at = lastFollowPosition?.takeIf { it.first == currentPdfFileId }?.second
-                ?: return failed("이어서 할 마디가 없어요 — 멈춘 적이 없어요")
-            return followFrom("${at}마디") { it.firstOrNull { m -> m.measureNumber == at } }
+                ?: return failed(getString(R.string.viewer_voice_no_resume))
+            return followFrom(getString(R.string.viewer_voice_measure_n, at)) { it.firstOrNull { m -> m.measureNumber == at } }
         }
 
         /**
@@ -4955,12 +4953,12 @@ class PdfViewerActivity : AppCompatActivity() {
          * 반주 · 듣기와 같은 맞추기([MusicXmlMatch]), 안 맞으면 MusicXML 에 적힌 마디 번호로. PDF 에 찍힌 마크는 아직 읽지 않는다
          */
         override suspend fun gotoRehearsalMark(mark: String): CommandOutcome {
-            val fileId = currentPdfFileId ?: return failed("악보를 아직 여는 중이에요")
+            val fileId = currentPdfFileId ?: return failed(getString(R.string.viewer_voice_still_opening))
             val score = musicXml?.takeIf { musicXmlFileId == fileId }
-                ?: return failed("레터는 MusicXML 이 있는 악보에서만 알아요 — 마디 번호로 말하세요")
+                ?: return failed(getString(R.string.viewer_voice_letter_needs_xml))
             val index = score.rehearsalMeasure(mark) ?: return failed(
-                if (score.rehearsals.isEmpty()) "이 악보에는 레터(리허설 마크)가 없어요 — 마디 번호로 말하세요"
-                else "레터 $mark 가 없어요 — 이 악보: " + score.rehearsals.joinToString(" · ") { it.text },
+                if (score.rehearsals.isEmpty()) getString(R.string.viewer_voice_no_letters)
+                else getString(R.string.viewer_voice_letter_missing, mark, score.rehearsals.joinToString(" · ") { it.text }),
             )
             val measures = withContext(Dispatchers.IO) {
                 try { musicRepository.getOrAnalyzeScoreMeasures(fileId, File(pdfFilePath)) } catch (e: Exception) { null }
@@ -4968,15 +4966,15 @@ class PdfViewerActivity : AppCompatActivity() {
             val match = measures?.takeIf { it.isNotEmpty() }?.let { com.mrgq.pdfviewer.metronome.MusicXmlMatch.check(score, it) }
             val number = match?.takeIf { it.ok }?.measureNumberOf(index)
                 ?: score.measures.getOrNull(index)?.number?.toIntOrNull()
-                ?: return failed("레터 $mark 의 마디를 악보에서 찾지 못했어요")
+                ?: return failed(getString(R.string.viewer_voice_letter_not_found, mark))
             return gotoMeasure(number)
         }
 
         override suspend fun nextPage(): CommandOutcome {
-            if (isInputBlocked()) return failed("지휘자가 방금 넘겨 잠시 넘길 수 없어요")
+            if (isInputBlocked()) return failed(getString(R.string.viewer_voice_input_blocked))
             val more = (phoneView && phoneWindowEnd < phoneChunks.lastIndex) ||
                 (if (isTwoPageMode) pageIndex + 2 else pageIndex + 1) < pageCount
-            if (!more) return failed("마지막 쪽이에요")
+            if (!more) return failed(getString(R.string.viewer_voice_last_page))
             if (isNavigationGuideVisible) hideNavigationGuide()
             commandPageTarget = when {
                 phoneView && phoneWindowEnd < phoneChunks.lastIndex -> pageIndex // 휴대폰: 같은 쪽 다음 화면
@@ -4988,8 +4986,8 @@ class PdfViewerActivity : AppCompatActivity() {
         }
 
         override suspend fun previousPage(): CommandOutcome {
-            if (isInputBlocked()) return failed("지휘자가 방금 넘겨 잠시 넘길 수 없어요")
-            if (!(phoneView && chunkIndex > 0) && pageIndex == 0) return failed("첫 쪽이에요")
+            if (isInputBlocked()) return failed(getString(R.string.viewer_voice_input_blocked))
+            if (!(phoneView && chunkIndex > 0) && pageIndex == 0) return failed(getString(R.string.viewer_voice_first_page))
             if (isNavigationGuideVisible) hideNavigationGuide()
             commandPageTarget = if (phoneView && chunkIndex > 0) pageIndex else maxOf(0, pageIndex - if (isTwoPageMode) 2 else 1)
             turnBack()
@@ -4997,12 +4995,12 @@ class PdfViewerActivity : AppCompatActivity() {
         }
 
         override suspend fun gotoPage(page: Int): CommandOutcome {
-            if (isInputBlocked()) return failed("지휘자가 방금 넘겨 잠시 넘길 수 없어요")
-            if (pageCount == 0) return failed("악보를 아직 여는 중이에요")
+            if (isInputBlocked()) return failed(getString(R.string.viewer_voice_input_blocked))
+            if (pageCount == 0) return failed(getString(R.string.viewer_voice_still_opening))
             // 파트 보기면 원본 쪽 번호로 말한다 — 그 쪽이 놓인 파트 쪽으로 (합주 쪽 신호와 같게)
             val layout = partViewLayout
             val sourcePages = layout?.strips?.maxOfOrNull { it.srcPage + 1 } ?: pageCount
-            if (page > sourcePages) return failed("${page}쪽이 없어요 (1 ~ $sourcePages)")
+            if (page > sourcePages) return failed(getString(R.string.viewer_voice_no_page, page, sourcePages))
             val target = pairStart((layout?.dstPageForSource(page - 1) ?: (page - 1)).coerceIn(0, pageCount - 1))
             commandPageTarget = target
             if (target == pageIndex) return CommandOutcome.Done
@@ -5012,13 +5010,13 @@ class PdfViewerActivity : AppCompatActivity() {
         }
 
         override suspend fun lastPage(): CommandOutcome {
-            if (pageCount == 0) return failed("악보를 아직 여는 중이에요")
+            if (pageCount == 0) return failed(getString(R.string.viewer_voice_still_opening))
             // 원본 쪽 번호로 — 파트 보기면 그 마지막 원본 쪽이 놓인 파트 쪽으로(gotoPage 와 같게)
             return gotoPage(partViewLayout?.strips?.maxOfOrNull { it.srcPage + 1 } ?: pageCount)
         }
 
         override suspend fun setTempo(bpm: Int): CommandOutcome {
-            if (collaborationMode == CollaborationMode.PERFORMER) return failed("템포는 지휘자가 정해요")
+            if (collaborationMode == CollaborationMode.PERFORMER) return failed(getString(R.string.viewer_voice_tempo_by_conductor))
             val fileId = currentPdfFileId
             metronome.bpm = bpm
             if (fileId != null) {
@@ -5034,27 +5032,27 @@ class PdfViewerActivity : AppCompatActivity() {
         }
 
         override suspend fun setCountIn(bars: Int): CommandOutcome {
-            if (collaborationMode == CollaborationMode.PERFORMER) return failed("예비박은 지휘자가 정해요")
+            if (collaborationMode == CollaborationMode.PERFORMER) return failed(getString(R.string.viewer_voice_count_in_by_conductor))
             // 박자 상세의 예비박 버튼과 같은 전역 설정 (#060) — 다음 시작부터
             preferences.edit().putInt(PREF_METRONOME_COUNT_IN_BARS, bars).apply()
             return CommandOutcome.Done
         }
 
         override suspend fun selectParts(parts: List<PartRef>): CommandOutcome {
-            if (collaborationMode == CollaborationMode.CONDUCTOR) return failed("지휘자는 총보만 봅니다 — 파트 보기는 연주자 · 혼자 연습에서")
-            val fileId = currentPdfFileId ?: return failed("악보를 아직 여는 중이에요")
+            if (collaborationMode == CollaborationMode.CONDUCTOR) return failed(getString(R.string.viewer_conductor_full_score_only))
+            val fileId = currentPdfFileId ?: return failed(getString(R.string.viewer_voice_still_opening))
             val staves = withContext(Dispatchers.IO) { musicRepository.getOrAnalyzeScoreStaves(fileId, File(pdfFilePath)) }
             val all = when (val result = staves?.let { ScoreParts.of(it) } ?: ScoreParts.Result.NoStaves) {
                 is ScoreParts.Result.Parts -> result.parts
-                ScoreParts.Result.NoStaves -> return failed("악보 구조를 찾지 못했어요 (벡터 악보 PDF 만)")
-                ScoreParts.Result.SingleStaff -> return failed("보표가 하나라 이미 파트보예요")
-                is ScoreParts.Result.VaryingStaves -> return failed("시스템마다 보표 수가 달라 파트 보기를 못 해요")
+                ScoreParts.Result.NoStaves -> return failed(getString(R.string.viewer_voice_no_staves))
+                ScoreParts.Result.SingleStaff -> return failed(getString(R.string.viewer_voice_single_staff))
+                is ScoreParts.Result.VaryingStaves -> return failed(getString(R.string.viewer_voice_varying_staves))
             }
             return when (val match = PartMatcher.match(all.map { it.staffIndex to knownPartName(it, all.size) }, parts)) {
                 is PartMatcher.Result.Missing -> failed(
-                    "${match.part.label} 파트가 없어요" + VoiceCommandRunner.partChoices(all.map { partName(it, all.size) })
+                    getString(R.string.viewer_voice_part_missing, match.part.label) + VoiceCommandRunner.partChoices(all.map { partName(it, all.size) })
                 )
-                is PartMatcher.Result.Ambiguous -> failed("${match.part.label} 파트가 여럿이에요 (${match.names.joinToString()}) — 번호까지 말하세요")
+                is PartMatcher.Result.Ambiguous -> failed(getString(R.string.viewer_voice_part_ambiguous, match.part.label, match.names.joinToString()))
                 is PartMatcher.Result.Staves -> applyPartStaves(fileId, match.staves.takeIf { it.size < all.size })
             }
         }
@@ -5068,18 +5066,18 @@ class PdfViewerActivity : AppCompatActivity() {
 
         override suspend fun showFullScore(): CommandOutcome {
             if (collaborationMode == CollaborationMode.CONDUCTOR) return CommandOutcome.Done // 지휘자는 늘 총보
-            val fileId = currentPdfFileId ?: return failed("악보를 아직 여는 중이에요")
+            val fileId = currentPdfFileId ?: return failed(getString(R.string.viewer_voice_still_opening))
             return applyPartStaves(fileId, null)
         }
 
         override suspend fun start(): CommandOutcome {
-            if (collaborationMode == CollaborationMode.PERFORMER) return failed("시작은 지휘자가 해요")
-            val fileId = currentPdfFileId ?: return failed("악보를 아직 여는 중이에요")
-            val startable = startableMeasuresNow(fileId) ?: return failed("다른 곡으로 넘어갔어요")
+            if (collaborationMode == CollaborationMode.PERFORMER) return failed(getString(R.string.viewer_voice_start_by_conductor))
+            val fileId = currentPdfFileId ?: return failed(getString(R.string.viewer_voice_still_opening))
+            val startable = startableMeasuresNow(fileId) ?: return failed(getString(R.string.viewer_voice_file_changed))
             if (startable.isEmpty()) {
                 // 마디 · 박자표를 못 읽은 악보 — 악보 연동 없이 메트로놈만 (↑ 메뉴 "시작"과 같다)
                 if (metronome.isRunning || followState != FollowState.OFF) stopMetronome()
-                if (!loadSavedMetronomeSettings(fileId)) return failed("다른 곡으로 넘어갔어요")
+                if (!loadSavedMetronomeSettings(fileId)) return failed(getString(R.string.viewer_voice_file_changed))
                 startMetronome()
                 return CommandOutcome.Done
             }
@@ -5095,7 +5093,7 @@ class PdfViewerActivity : AppCompatActivity() {
         }
 
         override suspend fun listen(from: ListenFrom): CommandOutcome {
-            if (!micFollowCapable()) return failed("이 기기에서는 연주를 들을 수 없어요")
+            if (!micFollowCapable()) return failed(getString(R.string.viewer_voice_cannot_listen))
             if (micFollower != null) return CommandOutcome.Done
             micFollowBlocker()?.let { return failed(it) }
             // "처음부터 듣기" · "이어서 듣기" (#113) — 그 마디의 쪽으로 넘기고(보이지 않으면) 그 마디부터
@@ -5108,8 +5106,8 @@ class PdfViewerActivity : AppCompatActivity() {
                     startable.first()
                 } else {
                     val number = (lastListenPosition ?: lastFollowPosition)?.takeIf { it.first == fileId }?.second
-                        ?: return failed("이어서 들을 마디가 없어요 — 이 곡에서 멈춘 적이 없어요")
-                    startable.firstOrNull { it.measureNumber == number } ?: return noSuchMeasure("${number}마디", startable)
+                        ?: return failed(getString(R.string.viewer_voice_no_listen_resume))
+                    startable.firstOrNull { it.measureNumber == number } ?: return noSuchMeasure(getString(R.string.viewer_voice_measure_n, number), startable)
                 }
                 if (followState == FollowState.SELECTING) cancelMeasureSelection()
                 val page = pairStart(at.pageIndex)
@@ -5139,7 +5137,7 @@ class PdfViewerActivity : AppCompatActivity() {
                 ensembleRole == EnsembleRole.FOLLOWING -> detachFromEnsemble() // 연주자: 이 기기만 빠진다 (뒤로 키와 같다)
                 followState == FollowState.SELECTING -> cancelMeasureSelection()
                 metronome.isRunning || followState != FollowState.OFF -> stopMetronome()
-                else -> return failed("멈출 연주가 없어요")
+                else -> return failed(getString(R.string.viewer_voice_nothing_to_stop))
             }
             return CommandOutcome.Done
         }
@@ -5171,17 +5169,17 @@ class PdfViewerActivity : AppCompatActivity() {
 
     /** 마디 명령을 받을 수 있으면 파일과 시작 가능 마디, 아니면 실패 이유 */
     private suspend fun followableMeasures(): MeasureTarget {
-        if (collaborationMode == CollaborationMode.PERFORMER) return MeasureTarget.Unavailable(failed("마디는 지휘자가 정해요"))
-        val fileId = currentPdfFileId ?: return MeasureTarget.Unavailable(failed("악보를 아직 여는 중이에요"))
-        val startable = startableMeasuresNow(fileId) ?: return MeasureTarget.Unavailable(failed("다른 곡으로 넘어갔어요"))
+        if (collaborationMode == CollaborationMode.PERFORMER) return MeasureTarget.Unavailable(failed(getString(R.string.viewer_voice_measure_by_conductor)))
+        val fileId = currentPdfFileId ?: return MeasureTarget.Unavailable(failed(getString(R.string.viewer_voice_still_opening)))
+        val startable = startableMeasuresNow(fileId) ?: return MeasureTarget.Unavailable(failed(getString(R.string.viewer_voice_file_changed)))
         if (startable.isEmpty()) {
-            return MeasureTarget.Unavailable(failed("이 악보는 마디 · 박자표를 읽지 못해 마디로 갈 수 없어요"))
+            return MeasureTarget.Unavailable(failed(getString(R.string.viewer_voice_no_measures)))
         }
         return MeasureTarget.Ready(fileId, startable)
     }
 
     private fun noSuchMeasure(what: String, startable: List<ScoreMeasure>) =
-        failed("${what}가 없어요 (${startable.minOf { it.measureNumber }} ~ ${startable.maxOf { it.measureNumber }})")
+        failed(getString(R.string.viewer_voice_no_such_measure, what, startable.minOf { it.measureNumber }, startable.maxOf { it.measureNumber }))
 
     /** 이 파일의 메트로놈 설정(없으면 악보 박자표)을 엔진에 — 그사이 다른 곡으로 넘어갔으면 false */
     private suspend fun loadSavedMetronomeSettings(fileId: String?): Boolean {
@@ -5214,7 +5212,7 @@ class PdfViewerActivity : AppCompatActivity() {
     private suspend fun startFollowingAt(fileId: String, startable: List<ScoreMeasure>, start: ScoreMeasure): CommandOutcome {
         val selectingHere = followState == FollowState.SELECTING && followFileId == fileId
         if (metronome.isRunning || (followState != FollowState.OFF && !selectingHere)) stopMetronome()
-        if (!loadSavedMetronomeSettings(fileId)) return failed("다른 곡으로 넘어갔어요")
+        if (!loadSavedMetronomeSettings(fileId)) return failed(getString(R.string.viewer_voice_file_changed))
         followMeasures = startable
         followFileId = fileId
         cursorIndex = startable.indexOf(start)
@@ -5228,12 +5226,12 @@ class PdfViewerActivity : AppCompatActivity() {
         if (target == partViewStaves) return CommandOutcome.Done
         if (metronome.isRunning || followState != FollowState.OFF) stopMetronome()
         withContext(Dispatchers.IO) { musicRepository.setPartStavesForFile(fileId, target) }
-        if (currentPdfFileId != fileId) return failed("다른 곡으로 넘어갔어요")
+        if (currentPdfFileId != fileId) return failed(getString(R.string.viewer_voice_file_changed))
         val shown = kotlinx.coroutines.CompletableDeferred<Unit>()
         fileShownSignal = shown
         loadFile(pdfFilePath, pdfFileName)
         kotlinx.coroutines.withTimeoutOrNull(FILE_RELOAD_TIMEOUT_MS) { shown.await() }
-            ?: return failed("파트 보기로 다시 여는 데 너무 오래 걸려요")
+            ?: return failed(getString(R.string.viewer_voice_reload_timeout))
         return CommandOutcome.Done
     }
 
@@ -5259,7 +5257,7 @@ class PdfViewerActivity : AppCompatActivity() {
     private var voicePressedAtMs = 0L
     private fun voiceHeldLongEnough() = SystemClock.uptimeMillis() - voicePressedAtMs >= VOICE_TAP_MS
     /** 누른 채로 [VOICE_TAP_MS] 가 지나서야 "듣는 중"을 띄운다 — 짧게 눌러 정지할 때 글자가 번쩍이지 않게 */
-    private val showPushListening = Runnable { if (voicePushToTalk && binding.voiceButton.isActivated) showVoiceStatus("🎙 듣는 중…") }
+    private val showPushListening = Runnable { if (voicePushToTalk && binding.voiceButton.isActivated) showVoiceStatus(getString(R.string.viewer_voice_status_listening)) }
 
     // 👂 계속 듣기 (#085): 🎙 를 누르지 않아도 듣기를 끝없이 다시 걸고, 호출어("메이트") 뒤의 말만 명령으로 실행한다
     /** 화면이 앞에 있다 — onResume ~ onPause */
@@ -5307,7 +5305,7 @@ class PdfViewerActivity : AppCompatActivity() {
     private fun muteRecognizerBeep(mute: Boolean) {
         if (com.mrgq.pdfviewer.voice.NotificationMute.set(this, mute) || !mute || beepMuteWarned) return
         beepMuteWarned = true
-        showVoiceStatus("👂 이 기기에서는 알림 소리를 끌 수 없어 듣기를 다시 걸 때 딸깍 소리가 날 수 있어요", VOICE_STATUS_MS)
+        showVoiceStatus(getString(R.string.viewer_voice_beep_unmutable), VOICE_STATUS_MS)
     }
 
     /** 👂 계속 듣기를 설정에서 켰고, 지금 쓸 수 있는 기능인가([VOICE_ALWAYS_AVAILABLE]) */
@@ -5329,7 +5327,7 @@ class PdfViewerActivity : AppCompatActivity() {
         if (androidx.core.content.ContextCompat.checkSelfPermission(this, android.Manifest.permission.RECORD_AUDIO) !=
             android.content.pm.PackageManager.PERMISSION_GRANTED
         ) {
-            return showVoiceStatus("👂 계속 들으려면 🎙 를 한 번 눌러 마이크 권한을 주세요", VOICE_STATUS_MS)
+            return showVoiceStatus(getString(R.string.viewer_voice_always_needs_permission), VOICE_STATUS_MS)
         }
         val listener = voiceListener ?: VoiceListener(this, voiceCallback).also { voiceListener = it }
         if (listener.isActive) return
@@ -5356,12 +5354,12 @@ class PdfViewerActivity : AppCompatActivity() {
                 scheduleAlwaysListening()
             }
             android.speech.SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS ->
-                showVoiceStatus("👂 마이크 권한이 없어 계속 듣기를 멈췄어요", VOICE_STATUS_MS)
+                showVoiceStatus(getString(R.string.viewer_voice_always_permission_lost), VOICE_STATUS_MS)
             else -> {
                 alwaysErrorStreak++
                 val delayMs = (ALWAYS_RESTART_MS shl alwaysErrorStreak.coerceAtMost(6)).coerceAtMost(ALWAYS_BACKOFF_MAX_MS)
                 Log.i("VoiceCommand", "👂 계속 듣기 오류 $error (${alwaysErrorStreak}번째) — ${delayMs}ms 뒤 다시")
-                if (alwaysErrorStreak == 3) showVoiceStatus("👂 음성 인식이 잘 안 돼요 (오류 $error) — 다시 시도하는 중", VOICE_STATUS_MS)
+                if (alwaysErrorStreak == 3) showVoiceStatus(getString(R.string.viewer_voice_always_errors, error), VOICE_STATUS_MS)
                 scheduleAlwaysListening(delayMs)
             }
         }
@@ -5383,7 +5381,7 @@ class PdfViewerActivity : AppCompatActivity() {
         binding.voiceButton.removeCallbacks(stopVoiceListening)
         binding.voiceButton.removeCallbacks(restartAlwaysListening)
         binding.voiceButton.removeCallbacks(showPushListening)
-        if (micFollower != null) return showVoiceStatus("🎤 연주 추적을 멈춘 뒤에 말하세요", VOICE_STATUS_MS)
+        if (micFollower != null) return showVoiceStatus(getString(R.string.viewer_voice_mic_busy), VOICE_STATUS_MS)
         if (androidx.core.content.ContextCompat.checkSelfPermission(this, android.Manifest.permission.RECORD_AUDIO) !=
             android.content.pm.PackageManager.PERMISSION_GRANTED
         ) {
@@ -5418,7 +5416,7 @@ class PdfViewerActivity : AppCompatActivity() {
             scheduleAlwaysListening()
             return
         }
-        showVoiceStatus("🎙 알아듣는 중…")
+        showVoiceStatus(getString(R.string.viewer_voice_status_recognizing))
         binding.voiceButton.postDelayed(stopVoiceListening, VOICE_RELEASE_TAIL_MS)
     }
 
@@ -5463,7 +5461,7 @@ class PdfViewerActivity : AppCompatActivity() {
 
     private val voiceCallback = object : VoiceListener.Callback {
         override fun onListening() {
-            if (voicePushToTalk && voiceHeldLongEnough()) showVoiceStatus("🎙 듣는 중…")
+            if (voicePushToTalk && voiceHeldLongEnough()) showVoiceStatus(getString(R.string.viewer_voice_status_listening))
         }
 
         override fun onPartial(text: String) {
@@ -5489,7 +5487,7 @@ class PdfViewerActivity : AppCompatActivity() {
                     // "메이트"만 — 이어지는 말을 호출어 없이 받는다. 곧바로 다시 들어야 이어 말한 첫머리를 놓치지 않는다 (#091)
                     Log.i("VoiceCommand", "👂 호출어만: $candidates")
                     wakeHeardAtMs = SystemClock.uptimeMillis()
-                    showVoiceStatus("👂 네? — 명령을 말하세요", WAKE_WINDOW_MS)
+                    showVoiceStatus(getString(R.string.viewer_voice_wake_heard), WAKE_WINDOW_MS)
                     scheduleAlwaysListening(0)
                 }
                 else -> {
@@ -5517,7 +5515,7 @@ class PdfViewerActivity : AppCompatActivity() {
         lifecycleScope.launch {
             val best = CommandParser.parseBest(candidates, voiceStaffNames(), voiceStaffCount())
             if (best == null) {
-                showVoiceStatus(if (alwaysListening) "👂 못 알아들었어요" else "🎙 못 알아들었어요 — 누른 채로 말하세요", VOICE_STATUS_MS)
+                showVoiceStatus(getString(if (alwaysListening) R.string.viewer_voice_not_understood_always else R.string.viewer_voice_not_understood), VOICE_STATUS_MS)
                 logVoiceCommand(heard, null, null, alwaysListening)
                 scheduleAlwaysListening()
                 return@launch
@@ -5637,7 +5635,7 @@ class PdfViewerActivity : AppCompatActivity() {
         if (!next.sameBeatsAs(current)) {
             if (!followTempoDeferredNotice) {
                 followTempoDeferredNotice = true
-                Toast.makeText(this, "세는 단위를 바꾼 구간은 다음 시작(이어서)부터 적용됩니다", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, getString(R.string.viewer_follow_beat_unit_deferred), Toast.LENGTH_SHORT).show()
             }
             return
         }
@@ -5689,7 +5687,7 @@ class PdfViewerActivity : AppCompatActivity() {
                 // 연주자는 끝난 연주를 다시 받아도 또 따라가지 않게 (#055)
                 if (ensembleRole == EnsembleRole.FOLLOWING) performerDetachedRunId = performerRun?.runId
                 stopMetronome()
-                Toast.makeText(this, "악보 끝까지 따라왔습니다", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, getString(R.string.viewer_follow_reached_end), Toast.LENGTH_SHORT).show()
             }
         }
     }
@@ -5719,7 +5717,7 @@ class PdfViewerActivity : AppCompatActivity() {
     private fun toggleScoreOverlay(announce: Boolean = true) {
         val enabled = !isScoreOverlayEnabled()
         preferences.edit().putBoolean("score_overlay_enabled", enabled).apply()
-        if (announce) Toast.makeText(this, if (enabled) "마디 박스 표시 켜짐" else "마디 박스 표시 꺼짐", Toast.LENGTH_SHORT).show()
+        if (announce) Toast.makeText(this, getString(if (enabled) R.string.viewer_measure_boxes_on else R.string.viewer_measure_boxes_off), Toast.LENGTH_SHORT).show()
         refreshScoreOverlay()
     }
 
@@ -5963,11 +5961,11 @@ class PdfViewerActivity : AppCompatActivity() {
             } else if (measures.isEmpty()) {
                 Toast.makeText(
                     this@PdfViewerActivity,
-                    "마디를 찾지 못했습니다 (지원: Sibelius 에서 PDF 로 인쇄한 벡터 악보)",
+                    getString(R.string.viewer_measures_not_found),
                     Toast.LENGTH_LONG
                 ).show()
             } else {
-                Toast.makeText(this@PdfViewerActivity, "마디 ${measures.size}개", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this@PdfViewerActivity, getString(R.string.viewer_measures_found, measures.size), Toast.LENGTH_SHORT).show()
             }
             refreshScoreOverlay()
         }
@@ -5986,9 +5984,9 @@ class PdfViewerActivity : AppCompatActivity() {
     }
 
     private fun phoneOrientationName(mode: String): String = when (mode) {
-        PHONE_ORIENTATION_LANDSCAPE -> "가로"
-        PHONE_ORIENTATION_PORTRAIT -> "세로"
-        else -> "기기 회전"
+        PHONE_ORIENTATION_LANDSCAPE -> getString(R.string.viewer_rotation_landscape)
+        PHONE_ORIENTATION_PORTRAIT -> getString(R.string.viewer_rotation_portrait)
+        else -> getString(R.string.viewer_rotation_auto)
     }
 
     /** 보기 메뉴의 회전 모드 (P13 3단계) — 고르면 바로 그 방향으로. 돌면 새 폭으로 다시 그린다(#090) */
@@ -5996,13 +5994,13 @@ class PdfViewerActivity : AppCompatActivity() {
         val modes = listOf(PHONE_ORIENTATION_AUTO, PHONE_ORIENTATION_LANDSCAPE, PHONE_ORIENTATION_PORTRAIT)
         val current = modes.indexOf(phoneOrientationMode()).coerceAtLeast(0)
         AlertDialog.Builder(this)
-            .setTitle("회전")
+            .setTitle(R.string.viewer_menu_rotation)
             .setSingleChoiceItems(modes.map(::phoneOrientationName).toTypedArray(), current) { dialog, which ->
                 preferences.edit().putString(PREF_PHONE_ORIENTATION, modes[which]).apply()
                 dialog.dismiss()
                 requestedOrientation = phoneOrientationRequest()
             }
-            .setNegativeButton("닫기", null)
+            .setNegativeButton(R.string.viewer_close, null)
             .show()
     }
 
@@ -6089,20 +6087,20 @@ class PdfViewerActivity : AppCompatActivity() {
     private fun showPartViewDialog() {
         val fileId = currentPdfFileId ?: return
         if (collaborationMode == CollaborationMode.CONDUCTOR) {
-            toast("지휘자는 총보만 봅니다 — 파트 보기는 연주자 · 혼자 연습에서")
+            toast(getString(R.string.viewer_conductor_full_score_only))
             return
         }
         val source = File(pdfFilePath)
-        Toast.makeText(this, "악보 분석 중…", Toast.LENGTH_SHORT).show()
+        Toast.makeText(this, getString(R.string.viewer_analyzing_score), Toast.LENGTH_SHORT).show()
         lifecycleScope.launch {
             val staves = withContext(Dispatchers.IO) { musicRepository.getOrAnalyzeScoreStaves(fileId, source) }
             if (currentPdfFileId != fileId) return@launch
             val result = staves?.let { ScoreParts.of(it) } ?: ScoreParts.Result.NoStaves
             val parts = when (result) {
                 is ScoreParts.Result.Parts -> result.parts
-                ScoreParts.Result.NoStaves -> return@launch toast("악보 구조를 찾지 못했습니다 (벡터 악보 PDF 만 지원)")
-                ScoreParts.Result.SingleStaff -> return@launch toast("보표가 하나라 이미 파트보입니다")
-                is ScoreParts.Result.VaryingStaves -> return@launch toast("시스템마다 보표 수가 달라 아직 파트 보기를 지원하지 않습니다")
+                ScoreParts.Result.NoStaves -> return@launch toast(getString(R.string.viewer_part_no_staves))
+                ScoreParts.Result.SingleStaff -> return@launch toast(getString(R.string.viewer_part_single_staff))
+                is ScoreParts.Result.VaryingStaves -> return@launch toast(getString(R.string.viewer_part_varying_staves))
             }
             // 여러 파트를 고를 수 있다 (사용자 요청 2026-09-28). 하나도 안 고르거나 모두 고르면 전체 악보
             val checked = BooleanArray(parts.size) { partViewStaves?.contains(parts[it].staffIndex) == true }
@@ -6116,11 +6114,11 @@ class PdfViewerActivity : AppCompatActivity() {
                 }
             }
             AlertDialog.Builder(this@PdfViewerActivity)
-                .setTitle("파트 보기 (여러 개 고를 수 있음)")
+                .setTitle(R.string.viewer_part_dialog_title)
                 .setMultiChoiceItems(parts.map { partName(it, parts.size) }.toTypedArray(), checked) { _, which, isChecked -> checked[which] = isChecked }
-                .setPositiveButton("보기") { _, _ -> apply(parts.filterIndexed { i, _ -> checked[i] }.map { it.staffIndex }.toSet()) }
-                .setNeutralButton("전체 악보") { _, _ -> apply(null) }
-                .setNegativeButton("닫기", null)
+                .setPositiveButton(R.string.viewer_part_show) { _, _ -> apply(parts.filterIndexed { i, _ -> checked[i] }.map { it.staffIndex }.toSet()) }
+                .setNeutralButton(R.string.viewer_full_score) { _, _ -> apply(null) }
+                .setNegativeButton(R.string.viewer_close, null)
                 .show()
         }
     }
@@ -6159,7 +6157,7 @@ class PdfViewerActivity : AppCompatActivity() {
         val measures = if (scoreMeasuresFileId == currentPdfFileId && scoreMeasures.isNotEmpty()) scoreMeasures else followMeasures
         val match = com.mrgq.pdfviewer.metronome.MusicXmlMatch.check(score, measures)
         if (!match.ok) {
-            toast("반주를 쓸 수 없습니다: ${match.reason}")
+            toast(getString(R.string.viewer_accompaniment_unavailable, match.reason?.resolve(this)))
             return null
         }
         val mine = partViewStaves
@@ -6168,7 +6166,7 @@ class PdfViewerActivity : AppCompatActivity() {
         val accompaniment = com.mrgq.pdfviewer.metronome.Accompaniment.build(
             score, follower, play, match::measureNumberOf, dynamics = preferences.getBoolean(PREF_ACCOMPANIMENT_DYNAMICS, true),
         )
-        Toast.makeText(this, "반주: ${play.joinToString { score.parts[it].name }}", Toast.LENGTH_SHORT).show()
+        Toast.makeText(this, getString(R.string.viewer_accompaniment_parts, play.joinToString { score.parts[it].name }), Toast.LENGTH_SHORT).show()
         Log.i("PdfViewerActivity", "반주: 파트 $play, 음 ${accompaniment.size}개")
         return accompaniment
     }
@@ -6178,7 +6176,7 @@ class PdfViewerActivity : AppCompatActivity() {
      * 서버 인식이 읽은 이름이라 웹에서 고칠 수 있다(서버 0.9.8)
      */
     private fun partName(part: com.mrgq.pdfviewer.score.ScorePart, staffCount: Int): String =
-        knownPartName(part, staffCount) ?: part.name
+        knownPartName(part, staffCount) ?: getString(R.string.viewer_staff_n, part.staffIndex + 1)
 
     /** 아는 파트 이름 — PDF 에서 읽었거나 MusicXML 에 있으면. 둘 다 없으면(보표 n) null */
     private fun knownPartName(part: com.mrgq.pdfviewer.score.ScorePart, staffCount: Int): String? {
@@ -6201,13 +6199,13 @@ class PdfViewerActivity : AppCompatActivity() {
         val mine = partViewStaves
         val playing = score.parts.indices.filter { p -> mine == null || score.stavesOf(p).none { it in mine } }
         val info = android.widget.TextView(this).apply {
-            text = if (playing.isEmpty()) "보고 있는 파트 말고는 들려줄 파트가 없습니다"
-            else "악보 연동 메트로놈을 켜면 함께 연주: ${playing.joinToString { score.parts[it].name }}" +
-                if (mine == null) "\n(파트 보기로 내 파트를 고르면 그 파트는 빼고 들려줍니다)" else ""
+            text = if (playing.isEmpty()) getString(R.string.viewer_accompaniment_nothing)
+            else getString(R.string.viewer_accompaniment_info, playing.joinToString { score.parts[it].name }) +
+                if (mine == null) getString(R.string.viewer_accompaniment_info_part_hint) else ""
             textSize = 15f
         }
         val toggle = android.widget.CheckBox(this).apply {
-            text = "반주 켜기"
+            text = getString(R.string.viewer_accompaniment_on)
             textSize = 18f
             isChecked = preferences.getBoolean(PREF_ACCOMPANIMENT, true)
         }
@@ -6218,7 +6216,7 @@ class PdfViewerActivity : AppCompatActivity() {
             progress = (preferences.getFloat(PREF_ACCOMPANIMENT_VOLUME, 0.6f) * 100).toInt()
         }
         fun showVolume() {
-            volumeLabel.text = "반주 소리 크기: ${seek.progress}%  (메트로놈 클릭과 따로)"
+            volumeLabel.text = getString(R.string.viewer_accompaniment_volume, seek.progress)
         }
         showVolume()
         seek.setOnSeekBarChangeListener(object : android.widget.SeekBar.OnSeekBarChangeListener {
@@ -6238,7 +6236,7 @@ class PdfViewerActivity : AppCompatActivity() {
         // 악상기호 따르기 (#114 ~ #116) — 끄면 모든 음을 같은 크기 · 적힌 길이로. 연주 중이면 바로 다시 만든다
         val hasDynamics = score.notes.any { part -> part.any { it.velocity != 1f || it.soundLength != 1f } }
         val dynamicsToggle = android.widget.CheckBox(this).apply {
-            text = "악상기호 따르기 (셈여림 · 크레셴도 · 스타카토)" + if (hasDynamics) "" else " — 이 곡에는 악상기호가 없습니다"
+            text = getString(R.string.viewer_accompaniment_dynamics) + if (hasDynamics) "" else getString(R.string.viewer_accompaniment_no_dynamics)
             textSize = 16f
             isChecked = preferences.getBoolean(PREF_ACCOMPANIMENT_DYNAMICS, true)
             setOnCheckedChangeListener { _, on ->
@@ -6253,15 +6251,18 @@ class PdfViewerActivity : AppCompatActivity() {
         layout.addView(volumeLabel)
         layout.addView(seek)
         AlertDialog.Builder(this)
-            .setTitle("반주 (MusicXML)")
+            .setTitle(R.string.viewer_accompaniment_title)
             .setView(layout)
-            .setPositiveButton("닫기", null)
+            .setPositiveButton(R.string.viewer_close, null)
             .show()
     }
 
     private fun toast(message: String) {
         Toast.makeText(this, message, Toast.LENGTH_LONG).show()
     }
+
+    /** 박 단위 음표 이름 — "8분음표", 점음표 박이면 "점4분음표" (P18 — [TimeSignature.beatNote] 의 키를 글로) */
+    private fun noteName(meter: TimeSignature, dotted: Boolean): String = meter.beatNote(dotted).resolve(this)
 
     /**
      * 파일을 열 때 (checkAndSetTwoPageMode, IO): 이 파일에 파트를 골라 두었으면 파트 PDF 를 준비해 렌더러를 바꾼다 (P07).
@@ -6297,7 +6298,7 @@ class PdfViewerActivity : AppCompatActivity() {
                 partViewStaves = null
                 partViewName = null
                 partViewLayout = null
-                toast("파트보를 만들지 못해 전체 악보로 봅니다")
+                toast(getString(R.string.viewer_part_build_failed))
                 return@withContext
             }
             val (file, name, layout) = prepared
@@ -6367,7 +6368,7 @@ class PdfViewerActivity : AppCompatActivity() {
         if (out.isFile && layoutFile.isFile) {
             PartLayout.decode(layoutFile.readText())?.let { return Triple(out, name, it) }
         }
-        withContext(Dispatchers.Main) { Toast.makeText(this@PdfViewerActivity, "파트보 만드는 중…", Toast.LENGTH_SHORT).show() }
+        withContext(Dispatchers.Main) { Toast.makeText(this@PdfViewerActivity, getString(R.string.viewer_part_building), Toast.LENGTH_SHORT).show() }
         val measures = musicRepository.getOrAnalyzeScoreMeasures(fileId, source) ?: return null
         // 가운데선을 걸친 슬러 · 빔 · 덧줄 음을 소속에 따라 넓혀 자르려고 쪽 경로를 읽는다 (PartClip)
         val boxes = com.mrgq.pdfviewer.score.ScoreLayoutAnalyzer.pathBoxes(source, measures.map { it.pageIndex }.toSet())
@@ -6413,9 +6414,9 @@ class PdfViewerActivity : AppCompatActivity() {
             dialogView.addView(seek)
             return text to seek
         }
-        val (topLabel, topSeekBar) = slider("위쪽 자르기", currentTopClipping)
-        val (bottomLabel, bottomSeekBar) = slider("아래쪽 자르기", currentBottomClipping)
-        val padding = if (withPadding) slider("가운데 여백 (두 쪽 사이)", currentCenterPadding) else null
+        val (topLabel, topSeekBar) = slider(getString(R.string.viewer_clip_top), currentTopClipping)
+        val (bottomLabel, bottomSeekBar) = slider(getString(R.string.viewer_clip_bottom), currentBottomClipping)
+        val padding = if (withPadding) slider(getString(R.string.viewer_clip_center), currentCenterPadding) else null
 
         val originalTop = currentTopClipping
         val originalBottom = currentBottomClipping
@@ -6443,7 +6444,7 @@ class PdfViewerActivity : AppCompatActivity() {
             setPadding(0, 0, 0, 10)
         }
         quickButtonsLayout.addView(android.widget.Button(this).apply {
-            text = "초기화"
+            text = getString(R.string.viewer_clip_reset)
             setOnClickListener {
                 topSeekBar.progress = 0
                 bottomSeekBar.progress = 0
@@ -6452,7 +6453,7 @@ class PdfViewerActivity : AppCompatActivity() {
             }
         })
         quickButtonsLayout.addView(android.widget.Button(this).apply {
-            text = "위/아래 5%"
+            text = getString(R.string.viewer_clip_five)
             setOnClickListener {
                 topSeekBar.progress = 5
                 bottomSeekBar.progress = 5
@@ -6461,7 +6462,7 @@ class PdfViewerActivity : AppCompatActivity() {
         })
         dialogView.addView(quickButtonsLayout)
         dialogView.addView(android.widget.TextView(this).apply {
-            text = "움직이면 바로 미리 보입니다 · 이 파일에 저장"
+            text = getString(R.string.viewer_clip_hint)
             textSize = 12f
             setTextColor(android.graphics.Color.GRAY)
             gravity = android.view.Gravity.CENTER
@@ -6482,14 +6483,14 @@ class PdfViewerActivity : AppCompatActivity() {
                 override fun onStopTrackingTouch(seekBar: android.widget.SeekBar?) {}
             })
         }
-        topSeekBar.follow(topLabel, "위쪽 자르기")
-        bottomSeekBar.follow(bottomLabel, "아래쪽 자르기")
-        padding?.let { (label, seek) -> seek.follow(label, "가운데 여백 (두 쪽 사이)") }
+        topSeekBar.follow(topLabel, getString(R.string.viewer_clip_top))
+        bottomSeekBar.follow(bottomLabel, getString(R.string.viewer_clip_bottom))
+        padding?.let { (label, seek) -> seek.follow(label, getString(R.string.viewer_clip_center)) }
 
         AlertDialog.Builder(this)
-            .setTitle(if (withPadding) "자르기 · 여백" else "위/아래 자르기")
+            .setTitle(if (withPadding) R.string.viewer_clip_title_padding else R.string.viewer_clip_title)
             .setView(dialogView)
-            .setPositiveButton("적용") { _, _ ->
+            .setPositiveButton(R.string.viewer_clip_apply) { _, _ ->
                 previewHandler.removeCallbacks(previewRunnable)
                 val top = topSeekBar.progress / 100f
                 val bottom = bottomSeekBar.progress / 100f
@@ -6504,7 +6505,7 @@ class PdfViewerActivity : AppCompatActivity() {
                 // 적용 뒤 보기 메뉴로 돌아간다
                 showPdfDisplayOptions()
             }
-            .setNegativeButton("취소") { _, _ ->
+            .setNegativeButton(R.string.cancel) { _, _ ->
                 previewHandler.removeCallbacks(previewRunnable)
                 restore()
             }
@@ -7137,7 +7138,7 @@ class PdfViewerActivity : AppCompatActivity() {
     private fun showInputBlockedMessage() {
         val inputBlockDuration = getInputBlockDuration()
         val remainingTime = inputBlockDuration - (System.currentTimeMillis() - lastSyncTime)
-        Toast.makeText(this, "동기화 중... ${remainingTime}ms 후 다시 시도하세요", Toast.LENGTH_SHORT).show()
+        Toast.makeText(this, getString(R.string.viewer_input_blocked, remainingTime), Toast.LENGTH_SHORT).show()
     }
     
     /**

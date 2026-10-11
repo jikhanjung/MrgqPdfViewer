@@ -3,6 +3,7 @@ package com.mrgq.pdfviewer
 import com.mrgq.pdfviewer.metronome.Accent
 import com.mrgq.pdfviewer.metronome.MetronomeClock
 import com.mrgq.pdfviewer.metronome.TimeSignature
+import com.mrgq.pdfviewer.menu.Text
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -72,7 +73,7 @@ class TimeSignatureTest {
     @Test
     fun 표시는_분자_분모() {
         assertEquals("6/8", TimeSignature(6, 8).toString())
-        assertEquals("8분음표", TimeSignature(6, 8).beatNoteName())
+        assertEquals(Text.of(R.string.viewer_note_8), TimeSignature(6, 8).beatNote())
     }
 
     @Test
@@ -82,9 +83,9 @@ class TimeSignatureTest {
         assertEquals(4, TimeSignature(12, 8).beatsPerBar(dotted = true))
         assertEquals(6, TimeSignature(6, 8).beatsPerBar(dotted = false))
         assertEquals("홑박자는 점음표 박이 없다", 3, TimeSignature(3, 4).beatsPerBar(dotted = true))
-        assertEquals("점4분음표", TimeSignature(6, 8).beatNoteName(dotted = true))
-        assertEquals("점8분음표", TimeSignature(6, 16).beatNoteName(dotted = true))
-        assertEquals("4분음표", TimeSignature(3, 4).beatNoteName(dotted = true))
+        assertEquals(Text.of(R.string.viewer_note_dotted, Text.of(R.string.viewer_note_4)), TimeSignature(6, 8).beatNote(dotted = true))
+        assertEquals(Text.of(R.string.viewer_note_dotted, Text.of(R.string.viewer_note_8)), TimeSignature(6, 16).beatNote(dotted = true))
+        assertEquals(Text.of(R.string.viewer_note_4), TimeSignature(3, 4).beatNote(dotted = true))
     }
 
     @Test
