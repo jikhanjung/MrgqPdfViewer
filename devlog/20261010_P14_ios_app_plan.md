@@ -1,7 +1,7 @@
 # P14 — iOS 앱 (iPad 먼저 · Kotlin Multiplatform 으로 로직 공유)
 
 작성일: 2026-10-10
-상태: 📝 **계획** — 결정 대기(§9). 1단계(공용 모듈 떼기)는 iOS 를 하지 않더라도 Android 쪽에 이득이라 먼저 할 수 있다
+상태: 📝 **계획** — 결정 대기(§9, Mac 은 있음 — M1 MacBook Air). 1단계(공용 모듈 떼기)는 iOS 를 하지 않더라도 Android 쪽에 이득이라 먼저 할 수 있다
 관련: [`P12`](20261009_P12_voice_commands_plan.md)(음성 명령 — 파서를 그대로 쓸 첫 후보), [`P10`](20260929_P10_mic_conductor_autoturn_plan.md)(마이크 추적),
 [`055`](20260926_055_ensemble_metronome_sync.md)(합주 메트로놈), [`P05`](20260926_P05_scoremate_client_plan.md) · [`P06`](20260927_P06_scoremate_server_requests.md)(ScoreMate · 서버 분석 §12),
 [`P07`](20260928_P07_part_view_plan.md)(파트보), [`P11`](20261007_P11_score_annotations_plan.md)(메모)
@@ -134,14 +134,14 @@ iosApp/                      ← Xcode 프로젝트, Shared.xcframework 를 씀
 |---|---|---|---|
 | **0** | Kotlin 2.x · (필요하면) Gradle 정리 — Android 만 | 지금 CI | CI 통과, 동작 변화 없음, beta 하나 |
 | **1** | `shared/` KMP 모듈(Android · JVM 대상만): `voice/` → 메트로놈 · 합주 계산 → `follow/` 핵심 → `score/` 해석기 · 파트 레이아웃 → 메모 모델 순으로 옮김, §2.1 치환, 테스트는 처음엔 jvmTest 그대로 | 지금 CI(Linux) | 단위 테스트 수 그대로 통과, 계측 · 스모크 통과. **iOS 를 안 해도 남는 이득**: 경계가 강제된다(Android 가 새어 들어오면 컴파일 오류) |
-| **2** | iOS 대상 추가 + **macOS CI 작업**: 공용 모듈을 iosArm64 · iosSimulatorArm64 로 컴파일, 테스트를 kotlin.test 로 바꿔 iOS 시뮬레이터에서도 실행 | macOS 러너 | iOS 에서 공용 테스트 전부 통과(정규식 · 부동소수 차이 잡기) |
-| **3** | **iPad 최소 뷰어**: 파일 앱에서 PDF 가져오기 · 목록 · PDFKit 렌더 · 탭 · 밀기 · 페달 넘김 · 세로 한 쪽 · 가로 두 쪽 · 파일별 설정 | Mac + Xcode, Apple 개발자 계정 | 실기기 iPad 에서 악보 넘김, TestFlight 내부 배포 |
+| **2** | iOS 대상 추가 + **macOS CI 작업**: 공용 모듈을 iosArm64 · iosSimulatorArm64 로 컴파일, 테스트를 kotlin.test 로 바꿔 iOS 시뮬레이터에서도 실행 — 수동 · iOS 릴리스 때만 돌림(§8) | macOS 러너(또는 M1 Mac self-hosted) | iOS 에서 공용 테스트 전부 통과(정규식 · 부동소수 차이 잡기) |
+| **3** | **iPad 최소 뷰어**: 파일 앱에서 PDF 가져오기 · 목록 · PDFKit 렌더 · 탭 · 밀기 · 페달 넘김 · 세로 한 쪽 · 가로 두 쪽 · 파일별 설정 | M1 Mac + Xcode, Apple 개발자 계정 | 실기기 iPad 에서 악보 넘김, TestFlight 내부 배포 |
 | **4** | ScoreMate 연결 · 동기화 · 세트리스트 · **서버 분석으로 마디 박스** · 메트로놈(§4.3) · 악보 연동 | 3 | 같은 계정의 서재가 보이고, 악보 연동 메트로놈이 마디를 따라 넘김 |
 | **5** | 🎙 음성 명령 — `SFSpeechRecognizer` + 공용 파서 · 실행기 | 4 | `docs/Voice_Commands.md` 의 명령이 같은 결과 |
 | **6** | 합주 **연주자**(WebSocket · 시계 동기 · 시간표 · 쪽 넘김 · 파트 보기) | 4, 로컬 네트워크 권한 | Android TV 지휘자 + iPad 연주자, 마디 전환 차이 측정 |
 | **7** | 메모(Apple Pencil) · 파트보 · 🎤 마이크 추적 · 반주 · 기기 안 악보 분석 · (필요하면) iPad 지휘자 · iPhone | 각자 | 기능별로 Android 와 같은 시험 |
 
-- 각 단계는 Android 판 번호와 별개인 **iOS 판 번호**로 낸다(예: iOS 0.1.0). 공용 모듈을 바꾸는 커밋은 Android CI 와 macOS CI 를 둘 다 통과해야 한다
+- 각 단계는 Android 판 번호와 별개인 **iOS 판 번호**로 낸다(예: iOS 0.1.0). 공용 모듈을 바꾸는 커밋은 Android CI(JVM 으로 `commonTest` 포함)를 통과해야 하고, macOS CI(iOS)는 iOS 릴리스 전 · 수동으로 확인한다(§8 — private 저장소 비용)
 - 1단계는 한 번에 옮기지 않고 패키지 하나씩, 매번 Android beta 로 확인 — 동작이 바뀌면 안 되는 이동이다
 
 ## 8. 배포 · 비용
@@ -149,12 +149,21 @@ iosApp/                      ← Xcode 프로젝트, Shared.xcframework 를 씀
 - **Apple 개발자 프로그램 연 $99** — 실기기에 7일 넘게 두기 · TestFlight · App Store 에 필요. 무료 계정은 Xcode 로 직접 설치만, 7일마다 다시
 - **TestFlight**: 내부 시험자(팀 계정, 최대 100명)는 심사 없이 바로. 외부 시험자는 베타 심사 한 번
 - **App Store**: 심사 — 마이크 · 음성 인식 · 로컬 네트워크 사용 목적 문구, 개인정보 표시(음성은 Apple 서버로 갈 수 있음)
-- **macOS CI**: GitHub 호스트 macOS 러너는 Linux 보다 분 단가가 비싸다(공개 저장소는 표준 러너 무료). iOS 작업은 `shared/` · `iosApp/` 가 바뀔 때만 돌리도록 경로 필터
+- **macOS CI — 저장소가 private 이 되면(P15) 무료가 아니다**
+  - 공개 저장소는 표준 러너가 무료지만, [`P15`](20261010_P15_private_repo_releases_on_scoremate_plan.md) 4단계 뒤에는 요금제의 월 포함 분을 쓴다
+  - macOS 러너는 포함 분을 Linux 의 약 10배 속도로 깎는다(GitHub 분 배수 — 그때 요금표로 다시 확인). 커밋마다 돌리면 Instrumentation 과 함께 포함 분을 금방 다 쓴다
+  - 그래서 iOS 작업(공용 모듈 iOS 컴파일 · 시뮬레이터 테스트 · 앱 빌드)은 **커밋마다 돌리지 않는다**: ① 수동 실행(workflow_dispatch) ② iOS 릴리스 태그 ③ (필요하면) `shared/` · `iosApp/` 를 바꾼 PR 에만 — P15 §4-1 에서 Instrumentation 을 private 전환 때 줄이기로 한 것과 같은 방침
+  - 커밋마다의 보호는 Linux CI 가 한다: `commonTest` 를 JVM 으로 돌리면 공용 로직 회귀는 거기서 대부분 잡힌다. macOS 작업이 더 잡는 것은 Kotlin/Native 만의 차이(정규식 엔진 · 부동소수 · 링크)뿐
+  - Mac 이 있으면 **그 Mac 을 self-hosted 러너**로 붙여 분 비용 없이 돌릴 수 있다(켜져 있을 때만 돈다 — 릴리스 전 확인용으로 충분)
 - 서명 인증서 · 프로비저닝 프로필은 Android 키스토어처럼 secrets 로 — 저장소에 넣지 않는다
 
 ## 9. 열린 질문 (결정 대기)
 
-1. **Mac 이 있나?** 3단계부터는 Xcode 가 필요하다(시뮬레이터 · 실기기 설치 · 디버깅). CI 만으로는 빌드는 되지만 화면 만들기가 매우 느리다
+1. ~~Mac 이 있나?~~ — **있다: M1 MacBook Air**(2026-10-11, 사용자: "좀 느리긴 하겠지만")
+   - 충분하다: Apple 실리콘이라 iOS 시뮬레이터가 arm64 그대로 돌아 빠르고, 지금 Xcode · macOS 도 M1 을 지원한다. 느린 곳은 Kotlin/Native 링크(첫 빌드 몇 분, 증분은 짧음)와 팬 없는 몸체의 긴 빌드 감속
+   - 메모리가 8GB 면 Gradle 데몬 · Xcode · 시뮬레이터를 함께 띄울 때 빠듯하다 → Gradle 힙을 줄이고(`org.gradle.jvmargs`), 시뮬레이터는 하나만
+   - 일하는 방식: 코드 · Android 는 지금처럼 Linux 에서, iOS 화면 · 실기기 설치는 Mac 에서(같은 저장소를 받아 Claude Code 를 Mac 에서도 돌릴 수 있다)
+   - §8 의 **self-hosted 러너**를 이 Mac 으로 — 켜 둔 동안만 돌므로 iOS 릴리스 전 확인용
 2. **Apple 개발자 계정** — 개인 vs 조직(앱 판매자 이름이 달라진다, ScoreMate 브랜드와 맞출지)
 3. **화면 기술** — SwiftUI(제안, §5) vs Compose Multiplatform
 4. **첫 기기** — iPad(제안) · iPhone 함께?
