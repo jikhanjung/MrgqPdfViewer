@@ -41,6 +41,8 @@ object NoteStaff {
         return Attachment(first, sure = abs(d2 - d1) >= AMBIGUOUS * (d1 + d2))
     }
 
-    /** 표시 이름 — 보표 이름이 있으면 그것, 없으면 "보표 n" (1부터, 파트 보기 `Pt. n` 과 같은 번호) */
-    fun labelOf(staff: ScoreStaff): String = staff.label?.takeIf { it.isNotBlank() } ?: "보표 ${staff.staffIndex + 1}"
+    /**
+     * 보표 이름 — 적혀 있으면 그것, 없으면 null. 화면은 null 이면 "보표 n"(`viewer_staff_n`, 1부터 — 파트 보기 `Pt. n` 과 같은 번호, P18)
+     */
+    fun labelOf(staff: ScoreStaff): String? = staff.label?.takeIf { it.isNotBlank() }
 }

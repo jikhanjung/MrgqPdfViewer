@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 악보 화면 메뉴 (P18 3단계) — menu/ViewerMenus. 한국어 글은 docs/Viewer_Menus.md 와 같게 -->
+<resources>
+    <string name="viewer_menu_label_value">%1$s: %2$s</string>
+    <string name="viewer_menu_on">켜짐</string>
+    <string name="viewer_menu_off">꺼짐</string>
+
+    <!-- 연주 메뉴 -->
+    <string name="viewer_menu_play_title">연주</string>
+    <string name="viewer_menu_play_title_paused">연주 — 일시정지</string>
+    <string name="viewer_menu_mic_stop">🎤 듣기 멈춤</string>
+    <string name="viewer_menu_mic_from_measure">🎤 %1$d마디부터 연주 듣고 넘기기</string>
+    <string name="viewer_menu_mic_from_page">🎤 연주 듣고 넘기기 — 이 쪽 첫 마디부터</string>
+    <string name="viewer_menu_start_selected">▶ %1$d마디부터 시작 (예비박 %2$d마디 뒤)</string>
+    <string name="viewer_menu_cancel_selection">마디 고르기 취소</string>
+    <string name="viewer_menu_resume">이어서 — %1$s번 마디부터 (예비박 %2$d마디 뒤)</string>
+    <string name="viewer_menu_reselect">마디 골라 다시 시작</string>
+    <string name="viewer_menu_stop">정지</string>
+    <string name="viewer_menu_start">시작 — 악보에서 마디 고르기</string>
+    <string name="viewer_menu_metronome_settings">메트로놈 설정…</string>
+    <string name="viewer_menu_accompaniment">반주 (MusicXML)</string>
+    <string name="viewer_menu_accompaniment_on">켜짐 · 크기 %1$d%%</string>
+    <string name="viewer_menu_accompaniment_on_no_dynamics">켜짐 · 크기 %1$d%% · 악상기호 끔</string>
+
+    <!-- 연주 메뉴 — 합주 연주자 -->
+    <string name="viewer_menu_detach">이 기기만 빠지기</string>
+    <string name="viewer_menu_rejoin">지휘자 연주에 다시 합류 — 지금 연주 중인 마디로</string>
+    <string name="viewer_menu_ensemble_sound">메트로놈 소리</string>
+    <string name="viewer_menu_sound_on">켬</string>
+    <string name="viewer_menu_sound_off">끔</string>
+    <string name="viewer_menu_performer_title_following">연주 — 지휘자를 따라가는 중</string>
+    <string name="viewer_menu_performer_title_detached">연주 — 이 기기는 빠져 있음</string>
+    <string name="viewer_menu_performer_title_waiting">연주 — 지휘자가 시작하면 따라갑니다</string>
+
+    <!-- 보기 메뉴 -->
+    <string name="viewer_menu_view_title">보기</string>
+    <string name="viewer_menu_part_view">파트 보기</string>
+    <string name="viewer_menu_full_score">전체 악보</string>
+    <string name="viewer_menu_measure_boxes">마디 박스</string>
+    <string name="viewer_menu_show_notes">메모 보이기</string>
+    <string name="viewer_menu_note_mode_start">✏️ 메모 쓰기</string>
+    <string name="viewer_menu_note_mode_end">✏️ 메모 끝</string>
+    <string name="viewer_menu_two_page">두 쪽 보기</string>
+    <string name="viewer_menu_two_page_double">두 쪽</string>
+    <string name="viewer_menu_two_page_single">한 쪽</string>
+    <string name="viewer_menu_clipping">위/아래 자르기…</string>
+    <string name="viewer_menu_clipping_padding">자르기 · 여백…</string>
+    <string name="viewer_menu_rotation">회전</string>
+</resources>

@@ -1,6 +1,8 @@
 package com.mrgq.pdfviewer.metronome
 
+import com.mrgq.pdfviewer.R
 import com.mrgq.pdfviewer.database.entity.ScoreMeasure
+import com.mrgq.pdfviewer.menu.Text
 import com.mrgq.pdfviewer.score.MusicXmlScore
 
 /**
@@ -74,17 +76,18 @@ class Accompaniment private constructor(
 /**
  * MusicXML 과 악보(PDF 분석)가 같은 마디 구조인가 (P07 §2.7 "쓰기 전에 검사"). 마디 수가 같고, 악보에서 박자표를 읽은 마디는 박자가 같아야 한다.
  * 판이 다르거나 인식이 틀린 MusicXML 을 여기서 거른다. 맞으면 MusicXML 마디 순서 i → 악보 마디 번호(적힌 순서 i 번째).
+ * [reason] = 안 맞는 까닭 — 화면 글 키 + 인자 (P18)
  */
-class MusicXmlMatch private constructor(val ok: Boolean, val reason: String?, private val numbers: List<Int>) {
+class MusicXmlMatch private constructor(val ok: Boolean, val reason: Text?, private val numbers: List<Int>) {
 
     fun measureNumberOf(index: Int): Int? = numbers.getOrNull(index)
 
     companion object {
         fun check(score: MusicXmlScore, measures: List<ScoreMeasure>): MusicXmlMatch {
             val ordered = measures.sortedBy { it.measureNumber }
-            if (ordered.isEmpty()) return MusicXmlMatch(false, "악보 마디를 찾지 못했습니다", emptyList())
+            if (ordered.isEmpty()) return MusicXmlMatch(false, Text.of(R.string.viewer_xml_match_no_measures), emptyList())
             if (score.measures.size != ordered.size) {
-                return MusicXmlMatch(false, "마디 수가 다릅니다 (악보 ${ordered.size} · MusicXML ${score.measures.size})", emptyList())
+                return MusicXmlMatch(false, Text.of(R.string.viewer_xml_match_measure_count, ordered.size, score.measures.size), emptyList())
             }
             val mismatch = score.measures.indices.firstOrNull { i ->
                 val m = ordered[i]
@@ -96,7 +99,7 @@ class MusicXmlMatch private constructor(val ok: Boolean, val reason: String?, pr
                 val x = score.measures[mismatch]
                 return MusicXmlMatch(
                     false,
-                    "${m.measureNumber}마디 박자가 다릅니다 (악보 ${m.timeSigNumerator}/${m.timeSigDenominator} · MusicXML ${x.beats}/${x.beatType})",
+                    Text.of(R.string.viewer_xml_match_meter, m.measureNumber, m.timeSigNumerator, m.timeSigDenominator, x.beats, x.beatType),
                     emptyList(),
                 )
             }

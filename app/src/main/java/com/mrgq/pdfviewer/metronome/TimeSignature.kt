@@ -1,5 +1,7 @@
 package com.mrgq.pdfviewer.metronome
 
+import com.mrgq.pdfviewer.R
+import com.mrgq.pdfviewer.menu.Text
 import kotlin.math.abs
 import kotlin.math.ln
 
@@ -32,9 +34,9 @@ data class TimeSignature(val numerator: Int, val denominator: Int) {
         else -> Accent.WEAK
     }
 
-    /** 박 단위 음표 이름 — "8분음표", 점음표 박이면 "점4분음표" */
-    fun beatNoteName(dotted: Boolean = false): String =
-        if (dotted && isCompound) "점${denominator / 2}분음표" else "${denominator}분음표"
+    /** 박 단위 음표 이름 (화면 글 키 + 인자, P18) — "8분음표", 점음표 박이면 "점4분음표" */
+    fun beatNote(dotted: Boolean = false): Text =
+        if (dotted && isCompound) Text.of(R.string.viewer_note_dotted, noteName(denominator / 2)) else noteName(denominator)
 
     /**
      * 메트로놈이 다루는 범위로 자른다. 분자는 [MetronomeClock.MIN_BEATS]..[MetronomeClock.MAX_BEATS],
@@ -75,4 +77,15 @@ data class TimeSignature(val numerator: Int, val denominator: Int) {
         fun of(numerator: Int?, denominator: Int?): TimeSignature =
             TimeSignature(numerator ?: DEFAULT.numerator, denominator ?: DEFAULT.denominator).coerced()
     }
+}
+
+/** n분음표 이름 — 메트로놈이 쓰는 분모(점음표 박이면 그 절반)는 이름 키가 따로, 그 밖은 숫자로 */
+private fun noteName(denominator: Int): Text = when (denominator) {
+    1 -> Text.of(R.string.viewer_note_1)
+    2 -> Text.of(R.string.viewer_note_2)
+    4 -> Text.of(R.string.viewer_note_4)
+    8 -> Text.of(R.string.viewer_note_8)
+    16 -> Text.of(R.string.viewer_note_16)
+    32 -> Text.of(R.string.viewer_note_32)
+    else -> Text.of(R.string.viewer_note_n, denominator)
 }

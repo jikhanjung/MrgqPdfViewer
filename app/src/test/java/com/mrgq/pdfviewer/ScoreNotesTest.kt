@@ -136,7 +136,7 @@ class ScoreNotesTest {
     @Test
     fun 보표_이름() {
         assertEquals("Vn.", NoteStaff.labelOf(staves[0]))
-        assertEquals("보표 2", NoteStaff.labelOf(staves[3]))
+        assertNull("이름 없는 보표 — 화면이 \"보표 n\" 을 붙인다 (P18)", NoteStaff.labelOf(staves[3]))
     }
 
     // ── 곁 파일 ──

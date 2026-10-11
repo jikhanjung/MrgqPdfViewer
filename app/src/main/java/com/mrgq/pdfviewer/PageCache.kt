@@ -346,13 +346,9 @@ class PageCache(
     private val pagesPerScreen: Int get() = if (isTwoPageMode) 2 else 1
 
     /**
-     * 캐시 상태 정보
+     * 캐시 상태 — (캐시된 쪽 수, 렌더링 중인 쪽 수). 화면 글은 악보 화면이 만든다 (`viewer_cache_info`, P18)
      */
-    fun getCacheInfo(): String {
-        val cacheSize = bitmapCache.size()
-        val renderingCount = renderingPages.size
-        return "캐시: $cacheSize 페이지, 렌더링 중: $renderingCount"
-    }
+    fun cacheCounts(): Pair<Int, Int> = bitmapCache.size() to renderingPages.size
     
     /**
      * 캐시 정리
