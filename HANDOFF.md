@@ -44,6 +44,9 @@ v0.5.6(2026-10-06) 뒤로 나흘 동안 v0.7.4 까지. 큰 줄기 여섯:
 
 ## 2. 일하는 방법 (이 환경)
 
+- **지금 PC 는 네이티브 Linux**(2026-10 ~): JDK · Android SDK 가 없어 **빌드 · 테스트는 CI 로만** 확인한다(푸시 → Android Build 통과 → 태그). 아래 WSL · powershell 줄은 예전 PC 의 것
+  - **adb 는 `~/Android/platform-tools/adb`**(Google platform-tools, 2026-10-11 설치). 태블릿은 이 PC 와 **페어링 완료** — 무선 디버깅을 켜면 연결 포트를 mDNS 로 찾아 저절로 잡힌다(`adb devices` → `adb-HA1V46NV-…._adb-tls-connect._tcp`). 안 잡히면 `adb mdns services`
+  - 음성 명령 기록: `adb pull /sdcard/Android/data/com.mrgq.pdfviewer/files/voice/commands.jsonl` (#109)
 - **빌드 · 테스트는 WSL 에서 `powershell.exe` 로 Windows Gradle** — `--no-daemon` 필수, 로그 UTF-16. 명령은 CLAUDE.md "빌드 명령어"
 - **adb 도 Windows 쪽**(`powershell.exe -Command "adb …"`). `adb shell … | grep` 은 WSL 쪽에서 파이프한다(PowerShell 따옴표 안에서는 깨진다)
 - **실기기**

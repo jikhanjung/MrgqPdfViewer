@@ -29,6 +29,8 @@ interface ViewerCommands {
     suspend fun previousPage(): CommandOutcome
     /** [page] 는 원본 쪽 번호(1부터) — 파트 보기면 그 쪽이 놓인 파트 쪽으로 */
     suspend fun gotoPage(page: Int): CommandOutcome
+    /** 마지막 쪽 (#109) */
+    suspend fun lastPage(): CommandOutcome
     suspend fun setTempo(bpm: Int): CommandOutcome
     /** 악보 연동 예비박 마디 수(1 · 2) — 전역 설정, 다음 시작부터 */
     suspend fun setCountIn(bars: Int): CommandOutcome

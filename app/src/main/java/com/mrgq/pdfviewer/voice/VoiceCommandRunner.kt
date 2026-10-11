@@ -56,6 +56,7 @@ object VoiceCommandRunner {
         VoiceCommand.NextPage -> target.nextPage()
         VoiceCommand.PreviousPage -> target.previousPage()
         is GotoPage -> target.gotoPage(command.page)
+        VoiceCommand.LastPage -> target.lastPage()
         is SetTempo -> target.setTempo(command.bpm)
         is SetCountIn -> target.setCountIn(command.bars)
         is SelectParts -> target.selectParts(command.parts)
@@ -64,6 +65,10 @@ object VoiceCommandRunner {
         VoiceCommand.Stop -> target.stop()
         VoiceCommand.Listen -> target.listen()
     }
+
+    /** 값이 모두 쓸 수 있는 범위인가 — 음성 인식 후보 고르기가 쓴다("템포 8" · "템포 80" 이면 80, #109) */
+    fun inRange(result: ParseResult): Boolean =
+        result !is ParseResult.Commands || result.commands.none { rangeError(it) != null }
 
     private fun rangeError(command: VoiceCommand): String? = when {
         command is SetTempo && command.bpm !in MetronomeClock.MIN_BPM..MetronomeClock.MAX_BPM ->

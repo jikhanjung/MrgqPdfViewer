@@ -34,6 +34,8 @@ sealed class VoiceCommand {
     object NextPage : VoiceCommand() { override val label get() = "다음 쪽" }
     object PreviousPage : VoiceCommand() { override val label get() = "이전 쪽" }
     data class GotoPage(val page: Int) : VoiceCommand() { override val label get() = "${page}쪽" }
+    /** "마지막 페이지" (#109) */
+    object LastPage : VoiceCommand() { override val label get() = "마지막 쪽" }
 
     // ── 설정 ──
     data class SetTempo(val bpm: Int) : VoiceCommand() { override val label get() = "♩=$bpm" }
@@ -58,7 +60,7 @@ sealed class VoiceCommand {
 
     val isPosition: Boolean
         get() = this is SelectMeasure || this is GotoMeasure || this == GotoStart || this == Restart || this == Resume ||
-            this is GotoRehearsalMark || this == NextPage || this == PreviousPage || this is GotoPage
+            this is GotoRehearsalMark || this == NextPage || this == PreviousPage || this is GotoPage || this == LastPage
 
     /** 위치 명령 중 메트로놈을 그 자리에서 시작하는 것 (마디 고르기 · 쪽 넘김은 시작하지 않는다) */
     val startsPlayback: Boolean

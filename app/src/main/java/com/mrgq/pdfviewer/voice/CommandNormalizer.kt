@@ -48,6 +48,9 @@ object CommandNormalizer {
             val c = compact[i]
             if (c == BOUNDARY) { flush(); i++; continue }
             val name = names.firstOrNull { compact.startsWith(it.first, i) }
+                // 모음 하나만 다르게 받아 적은 이름("예원" ↔ 보표 "예완") — 그렇게 가까운 이름이 하나뿐일 때만 (#109)
+                // 명령 낱말이 시작하는 자리는 빼고 — "마디"가 보표 "마다"로 읽히지 않게
+                ?: if (other.isEmpty() && keywordAt(compact, i) == null) PartNames.nearAt(compact, i, names) else null
             if (name != null) {
                 flush()
                 out += Token.Person(name.second)
@@ -69,6 +72,17 @@ object CommandNormalizer {
                 if (digits.length <= MAX_DIGITS) { flush(); out += Token.Num(digits.toInt()) } else other.append(digits)
                 i = j
                 continue
+            }
+            // "기타 원" · "스테프원" — 악기 · 보표 바로 뒤의 영어 수 (#109)
+            val last = out.lastOrNull()
+            if (other.isEmpty() && (last is Token.Instrument || last == Token.Word(Kw.STAFF))) {
+                val english = VoiceLexicon.ENGLISH_NUMBERS.entries.firstOrNull { compact.startsWith(it.key, i) }
+                if (english != null) {
+                    flush()
+                    out += Token.Num(english.value)
+                    i += english.key.length
+                    continue
+                }
             }
             val number = KoreanNumbers.prefixAt(compact, i)
             // "보표 일 이" — 보표 뒤에 이어지는 수는 보표 번호 목록

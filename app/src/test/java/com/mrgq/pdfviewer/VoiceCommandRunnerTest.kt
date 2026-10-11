@@ -32,6 +32,7 @@ class VoiceCommandRunnerTest {
         override suspend fun nextPage() = call("next")
         override suspend fun previousPage() = call("prev")
         override suspend fun gotoPage(page: Int) = call("page $page")
+        override suspend fun lastPage() = call("last")
         override suspend fun setTempo(bpm: Int) = call("tempo $bpm")
         override suspend fun setCountIn(bars: Int) = call("count-in $bars")
         override suspend fun selectParts(parts: List<PartRef>) = call("parts ${parts.joinToString { it.label }}")

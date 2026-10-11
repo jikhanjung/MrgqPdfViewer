@@ -26,6 +26,7 @@ enum class Kw {
     LETTER,       // 레터 · 리허설 — 리허설 마크
     NEGATION,     // 말고 · 아니 · 취소 — 들리면 아무것도 실행하지 않는다
     BLOCK,        // 악장 · 장조 — "장"(쪽)으로 잘못 읽히지 않게 막는 낱말
+    LAST,         // 마지막 · 맨끝 — "마지막 페이지" (#109)
 }
 
 /**
@@ -74,15 +75,28 @@ object VoiceLexicon {
         "전" to Kw.RELATIVE, "뒤" to Kw.RELATIVE, "후" to Kw.RELATIVE,
         "넘겨" to Kw.TURN, "넘기기" to Kw.TURN, "넘김" to Kw.TURN,
         "시작" to Kw.START, "메트로놈" to Kw.METRONOME,
+        // "메트로놈 켜 줘 / 꺼 줘" — "꺼"를 몰라 "메트로놈"만 남아 시작했다(실녹음 #109, 잘못 실행)
+        "켜" to Kw.START, "꺼" to Kw.STOP, "끄" to Kw.STOP,
         "예비박" to Kw.COUNT_IN, "카운트인" to Kw.COUNT_IN,
         "듣고넘기기" to Kw.LISTEN, "듣고넘겨" to Kw.LISTEN, "듣기" to Kw.LISTEN, "들어줘" to Kw.LISTEN,
         "멈춰" to Kw.STOP, "멈춤" to Kw.STOP, "멈추" to Kw.STOP, "정지" to Kw.STOP, "그만" to Kw.STOP, "스톱" to Kw.STOP,
         "파트" to Kw.PART, "보표" to Kw.STAFF,
+        // 실녹음(#109): "보표"를 "도표 · 목표"로, "staff one"을 "스테프원"으로 받아 적는다
+        "도표" to Kw.STAFF, "목표" to Kw.STAFF, "스테프" to Kw.STAFF, "스태프" to Kw.STAFF, "staff" to Kw.STAFF,
         "총보" to Kw.FULL_SCORE, "풀스코어" to Kw.FULL_SCORE, "전체악보" to Kw.FULL_SCORE,
+        // 실녹음(#109): "총보"가 "총복 · 충북 · 청보 · 충보"로만 오기도 한다
+        "총복" to Kw.FULL_SCORE, "충북" to Kw.FULL_SCORE, "청보" to Kw.FULL_SCORE, "충보" to Kw.FULL_SCORE,
+        "마지막" to Kw.LAST, "맨끝" to Kw.LAST, "맨뒤" to Kw.LAST,
         "레터" to Kw.LETTER, "리허설" to Kw.LETTER, "연습번호" to Kw.LETTER,
         "말고" to Kw.NEGATION, "아니" to Kw.NEGATION, "취소" to Kw.NEGATION, "빼고" to Kw.NEGATION,
         "악장" to Kw.BLOCK, "장조" to Kw.BLOCK,
     )
+
+    /**
+     * 영어 수 읽기 — **악기 · 보표 바로 뒤에서만** 수로 읽는다("기타 원" = 기타 1, "스테프원" = 보표 1, #109).
+     * 다른 자리의 "원"은 이름("예원")이나 낱말의 일부일 수 있다. "포"(four)는 넣지 않는다 — "피아노포르테"가 피아노 4 가 된다
+     */
+    val ENGLISH_NUMBERS: Map<String, Int> = mapOf("원" to 1, "투" to 2, "쓰리" to 3)
 
     /** 파트 번호를 말하는 서수 — "바이올린 세컨", "비올라 둘째" */
     val ORDINALS: Map<String, Int> = mapOf(

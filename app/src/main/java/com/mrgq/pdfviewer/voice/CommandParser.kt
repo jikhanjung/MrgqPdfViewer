@@ -37,7 +37,9 @@ object CommandParser {
         val first = parsed.firstOrNull() ?: return null
         val top = first.second
         if (top is ParseResult.Unrecognized && top.reason !in RETRYABLE) return first
-        return parsed.firstOrNull { it.second is ParseResult.Commands }
+        // 값이 범위 안인 명령을 먼저 — "템포 8"(첫 후보) · "템포 80"(둘째)이면 80. 범위 밖 값은 어차피 실행할 수 없다 (#109)
+        return parsed.firstOrNull { it.second is ParseResult.Commands && VoiceCommandRunner.inRange(it.second) }
+            ?: parsed.firstOrNull { it.second is ParseResult.Commands }
             ?: parsed.firstOrNull { it.second is ParseResult.BareNumber }
             ?: first
     }
@@ -81,6 +83,8 @@ object CommandParser {
                         Kw.FROM -> { found += GotoMeasure(t.value); i = j + 1; continue }
                         Kw.PAGE -> { found += GotoPage(t.value); i = j + 1; continue }
                         Kw.BPM -> { found += SetTempo(t.value); i = j + 1; continue }
+                        // "두 번째 파트" — 번째가 붙은 수 + 파트 = 위에서 그만큼째 보표 (#109). 번째 없는 "이 파트"는 "이것"일 수 있어 받지 않는다
+                        Kw.PART -> if (j > i + 1) { parts += PartRef.staff(t.value); i = j + 1; continue } else strayNumbers++
                         else -> strayNumbers++
                     }
                 }
@@ -93,6 +97,7 @@ object CommandParser {
                     continue
                 }
                 t == Token.Word(Kw.NEXT) && next == Token.Word(Kw.PAGE) -> { found += VoiceCommand.NextPage; i += 2; continue }
+                t == Token.Word(Kw.LAST) && next == Token.Word(Kw.PAGE) -> { found += VoiceCommand.LastPage; i += 2; continue }
                 t == Token.Word(Kw.PREV) -> {
                     // "앞 · 이전"은 쪽 앞에서만 — "57마디 앞"은 상대 위치라 받지 않는다
                     if (next != Token.Word(Kw.PAGE)) return ParseResult.Unrecognized(Reason.RELATIVE)
@@ -107,6 +112,12 @@ object CommandParser {
                 t == Token.Word(Kw.LISTEN) -> found += VoiceCommand.Listen
                 t == Token.Word(Kw.METRONOME) -> metronome = true
                 t == Token.Word(Kw.FULL_SCORE) -> found += VoiceCommand.ShowFullScore
+                // "세컨드 파트" · "둘째 파트" — 악기 없이 서수 + 파트 = 위에서 그만큼째 보표 (#109)
+                t is Token.Ordinal && next == Token.Word(Kw.PART) -> {
+                    parts += PartRef.staff(t.n)
+                    i += 2
+                    continue
+                }
                 // "세컨 바이올린" — 서수가 앞에
                 t is Token.Ordinal && next is Token.Instrument -> {
                     parts += PartRef(next.key, t.n)

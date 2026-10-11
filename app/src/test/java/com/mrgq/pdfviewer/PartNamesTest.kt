@@ -9,6 +9,7 @@ import com.mrgq.pdfviewer.voice.PartRef
 import com.mrgq.pdfviewer.voice.VoiceCommand
 import com.mrgq.pdfviewer.voice.VoiceCommand.GotoMeasure
 import com.mrgq.pdfviewer.voice.VoiceCommand.GotoPage
+import com.mrgq.pdfviewer.voice.VoiceCommand.SelectMeasure
 import com.mrgq.pdfviewer.voice.VoiceCommand.SelectParts
 import org.junit.Assert.assertEquals
 import org.junit.Test
@@ -74,17 +75,34 @@ class PartNamesTest {
     @Test
     fun 파트는_들었는데_무슨_파트인지_모르면_들린_말과_함께() {
         assertEquals(ParseResult.Unrecognized(Reason.UNKNOWN_PART, "지한"), CommandParser.parse("지한 파트"))
-        assertEquals(ParseResult.Unrecognized(Reason.UNKNOWN_PART, "지환"), CommandParser.parse("지환 파트", staves))
+        // 이 악보에 없는 이름 — "지환"은 이제 "지한"과 모음 하나 차이라 맞춘다(#109, 아래), 그래서 전혀 다른 이름으로
+        assertEquals(ParseResult.Unrecognized(Reason.UNKNOWN_PART, "준호"), CommandParser.parse("준호 파트", staves))
         assertEquals(ParseResult.Unrecognized(Reason.UNKNOWN_PART), CommandParser.parse("파트 보여줘"))
         // 파트를 모르면 나머지(마디)도 실행하지 않는다
-        assertEquals(ParseResult.Unrecognized(Reason.UNKNOWN_PART, "지환"), CommandParser.parse("지환 파트 57마디부터", staves))
+        assertEquals(ParseResult.Unrecognized(Reason.UNKNOWN_PART, "준호"), CommandParser.parse("준호 파트 57마디부터", staves))
         // "파트" 없이 모르는 말만이면 전처럼
         assertEquals(ParseResult.Unrecognized(Reason.NOTHING), CommandParser.parse("지환"))
     }
 
     @Test
     fun 다른_후보에_맞는_이름이_있으면_그것() {
-        assertEquals("지한 파트" to ParseResult.Commands(listOf(named("김지한"))), CommandParser.parseBest(listOf("지환 파트", "지한 파트"), staves))
+        assertEquals("지한 파트" to ParseResult.Commands(listOf(named("김지한"))), CommandParser.parseBest(listOf("준호 파트", "지한 파트"), staves))
+    }
+
+    @Test
+    fun 모음_하나만_다르게_받아_적은_이름도_그_사람() {
+        // 실녹음(#109): 보표 "예완"을 STT 가 "예원"으로 — 첫소리 · 받침이 같고 가운데소리 하나만 다르다
+        assertEquals(listOf(named("김지한")), commands("지환 파트"))
+        assertEquals(listOf(named("김지한"), GotoMeasure(57)), commands("지환 파트 57마디부터"))
+        val ensemble = listOf("은석", "예완", "하진")
+        assertEquals(listOf(named("예완")), commands("예원 파트", ensemble))
+        // 받침이 다르거나 두 음절이 다르면 맞추지 않는다
+        assertEquals(ParseResult.Unrecognized(Reason.UNKNOWN_PART, "하지"), CommandParser.parse("하지 파트", ensemble))
+        assertEquals(ParseResult.Unrecognized(Reason.UNKNOWN_PART, "유원"), CommandParser.parse("유원 파트", ensemble))
+        // 가까운 이름이 둘이면 어느 쪽인지 모른다
+        assertEquals(ParseResult.Unrecognized(Reason.UNKNOWN_PART, "예안"), CommandParser.parse("예안 파트", listOf("예완", "예언")))
+        // 명령 낱말은 이름보다 먼저 — 보표 "마다"가 있어도 "57마디"는 마디
+        assertEquals(listOf(SelectMeasure(57)), commands("57마디", listOf("마다", "Violin I")))
     }
 
     @Test
@@ -95,7 +113,7 @@ class PartNamesTest {
         assertEquals(staff1, commands("보표일 파트"))
         assertEquals(staff1, commands("보표 1 파트보"))
         assertEquals(staff1, commands("보표 1 파트만 보여줘"))
-        assertEquals(ParseResult.Unrecognized(Reason.UNKNOWN_PART, "지환"), CommandParser.parse("지환 파트보", staves))
+        assertEquals(ParseResult.Unrecognized(Reason.UNKNOWN_PART, "준호"), CommandParser.parse("준호 파트보", staves))
         assertEquals(listOf(SelectParts(listOf(PartRef.staff(2)))), commands("보표 이"))
         assertEquals(listOf(SelectParts(listOf(PartRef.staff(3))), GotoMeasure(10)), commands("보표 삼 10마디부터"))
         assertEquals("보표 2", PartRef.staff(2).label)

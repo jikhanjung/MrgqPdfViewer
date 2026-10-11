@@ -4981,6 +4981,12 @@ class PdfViewerActivity : AppCompatActivity() {
             return CommandOutcome.Done
         }
 
+        override suspend fun lastPage(): CommandOutcome {
+            if (pageCount == 0) return failed("악보를 아직 여는 중이에요")
+            // 원본 쪽 번호로 — 파트 보기면 그 마지막 원본 쪽이 놓인 파트 쪽으로(gotoPage 와 같게)
+            return gotoPage(partViewLayout?.strips?.maxOfOrNull { it.srcPage + 1 } ?: pageCount)
+        }
+
         override suspend fun setTempo(bpm: Int): CommandOutcome {
             if (collaborationMode == CollaborationMode.PERFORMER) return failed("템포는 지휘자가 정해요")
             val fileId = currentPdfFileId

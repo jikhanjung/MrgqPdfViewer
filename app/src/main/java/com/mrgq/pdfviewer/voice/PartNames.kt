@@ -32,6 +32,34 @@ object PartNames {
         return (people + usableGiven).sortedByDescending { it.first.length }
     }
 
+    /**
+     * [text] 의 [at] 에서 부를 말 하나와 **모음 한 글자만 다른** 말 — (그 자리의 말, 보표 이름). STT 가 이름의 모음을 바꿔 적는다
+     * ("예원" ↔ 보표 "예완", 실녹음 #109). 첫소리 · 받침은 같고 한 음절의 가운데소리만 다를 때, 그런 보표가 하나뿐일 때만
+     * (둘 이상이면 어느 쪽인지 모르므로 부르지 않는다). 두 글자 이상 이름만
+     */
+    fun nearAt(text: String, at: Int, aliases: List<Pair<String, String>>): Pair<String, String>? {
+        val hits = aliases.filter { (alias, _) ->
+            alias.length >= 2 && at + alias.length <= text.length && oneVowelApart(text.substring(at, at + alias.length), alias)
+        }
+        return hits.distinctBy { it.second }.singleOrNull()?.let { (alias, staff) -> text.substring(at, at + alias.length) to staff }
+    }
+
+    private fun oneVowelApart(a: String, b: String): Boolean {
+        var diff = 0
+        for (k in a.indices) {
+            val x = a[k]
+            val y = b[k]
+            if (x == y) continue
+            if (x !in '가'..'힣' || y !in '가'..'힣') return false
+            val dx = x - '가'
+            val dy = y - '가'
+            // 음절 = (첫소리 × 21 + 가운데소리) × 28 + 받침
+            if (dx / (21 * 28) != dy / (21 * 28) || dx % 28 != dy % 28) return false
+            diff++
+        }
+        return diff == 1
+    }
+
     /** 음성 인식 낱말 힌트 — 부를 말 모두 */
     fun hints(staffNames: List<String>): List<String> = aliases(staffNames).map { it.first }
 
