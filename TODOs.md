@@ -105,9 +105,10 @@
 
 계획 [`P18`](devlog/20261011_P18_i18n_language_setting_plan.md) — 화면 글 약 960개를 리소스로 옮겨 `values-en`. 한국어 화면은 그대로, 단계마다 beta.
 - [x] 정할 것(P18 §9) — 모두 추천대로: 시스템 따름 · 한국어 · English, 기본 = 시스템 따름, `values/` = 한국어, 음성 명령 영어는 화면 뒤 좁게, 웹 업로드 페이지는 7단계, docs 영어는 User_Manual 만, CHANGELOG · notes 는 한국어, lint 게이트는 6단계, 0 ~ 6 = beta 여럿 → 정식 하나
-- [ ] 0. 틀 — `locales_config` · `autoStoreLocales` · 설정 "언어" 줄 · `values-en` 41개 · 용어집 `docs/Glossary_ko_en.md`
-- [ ] 1. 설정 화면 · 2. 곡 목록 · 첫 화면 · 3. 악보 화면 메뉴 · 4. 악보 화면 나머지(4a · 4b · 4c) · 5. ScoreMate · 업데이트 · 그 밖 · 6. lint 게이트 → 정식
-- [ ] 7. 웹 업로드 페이지 · 8. 음성 명령 영어(좁게) · 9. User_Manual 영어판
+- [x] 0. 틀 → v0.8.0-beta.1 (#125)
+- [x] 1 ~ 9 단계(설정 · 곡 목록 · 악보 화면 · 메뉴 · 연결 · 업데이트 · CI 게이트 · 웹 페이지 · 영어 음성 · User_Manual 영어판) → v0.8.0-beta.2 (#126)
+- [ ] 기기 확인(English 화면 잘림 · 한국어 그대로 · 영어 음성 명령) → 정식 v0.8.0
+- [ ] User_Manual(한 · 영) 내용을 지금 앱에 맞게 다시 쓰기(TV 전용 시절 내용)
 
 ## 🧭 악보 화면 메뉴 정리 (P13, 사용자 요청 2026-10-10)
 
