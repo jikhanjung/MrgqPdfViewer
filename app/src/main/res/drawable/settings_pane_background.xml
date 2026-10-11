@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 설정 오른쪽 칸 하나의 면 (#122) — 줄마다 카드를 두지 않고 칸 전체를 한 면으로 -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+    <solid android:color="#14FFFFFF" />
+    <corners android:radius="16dp" />
+</shape>

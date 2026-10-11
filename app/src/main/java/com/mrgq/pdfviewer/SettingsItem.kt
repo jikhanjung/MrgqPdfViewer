@@ -18,5 +18,7 @@ enum class SettingsType {
     TOGGLE,
     ACTION,
     INPUT,
-    INFO
+    INFO,
+    /** 오른쪽 칸의 묶음 제목 (#122) — [SettingsItem.title] 만, 포커스 · 누름 없음 */
+    HEADER
 }

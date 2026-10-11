@@ -156,7 +156,11 @@ class SettingsActivity : AppCompatActivity() {
     private fun focusDetail() {
         panePreview.removeCallbacksAndMessages(null)
         binding.detailPanelLayout.scrollTo(0, 0)
-        binding.detailRecyclerView.post { binding.detailRecyclerView.getChildAt(0)?.requestFocus() }
+        // 첫 줄 — 묶음 제목(포커스 안 됨)은 건너뛴다
+        binding.detailRecyclerView.post {
+            val list = binding.detailRecyclerView
+            (0 until list.childCount).map { list.getChildAt(it) }.firstOrNull { it.isFocusable }?.requestFocus()
+        }
     }
 
     private fun detailHasFocus(): Boolean = binding.detailPanelLayout.hasFocus()
@@ -460,6 +464,7 @@ class SettingsActivity : AppCompatActivity() {
         val syncLeadMs = preferences.getLong("sync_turn_lead_ms", 2000L)
 
         val items = listOf(
+            header("ensemble_header", "합주"),
             SettingsItem(
                 id = "collaboration_info",
                 icon = "ℹ️",
@@ -479,6 +484,7 @@ class SettingsActivity : AppCompatActivity() {
                 type = SettingsType.TOGGLE,
                 checked = preferences.getBoolean(PdfViewerActivity.PREF_ENSEMBLE_SOUND, false)
             ),
+            header("sync_turn_header", "동기 넘김 (시험)"),
             SettingsItem(
                 id = "sync_turn_toggle",
                 icon = "🎯",
@@ -495,6 +501,7 @@ class SettingsActivity : AppCompatActivity() {
                 type = SettingsType.ACTION,
                 enabled = syncEnabled
             ),
+            header("diagnostics_header", "고급"),
             SettingsItem(
                 id = "input_block_time",
                 icon = "⏱️",
@@ -523,6 +530,7 @@ class SettingsActivity : AppCompatActivity() {
         val linked = scoreMateClient.isLinked
         val server = scoreMateStore.server.removePrefix("https://")
         val items = mutableListOf(
+            header("scoremate_link_header", "연결"),
             SettingsItem(
                 id = "scoremate_status",
                 icon = if (linked) "✅" else "⚪",
@@ -563,6 +571,7 @@ class SettingsActivity : AppCompatActivity() {
             )
         }
         if (linked) {
+            items += header("scoremate_sync_header", "악보")
             items += SettingsItem(
                 id = "scoremate_sync",
                 icon = "📥",
@@ -842,6 +851,7 @@ class SettingsActivity : AppCompatActivity() {
 
     private fun showInfoPanel() {
         val items = listOfNotNull(
+            header("update_header", "업데이트"),
             SettingsItem(
                 id = "app_version",
                 icon = "📱",
@@ -866,6 +876,14 @@ class SettingsActivity : AppCompatActivity() {
                 type = SettingsType.TOGGLE,
                 checked = UpdateController.isPrereleaseEnabled(this)
             ),
+            SettingsItem(
+                id = "check_update",
+                icon = "🔄",
+                title = "업데이트 확인",
+                subtitle = "ScoreMate 서버에서 새 버전 찾기",
+                type = SettingsType.ACTION
+            ),
+            header("voice_header", "음성 명령").takeIf { !isTv },
             // 🎙 음성 명령 (P12 2단계) — 태블릿 · 휴대폰. 기기의 음성 인식(보통 Google)을 쓴다
             SettingsItem(
                 id = "voice_commands_toggle",
@@ -910,13 +928,7 @@ class SettingsActivity : AppCompatActivity() {
                     " — 누르면 바꿉니다",
                 type = SettingsType.ACTION
             ).takeIf { !com.mrgq.pdfviewer.utils.DeviceForm.isTv(this) && PdfViewerActivity.VOICE_ALWAYS_AVAILABLE },
-            SettingsItem(
-                id = "check_update",
-                icon = "🔄",
-                title = "업데이트 확인",
-                subtitle = "GitHub 에서 새 버전 찾기",
-                type = SettingsType.ACTION
-            ),
+            header("about_header", "정보"),
             SettingsItem(
                 id = "app_info",
                 icon = "ℹ️",
@@ -929,6 +941,9 @@ class SettingsActivity : AppCompatActivity() {
         showDetailPanel("앱 정보", items)
     }
     
+    /** 오른쪽 칸의 묶음 제목 (#122) */
+    private fun header(id: String, title: String) = SettingsItem(id = id, icon = "", title = title, type = SettingsType.HEADER)
+
     // ── 🎤 녹음 기록 (P10 — 마이크 추적 기록 · 예전 연습 녹음) ─────────────────────────
     private var recordingEntries: List<com.mrgq.pdfviewer.recording.RecordingLibrary.Entry> = emptyList()
     private var recordingPlayer: android.media.MediaPlayer? = null
@@ -1136,7 +1151,7 @@ class SettingsActivity : AppCompatActivity() {
         // 웹서버 칸이 아니면 로그는 숨긴다 (웹서버 칸은 이 뒤에 다시 보인다)
         hideWebServerLogSection()
 
-        val detailAdapter = SettingsAdapter(items) { item ->
+        val detailAdapter = SettingsAdapter(items, detail = true) { item ->
             handleDetailItemClick(item)
         }
         binding.detailRecyclerView.layoutManager = LinearLayoutManager(this)

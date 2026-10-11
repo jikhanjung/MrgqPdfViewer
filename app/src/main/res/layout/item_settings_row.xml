@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    설정 오른쪽(상세) 줄 — Android 설정의 두 칸 오른쪽처럼 카드 없이 평평한 줄: 제목 · 설명 · 오른쪽 스위치 / 값 (#122).
+    아이콘은 왼쪽 카테고리에만. 포커스 · 누름은 줄 전체가 둥근 밝은 면
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:minHeight="64dp"
+    android:orientation="horizontal"
+    android:gravity="center_vertical"
+    android:background="@drawable/settings_row_background"
+    android:paddingHorizontal="20dp"
+    android:paddingVertical="14dp"
+    android:layout_marginHorizontal="8dp"
+    android:focusable="true"
+    android:clickable="true">
+
+    <LinearLayout
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:orientation="vertical">
+
+        <TextView
+            android:id="@+id/titleText"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textSize="17sp"
+            android:textColor="@android:color/white" />
+
+        <TextView
+            android:id="@+id/subtitleText"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textSize="14sp"
+            android:textColor="#A6FFFFFF"
+            android:lineSpacingExtra="2dp"
+            android:layout_marginTop="3dp"
+            android:visibility="gone" />
+    </LinearLayout>
+
+    <TextView
+        android:id="@+id/arrowText"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:textSize="14sp"
+        android:textColor="#A6FFFFFF"
+        android:layout_marginStart="16dp" />
+
+    <!-- 켜기 · 끄기 줄 — 줄 전체가 눌리므로 스위치는 보이기만 -->
+    <com.google.android.material.switchmaterial.SwitchMaterial
+        android:id="@+id/toggleSwitch"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="16dp"
+        android:clickable="false"
+        android:focusable="false"
+        android:visibility="gone" />
+
+</LinearLayout>

@@ -3,19 +3,25 @@ package com.mrgq.pdfviewer
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.widget.TextView
 import androidx.recyclerview.widget.RecyclerView
+import com.google.android.material.switchmaterial.SwitchMaterial
 import com.mrgq.pdfviewer.databinding.ItemSettingsBinding
+import com.mrgq.pdfviewer.databinding.ItemSettingsHeaderBinding
+import com.mrgq.pdfviewer.databinding.ItemSettingsRowBinding
 
 /**
  * 설정 줄 목록. [selectable] 이면 두 칸의 왼쪽 카테고리 목록이다 — 오른쪽에 보이는 카테고리([selectedId])를 표시한다.
+ * [detail] 이면 오른쪽(상세) 목록 — Android 설정처럼 카드 없는 평평한 줄 · 묶음 제목([SettingsType.HEADER]), 아이콘 없음 (#122).
  * [onItemFocus] 는 TV 에서 포커스가 온 줄을 알린다(오른쪽 미리 보기)
  */
 class SettingsAdapter(
     private val items: List<SettingsItem>,
     private val selectable: Boolean = false,
+    private val detail: Boolean = false,
     private val onItemFocus: ((SettingsItem) -> Unit)? = null,
     private val onItemClick: (SettingsItem) -> Unit,
-) : RecyclerView.Adapter<SettingsAdapter.SettingsViewHolder>() {
+) : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
 
     /** 두 칸: 오른쪽에 보이는 카테고리 */
     var selectedId: String? = null
@@ -31,47 +37,72 @@ class SettingsAdapter(
         }
     }
 
-    inner class SettingsViewHolder(private val binding: ItemSettingsBinding) : RecyclerView.ViewHolder(binding.root) {
-        fun bind(item: SettingsItem, onItemClick: (SettingsItem) -> Unit) {
-            binding.iconText.text = item.icon
-            binding.titleText.text = item.title
-            
-            if (item.subtitle.isNotEmpty()) {
-                binding.subtitleText.text = item.subtitle
-                binding.subtitleText.visibility = View.VISIBLE
-            } else {
-                binding.subtitleText.visibility = View.GONE
-            }
-            
-            binding.arrowText.text = item.arrow
-            // 태블릿 · 휴대폰은 켜기 · 끄기를 스위치로도 보인다 (P17 5단계) — TV 는 부제목 글만
-            val toggle = item.checked?.takeIf { !com.mrgq.pdfviewer.utils.DeviceForm.isTv(binding.root.context) }
-            binding.toggleSwitch.visibility = if (toggle != null) View.VISIBLE else View.GONE
-            if (toggle != null) binding.toggleSwitch.isChecked = toggle
-            binding.root.alpha = if (item.enabled) 1.0f else 0.5f
-            
-            binding.root.setOnClickListener {
-                if (item.enabled) {
-                    onItemClick(item)
-                }
-            }
+    /** 줄 하나를 그린다 — 카드 줄(왼쪽 · 한 칸 목록)과 평평한 줄(오른쪽)이 같은 뷰 묶음을 쓴다 */
+    private inner class RowViews(
+        val root: View,
+        val title: TextView,
+        val subtitle: TextView,
+        val arrow: TextView,
+        val toggle: SwitchMaterial,
+        val icon: TextView?,
+    ) {
+        fun bind(item: SettingsItem) {
+            icon?.text = item.icon
+            title.text = item.title
+            subtitle.text = item.subtitle
+            subtitle.visibility = if (item.subtitle.isNotEmpty()) View.VISIBLE else View.GONE
+            arrow.text = item.arrow
+            arrow.visibility = if (item.arrow.isNotEmpty()) View.VISIBLE else View.GONE
+            // 켜기 · 끄기는 스위치로도 — 카드 줄은 터치 기기만(P17 5단계), 평평한 줄은 TV 도(Android TV 설정처럼, #122)
+            val showToggle = item.checked != null && (detail || !com.mrgq.pdfviewer.utils.DeviceForm.isTv(root.context))
+            toggle.visibility = if (showToggle) View.VISIBLE else View.GONE
+            if (showToggle) toggle.isChecked = item.checked == true
+            root.alpha = if (item.enabled) 1.0f else if (detail) 0.38f else 0.5f
+            root.setOnClickListener { if (item.enabled) onItemClick(item) }
             if (selectable) {
-                binding.root.setBackgroundResource(R.drawable.settings_category_background)
-                binding.root.isSelected = item.id == selectedId
+                root.setBackgroundResource(R.drawable.settings_category_background)
+                root.isSelected = item.id == selectedId
             }
             val focus = onItemFocus
-            if (focus != null) binding.root.setOnFocusChangeListener { _, hasFocus -> if (hasFocus) focus(item) }
+            if (focus != null) root.setOnFocusChangeListener { _, hasFocus -> if (hasFocus) focus(item) }
         }
     }
 
-    override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): SettingsViewHolder {
-        val binding = ItemSettingsBinding.inflate(LayoutInflater.from(parent.context), parent, false)
-        return SettingsViewHolder(binding)
+    private inner class RowHolder(val views: RowViews) : RecyclerView.ViewHolder(views.root)
+    private class HeaderHolder(val binding: ItemSettingsHeaderBinding) : RecyclerView.ViewHolder(binding.root)
+
+    override fun getItemViewType(position: Int): Int = when {
+        items[position].type == SettingsType.HEADER -> TYPE_HEADER
+        detail -> TYPE_ROW
+        else -> TYPE_CARD
     }
 
-    override fun onBindViewHolder(holder: SettingsViewHolder, position: Int) {
-        holder.bind(items[position], onItemClick)
+    override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): RecyclerView.ViewHolder {
+        val inflater = LayoutInflater.from(parent.context)
+        return when (viewType) {
+            TYPE_HEADER -> HeaderHolder(ItemSettingsHeaderBinding.inflate(inflater, parent, false))
+            TYPE_ROW -> ItemSettingsRowBinding.inflate(inflater, parent, false).let {
+                RowHolder(RowViews(it.root, it.titleText, it.subtitleText, it.arrowText, it.toggleSwitch, icon = null))
+            }
+            else -> ItemSettingsBinding.inflate(inflater, parent, false).let {
+                RowHolder(RowViews(it.root, it.titleText, it.subtitleText, it.arrowText, it.toggleSwitch, it.iconText))
+            }
+        }
+    }
+
+    override fun onBindViewHolder(holder: RecyclerView.ViewHolder, position: Int) {
+        val item = items[position]
+        when (holder) {
+            is HeaderHolder -> holder.binding.headerText.text = item.title
+            is RowHolder -> holder.views.bind(item)
+        }
     }
 
     override fun getItemCount(): Int = items.size
+
+    companion object {
+        private const val TYPE_CARD = 0
+        private const val TYPE_ROW = 1
+        private const val TYPE_HEADER = 2
+    }
 }

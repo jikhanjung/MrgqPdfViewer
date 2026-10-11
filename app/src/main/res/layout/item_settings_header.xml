@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 설정 오른쪽의 묶음 제목 — Android 설정의 PreferenceCategory 처럼 작은 강조색 글 (#122). 포커스 · 누름 없음 -->
+<TextView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/headerText"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:paddingHorizontal="28dp"
+    android:paddingTop="20dp"
+    android:paddingBottom="6dp"
+    android:textSize="14sp"
+    android:textStyle="bold"
+    android:textColor="#8AB4F8"
+    android:focusable="false" />
