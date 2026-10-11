@@ -22,6 +22,7 @@ class AccompanimentVoices(private val sampleRate: Int) {
     private val phase = DoubleArray(MAX_VOICES)
     private val step = DoubleArray(MAX_VOICES)
     private val timbre = IntArray(MAX_VOICES)
+    private val level = FloatArray(MAX_VOICES)
 
     private val attackFrames = (sampleRate * ATTACK_SEC).toInt().coerceAtLeast(1)
     private val releaseFrames = (sampleRate * RELEASE_SEC).toInt().coerceAtLeast(1)
@@ -30,8 +31,8 @@ class AccompanimentVoices(private val sampleRate: Int) {
     /** 울리는 음 수 (테스트용) */
     val activeCount: Int get() = active.count { it }
 
-    /** 프레임 [startFrame] 부터 [endFrame] 까지 [midi] 음. 빈 자리가 없으면 가장 먼저 시작한 음을 밀어낸다 */
-    fun noteOn(startFrame: Long, endFrame: Long, midi: Int, part: Int) {
+    /** 프레임 [startFrame] 부터 [endFrame] 까지 [midi] 음, 셈여림 [velocity](0 ~ 1, #114). 빈 자리가 없으면 가장 먼저 시작한 음을 밀어낸다 */
+    fun noteOn(startFrame: Long, endFrame: Long, midi: Int, part: Int, velocity: Float = 1f) {
         var slot = active.indexOfFirst { !it }
         if (slot < 0) slot = start.indices.minByOrNull { start[it] } ?: 0
         active[slot] = true
@@ -40,6 +41,7 @@ class AccompanimentVoices(private val sampleRate: Int) {
         phase[slot] = 0.0
         step[slot] = 440.0 * 2.0.pow((midi - 69) / 12.0) * TABLE_SIZE / sampleRate
         timbre[slot] = part % TIMBRES.size
+        level[slot] = velocity.coerceIn(0f, 1f)
     }
 
     fun clear() {
@@ -57,6 +59,7 @@ class AccompanimentVoices(private val sampleRate: Int) {
         for (v in 0 until MAX_VOICES) {
             if (!active[v]) continue
             val table = tables[timbre[v]]
+            val voiceAmplitude = amplitude * level[v]
             val s = start[v]
             val e = end[v]
             // 줄어드는 소리는 곱셈으로 이어 간다 (프레임마다 pow 는 비싸다) — 이 청크 첫 프레임의 값만 한 번 계산
@@ -82,7 +85,7 @@ class AccompanimentVoices(private val sampleRate: Int) {
                         break
                     }
                 }
-                out[i] += (table[p.toInt() and (TABLE_SIZE - 1)] * env * amplitude).toInt()
+                out[i] += (table[p.toInt() and (TABLE_SIZE - 1)] * env * voiceAmplitude).toInt()
                 p += inc
                 if (p >= TABLE_SIZE) p -= TABLE_SIZE
                 i++

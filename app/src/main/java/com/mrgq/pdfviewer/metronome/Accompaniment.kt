@@ -17,6 +17,8 @@ class Accompaniment private constructor(
     val midis: IntArray,
     /** 파트 순번 (음색을 조금씩 달리 한다) */
     val parts: IntArray,
+    /** 셈여림 0 ~ 1 (#114) */
+    val velocities: FloatArray,
 ) {
     val size: Int get() = beats.size
 
@@ -38,14 +40,14 @@ class Accompaniment private constructor(
          * @param measureNumberOf MusicXML 마디 순서(0부터) → 악보(PDF) 마디 번호 ([MusicXmlMatch.measureNumberOf])
          */
         fun build(score: MusicXmlScore, follower: ScoreFollower, playParts: Set<Int>, measureNumberOf: (Int) -> Int?): Accompaniment {
-            data class N(val beat: Double, val length: Double, val midi: Int, val part: Int)
+            data class N(val beat: Double, val length: Double, val midi: Int, val part: Int, val velocity: Float)
             val list = ArrayList<N>()
             for (p in playParts.sorted()) {
                 for (note in score.notes.getOrNull(p).orEmpty()) {
                     val number = measureNumberOf(note.measure) ?: continue
                     val start = follower.beatAt(number, note.onset) ?: continue
                     val end = follower.beatAt(number, note.onset + note.duration) ?: continue
-                    if (end > start) list += N(start, end - start, note.midi, p)
+                    if (end > start) list += N(start, end - start, note.midi, p, note.velocity)
                 }
             }
             list.sortBy { it.beat }
@@ -54,6 +56,7 @@ class Accompaniment private constructor(
                 DoubleArray(list.size) { list[it].length },
                 IntArray(list.size) { list[it].midi },
                 IntArray(list.size) { list[it].part },
+                FloatArray(list.size) { list[it].velocity },
             )
         }
     }

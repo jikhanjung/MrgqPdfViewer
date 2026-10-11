@@ -62,8 +62,29 @@ data class XmlMeasure(val index: Int, val number: String, val beats: Int, val be
 
 /**
  * 음 하나. [measure] 는 마디 순서(0부터), [onset] · [duration] 은 **4분음표 단위**(마디 첫머리부터), [midi] 는 음높이 (가온 다 = 60).
+ * [velocity] 는 셈여림(0 ~ 1, #114) — 셈여림표가 하나도 없는 파트는 모두 1(예전 그대로)
  */
-data class XmlNote(val measure: Int, val onset: Double, val duration: Double, val midi: Int)
+data class XmlNote(val measure: Int, val onset: Double, val duration: Double, val midi: Int, val velocity: Float = 1f)
+
+/**
+ * 셈여림 (#114). 반주 소리 크기에 곱한다 — 크게(fff) 1 에서 작게(ppp) 0.28 까지. 악기 소리의 실제 차이보다 좁게 잡았다
+ * (반주가 너무 작아 안 들리지 않게, 크기는 반주 크기로 따로 맞춘다)
+ */
+object Dynamics {
+    val LEVELS: Map<String, Float> = mapOf(
+        "ppp" to 0.28f, "pp" to 0.38f, "p" to 0.5f, "mp" to 0.62f,
+        "mf" to 0.74f, "f" to 0.86f, "ff" to 0.94f, "fff" to 1f,
+        "pppp" to 0.22f, "ffff" to 1f,
+    )
+    /** 한 음만 세게 — 그다음은 앞의 셈여림으로 돌아간다(fp 는 p 로) */
+    val ACCENTS: Map<String, Float> = mapOf(
+        "sf" to 0.94f, "sfz" to 0.94f, "sffz" to 1f, "sfp" to 0.94f, "sfpp" to 0.94f, "fz" to 0.94f, "rf" to 0.9f, "rfz" to 0.9f, "fp" to 0.86f,
+    )
+    /** 셈여림표가 있는 파트에서 첫 표 앞의 음 */
+    const val UNMARKED = 0.74f
+    /** `<sound dynamics="X">` — 포르테(MIDI 90)에 대한 백분율 */
+    fun ofSound(percent: Double): Float = (LEVELS.getValue("f") * percent / 100.0).toFloat().coerceIn(0.05f, 1f)
+}
 
 /**
  * MusicXML 읽기. `javax.xml` DOM — Android 와 JVM 단위 테스트 모두에서 돈다. 670KB(K488 2파트 99마디)도 가볍다.
@@ -130,6 +151,13 @@ object MusicXmlReader {
         val out = ArrayList<XmlNote>()
         val measures = ArrayList<XmlMeasure>()
         val rehearsals = ArrayList<XmlRehearsal>()
+        // 셈여림 (#114): 지금 셈여림(null = 아직 표 없음), 다음 한 음만 세게(sf 등), 그 뒤 돌아갈 셈여림(fp → p)
+        var dynamic: Float? = null
+        var accentNext: Float? = null
+        // 세게 친 음의 자리(마디, 시각)와 크기 — 화음이면 같은 시각의 음 모두
+        var accentAt: Pair<Int, Double>? = null
+        var accentLevel = 0f
+        var anyDynamics = false
         var divisions = 1.0
         var beats = 4
         var beatType = 4
@@ -150,9 +178,27 @@ object MusicXmlReader {
                             t.child("beat-type")?.textContent?.trim()?.toIntOrNull()?.let { beatType = it }
                         }
                     }
-                    "direction" -> node.children("direction-type").flatMap { it.children("rehearsal") }.forEach { r ->
-                        r.textContent?.trim()?.takeIf { it.isNotEmpty() }?.let { rehearsals += XmlRehearsal(m, it) }
+                    "direction" -> {
+                        node.children("direction-type").flatMap { it.children("rehearsal") }.forEach { r ->
+                            r.textContent?.trim()?.takeIf { it.isNotEmpty() }?.let { rehearsals += XmlRehearsal(m, it) }
+                        }
+                        for (marks in node.children("direction-type").flatMap { it.children("dynamics") }) {
+                            for (mark in marks.childElements()) {
+                                val name = mark.tagName
+                                Dynamics.LEVELS[name]?.let { dynamic = it; anyDynamics = true }
+                                Dynamics.ACCENTS[name]?.let { level ->
+                                    accentNext = level
+                                    anyDynamics = true
+                                    // fp · sfp — 친 뒤 여리게
+                                    if (name == "fp" || name == "sfp") dynamic = Dynamics.LEVELS.getValue("p")
+                                    if (name == "sfpp") dynamic = Dynamics.LEVELS.getValue("pp")
+                                }
+                            }
+                        }
+                        // 편집기가 적어 둔 재생 크기가 있으면 그것을 따른다
+                        node.child("sound")?.getAttribute("dynamics")?.toDoubleOrNull()?.let { dynamic = Dynamics.ofSound(it); anyDynamics = true }
                     }
+                    "sound" -> node.getAttribute("dynamics").toDoubleOrNull()?.let { dynamic = Dynamics.ofSound(it); anyDynamics = true }
                     "backup" -> cursor -= node.durationQuarters(divisions)
                     "forward" -> cursor += node.durationQuarters(divisions)
                     "note" -> {
@@ -174,7 +220,18 @@ object MusicXmlReader {
                             out[at] = out[at].copy(duration = out[at].duration + duration)
                             if ("start" !in ties) openTies.remove(midi)
                         } else {
-                            out += XmlNote(m, onset, duration, midi)
+                            // 음에 적힌 재생 크기(`<note dynamics>`) > 한 음 세게 > 지금 셈여림. 아직 표가 없으면 -1(뒤에서 정한다)
+                            val own = node.getAttribute("dynamics").toDoubleOrNull()?.let { anyDynamics = true; Dynamics.ofSound(it) }
+                            accentNext?.let { level ->
+                                if (!chord) {
+                                    accentAt = m to onset
+                                    accentLevel = level
+                                    accentNext = null
+                                }
+                            }
+                            val accent = accentLevel.takeIf { accentAt == m to onset }
+                            val velocity = own ?: accent ?: dynamic ?: -1f
+                            out += XmlNote(m, onset, duration, midi, velocity)
                             if ("start" in ties) openTies[midi] = out.size - 1 else openTies.remove(midi)
                         }
                     }
@@ -182,6 +239,9 @@ object MusicXmlReader {
             }
             measures += XmlMeasure(m, measure.getAttribute("number"), beats, beatType)
         }
+        // 셈여림표가 하나도 없는 파트는 모두 1(예전과 같은 크기), 있으면 첫 표 앞의 음은 보통(mf)
+        val unmarked = if (anyDynamics) Dynamics.UNMARKED else 1f
+        for (i in out.indices) if (out[i].velocity < 0f) out[i] = out[i].copy(velocity = unmarked)
         return PartRead(out, measures, staves, rehearsals)
     }
 

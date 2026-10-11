@@ -197,7 +197,10 @@ class MetronomeEngine(private val sampleRate: Int = 44100) {
                             val offset = acc.beats[nextNote] - beat.index
                             if (offset >= 0) {
                                 val on = beat.frame + Math.round(offset * span)
-                                voices.noteOn(on, on + Math.round(acc.lengths[nextNote] * span), acc.midis[nextNote], acc.parts[nextNote])
+                                voices.noteOn(
+                                    on, on + Math.round(acc.lengths[nextNote] * span), acc.midis[nextNote], acc.parts[nextNote],
+                                    acc.velocities[nextNote],
+                                )
                             }
                             nextNote++
                         }

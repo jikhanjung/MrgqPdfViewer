@@ -5,6 +5,7 @@ import com.mrgq.pdfviewer.metronome.Accompaniment
 import com.mrgq.pdfviewer.metronome.AccompanimentVoices
 import com.mrgq.pdfviewer.metronome.MusicXmlMatch
 import com.mrgq.pdfviewer.metronome.ScoreFollower
+import com.mrgq.pdfviewer.score.Dynamics
 import com.mrgq.pdfviewer.score.MusicXmlReader
 import com.mrgq.pdfviewer.score.XmlNote
 import org.junit.Assert.assertEquals
@@ -180,5 +181,76 @@ class MusicXmlAccompanimentTest {
         assertNull(read.rehearsalMeasure(""))
         // 마크가 없는 악보
         assertTrue(score.rehearsals.isEmpty())
+    }
+
+    @Test
+    fun 셈여림() {
+        // P1: p → 두 음, f → 화음, sf → 화음 한 번만 세게 그다음은 f, sound 50%, 음에 적힌 dynamics. P2: 표 없음. P3: 첫 음 뒤에 mf (#114)
+        val xml = """
+            <score-partwise version="4.0">
+              <part-list><score-part id="P1"/><score-part id="P2"/><score-part id="P3"/></part-list>
+              <part id="P1">
+                <measure number="1"><attributes><divisions>1</divisions><time><beats>4</beats><beat-type>4</beat-type></time></attributes>
+                  <direction><direction-type><dynamics><p/></dynamics></direction-type></direction>
+                  <note><pitch><step>C</step><octave>4</octave></pitch><duration>2</duration></note>
+                  <note><pitch><step>D</step><octave>4</octave></pitch><duration>2</duration></note>
+                </measure>
+                <measure number="2">
+                  <direction><direction-type><dynamics><f/></dynamics></direction-type></direction>
+                  <note><pitch><step>E</step><octave>4</octave></pitch><duration>1</duration></note>
+                  <note><chord/><pitch><step>G</step><octave>4</octave></pitch><duration>1</duration></note>
+                  <direction><direction-type><dynamics><sf/></dynamics></direction-type></direction>
+                  <note><pitch><step>F</step><octave>4</octave></pitch><duration>1</duration></note>
+                  <note><chord/><pitch><step>A</step><octave>4</octave></pitch><duration>1</duration></note>
+                  <note><pitch><step>G</step><octave>4</octave></pitch><duration>1</duration></note>
+                  <direction><direction-type><words>dolce</words></direction-type><sound dynamics="50"/></direction>
+                  <note dynamics="100"><pitch><step>A</step><octave>4</octave></pitch><duration>1</duration></note>
+                </measure>
+              </part>
+              <part id="P2">
+                <measure number="1"><note><pitch><step>C</step><octave>3</octave></pitch><duration>4</duration></note></measure>
+                <measure number="2"><note><pitch><step>C</step><octave>3</octave></pitch><duration>4</duration></note></measure>
+              </part>
+              <part id="P3">
+                <measure number="1">
+                  <note><pitch><step>E</step><octave>3</octave></pitch><duration>2</duration></note>
+                  <direction><direction-type><dynamics><mf/></dynamics></direction-type></direction>
+                  <note><pitch><step>F</step><octave>3</octave></pitch><duration>2</duration></note>
+                </measure>
+                <measure number="2">
+                  <direction><direction-type><dynamics><fp/></dynamics></direction-type></direction>
+                  <note><pitch><step>G</step><octave>3</octave></pitch><duration>2</duration></note>
+                  <note><pitch><step>A</step><octave>3</octave></pitch><duration>2</duration></note>
+                </measure>
+              </part>
+            </score-partwise>
+        """.trimIndent()
+        val read = MusicXmlReader.read(xml.byteInputStream())!!
+        val p = Dynamics.LEVELS.getValue("p")
+        val f = Dynamics.LEVELS.getValue("f")
+        val sf = Dynamics.ACCENTS.getValue("sf")
+        assertEquals(listOf(p, p, f, f, sf, sf, f, f), read.notes[0].map { it.velocity })
+        assertEquals(listOf(1f, 1f), read.notes[1].map { it.velocity })
+        assertEquals(listOf(Dynamics.UNMARKED, Dynamics.LEVELS.getValue("mf"), Dynamics.ACCENTS.getValue("fp"), p), read.notes[2].map { it.velocity })
+        // sound dynamics="50" 은 다음 음에 적힌 dynamics="100" 이 이긴다
+        assertEquals(Dynamics.ofSound(100.0), read.notes[0].last().velocity)
+        assertEquals(f * 0.5f, Dynamics.ofSound(50.0), 1e-6f)
+        // 셈여림표 없는 첫 악보는 그대로 1
+        assertTrue(score.notes.flatten().all { it.velocity == 1f })
+    }
+
+    @Test
+    fun 셈여림만큼_작게_울린다() {
+        fun loudness(velocity: Float): Long {
+            val voices = AccompanimentVoices(8000)
+            voices.noteOn(0, 800, 69, 0, velocity)
+            val out = IntArray(800)
+            voices.mixInto(out, 0, 800, 1f)
+            return out.sumOf { kotlin.math.abs(it).toLong() }
+        }
+        val full = loudness(1f)
+        val half = loudness(0.5f)
+        assertTrue(full > 0)
+        assertEquals(0.5, half.toDouble() / full, 0.02)
     }
 }
