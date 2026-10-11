@@ -62,7 +62,7 @@
 - release APK 끼리는 덮어쓰기 설치 · **앱 안 업데이트**(#054)가 데이터를 남긴 채 된다. 이것이 업데이트 경로의 전제다.
 - debug APK(와 secrets 가 없는 포크의 release APK)는 debug keystore 서명이라 release 설치본 위에 덮어쓸 수 없다 — 지우고 설치.
 - 릴리스 본문에 서명 상태를 자동으로 적고(가이드 §2 "컴파일된 것과 검증된 것을 혼동하지 말 것"),
-  secrets 가 빠져 debug 키로 폴백하면 경고를 단다. ScoreMate 서버 업로드(`APP_RELEASE_TOKEN`)는 릴리스 키일 때만 한다.
+  secrets 가 빠져 debug 키로 폴백하면 경고를 단다. ScoreMate 서버 업로드(`APP_RELEASE_TOKEN`)는 릴리스 키일 때만 한다 — 정식 · 사전 릴리스 모두(시험 태그 `-test` 빼고), 변경 내용(`notes` = CHANGELOG 섹션) · `version_code` 와 함께, 200(같은 판 재실행)도 성공(#118, P15 · 서버 P16). 앱 안 업데이트는 서버를 먼저 본다.
 - **keystore 백업**: 원본 keystore 파일과 두 비밀번호 · alias 를 저장소 · CI 밖에 따로 보관한다(잃으면 기존 설치본을 더는 업데이트할 수 없다 —
   모든 기기에서 지우고 새 키로 다시 설치해야 한다). secrets 는 다시 꺼낼 수 없다.
   ✅ **2026-10-11 백업함** — 원본은 Windows PC 의 `D:\projects\MrgqPdfViewer\signing\`(`mrgq-pdf-viewer-key.jks` ·

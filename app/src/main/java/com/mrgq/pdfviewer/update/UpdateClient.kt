@@ -14,22 +14,43 @@ import java.security.MessageDigest
 class UpdateException(message: String, cause: Throwable? = null) : Exception(message, cause)
 
 /**
- * GitHub 릴리스 조회와 APK 다운로드 (#054). 요청이 몇 개뿐이라 [HttpURLConnection] 으로 충분하다.
+ * 앱 업데이트 확인과 APK 다운로드 (#054). 요청이 몇 개뿐이라 [HttpURLConnection] 으로 충분하다.
  *
+ * **ScoreMate 서버 먼저**(P15 §2.2, #118): [server](설정 → ☁️ ScoreMate 의 서버 주소, 연결 여부와 무관)의
+ * `latest/?channel=stable|beta` 가 버전 · 변경 내용 · sha256 · 받기 주소를 한 번에 준다. 서버가 안 되면(404 · 네트워크 · 깨진 응답)
+ * 아래 GitHub 경로로 — 저장소를 private 으로 바꾸는 P15 4단계까지의 폴백이고 5단계에서 지운다.
+ *
+ * GitHub 경로:
  * 최신 버전은 API 가 아니라 웹 주소 `…/releases/latest` 의 리다이렉트(Location 의 태그)로 안다 — API 의 비인증 한도
  * (IP 당 시간 60회)를 쓰지 않아 10분마다 확인해도 된다. 변경 내용은 알릴 때만 그 태그의 `CHANGELOG.md` 에서 받는다.
  * 다운로드 URL 은 GitHub 파일 서버로 https→https 리다이렉트되며 자동으로 따라간다.
  */
 class UpdateClient(
+    /** ScoreMate 서버 주소 — null 이면 GitHub 만 */
+    private val server: (() -> String)? = null,
     private val repoUrl: String = REPO_URL,
     private val rawUrl: String = RAW_URL,
 ) {
+
+    /** 마지막 확인이 어디서 왔나 — 기록용("ScoreMate" · "GitHub") */
+    var lastSource: String = ""
+        private set
 
     /**
      * 받을 릴리스. [includePrerelease](설정 "사전 릴리스 받기")면 릴리스 피드에서 정식 · 사전 릴리스 중 가장 높은 것 —
      * 피드를 못 읽으면 조용히 정식(`releases/latest`)으로. 아니면 지금처럼 정식만
      */
     suspend fun fetchLatestRelease(includePrerelease: Boolean = false): ReleaseInfo {
+        server?.let { serverUrl ->
+            try {
+                return fetchFromScoreMate(serverUrl(), includePrerelease).also { lastSource = "ScoreMate" }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                // GitHub 으로 — 아래 (P15 전환 동안의 폴백)
+            }
+        }
+        lastSource = "GitHub"
         if (includePrerelease) {
             try {
                 newestFromFeed()?.let { return it }
@@ -40,6 +61,13 @@ class UpdateClient(
             }
         }
         return fetchLatestStable()
+    }
+
+    /** 서버의 최신 — 사전 릴리스 받기면 `beta`(정식 · 사전 릴리스 통틀어 가장 새것), 아니면 `stable` */
+    private suspend fun fetchFromScoreMate(server: String, includePrerelease: Boolean): ReleaseInfo = withContext(Dispatchers.IO) {
+        val url = server.trimEnd('/') + ReleaseInfo.SCOREMATE_RELEASES_PATH + "latest/?channel=" + if (includePrerelease) "beta" else "stable"
+        val text = open(url, accept = "application/json").use { it.readText() }
+        ReleaseInfo.fromScoreMate(text, server)
     }
 
     /** 릴리스 피드에서 가장 높은 버전 — 릴리스(파일)가 실제로 있는 것만 (피드에는 릴리스 없는 태그도 온다). 앞의 몇 개만 본다 */
@@ -96,8 +124,12 @@ class UpdateClient(
         }
     }
 
-    /** [release] 의 변경 내용 — 그 태그의 CHANGELOG 섹션. 못 받으면 빈 문자열 (알림은 그대로 띄운다) */
+    /**
+     * [release] 의 변경 내용 — 서버가 같이 준 `notes` 가 있으면 그것, 아니면 그 태그의 CHANGELOG 섹션(GitHub).
+     * 못 받으면 빈 문자열 (알림은 그대로 띄운다)
+     */
     suspend fun fetchReleaseNotes(release: ReleaseInfo): String = withContext(Dispatchers.IO) {
+        if (release.body.isNotBlank()) return@withContext release.body
         try {
             open("$rawUrl/${release.tag}/CHANGELOG.md", accept = "text/plain").use {
                 ReleaseInfo.changelogSection(it.readText(), release.tag)

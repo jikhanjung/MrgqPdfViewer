@@ -9,7 +9,16 @@ name: Android Build
 on:
   push:
     branches: [main]
+    # 문서만 바꾼 푸시는 빌드하지 않는다 — Actions 분 (P15 §2.3). 릴리스 커밋은 build.gradle.kts 도 바꾸므로 빌드된다
+    paths-ignore:
+      - 'devlog/**'
+      - 'docs/**'
+      - '**/*.md'
   pull_request:
+    paths-ignore:
+      - 'devlog/**'
+      - 'docs/**'
+      - '**/*.md'
   workflow_dispatch:
 
 jobs:

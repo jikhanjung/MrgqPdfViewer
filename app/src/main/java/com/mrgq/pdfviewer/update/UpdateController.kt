@@ -35,7 +35,8 @@ import java.util.Locale
  */
 class UpdateController(
     private val activity: Activity,
-    private val client: UpdateClient = UpdateClient()
+    // 업데이트는 ScoreMate 서버 먼저(설정의 서버 주소), 안 되면 GitHub (P15 §2.2, #118)
+    private val client: UpdateClient = UpdateClient(server = { com.mrgq.pdfviewer.scoremate.ScoreMateStore(activity).server })
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private var job: Job? = null
@@ -45,7 +46,7 @@ class UpdateController(
 
     fun checkForUpdate() {
         if (job?.isActive == true) return
-        val checking = progressDialog("업데이트 확인", if (isPrereleaseEnabled(activity)) "GitHub 에서 최신 릴리스(사전 릴리스 포함)를 확인하는 중…" else "GitHub 에서 최신 릴리스를 확인하는 중…", indeterminate = true)
+        val checking = progressDialog("업데이트 확인", if (isPrereleaseEnabled(activity)) "최신 버전(사전 릴리스 포함)을 확인하는 중…" else "최신 버전을 확인하는 중…", indeterminate = true)
         job = scope.launch {
             try {
                 withContext(Dispatchers.IO) { updatesDir(activity).deleteRecursively() }
@@ -85,7 +86,7 @@ class UpdateController(
                 val current = AppVersion.parse(BuildConfig.VERSION_NAME) ?: return@launch
                 val offer = release.version > current && release.apk != null && release.tag != declinedTag &&
                     !activity.isFinishing && !activity.isDestroyed
-                Log.i(TAG, "자동 업데이트 확인: 현재 v${BuildConfig.VERSION_NAME}, 최신 ${release.tag} → ${if (offer) "알림" else "알림 없음"}")
+                Log.i(TAG, "자동 업데이트 확인(${client.lastSource}): 현재 v${BuildConfig.VERSION_NAME}, 최신 ${release.tag} → ${if (offer) "알림" else "알림 없음"}")
                 if (offer) {
                     val notes = client.fetchReleaseNotes(release)
                     if (!activity.isFinishing && !activity.isDestroyed) showUpdateOffer(release.copy(body = notes), fromStartup = true)

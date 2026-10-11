@@ -1,5 +1,7 @@
 package com.mrgq.pdfviewer.update
 
+import com.google.gson.JsonParser
+
 /** 릴리스에 올라간 파일 하나. [size] 는 모르면 -1, [sha256] 은 모르면 null (`SHA256SUMS.txt` 로 검증). */
 data class ReleaseAsset(
     val name: String,
@@ -26,6 +28,41 @@ data class ReleaseInfo(
     companion object {
         const val APK_SUFFIX = "-release.apk"
         const val CHECKSUMS_NAME = "SHA256SUMS.txt"
+        /** ScoreMate 서버의 앱 릴리스 (P15 §2.2, 서버 P16) — `latest/?channel=` · `<version>/apk/` 가 이 아래 */
+        const val SCOREMATE_RELEASES_PATH = "/api/v1/app-releases/android/"
+
+        /**
+         * ScoreMate 서버 `GET …/app-releases/android/latest/?channel=stable|beta` 응답 (P15 §2.2, 서버 P16).
+         * 변경 내용(`notes`) · `sha256` · 판마다 고정된 받기 주소(`download_url` → 받을 때마다 서명 URL 로 302)가 함께 온다 —
+         * CHANGELOG raw · `SHA256SUMS.txt` 를 따로 받지 않는다. 받기 주소가 없거나 이상하면 [server] 와 버전으로 만든다.
+         * 버전이 없거나 버전 형식이 아니면(응답이 깨짐) [IllegalArgumentException]
+         */
+        fun fromScoreMate(json: String, server: String): ReleaseInfo {
+            val o = try {
+                JsonParser.parseString(json).asJsonObject
+            } catch (e: Exception) {
+                throw IllegalArgumentException("서버 응답을 읽지 못함", e)
+            }
+            fun str(key: String): String? = o.get(key)?.takeIf { it.isJsonPrimitive }?.asString
+            val tag = str("version") ?: throw IllegalArgumentException("서버 응답에 version 이 없음")
+            val version = AppVersion.parse(tag) ?: throw IllegalArgumentException("버전 형식이 아님: $tag")
+            val base = server.trimEnd('/')
+            val name = str("apk")?.takeIf { it.endsWith(".apk") && '/' !in it } ?: "MrgqPdfViewer-$tag$APK_SUFFIX"
+            // 같은 서버의 https(로컬 시험 서버면 http) 주소만 — 아니면 판 주소를 만든다
+            val url = str("download_url")?.takeIf { it.startsWith("https://") || (it.startsWith("http://") && base.startsWith("http://")) }
+                ?: "$base$SCOREMATE_RELEASES_PATH$tag/apk/"
+            val sha = str("sha256")?.lowercase()?.takeIf { it.matches(Regex("[0-9a-f]{64}")) }
+            val size = o.get("size")?.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isNumber }?.asLong ?: -1L
+            return ReleaseInfo(
+                tag = tag,
+                version = version,
+                htmlUrl = "$base/download/",
+                body = str("notes").orEmpty(),
+                apk = ReleaseAsset(name, url, size, sha),
+                // 서버는 sha256 을 같이 준다 — 없으면 검증할 것이 없어 설치하지 않는다(downloadApk)
+                checksums = null,
+            )
+        }
 
         /** 태그로 릴리스 정보를 만든다 (`.github/workflows/build.yml` 의 APK 이름). 태그가 버전 형식이 아니면 [IllegalArgumentException] */
         fun fromTag(repoUrl: String, tag: String, body: String = ""): ReleaseInfo {
