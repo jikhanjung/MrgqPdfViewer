@@ -2,7 +2,7 @@
 
 마지막 갱신: 2026-10-11
 브랜치: `main` (origin/main 과 동기화)
-버전: **v0.7.5** (versionCode 89, 2026-10-11 정식 — beta.1 ~ beta.16 묶음: P17 터치 껍질 · 설정 두 칸 · 음성 실녹음 다듬기 · 반주 악상기호). 실기기는 앱 안 업데이트로 받는다(태블릿 · TV 모두 사전 릴리스 받기 켜 둠)
+버전: **v0.7.6-beta.1** (versionCode 90 — 앱 업데이트를 ScoreMate 서버 먼저, P15 1단계 #118). 정식은 v0.7.5. 실기기는 앱 안 업데이트로 받는다(태블릿 · TV 모두 사전 릴리스 받기 켜 둠)
 관련 문서: [CLAUDE.md](CLAUDE.md) (가이드 · 알아 둘 결정) · [TODOs.md](TODOs.md) (할 일 · **실기기 확인 목록**) · [CHANGELOG.md](CHANGELOG.md) · [devlog 인덱스](devlog/README.md) · [음성 명령 목록](docs/Voice_Commands.md) · [사례집](docs/Voice_Command_Examples.md)
 
 ---
