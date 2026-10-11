@@ -2,6 +2,8 @@ package com.mrgq.pdfviewer.scoremate
 
 import com.google.gson.JsonObject
 import com.google.gson.JsonParser
+import com.mrgq.pdfviewer.R
+import com.mrgq.pdfviewer.update.UiText
 
 /**
  * ScoreMate 서버 규약 — TV 기기 연결 (RFC 8628, 서버 devlog 059). 응답 해석만 하고 네트워크는 모른다.
@@ -48,7 +50,8 @@ object ScoreMateProtocol {
         /** 없는 코드 · 이미 토큰으로 바꾼 코드 — 처음부터 */
         object Invalid : PollResult
         data class Linked(val tokens: Tokens) : PollResult
-        data class Failed(val message: String) : PollResult
+        /** [text] = 화면에 보일 글 (P18 — 키 + 인자) */
+        data class Failed(val text: UiText) : PollResult
     }
 
     /** 이 TV 의 정보 (`GET /devices/me/`) */
@@ -96,7 +99,7 @@ object ScoreMateProtocol {
                 if (access != null && refresh != null && deviceId != null) {
                     PollResult.Linked(Tokens(access, refresh, deviceId))
                 } else {
-                    PollResult.Failed("서버 응답에 토큰이 없습니다")
+                    PollResult.Failed(UiText(R.string.scoremate_poll_no_token))
                 }
             }
             400 -> when (o?.string("error")) {
@@ -105,11 +108,11 @@ object ScoreMateProtocol {
                 "access_denied" -> PollResult.Denied
                 "expired_token" -> PollResult.Expired
                 "invalid_grant" -> PollResult.Invalid
-                else -> PollResult.Failed("연결 오류: ${o?.string("error") ?: "HTTP 400"}")
+                else -> PollResult.Failed(UiText(R.string.scoremate_poll_error, o?.string("error") ?: "HTTP 400"))
             }
             // 요청 제한 — 천천히 다시
             429 -> PollResult.SlowDown
-            else -> PollResult.Failed("서버 오류 (HTTP $code)")
+            else -> PollResult.Failed(UiText(R.string.scoremate_server_error, code))
         }
     }
 

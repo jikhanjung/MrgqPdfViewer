@@ -174,11 +174,11 @@ class ViewerCollaborationManager(
         return when (currentMode) {
             CollaborationMode.CONDUCTOR -> {
                 val connectedCount = globalCollaborationManager.getConnectedClientCount()
-                "지휘자 모드 ($connectedCount 명 연결됨)"
+                context.getString(R.string.ensemble_viewer_conductor, connectedCount)
             }
             CollaborationMode.PERFORMER -> {
                 val isConnected = globalCollaborationManager.isClientConnected()
-                if (isConnected) "연주자 모드 (연결됨)" else "연주자 모드 (연결 끊김)"
+                context.getString(if (isConnected) R.string.ensemble_viewer_performer_connected else R.string.ensemble_viewer_performer_disconnected)
             }
             CollaborationMode.NONE -> ""
         }

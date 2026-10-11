@@ -17,6 +17,7 @@ import com.google.zxing.BarcodeFormat
 import com.google.zxing.EncodeHintType
 import com.google.zxing.qrcode.QRCodeWriter
 import com.mrgq.pdfviewer.BuildConfig
+import com.mrgq.pdfviewer.R
 import com.mrgq.pdfviewer.scoremate.ScoreMateProtocol.PollResult
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -103,10 +104,10 @@ class DeviceLinkDialog(
             addView(right)
         }
         dialog = AlertDialog.Builder(activity)
-            .setTitle("ScoreMate 에 이 $device 연결")
+            .setTitle(activity.getString(R.string.scoremate_link_title, device))
             .setView(content)
-            .setNegativeButton("취소", null)
-            .setNeutralButton("새 코드", null)
+            .setNegativeButton(R.string.cancel, null)
+            .setNeutralButton(R.string.scoremate_link_new_code, null)
             .setOnDismissListener { scope.cancel() }
             .create()
         dialog.setOnShowListener {
@@ -123,18 +124,17 @@ class DeviceLinkDialog(
             while (isActive) {
                 qrView.setImageBitmap(null)
                 codeView.text = "…"
-                stepsView.text = "ScoreMate 서버에서 연결 코드를 받는 중…"
+                stepsView.text = activity.getString(R.string.scoremate_link_requesting)
                 statusView.text = store.server
                 val code = try {
                     client.requestDeviceCode(deviceName(activity), Build.MODEL, BuildConfig.VERSION_NAME)
                 } catch (e: ScoreMateException) {
-                    stepsView.text = e.message
-                    statusView.text = "\"새 코드\" 로 다시 시도하세요 (${store.server})"
+                    stepsView.text = e.text.resolve(activity)
+                    statusView.text = activity.getString(R.string.scoremate_link_retry_hint, store.server)
                     return@launch
                 }
                 qrView.setImageBitmap(qrBitmap(code.verificationUriComplete, qrSizePx))
-                stepsView.text = "1. 휴대폰으로 QR 코드를 찍거나\n    ${code.verificationUri.removePrefix("https://")} 에 들어가\n" +
-                    "2. 로그인한 뒤 이 코드를 확인하고 \"연결\" 을 누르세요"
+                stepsView.text = activity.getString(R.string.scoremate_link_steps, code.verificationUri.removePrefix("https://"))
                 codeView.text = code.userCode
 
                 val expiresAt = SystemClock.elapsedRealtime() + code.expiresInSec * 1000L
@@ -143,7 +143,7 @@ class DeviceLinkDialog(
                 while (isActive) {
                     val left = (expiresAt - SystemClock.elapsedRealtime()) / 1000
                     if (left <= 0) break // 새 코드
-                    statusView.text = "휴대폰에서 연결하기를 기다리는 중… (남은 시간 ${left / 60}:${"%02d".format(left % 60)})$note"
+                    statusView.text = activity.getString(R.string.scoremate_link_waiting, left / 60, left % 60, note)
                     delay(interval * 1000L)
                     val result = client.pollToken(code.deviceCode)
                     interval = ScoreMateProtocol.nextIntervalSec(interval, result)
@@ -152,13 +152,13 @@ class DeviceLinkDialog(
                         PollResult.Pending, PollResult.SlowDown -> Unit
                         PollResult.Expired, PollResult.Invalid -> break
                         PollResult.Denied -> {
-                            stepsView.text = "휴대폰에서 연결을 거절했습니다."
-                            statusView.text = "다시 연결하려면 \"새 코드\" 를 누르세요"
+                            stepsView.text = activity.getString(R.string.scoremate_link_denied)
+                            statusView.text = activity.getString(R.string.scoremate_link_denied_hint)
                             qrView.setImageBitmap(null)
                             codeView.text = ""
                             return@launch
                         }
-                        is PollResult.Failed -> note = "\n${result.message} — 계속 시도합니다"
+                        is PollResult.Failed -> note = activity.getString(R.string.scoremate_link_retrying_note, result.text.resolve(activity))
                         is PollResult.Linked -> {
                             finishLinked()
                             return@launch
@@ -170,7 +170,7 @@ class DeviceLinkDialog(
     }
 
     private suspend fun finishLinked() {
-        statusView.text = "연결되었습니다"
+        statusView.text = activity.getString(R.string.scoremate_link_done)
         val info = try {
             client.heartbeat(BuildConfig.VERSION_NAME, Build.MODEL)
         } catch (e: ScoreMateException) {

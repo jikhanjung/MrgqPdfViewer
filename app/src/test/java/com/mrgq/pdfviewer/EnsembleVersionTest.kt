@@ -2,9 +2,9 @@ package com.mrgq.pdfviewer
 
 import com.mrgq.pdfviewer.ensemble.EnsembleVersion
 import com.mrgq.pdfviewer.ensemble.EnsembleVersion.Mismatch
+import com.mrgq.pdfviewer.update.UiText
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
-import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /** 합주 연결 때 합주 버전 비교 (#061 → #086). 지금 합주 버전 = 0.4.0 */
@@ -28,9 +28,10 @@ class EnsembleVersionTest {
 
     @Test
     fun 옛_버전은_v0_1_5_고정값이나_값이_없다() {
-        assertEquals(Mismatch("v0.7.1", "v0.2.5 이하", true), EnsembleVersion.check("0.7.1", "v0.1.5"))
-        assertEquals(Mismatch("v0.7.1", "v0.2.5 이하", true), EnsembleVersion.check("0.7.1", null))
-        assertEquals("v0.2.5 이하", EnsembleVersion.describe(""))
+        // theirs null = "v0.2.5 이하" (화면 글은 ensemble_version_legacy, P18)
+        assertEquals(Mismatch("v0.7.1", null, true), EnsembleVersion.check("0.7.1", "v0.1.5"))
+        assertEquals(Mismatch("v0.7.1", null, true), EnsembleVersion.check("0.7.1", null))
+        assertNull(EnsembleVersion.describe(""))
     }
 
     @Test
@@ -42,11 +43,27 @@ class EnsembleVersionTest {
 
     @Test
     fun 안내문은_업데이트할_기기를_가리킨다() {
-        val performerSees = EnsembleVersion.performerMessage(EnsembleVersion.check("0.7.1", "v0.1.5")!!)
-        assertTrue(performerSees, performerSees.contains("지휘자 기기를 v0.7.1 으로 업데이트"))
-        val conductorSees = EnsembleVersion.conductorMessage("거실 TV", EnsembleVersion.check("0.7.1", "0.3.5")!!)
-        assertTrue(conductorSees, conductorSees.contains("'거실 TV'") && conductorSees.contains("v0.7.1 으로 업데이트"))
-        val conductorOlder = EnsembleVersion.conductorMessage("거실 TV", EnsembleVersion.check("0.7.1", "0.9.0", "0.9.0")!!)
-        assertTrue(conductorOlder, conductorOlder.contains("이 기기를 v0.9.0 로 업데이트"))
+        // 글은 리소스(키 + 인자, P18) — 어느 문장 · 어느 버전을 끼우는지를 본다. 끝에는 늘 공통 안내(ensemble_version_notice)
+        fun notice(id: Int, vararg args: Any) = UiText(R.string.ensemble_version_notice, UiText(id, *args))
+        val legacy = UiText(R.string.ensemble_version_legacy)
+        // 연주자: 지휘자가 옛 기기 → 지휘자 기기를 v0.7.1 으로
+        assertEquals(
+            notice(R.string.ensemble_version_performer_conductor_older, legacy, "v0.7.1"),
+            EnsembleVersion.performerMessage(EnsembleVersion.check("0.7.1", "v0.1.5")!!),
+        )
+        // 지휘자: 연주자 '거실 TV' 가 옛 기기 → 그 기기를 v0.7.1 으로
+        assertEquals(
+            notice(R.string.ensemble_version_conductor_performer_older, "거실 TV", "v0.3.5", "v0.7.1"),
+            EnsembleVersion.conductorMessage("거실 TV", EnsembleVersion.check("0.7.1", "0.3.5")!!),
+        )
+        // 지휘자가 옛 기기 → 이 기기를 v0.9.0 로
+        assertEquals(
+            notice(R.string.ensemble_version_conductor_self_older, "v0.7.1", "거실 TV", "v0.9.0"),
+            EnsembleVersion.conductorMessage("거실 TV", EnsembleVersion.check("0.7.1", "0.9.0", "0.9.0")!!),
+        )
+        assertEquals(
+            notice(R.string.ensemble_version_performer_self_older, "v0.7.1", "v0.9.0"),
+            EnsembleVersion.performerMessage(EnsembleVersion.check("0.7.1", "0.9.0", "0.9.0")!!),
+        )
     }
 }

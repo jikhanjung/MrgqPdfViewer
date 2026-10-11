@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- English (P18 step 5): in-app update. Base: values/strings_update.xml. Release notes stay as the server sends them -->
+<resources>
+    <!-- Errors -->
+    <string name="update_github_rate_limited">GitHub request limit reached. Try again in a moment</string>
+    <string name="update_release_info_failed">Couldn\'t get release info (HTTP %1$d)</string>
+    <string name="update_network_unavailable">Can\'t connect to the network</string>
+    <string name="update_no_release">No published release</string>
+    <string name="update_release_info_unreadable">Couldn\'t read the release info</string>
+    <string name="update_no_apk_in_release">This release has no APK to install</string>
+    <string name="update_no_checksum">No checksum to verify, so not installing</string>
+    <string name="update_download_failed">Download failed (HTTP %1$d)</string>
+    <string name="update_download_interrupted">Connection lost during download</string>
+    <string name="update_checksum_mismatch">The downloaded file is corrupt (checksum mismatch). Try again</string>
+    <string name="update_save_failed">Couldn\'t save the downloaded file</string>
+
+    <!-- Dialogs -->
+    <string name="update_check_title">Check for updates</string>
+    <string name="update_checking_with_prerelease">Checking for the latest version (including pre-releases)…</string>
+    <string name="update_checking">Checking for the latest version…</string>
+    <string name="update_up_to_date_title">You\'re up to date</string>
+    <string name="update_up_to_date_message">v%1$s is the latest version.\n\nChecked at: %2$s</string>
+    <string name="update_install_blocked">Install permission is off, so the update wasn\'t installed</string>
+    <string name="update_source_scoremate">ScoreMate server (%1$s)</string>
+    <string name="update_unavailable_title">Can\'t update</string>
+    <string name="update_no_apk_message">Release %1$s has no APK to install (%2$s).</string>
+    <string name="update_offer_source">From: %1$s</string>
+    <string name="update_debug_warning">⚠️ This is a debug build with a different signature, so the update will be refused. Uninstall the app first to install it.</string>
+    <string name="update_no_notes">(no release notes)</string>
+    <string name="update_offer_title">New version %1$s</string>
+    <string name="update_download_and_install">Download and install</string>
+    <string name="update_later">Later</string>
+    <string name="update_disable_auto">Don\'t check automatically</string>
+    <string name="update_reenable_hint">You can turn it back on in Settings → About</string>
+    <string name="update_downloading_title">Downloading</string>
+    <string name="update_download_canceled">Download canceled</string>
+    <string name="update_install_permission_title">Install permission needed</string>
+    <string name="update_install_permission_message">To update, allow this app to \"Install unknown apps\".\n\nTurn it on in the settings screen, then come back to continue the install.</string>
+    <string name="update_open_settings">Open settings</string>
+    <string name="update_cannot_open_settings_title">Can\'t open settings</string>
+    <string name="update_cannot_open_settings_message">This device can\'t open the install permission screen directly.\n\nAllow this app under Settings → Apps → Security &amp; restrictions → Unknown sources, then check for updates again.</string>
+    <string name="update_cannot_install_title">Can\'t install</string>
+    <string name="update_cannot_install_message">Can\'t open the installer on this device.</string>
+    <string name="update_unknown_error">Unknown error: %1$s</string>
+    <string name="update_failed_title">Update failed</string>
+</resources>

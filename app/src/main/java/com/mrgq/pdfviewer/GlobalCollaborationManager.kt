@@ -50,9 +50,9 @@ class GlobalCollaborationManager private constructor() {
     private var onDiscoveryTimeout: (() -> Unit)? = null
     private var onAutoConnectionResult: ((Boolean, String) -> Unit)? = null
     /** 합주 상대와 앱 버전이 다르다 (#061). 화면(액티비티)이 onResume 에서 등록 — 없으면 토스트 */
-    private var onVersionMismatch: ((String) -> Unit)? = null
+    private var onVersionMismatch: ((com.mrgq.pdfviewer.update.UiText) -> Unit)? = null
     /** 이미 알린 안내 — 재연결마다 같은 안내를 다시 띄우지 않는다 (앱을 끄면 다시) */
-    private val shownVersionNotices = java.util.Collections.synchronizedSet(mutableSetOf<String>())
+    private val shownVersionNotices = java.util.Collections.synchronizedSet(mutableSetOf<com.mrgq.pdfviewer.update.UiText>())
     
     private var isInitialized = false
     
@@ -465,18 +465,18 @@ class GlobalCollaborationManager private constructor() {
     }
     
     /** 합주 상대와 버전이 다를 때 보일 곳 (#061). null 이면 토스트 */
-    fun setOnVersionMismatch(callback: ((String) -> Unit)?) {
+    fun setOnVersionMismatch(callback: ((com.mrgq.pdfviewer.update.UiText) -> Unit)?) {
         onVersionMismatch = callback
     }
 
-    private fun notifyVersionMismatch(message: String) {
+    private fun notifyVersionMismatch(message: com.mrgq.pdfviewer.update.UiText) {
         if (!shownVersionNotices.add(message)) return
         android.os.Handler(android.os.Looper.getMainLooper()).post {
             val callback = onVersionMismatch
             if (callback != null) {
                 callback(message)
             } else {
-                applicationContext?.let { Toast.makeText(it, message, Toast.LENGTH_LONG).show() }
+                applicationContext?.let { Toast.makeText(it, message.resolve(it), Toast.LENGTH_LONG).show() }
             }
         }
     }
@@ -553,29 +553,31 @@ class GlobalCollaborationManager private constructor() {
     }
     
     // Utility methods
-    fun getServerConnectionInfo(): String {
+    /** 화면 글은 [context](화면)의 언어로 (P18) */
+    fun getServerConnectionInfo(context: Context): String {
         return if (isServerRunning()) {
             "${NetworkUtils.getLocalIpAddress()}:9090"
         } else {
-            "서버 중지됨"
+            context.getString(R.string.ensemble_status_server_stopped)
         }
     }
-    
-    fun getCollaborationStatusText(): String {
+
+    /** 화면 글은 [context](화면)의 언어로 (P18) */
+    fun getCollaborationStatusText(context: Context): String {
         return when (currentMode) {
             CollaborationMode.CONDUCTOR -> {
                 val clientCount = getConnectedClientCount()
-                "합주 모드: 지휘자 (연결된 기기: ${clientCount}대)"
+                context.getString(R.string.ensemble_status_conductor, clientCount)
             }
             CollaborationMode.PERFORMER -> {
                 val conductorAddress = getConductorAddress()
                 if (isClientConnected()) {
-                    "합주 모드: 연주자 (연결됨: $conductorAddress)"
+                    context.getString(R.string.ensemble_status_performer_connected, conductorAddress)
                 } else {
-                    "합주 모드: 연주자 (연결 끊김)"
+                    context.getString(R.string.ensemble_status_performer_disconnected)
                 }
             }
-            else -> "합주 모드: 비활성화"
+            else -> context.getString(R.string.ensemble_status_off)
         }
     }
     

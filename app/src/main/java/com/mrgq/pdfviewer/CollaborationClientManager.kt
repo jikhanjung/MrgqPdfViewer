@@ -26,8 +26,8 @@ class CollaborationClientManager(
     private val onMetronomeRunReceived: ((EnsembleRun) -> Unit)? = null,
     /** 시계 동기 표본을 처음 얻었을 때 — 기다리던 합주 메트로놈을 시작할 수 있다 */
     private val onClockSynced: (() -> Unit)? = null,
-    /** 지휘자와 앱 버전이 다르다 (#061) — 보일 안내문 */
-    private val onVersionMismatch: ((String) -> Unit)? = null,
+    /** 지휘자와 앱 버전이 다르다 (#061) — 보일 안내문 (키 + 인자, P18) */
+    private val onVersionMismatch: ((com.mrgq.pdfviewer.update.UiText) -> Unit)? = null,
     /** 지휘자 마이크 추적의 지금 마디 (파일, 마디 번호 — 0 = 끝) (P10) */
     private val onFollowPositionReceived: ((String, Int) -> Unit)? = null,
     /** 지휘자가 합주를 끝냈다 */

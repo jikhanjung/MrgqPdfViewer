@@ -1,5 +1,6 @@
 package com.mrgq.pdfviewer.update
 
+import com.mrgq.pdfviewer.R
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ensureActive
@@ -10,8 +11,8 @@ import java.net.HttpURLConnection
 import java.net.URL
 import java.security.MessageDigest
 
-/** 사용자에게 그대로 보일 메시지를 담은 업데이트 실패. */
-class UpdateException(message: String, cause: Throwable? = null) : Exception(message, cause)
+/** 사용자에게 보일 메시지([text] — 리소스 키 + 인자, P18)를 담은 업데이트 실패. [message] 는 로그용 */
+class UpdateException(val text: UiText, cause: Throwable? = null) : Exception(text.toString(), cause)
 
 /**
  * 앱 업데이트 확인과 APK 다운로드 (#054). 요청이 몇 개뿐이라 [HttpURLConnection] 으로 충분하다.
@@ -111,20 +112,20 @@ class UpdateClient(
                 when (val code = conn.responseCode) {
                     in 300..399 -> conn.getHeaderField("Location")
                     404 -> null
-                    429 -> throw UpdateException("GitHub 요청 한도를 넘었습니다. 잠시 후 다시 시도하세요")
-                    else -> throw UpdateException("릴리스 정보를 가져오지 못했습니다 (HTTP $code)")
+                    429 -> throw UpdateException(UiText(R.string.update_github_rate_limited))
+                    else -> throw UpdateException(UiText(R.string.update_release_info_failed, code))
                 }
             } finally {
                 conn.disconnect()
             }
         } catch (e: IOException) {
-            throw UpdateException("네트워크에 연결할 수 없습니다", e)
+            throw UpdateException(UiText(R.string.update_network_unavailable), e)
         }
-        val tag = ReleaseInfo.tagFromLocation(location) ?: throw UpdateException("공개된 릴리스가 없습니다")
+        val tag = ReleaseInfo.tagFromLocation(location) ?: throw UpdateException(UiText(R.string.update_no_release))
         try {
             ReleaseInfo.fromTag(repoUrl, tag)
         } catch (e: IllegalArgumentException) {
-            throw UpdateException("릴리스 정보를 해석하지 못했습니다", e)
+            throw UpdateException(UiText(R.string.update_release_info_unreadable), e)
         }
     }
 
@@ -152,9 +153,9 @@ class UpdateClient(
         dir: File,
         onProgress: (Long, Long) -> Unit
     ): File = withContext(Dispatchers.IO) {
-        val apk = release.apk ?: throw UpdateException("이 릴리스에는 설치할 APK 가 없습니다")
+        val apk = release.apk ?: throw UpdateException(UiText(R.string.update_no_apk_in_release))
         val expected = apk.sha256 ?: fetchChecksum(release, apk.name)
-            ?: throw UpdateException("검증할 체크섬이 없어 설치하지 않습니다")
+            ?: throw UpdateException(UiText(R.string.update_no_checksum))
 
         dir.mkdirs()
         val part = File(dir, apk.name + ".part")
@@ -191,10 +192,10 @@ class UpdateClient(
             }
         } catch (e: HttpStatusException) {
             part.delete()
-            throw UpdateException("다운로드하지 못했습니다 (HTTP ${e.code})", e)
+            throw UpdateException(UiText(R.string.update_download_failed, e.code), e)
         } catch (e: IOException) {
             part.delete()
-            throw UpdateException("다운로드 중 연결이 끊겼습니다", e)
+            throw UpdateException(UiText(R.string.update_download_interrupted), e)
         } catch (e: Throwable) {
             part.delete()  // 취소 포함
             throw e
@@ -203,11 +204,11 @@ class UpdateClient(
         val actual = digest.digest().toHex()
         if (actual != expected) {
             part.delete()
-            throw UpdateException("받은 파일이 손상됐습니다 (체크섬 불일치). 다시 시도하세요")
+            throw UpdateException(UiText(R.string.update_checksum_mismatch))
         }
         if (!part.renameTo(target)) {
             part.delete()
-            throw UpdateException("받은 파일을 저장하지 못했습니다")
+            throw UpdateException(UiText(R.string.update_save_failed))
         }
         target
     }
