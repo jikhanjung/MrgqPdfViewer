@@ -221,6 +221,69 @@
 
     </LinearLayout>
 
+    <!-- 터치 기기 도구 막대 (P17 2단계) — 가운데 탭으로 보이기 · 숨기기, 연주가 시작되면 숨는다. TV 에는 없다.
+         위: ← 목록 · 제목 · 쪽, 아래: ▶ 연주 · 👁 보기 · ✏️ 메모 (마디 고르는 중이면 시작 · 듣기 · 취소). 아래 단추는 코드에서 채운다 -->
+    <LinearLayout
+        android:id="@+id/viewerTopBar"
+        android:layout_width="0dp"
+        android:layout_height="52dp"
+        android:background="#E6202124"
+        android:elevation="4dp"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:visibility="gone"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent">
+
+        <TextView
+            android:id="@+id/barBack"
+            android:layout_width="56dp"
+            android:layout_height="match_parent"
+            android:background="?attr/selectableItemBackground"
+            android:contentDescription="목록으로"
+            android:gravity="center"
+            android:text="←"
+            android:textColor="#FFFFFFFF"
+            android:textSize="24sp" />
+
+        <TextView
+            android:id="@+id/barTitle"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:ellipsize="end"
+            android:singleLine="true"
+            android:textColor="#FFFFFFFF"
+            android:textSize="18sp" />
+
+        <TextView
+            android:id="@+id/barPage"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="12dp"
+            android:paddingEnd="16dp"
+            android:singleLine="true"
+            android:textColor="#FFB0B0B0"
+            android:textSize="16sp" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/viewerBottomBar"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:background="#E6202124"
+        android:elevation="4dp"
+        android:gravity="center_vertical"
+        android:minHeight="64dp"
+        android:orientation="horizontal"
+        android:paddingStart="8dp"
+        android:paddingEnd="96dp"
+        android:visibility="gone"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent" />
+
     <!-- 메모 모드 도구 줄 (P11) — 단추는 코드에서 채운다 -->
     <!-- 🎙 음성 명령 (P12, 태블릿 · 휴대폰) — 누르는 동안 듣는다. 설정 → 앱 정보에서 켤 때만 보인다 -->
     <TextView
@@ -236,26 +299,6 @@
         android:textSize="28sp"
         android:visibility="gone"
         app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintEnd_toEndOf="parent" />
-
-    <!-- 🎤 시작 마디를 고르는 동안: 그 마디부터 연주 듣고 넘기기 (P10 §10, #087) — 태블릿 · 휴대폰 -->
-    <TextView
-        android:id="@+id/micStartButton"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginBottom="24dp"
-        android:background="@drawable/mic_start_button_background"
-        android:elevation="6dp"
-        android:gravity="center"
-        android:minHeight="48dp"
-        android:paddingHorizontal="20dp"
-        android:paddingVertical="10dp"
-        android:text="🎤 여기서부터 듣기"
-        android:textColor="#FFFFFFFF"
-        android:textSize="18sp"
-        android:visibility="gone"
-        app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent" />
 
     <!-- 🎙 듣는 중 · 알아들은 말 · 결과 -->

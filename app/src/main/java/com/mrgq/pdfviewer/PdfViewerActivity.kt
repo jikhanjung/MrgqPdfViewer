@@ -1303,6 +1303,9 @@ class PdfViewerActivity : AppCompatActivity() {
         } ?: ""
         
         binding.pageInfo.text = "$fileInfo$pageInfo$cacheInfo"
+        barTitleText = shownName
+        barPageText = pageInfo
+        refreshViewerBars()
     }
     
     /** 파트 보기면 " · 보표 2 (총보 11~15쪽)" — 지금 가상 쪽에 담긴 원본 쪽 (P07) */
@@ -1711,13 +1714,13 @@ class PdfViewerActivity : AppCompatActivity() {
     }
 
     /**
-     * 태블릿 터치 (1단계 — 리모컨 동작을 그대로 부른다, 2단계 — 밀기 · 마디 탭):
-     *  - 왼쪽 · 오른쪽 1/3 탭 = ← →(쪽 넘김, 마디 고르는 중이면 커서). 끝 · 처음 안내가 떠 있으면 다음 · 이전 파일
+     * 태블릿 · 휴대폰 터치 (#066 — 리모컨 동작을 그대로 부른다, 밀기 · 마디 탭, P17 2단계 — 도구 막대):
+     *  - 왼쪽 · 오른쪽 1/3 탭 = ← →(쪽 넘김). 끝 · 처음 안내가 떠 있으면 다음 · 이전 파일
      *  - 왼쪽으로 밀기 = 다음 쪽, 오른쪽으로 밀기 = 이전 쪽
-     *  - 시작 마디를 고르는 중에 **마디를 탭**하면 그 마디로, 이미 고른 마디를 다시 탭하면 시작
-     *  - 가운데 탭 = OK 짧게(쪽 정보 · 안내 닫기, 마디 고르는 중이면 시작)
-     *  - 가운데 두 번 탭 = ↑(메트로놈 메뉴)
-     *  - 길게 누르기 = OK 길게(PDF 표시 옵션, 악보 연동 중이면 일시정지)
+     *  - **가운데 탭 = 도구 막대 보이기 · 숨기기**(안내가 떠 있으면 안내 닫기). 두 번 탭은 쓰지 않는다 — 한 번 탭이 기다림 없이 바로 반응한다
+     *    (연주 메뉴는 막대의 ▶, P17 §9-1)
+     *  - 시작 마디를 고르는 중에 **마디를 탭**하면 그 마디로, 이미 고른 마디를 다시 탭하면 시작. 시작 · 듣기 · 취소는 아래 막대
+     *  - 길게 누르기 = OK 길게(보기 메뉴, 악보 연동 중이면 일시정지)
      * 대화상자는 다른 창이라 여기로 오지 않는다. TV 에는 터치가 없어 영향이 없다
      */
     private val touchGestures by lazy {
@@ -1733,12 +1736,7 @@ class PdfViewerActivity : AppCompatActivity() {
             private fun press(keyCode: Int) {
                 onKeyDown(keyCode, KeyEvent(KeyEvent.ACTION_DOWN, keyCode))
             }
-            /** 이번 탭을 마디 고르기가 처리했다 — 가운데 탭(OK)으로 또 처리하지 않게 */
-            private var tapTaken = false
-            override fun onDown(e: android.view.MotionEvent): Boolean {
-                tapTaken = false
-                return true
-            }
+            override fun onDown(e: android.view.MotionEvent): Boolean = true
             override fun onScroll(e1: android.view.MotionEvent?, e2: android.view.MotionEvent, distanceX: Float, distanceY: Float): Boolean {
                 // 휴대폰: 세로로 끌면 악보가 따라 움직이고, 손을 떼면(dispatchTouchEvent) 가까운 시스템에 맞춘다
                 if (!phoneView) return false
@@ -1758,19 +1756,6 @@ class PdfViewerActivity : AppCompatActivity() {
                 return true
             }
             override fun onSingleTapUp(e: android.view.MotionEvent): Boolean {
-                // 시작 마디 고르기의 마디 탭은 두 번 탭(↑ 메뉴)이 아닌 것이 확인된 뒤에 (onSingleTapConfirmed) — 커서 마디를
-                // 두 번 탭해 메뉴를 열려다 첫 탭에 시작하지 않게 (#087)
-                if (followState == FollowState.SELECTING && followMeasureAt(e.x, e.y) >= 0) {
-                    tapTaken = true
-                    return true
-                }
-                when (zone(e)) {
-                    -1 -> press(KeyEvent.KEYCODE_DPAD_LEFT)
-                    1 -> press(KeyEvent.KEYCODE_DPAD_RIGHT)
-                }
-                return true
-            }
-            override fun onSingleTapConfirmed(e: android.view.MotionEvent): Boolean {
                 if (followState == FollowState.SELECTING) {
                     val index = followMeasureAt(e.x, e.y)
                     if (index >= 0) {
@@ -1778,22 +1763,11 @@ class PdfViewerActivity : AppCompatActivity() {
                         return true
                     }
                 }
-                if (zone(e) == 0 && !tapTaken) {
-                    // OK 짧게 — 누르고 떼기
-                    press(KeyEvent.KEYCODE_DPAD_CENTER)
-                    longPressHandler.removeCallbacks(longPressRunnable)
-                    onKeyUp(KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_DPAD_CENTER))
+                when (zone(e)) {
+                    -1 -> press(KeyEvent.KEYCODE_DPAD_LEFT)
+                    1 -> press(KeyEvent.KEYCODE_DPAD_RIGHT)
+                    else -> if (isNavigationGuideVisible) hideNavigationGuide() else toggleViewerBars()
                 }
-                return true
-            }
-            override fun onDoubleTap(e: android.view.MotionEvent): Boolean {
-                // 시작 마디를 고르는 중에도 두 번 탭 = ↑ 메뉴(🎤 고른 마디부터 듣기 · 시작 · 취소, #087). 리모컨의 ↑ 는 여전히 윗줄로 —
-                // 터치 기기는 줄을 탭으로 고르고, 듣기는 TV 에 없다
-                if (followState == FollowState.SELECTING) {
-                    showMetronomeMenu()
-                    return true
-                }
-                if (zone(e) == 0) press(KeyEvent.KEYCODE_DPAD_UP)
                 return true
             }
             override fun onLongPress(e: android.view.MotionEvent) {
@@ -1804,16 +1778,20 @@ class PdfViewerActivity : AppCompatActivity() {
                 longPressRunnable.run()
                 isLongPressing = false
             }
-        })
+        }).apply {
+            // 두 번 탭을 알아보지 않는다 — 한 번 탭이 바로 오고(onSingleTapUp), 옆을 빨리 두 번 치면 두 쪽 넘어간다
+            setOnDoubleTapListener(null)
+        }
     }
 
-    /** 이번 터치가 메모 도구 줄 · 🎙 단추 · 🎤 시작 단추에서 시작했다 — 단추만 받고 몸짓 · 메모로 보내지 않는다 */
+    /** 이번 터치가 메모 도구 줄 · 🎙 단추 · 도구 막대에서 시작했다 — 단추만 받고 몸짓 · 메모로 보내지 않는다 */
     private var touchOnNoteToolbar = false
 
     override fun dispatchTouchEvent(ev: android.view.MotionEvent): Boolean {
         if (ev.actionMasked == android.view.MotionEvent.ACTION_DOWN) {
             fun View.hit() = visibility == View.VISIBLE && ev.x >= left && ev.x <= right && ev.y >= top && ev.y <= bottom
-            touchOnNoteToolbar = binding.noteToolbar.hit() || binding.voiceButton.hit() || binding.micStartButton.hit()
+            touchOnNoteToolbar = binding.noteToolbar.hit() || binding.voiceButton.hit() ||
+                binding.viewerTopBar.hit() || binding.viewerBottomBar.hit()
         }
         if (touchOnNoteToolbar) return super.dispatchTouchEvent(ev)
         // 메모 모드의 두 손가락 = 확대 · 이동 (긋던 획은 버린다)
@@ -2315,6 +2293,7 @@ class PdfViewerActivity : AppCompatActivity() {
         notePen.tool = com.mrgq.pdfviewer.notes.NotePen.Tool.PEN
         buildNoteToolbar()
         binding.noteToolbar.visibility = View.VISIBLE
+        refreshViewerBars()
         refreshNotes()
     }
 
@@ -2324,6 +2303,7 @@ class PdfViewerActivity : AppCompatActivity() {
         notePen.editMode = false
         binding.noteToolbar.visibility = View.GONE
         resetNoteZoom()
+        refreshViewerBars()
     }
 
     // ── 메모 모드 확대 · 이동 — 두 손가락으로 집기 · 끌기. 한 손가락 · 펜은 그대로 긋는다 ──
@@ -2776,15 +2756,98 @@ class PdfViewerActivity : AppCompatActivity() {
         toggleMicFollow()
     }
 
-    /** 시작 마디를 고르는 동안만 "🎤 N마디부터 듣기" — 마이크가 있는 기기, 연주자가 아니고 듣는 중이 아닐 때 */
-    private fun refreshMicStartButton() {
-        val at = followMeasures.getOrNull(cursorIndex)
-        val show = followState == FollowState.SELECTING && at != null && micFollowCapable() && micFollower == null &&
-            collaborationMode != CollaborationMode.PERFORMER
-        binding.micStartButton.visibility = if (show) View.VISIBLE else View.GONE
-        if (!show) return
-        binding.micStartButton.text = "🎤 ${at!!.measureNumber}마디부터 듣기"
-        binding.micStartButton.setOnClickListener { startMicFollowFromSelection() }
+    // ── 터치 도구 막대 (P17 2단계) ──────────────────────────────────────────────
+
+    /** 가운데 탭으로 막대를 열어 두었다 — 연주가 시작되면 접힌다(§9-2) */
+    private var barsRequested = false
+    /** 아래 막대를 마지막으로 채운 모양 — 같으면 다시 만들지 않는다 */
+    private var bottomBarKey: String? = null
+    /** 막대 글 — [updatePageInfo] 가 채운다 */
+    private var barTitleText = ""
+    private var barPageText = ""
+
+    private fun isPlayingNow(): Boolean =
+        followState == FollowState.PLAYING || micFollower != null || metronome.isRunning || ensembleRole == EnsembleRole.FOLLOWING
+
+    /** 휴대폰 가로 — 높이가 빠듯해 위 막대 없이 아래 막대에 쪽까지 */
+    private fun phoneLandscape(): Boolean =
+        phoneView && resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
+
+    private fun toggleViewerBars() {
+        barsRequested = !barsRequested
+        refreshViewerBars()
+    }
+
+    /**
+     * 막대를 지금 상태에 맞춘다 — 상태가 바뀌는 곳(마디 박스 다시 그리기 · 메트로놈 시작/정지 · 🎤 · 메모 모드)에서 부른다.
+     * 연주 중에는 접는다. 시작 마디를 고르는 중에는 아래 막대가 저절로 떠 시작 · 🎤 듣기 · 취소를 보인다(예전 "🎤 N마디부터 듣기" 단추 · 두 번 탭 메뉴 대신).
+     * 메모 모드에서는 메모 도구 줄만. 막대가 보이는 동안 가운데 아래 쪽 정보 글은 숨긴다(막대와 겹친다)
+     */
+    private fun refreshViewerBars() {
+        if (!touchShell()) return
+        if (isPlayingNow()) barsRequested = false
+        val selected = followMeasures.getOrNull(cursorIndex)?.takeIf { followState == FollowState.SELECTING }
+        val editing = notePen.editMode
+        val showBottom = !editing && (barsRequested || selected != null)
+        val showTop = !editing && barsRequested && selected == null && !phoneLandscape()
+        binding.viewerTopBar.visibility = if (showTop) View.VISIBLE else View.GONE
+        binding.viewerBottomBar.visibility = if (showBottom) View.VISIBLE else View.GONE
+        if (binding.pageInfo.visibility != View.GONE) binding.pageInfo.visibility = if (showBottom) View.INVISIBLE else View.VISIBLE
+        if (showTop) {
+            binding.barTitle.text = barTitleText
+            binding.barPage.text = barPageText
+            binding.barBack.setOnClickListener { pressKey(KeyEvent.KEYCODE_BACK) }
+        }
+        if (showBottom) renderBottomBar(selected)
+    }
+
+    /** 아래 막대 단추 — 보통은 ▶ 연주 · 👁 보기 · ✏️ 메모, 시작 마디를 고르는 중이면 ▶ N마디부터 시작 · 🎤 N마디부터 듣기 · 취소 · ⋯(연주 메뉴) */
+    private fun renderBottomBar(selected: ScoreMeasure?) {
+        val bar = binding.viewerBottomBar
+        val canListen = selected != null && micFollowCapable() && micFollower == null && collaborationMode != CollaborationMode.PERFORMER
+        val pageShown = selected == null && phoneLandscape()
+        val key = "${selected?.measureNumber}|$canListen|${notesWritable()}|${if (pageShown) barPageText else ""}"
+        if (key == bottomBarKey && bar.childCount > 0) return
+        bottomBarKey = key
+        bar.removeAllViews()
+        val height = (resources.displayMetrics.density * 52).toInt()
+        fun button(label: String, onClick: () -> Unit) {
+            bar.addView(android.widget.TextView(this).apply {
+                text = label
+                setTextColor(android.graphics.Color.WHITE)
+                textSize = 18f
+                gravity = android.view.Gravity.CENTER
+                val pad = (resources.displayMetrics.density * 16).toInt()
+                setPadding(pad, 0, pad, 0)
+                isFocusable = false
+                val ripple = android.util.TypedValue()
+                theme.resolveAttribute(android.R.attr.selectableItemBackground, ripple, true)
+                setBackgroundResource(ripple.resourceId)
+                setOnClickListener { onClick() }
+            }, android.widget.LinearLayout.LayoutParams(android.view.ViewGroup.LayoutParams.WRAP_CONTENT, height))
+        }
+        if (selected != null) {
+            button("▶ ${selected.measureNumber}마디부터 시작") { startFollowing() }
+            if (canListen) button("🎤 ${selected.measureNumber}마디부터 듣기") { startMicFollowFromSelection() }
+            button("취소") { cancelMeasureSelection() }
+            button("⋯") { showMetronomeMenu() } // 연주 메뉴(메트로놈 설정 · 반주) — 예전 고르는 중 두 번 탭
+            return
+        }
+        button("▶ 연주") { showMetronomeMenu() }
+        button("👁 보기") { showPdfDisplayOptions() }
+        if (notesWritable()) button("✏️ 메모") {
+            toggleNoteMode()
+            refreshViewerBars()
+        }
+        if (pageShown) {
+            bar.addView(android.widget.TextView(this).apply {
+                text = barPageText
+                setTextColor(0xFFB0B0B0.toInt())
+                textSize = 16f
+                gravity = android.view.Gravity.END or android.view.Gravity.CENTER_VERTICAL
+                setSingleLine(true)
+            }, android.widget.LinearLayout.LayoutParams(0, android.view.ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+        }
     }
 
     /** 손으로 [page] 쪽으로 넘겼다 — 추적도 그 쪽 첫 마디에서 다시 (P10 §2) */
@@ -4131,6 +4194,7 @@ class PdfViewerActivity : AppCompatActivity() {
         binding.metronomeBeat.visibility = View.VISIBLE
         binding.metronomeBeat.removeCallbacks(metronomeTicker)
         binding.metronomeBeat.postOnAnimation(metronomeTicker)
+        refreshViewerBars()
         if (!withSound) {
             Toast.makeText(this, "소리 장치를 열지 못해 박 표시만 합니다", Toast.LENGTH_LONG).show()
         }
@@ -4145,6 +4209,7 @@ class PdfViewerActivity : AppCompatActivity() {
         binding.metronomeBeat.visibility = View.GONE
         showCountIn(null)
         metronomeFileId = null
+        refreshViewerBars()
         if (followState != FollowState.OFF) {
             val fileId = followFileId
             val at = followMeasure
@@ -4514,21 +4579,21 @@ class PdfViewerActivity : AppCompatActivity() {
                     performerRun?.let { joinEnsembleRun(it) }
                 }
                 // 소리는 누르면 바로 켬 ↔ 끔 (P13). 파트 보기 · 메모는 보기 메뉴(길게)에
-                MenuAction.ENSEMBLE_SOUND -> setPerformerSound(!preferences.getBoolean(PREF_ENSEMBLE_SOUND, false), announce = !sheetMenus())
+                MenuAction.ENSEMBLE_SOUND -> setPerformerSound(!preferences.getBoolean(PREF_ENSEMBLE_SOUND, false), announce = !touchShell())
                 else -> Unit
             }
         }
     }
 
-    /** 메뉴를 하단 시트로 그리는 기기 — 태블릿 · 휴대폰 (P17 1단계). TV 는 목록 대화상자 */
-    private fun sheetMenus(): Boolean = !com.mrgq.pdfviewer.utils.DeviceForm.isTv(this)
+    /** 터치 껍질을 쓰는 기기 — 태블릿 · 휴대폰 (P17): 메뉴는 하단 시트, 악보 화면에 도구 막대. TV 는 목록 대화상자 · 리모컨 */
+    private fun touchShell(): Boolean = !com.mrgq.pdfviewer.utils.DeviceForm.isTv(this)
 
     /**
      * 악보 화면 메뉴 그리기 (P17) — 내용은 [ViewerMenus] 로 [build] 가 만들고, TV 는 목록 대화상자 · 터치 기기는 하단 시트([showMenuSheet]).
      * [onChosen] 은 줄을 고른 뒤, [onDismiss] 는 고르든 말든 닫힐 때
      */
     private fun showViewerMenu(build: () -> Menu, onDismiss: () -> Unit = {}, onChosen: (MenuAction) -> Unit) {
-        if (sheetMenus()) return showMenuSheet(build, onDismiss, onChosen)
+        if (touchShell()) return showMenuSheet(build, onDismiss, onChosen)
         val menu = build()
         AlertDialog.Builder(this)
             .setTitle(menu.title)
@@ -5125,6 +5190,7 @@ class PdfViewerActivity : AppCompatActivity() {
         val show = preferences.getBoolean(PREF_VOICE_COMMANDS, false) && micFollowCapable() && VoiceListener.isAvailable(this)
         binding.voiceButton.visibility = if (show) View.VISIBLE else View.GONE
         binding.voiceButton.alpha = if (micFollower != null) 0.4f else 1f
+        refreshViewerBars() // 🎤 듣기를 켜고 끌 때마다 여기를 지난다 — 듣기가 시작되면 막대를 접는다
         // 👂 = 계속 듣는 중 (단추는 그대로 누른 채 말하기로도 쓴다)
         binding.voiceButton.text = if (voiceAlwaysOn()) "👂" else "🎙"
         prefetchVoiceStaffNames()
@@ -5707,7 +5773,7 @@ class PdfViewerActivity : AppCompatActivity() {
 
     private fun refreshScoreOverlay() {
         refreshNotes()
-        refreshMicStartButton()
+        refreshViewerBars()
         val overlay = binding.scoreOverlay
         val fileId = currentPdfFileId
         val focus = when (followState) {
@@ -5906,7 +5972,7 @@ class PdfViewerActivity : AppCompatActivity() {
             phoneRotation = if (phoneView) phoneOrientationName(phoneOrientationMode()) else null,
         ))
         // 시트의 스위치는 스스로 상태를 보이므로 알림(토스트)을 띄우지 않는다
-        val announce = !sheetMenus()
+        val announce = !touchShell()
         showViewerMenu(::build) { action ->
             when (action) {
                 MenuAction.PART_VIEW -> showPartViewDialog()
