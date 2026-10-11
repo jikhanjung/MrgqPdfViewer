@@ -181,6 +181,7 @@ MrgqPdfViewer 개발 로그 모음. 구현 기록은 `YYYYMMDD_NNN_` 형식(NNN 
 - [`P15`](20261010_P15_private_repo_releases_on_scoremate_plan.md) — **계획: 저장소 private 전환 — 릴리스 · 업데이트를 ScoreMate 서버로**. 정식 · beta 모두 서버가 배포 정본, 앱은 로그인 없이 서버 `latest/` 만 본다(전환 동안 GitHub 폴백). 순서: 서버(P16) → 앱 · CI(v0.7.5-beta) → 정식 v0.7.5 를 모든 기기에 → private → 폴백 정리. Actions 분(하루 약 170분 실측) 줄이기
 - [`P16`](20261010_P16_scoremate_app_release_server_requests.md) — **서버 요청: 앱 릴리스** — beta 버전(SemVer) · `notes` 저장 · 정식 / beta 최신 따로, 로그인 없는 `GET …/app-releases/android/latest/?channel=`, 판마다 고정 주소 → 서명 URL 302, 다운로드 페이지에서 GitHub 빼기, beta 최근 10개 보관
 - [`118`](20261011_118_update_from_scoremate_server.md) (2026-10-11) — **P15 1단계**: 앱 업데이트를 ScoreMate 서버 먼저(`latest/?channel=`, notes · sha256 · 고정 받기 주소) + GitHub 폴백, CI 가 사전 릴리스 · notes · version_code 도 올리고 200 도 성공 · -test 빼기, 문서만 바꾼 푸시는 빌드 안 함. v0.7.6-beta.1
+- [`119`](20261011_119_update_source_label.md) — 업데이트 대화상자에 **"받는 곳 · 확인한 곳: ScoreMate 서버 / GitHub"**(P15 2단계를 adb 없이 확인). v0.7.6-beta.2 = 서버에서 받는 첫 다음 beta
 
 ## 📱 터치 UI 껍질 (2026-10-11)
 - [`P17`](20261011_P17_touch_ui_shell_plan.md) — **계획: 태블릿 · 휴대폰 UI 껍질** — TV 는 그대로, 터치 기기만: 악보 화면 가운데 탭 = 도구 막대(위 제목 · 쪽, 아래 ▶ 연주 · 👁 보기 · ✏️ 메모 · 🎙, 연주 시작에 숨음, 마디 고르는 중엔 상황 막대), 가운데 두 번 탭 없앰, 메뉴는 스위치가 든 하단 시트, 메트로놈 설정 한 화면, 곡 목록 세트리스트 칩 · 당겨서 동기화, 설정 한 칸 · 스위치(정할 것 모두 추천대로). 메뉴 내용(`ViewerMenus`)과 그리기를 나눠 P13 원칙 유지 · iOS(P14)와 공유. 단계: 0 Material 다리 테마 + 내용 모델(화면 변화 없음) → 1 하단 시트 → 2 도구 막대 → 3 메트로놈 → 4 곡 목록 → 5 설정

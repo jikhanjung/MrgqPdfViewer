@@ -95,7 +95,7 @@
 - [x] 정할 것(P15 §4) — 모두 추천대로: Instrumentation 은 private 전환 때 릴리스 커밋 · 수동만으로 · GitHub Release 계속(보관용) · 업데이트도 설정의 서버 주소 · 옛 beta 안 올림
 - [x] 0. 서버 P16 배포 (서버 세션, 2026-10-11 ScoreMateServer 0.21.0)
 - [x] 1. 앱 `update/` 서버 먼저 + GitHub 폴백, CI beta · notes · version_code 올리기 · 200 도 성공 · -test 빼기 · Android Build paths-ignore → **v0.7.6-beta.1** (#118)
-- [ ] 2. beta 기기가 서버 경로로 업데이트되는지 (그 다음 beta)
+- [ ] 2. beta 기기가 서버 경로로 업데이트되는지 — v0.7.6-beta.1 기기가 **v0.7.6-beta.2** 를 받을 때 대화상자 "받는 곳: ScoreMate 서버"(#119), 설치 뒤 업데이트 확인 "확인한 곳: ScoreMate 서버"
 - [ ] 3. 그 뒤 첫 정식(v0.7.6) → 모든 기기(Z18TV × 2 · Google TV Streamer · 태블릿 · 휴대폰) ≥ 그 정식 확인
 - [ ] 4. 사용자가 GitHub 에서 private 으로 → 업데이트 확인 · 다운로드 페이지 확인. 같은 때 Instrumentation 을 릴리스 커밋 · 수동만으로
 - [ ] 5. GitHub 폴백 코드 · 문서 정리 (CLAUDE.md `.guides` 규칙 다시 정하기)

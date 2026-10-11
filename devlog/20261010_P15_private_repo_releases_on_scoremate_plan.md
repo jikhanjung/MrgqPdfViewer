@@ -5,7 +5,7 @@
 
 서버에 요청할 것: [`P16`](20261010_P16_scoremate_app_release_server_requests.md).
 
-**진행 (2026-10-11)**: 0단계 ✅ 서버 배포(ScoreMateServer 0.21.0 — P16 "서버 배포됨 — 차이") · 1단계 앱 · CI → **v0.7.6-beta.1**([#118](20261011_118_update_from_scoremate_server.md)). 다음은 2단계
+**진행 (2026-10-11)**: 0단계 ✅ 서버 배포(ScoreMateServer 0.21.0 — P16 "서버 배포됨 — 차이") · 1단계 앱 · CI → **v0.7.6-beta.1**([#118](20261011_118_update_from_scoremate_server.md)) · 2단계용 다음 beta **v0.7.6-beta.2**(대화상자에 "받는 곳", [#119](20261011_119_update_source_label.md)) — 기기에서 "받는 곳: ScoreMate 서버" 확인 대기
 
 ## 0. 목표 · 원칙
 - **배포 정본 = ScoreMate 서버**

@@ -54,7 +54,7 @@ class UpdateController(
                 checking.dialog.dismiss()
                 val current = AppVersion.parse(BuildConfig.VERSION_NAME)
                 if (current != null && release.version <= current) {
-                    showMessage("최신 버전입니다", "현재 v${BuildConfig.VERSION_NAME} 이 최신입니다.")
+                    showMessage("최신 버전입니다", "현재 v${BuildConfig.VERSION_NAME} 이 최신입니다.\n\n확인한 곳: ${sourceLabel()}")
                 } else {
                     showUpdateOffer(release.copy(body = client.fetchReleaseNotes(release)))
                 }
@@ -116,6 +116,13 @@ class UpdateController(
 
     // ── 단계 ────────────────────────────────────────────────────────────────
 
+    /** 마지막 확인이 어디서 왔나 — 화면용 (P15 2단계 확인, #119). 서버가 안 돼 GitHub 으로 갔으면 그렇게 보인다 */
+    private fun sourceLabel(): String = when (client.lastSource) {
+        "ScoreMate" -> "ScoreMate 서버 (" + com.mrgq.pdfviewer.scoremate.ScoreMateStore(activity).server.removePrefix("https://") + ")"
+        "GitHub" -> "GitHub"
+        else -> "?"
+    }
+
     private fun showUpdateOffer(release: ReleaseInfo, fromStartup: Boolean = false) {
         val apk = release.apk
         if (apk == null) {
@@ -125,6 +132,7 @@ class UpdateController(
         val message = buildString {
             append("v${BuildConfig.VERSION_NAME} → ${release.tag}")
             if (apk.size > 0) append("   (${formatMb(apk.size)})")
+            append("\n받는 곳: ${sourceLabel()}")
             append("\n\n")
             if (BuildConfig.DEBUG) {
                 // debug 빌드는 서명 키가 달라 release APK 로 업데이트되지 않는다 (#054 §1.3)
