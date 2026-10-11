@@ -308,6 +308,18 @@ class MainActivity : AppCompatActivity() {
             Toast.makeText(this, "ScoreMate 동기화 중…", Toast.LENGTH_SHORT).show()
             lifecycleScope.launch { runScoreMateSync(quiet = false) }
         }
+        // 당겨서 동기화 (P17 4단계) — 켜는 조건은 showLibrary. 목록이 맨 위일 때만 당겨진다(빈 화면 안내도 그 틀 안)
+        binding.listRefresh.apply {
+            setColorSchemeResources(R.color.tv_primary)
+            setProgressBackgroundColorSchemeResource(R.color.tv_surface)
+            setOnChildScrollUpCallback { _, _ -> binding.recyclerView.canScrollVertically(-1) }
+            setOnRefreshListener {
+                lifecycleScope.launch {
+                    runScoreMateSync(quiet = false)
+                    isRefreshing = false
+                }
+            }
+        }
         selectedSetlistId = preferences.getLong(PREF_SETLIST, ALL_SCORES).takeIf { it != ALL_SCORES }
     }
 
@@ -383,6 +395,8 @@ class MainActivity : AppCompatActivity() {
         } else null
         renderSetlistTabs(current)
         binding.scoreMateSyncBtn.visibility = if (scoreMateLinked) View.VISIBLE else View.GONE
+        // 태블릿 · 휴대폰은 목록을 당겨도 동기화 — TV 는 터치가 없고 🔄 버튼만
+        binding.listRefresh.isEnabled = scoreMateLinked && !com.mrgq.pdfviewer.utils.DeviceForm.isTv(this)
         // "× ScoreMate ☁️" — 가로면 첫 줄 앱 이름 옆, 세로(태블릿)면 첫 줄이 좁아 제목 바로 아래 줄에 (사용자 요청 2026-09-28).
         // 세트리스트 탭 · 동기화는 그다음 줄
         val portrait = resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_PORTRAIT
