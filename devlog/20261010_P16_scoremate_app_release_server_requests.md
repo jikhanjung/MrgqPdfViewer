@@ -134,5 +134,67 @@ curl -sI https://scoremate.noematica.kr/api/v1/app-releases/android/v0.7.4/apk/ 
 ```
 다운로드 페이지에 github.com 링크가 없다.
 
+## 서버 배포됨 — 차이 (2026-10-11, ScoreMateServer 0.21.0)
+
+서버 쪽 정리: ScoreMateServer `devlog/20261010_P03_앱_릴리스_서버_보관_검토.md`(검토 · 구현 · §8 이 이 절의 원본).
+§1 ~ §5 를 운영에 배포했다(§6 판 목록 API 는 만들지 않음 — 앱은 쓰지 않는다). 지금 CI(정식만, `notes_url`)는 그대로 201.
+**CI 가 beta · `notes` 를 올리기 시작해도 된다** — 아래 "꼭 맞출 것" 셋을 먼저.
+
+### 꼭 맞출 것
+1. **`-test` 태그는 올리지 않는다** — 서버가 400 으로 거절하므로 시험 릴리스가 매번 실패한다.
+   `Upload APK to ScoreMate` 단계 조건에 `!endsWith(tag, '-test')` 같은 것을 더한다
+2. **릴리스 키 서명만 받는다** — 서버가 APK 서명 블록(v2/v3)의 서명 인증서 SHA-256 을 고정 값과 비교한다.
+   - 고정 값 `dece29812f746271f99da16140c9cc3eacad38bff64c2b320f19f1c3a9c65734`(v0.5.2 ~ v0.7.5 모두 같음)
+   - 다르면 400 `code: certificate`. 디버그 키 · v1 서명만 있는 APK 도 거절
+   - **서명 키를 바꾸면 서버 `.env` 도 함께 바꿔야 한다**(바꾸기 전에 서버 쪽에 알려 주세요)
+3. **CI 는 201 과 200 을 모두 성공으로** — 같은 버전 · 같은 sha256 재실행은 200. 지금 CI 는 201 만 성공이라 재실행이 실패로 끝난다
+
+### 올리기 — `POST /api/v1/app-releases/android/` (Bearer `APP_RELEASE_TOKEN`, multipart)
+| 필드 | |
+|---|---|
+| `apk` · `sha256` | 그대로 |
+| `version` | `vX.Y.Z` 또는 `vX.Y.Z-(alpha\|beta\|rc)[.N]`. 꼬리 숫자는 없어도 된다(`-rc` < `-rc.1`) |
+| `notes` | 선택. 그 판의 CHANGELOG 섹션(Markdown), 32KB 까지 |
+| `version_code` | 선택(정수). 저장해 두었다가 읽기 응답에 돌려준다 |
+| `notes_url` | 받되 쓰지 않는다 — 빼도 된다 |
+
+- 응답 코드:
+  - **201**: 새 판, 또는 같은 버전 · 다른 sha256 으로 파일을 바꿈(기록이 남는다)
+  - **200**: 같은 버전 · 같은 sha256(재실행). 새로 보낸 `notes` · `version_code` 는 반영
+  - **400**: 버전 · sha · 인증서 · notes 크기 오류
+- 응답 예:
+  `{"version":"v0.7.5-beta.1","prerelease":true,"apk":"MrgqPdfViewer-v0.7.5-beta.1-release.apk","sha256":"…","size":6676762,"cert_sha256":"dece…","version_code":75,"latest":false,"latest_stable":"v0.7.5","latest_beta":"v0.7.5-beta.1","removed":[]}`
+  - `latest` = 정식 최신이 됐는가
+  - `removed` = 이번에 보관 정리로 지운 판들
+- 400 모양: `{"error":{"details":{"apk":"…","code":"certificate"|"invalid"}}}`
+
+### 읽기 — 로그인 없이
+- `GET /api/v1/app-releases/android/latest/?channel=stable|beta`
+  - `beta` = 정식 · 사전 릴리스 통틀어 최신. 모르는 값 · 없음은 `stable`
+  - 판이 없으면 404. `Cache-Control: public, max-age=60`
+  - 필드: `version` · `prerelease` · `apk` · `size` · `sha256` · `version_code` · `published_at`(`2026-10-11T15:18:07+09:00`) · `notes`(원문 Markdown) · `download_url`
+  - P16 이 요청한 필드는 모두 그대로, 더한 것은 `version_code`
+- `GET /api/v1/app-releases/android/<version>/apk/` → 302 서명 URL(15분)
+  - `download_url` 이 이 주소 — 알림 뒤 늦게 눌러도 만료되지 않는다
+  - 없는 판 · 지운 판은 404
+- 제한: IP 마다 600/hour(`app_update`)
+- 배포 때 운영: `latest/` · `latest/?channel=beta` 모두 `v0.7.5`(아직 beta 없음)
+
+### 보관
+- 정식은 모두
+- 사전 릴리스는 최근 10개. **정식 최신보다 옛 사전 릴리스는 올라오는 즉시 지운다**
+  - 예: `v0.7.5` 뒤에 `v0.7.5-beta.17` 을 올리면 201 이지만 바로 지워져 `removed` 에 나온다
+- 지운 판의 주소는 404. 서버 관리자 기록에는 남는다
+
+### 웹
+- `/download/`: 정식만. 변경 내용은 저장한 `notes` 로, 지난 정식 판도 보인다. GitHub 링크는 모두 뺐다
+- `/download/beta/`: 실험판 목록(판마다 변경 내용 · 받기). `/download/` 에서는 링크하지 않는다(주소를 아는 사람만)
+- `/apk/`: 정식 최신 그대로(TV Downloader 안내용)
+
+### 확인
+- `curl -s https://scoremate.noematica.kr/api/v1/app-releases/android/latest/` → v0.7.5
+- `curl -sI https://scoremate.noematica.kr/api/v1/app-releases/android/v0.7.4/apk/` → 302
+
 ## 변경 이력
 - 2026-10-10: 처음 작성 (P15 — 저장소 private 전환)
+- 2026-10-11: "서버 배포됨 — 차이" 절 (ScoreMateServer 0.21.0 — `-test` 빼기 · 서명 인증서 고정 · CI 는 200 도 성공)
