@@ -629,7 +629,7 @@ class SettingsActivity : AppCompatActivity() {
                     .setPositiveButton(getString(R.string.ok), null)
                     .show()
             } catch (e: ScoreMateException) {
-                Toast.makeText(this@SettingsActivity, e.message, Toast.LENGTH_LONG).show()
+                Toast.makeText(this@SettingsActivity, e.text.resolve(this@SettingsActivity), Toast.LENGTH_LONG).show()
             }
             showScoreMatePanel()
         }
@@ -641,13 +641,13 @@ class SettingsActivity : AppCompatActivity() {
             val report = try {
                 scoreMateSync.sync()
             } catch (e: ScoreMateException) {
-                Toast.makeText(this@SettingsActivity, e.message, Toast.LENGTH_LONG).show()
+                Toast.makeText(this@SettingsActivity, e.text.resolve(this@SettingsActivity), Toast.LENGTH_LONG).show()
                 showScoreMatePanel()
                 return@launch
             }
             Toast.makeText(
                 this@SettingsActivity,
-                com.mrgq.pdfviewer.scoremate.ScoreMateSyncText.summary(report) ?: getString(R.string.settings_scoremate_no_changes),
+                com.mrgq.pdfviewer.scoremate.ScoreMateSyncText.summary(this@SettingsActivity, report) ?: getString(R.string.settings_scoremate_no_changes),
                 Toast.LENGTH_LONG
             ).show()
         }

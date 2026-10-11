@@ -127,7 +127,7 @@ class MainActivity : AppCompatActivity() {
                     if (info.name.isNotBlank()) store.deviceName = info.name
                 }
             } catch (e: com.mrgq.pdfviewer.scoremate.ScoreMateUnlinkedException) {
-                Toast.makeText(this@MainActivity, e.message, Toast.LENGTH_LONG).show()
+                Toast.makeText(this@MainActivity, e.text.resolve(this@MainActivity), Toast.LENGTH_LONG).show()
                 return@launch
             } catch (e: com.mrgq.pdfviewer.scoremate.ScoreMateException) {
                 Log.i("MainActivity", "ScoreMate heartbeat 실패 (무시): ${e.message}")
@@ -153,14 +153,14 @@ class MainActivity : AppCompatActivity() {
         } catch (e: com.mrgq.pdfviewer.scoremate.ScoreMateException) {
             Log.i("MainActivity", "ScoreMate 동기화 실패: ${e.message}")
             if (!quiet || e is com.mrgq.pdfviewer.scoremate.ScoreMateUnlinkedException) {
-                Toast.makeText(this, e.message, Toast.LENGTH_LONG).show()
+                Toast.makeText(this, e.text.resolve(this), Toast.LENGTH_LONG).show()
             }
             return
         }
         Log.i("MainActivity", "ScoreMate 동기화: $report")
         // 메모만 오갔어도 목록의 ✏️ 동기화 표시가 바뀐다
         if (report.changed || report.notesUploaded + report.notesDownloaded > 0) loadPdfFiles()
-        val summary = com.mrgq.pdfviewer.scoremate.ScoreMateSyncText.summary(report)
+        val summary = com.mrgq.pdfviewer.scoremate.ScoreMateSyncText.summary(this, report)
         // 주기 확인에서 부른 것(background)은 알리지 않는다 — 실패가 되풀이돼도 확인마다 뜨지 않게. 목록의 "동기화 필요" 가 남는다
         if (background) return
         if (summary != null && (report.changed || !quiet || report.errors.isNotEmpty())) {
