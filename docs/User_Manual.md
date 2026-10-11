@@ -1,3 +1,5 @@
+English: [User_Manual.en.md](User_Manual.en.md)
+
 # MrgqPdfViewer 사용자 매뉴얼
 
 ## 🎵 1. MrgqPdfViewer 소개
