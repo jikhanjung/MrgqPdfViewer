@@ -125,13 +125,13 @@ class ReleaseInfoTest {
     // ── ScoreMate 서버 (P15 §2.2, #118) ──
 
     private val server = "https://scoremate.noematica.kr"
-    private val sha = "6b64cf56840989a5a54d0bac2176f4bed93689872625767287631679b842e26c"
+    private val serverSha = "6b64cf56840989a5a54d0bac2176f4bed93689872625767287631679b842e26c"
 
     @Test
     fun 서버_응답을_읽는다() {
         val json = """
             {"version":"v0.7.6-beta.1","prerelease":true,"apk":"MrgqPdfViewer-v0.7.6-beta.1-release.apk","size":6676762,
-             "sha256":"${sha.uppercase()}","version_code":90,"published_at":"2026-10-11T15:18:07+09:00",
+             "sha256":"${serverSha.uppercase()}","version_code":90,"published_at":"2026-10-11T15:18:07+09:00",
              "notes":"> 요약\n- 항목","download_url":"$server/api/v1/app-releases/android/v0.7.6-beta.1/apk/"}
         """.trimIndent()
         val info = ReleaseInfo.fromScoreMate(json, server)
@@ -142,7 +142,7 @@ class ReleaseInfoTest {
         assertEquals("MrgqPdfViewer-v0.7.6-beta.1-release.apk", apk.name)
         assertEquals("$server/api/v1/app-releases/android/v0.7.6-beta.1/apk/", apk.downloadUrl)
         assertEquals(6676762L, apk.size)
-        assertEquals(sha, apk.sha256) // 소문자로
+        assertEquals(serverSha, apk.sha256) // 소문자로
         assertNull(info.checksums)
         assertEquals("$server/download/", info.htmlUrl)
     }
@@ -150,13 +150,13 @@ class ReleaseInfoTest {
     @Test
     fun 서버_응답의_빠진_값과_이상한_값() {
         // 받기 주소 · 파일 이름이 없으면 서버와 버전으로 만든다, 변경 내용이 null 이면 빈 글(→ GitHub CHANGELOG 로)
-        val bare = ReleaseInfo.fromScoreMate("""{"version":"v0.7.5","sha256":"$sha","notes":null}""", "$server/")
+        val bare = ReleaseInfo.fromScoreMate("""{"version":"v0.7.5","sha256":"$serverSha","notes":null}""", "$server/")
         assertEquals("$server/api/v1/app-releases/android/v0.7.5/apk/", bare.apk!!.downloadUrl)
         assertEquals("MrgqPdfViewer-v0.7.5-release.apk", bare.apk!!.name)
         assertEquals(-1L, bare.apk!!.size)
         assertEquals("", bare.body)
         // 다른 곳(평문 http · 상대 주소)을 가리키는 받기 주소는 쓰지 않는다
-        val odd = ReleaseInfo.fromScoreMate("""{"version":"v0.7.5","sha256":"$sha","download_url":"http://evil.example/x.apk"}""", server)
+        val odd = ReleaseInfo.fromScoreMate("""{"version":"v0.7.5","sha256":"$serverSha","download_url":"http://evil.example/x.apk"}""", server)
         assertEquals("$server/api/v1/app-releases/android/v0.7.5/apk/", odd.apk!!.downloadUrl)
         // 로컬 시험 서버(http)면 http 주소도
         val local = ReleaseInfo.fromScoreMate("""{"version":"v0.7.5","download_url":"http://192.168.0.2:8000/a/apk/"}""", "http://192.168.0.2:8000")
