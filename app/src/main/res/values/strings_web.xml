@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 웹 업로드 서버의 활동 로그(설정 화면에 보임 — 앱 언어를 따른다, P18 7단계).
+     업로드 페이지 · 응답 글은 브라우저 언어를 따르므로 리소스가 아니라 server/WebText.kt 사전에 있다. -->
+<resources>
+    <string name="web_log_page_opened">📄 웹 인터페이스 접속 - %1$s</string>
+    <string name="web_log_list_requested">📋 파일 목록 요청 - %1$s</string>
+    <string name="web_log_delete_requested">🗑️ 파일 삭제 요청: %1$s - %2$s</string>
+    <string name="web_log_delete_all_requested">🗑️ 전체 파일 삭제 요청 - %1$s</string>
+    <string name="web_log_upload_started">📤 파일 업로드 시작 - %1$s</string>
+    <string name="web_log_unknown_request">❓ 알 수 없는 요청: %1$s %2$s - %3$s</string>
+    <string name="web_log_saving">💾 파일 저장 중: %1$s</string>
+    <string name="web_log_saved">✅ 파일 저장 완료: %1$s (%2$s)</string>
+    <string name="web_log_save_failed">❌ 파일 저장 실패: %1$s</string>
+    <plurals name="web_log_upload_done">
+        <item quantity="other">🎉 업로드 완료: %1$d개 파일 (%2$s)</item>
+    </plurals>
+    <string name="web_log_upload_no_pdf">❌ 업로드 실패: PDF 파일이 없음</string>
+    <string name="web_log_deleted">✅ 파일 삭제 완료: %1$s</string>
+    <string name="web_log_delete_failed">❌ 파일 삭제 실패: %1$s</string>
+    <string name="web_log_not_found">❌ 파일을 찾을 수 없음: %1$s</string>
+    <plurals name="web_log_delete_all_done">
+        <item quantity="other">🧹 전체 삭제 완료: %1$d개 파일</item>
+    </plurals>
+    <string name="web_log_delete_all_partial">⚠️ 전체 삭제 일부 실패: %1$d개 성공, %2$d개 실패</string>
+</resources>
