@@ -48,7 +48,7 @@ object CommandParser {
     }
 
     /** 잘못 들었을 수 있는 실패 — 다음 후보를 본다 */
-    private val RETRYABLE = setOf(Reason.NOTHING, Reason.STRAY_NUMBER, Reason.UNKNOWN_PART)
+    private val RETRYABLE = setOf(Reason.NOTHING, Reason.STRAY_NUMBER, Reason.UNKNOWN_PART, Reason.CHATTER)
 
     /** 수 뒤에 붙으면 그 수가 마디 · 쪽 · 빠르기인 말 */
     private val UNITS = setOf(Kw.MEASURE, Kw.FROM, Kw.PAGE, Kw.BPM)
@@ -161,6 +161,12 @@ object CommandParser {
         if (parts.isEmpty() && Token.Word(Kw.PART) in tokens && VoiceCommand.ShowFullScore !in found) {
             val heard = tokens.filterIsInstance<Token.Other>().joinToString(" ") { it.text }.ifEmpty { null }
             return ParseResult.Unrecognized(Reason.UNKNOWN_PART, heard)
+        }
+        // 악기 · 이름을 불렀는데 "파트 · 보표"라는 말이 없고 모르는 말이 섞였다 — 대화로 본다 (#117). 🎙 를 누른 채 단원에게
+        // "여기 첼로가 좀 커요"라고 하면 첼로 파트 보기가 되던 것. 조사 · 말끝은 이미 빠졌다
+        val chatter = tokens.withIndex().any { (k, t) -> t is Token.Other && tokens.getOrNull(k - 1) != Token.Word(Kw.LETTER) }
+        if (parts.isNotEmpty() && Token.Word(Kw.PART) !in tokens && Token.Word(Kw.STAFF) !in tokens && chatter) {
+            return ParseResult.Unrecognized(Reason.CHATTER)
         }
         if (parts.isNotEmpty()) found += SelectParts(parts.distinct())
         // "메트로놈"만 = 시작, "메트로놈 정지" = 정지

@@ -100,4 +100,19 @@ class VoiceRecordingsTest {
     fun 대화는_실행하지_않는다() {
         assertEquals(Reason.RELATIVE, heard("누르고 있다가 그 전에는 안 하고 아", "누르고 있다가 그 전에는 안 하고"))
     }
+
+    @Test
+    fun 악기_이름이_든_대화는_파트_명령이_아니다() {
+        // 🎙 를 누른 채 단원에게 한 말 — 예전에는 첼로 파트 보기가 됐다 (#117)
+        assertEquals(Reason.CHATTER, heard("여기 첼로가 좀 커요"))
+        assertEquals(Reason.CHATTER, heard("57마디에서 첼로가 커요"))
+        assertEquals(Reason.CHATTER, heard("민수 씨 좋아요", names = listOf("김민수", "이서연")))
+        // 짧게 부르거나 "파트"가 있으면 그대로
+        assertEquals("첼로 파트", heard("첼로"))
+        assertEquals("첼로 파트", heard("첼로 파트 좀 보여 줘"))
+        assertEquals("57마디부터 · 첼로 파트", heard("첼로 57마디부터"))
+        assertEquals("김민수 파트", heard("민수야", names = listOf("김민수", "이서연")))
+        // 첫 후보가 대화처럼 들려도 다음 후보가 명령이면 그것("하진 하트" → "하진 파트", 실녹음)
+        assertEquals("하진 파트", heard("하진 하트", "하진 파트", names = moldau))
+    }
 }

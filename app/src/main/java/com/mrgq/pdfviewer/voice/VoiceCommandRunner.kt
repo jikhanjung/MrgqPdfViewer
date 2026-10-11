@@ -98,5 +98,6 @@ object VoiceCommandRunner {
         Reason.CONFLICT -> "위치나 템포가 둘이에요 — 하나만 말하세요"
         Reason.STRAY_NUMBER -> "무엇의 수인지 모르는 수가 있어요 — '57마디'처럼 단위를 붙이세요"
         Reason.UNKNOWN_PART -> "무슨 파트인지 못 알아들었어요"
+        Reason.CHATTER -> "대화로 들려 실행하지 않았어요 — 파트를 바꾸려면 '첼로 파트'처럼 말하세요"
     }
 }

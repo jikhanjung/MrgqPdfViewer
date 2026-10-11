@@ -152,6 +152,7 @@ MrgqPdfViewer 개발 로그 모음. 구현 기록은 `YYYYMMDD_NNN_` 형식(NNN 
 - [`111`](20261011_111_media_volume_zero_hint.md) — 녹음 재생이 안 들리던 것 = 태블릿 미디어 소리 0(adb `dumpsys audio`, 앱 탓 아님) → 재생 때 0 이면 안내, 설정 · 악보 화면 볼륨 키 = 미디어 소리
 - [`112`](20261011_112_rehearsal_marks.md) — **리허설 마크 "레터 B"**(P12 4단계): MusicXML `<rehearsal>` 를 읽어 그 마디부터 시작(`MusicXmlMatch` 로 악보 마디 번호), 없으면 마크 목록 안내. PDF 의 마크는 아직
 - [`113`](20261011_113_listen_from_start_resume.md) — 🎙 **"처음부터 듣기" · "이어서 듣기"**(`ListenFrom.START · RESUME` — 첫 마디 / 지난번 듣기가 멈춘 마디, 그 쪽으로 넘긴 뒤). "다시 듣기"는 그대로 안 받음
+- [`117`](20261011_117_voice_part_chatter.md) — 🎙 **악기 · 이름이 든 대화**("여기 첼로가 좀 커요")는 "파트" 없이 모르는 말이 섞이면 실행 안 함(`CHATTER`, 다음 후보는 봄 — "하진 하트" → "하진 파트")
 - [`114`](20261011_114_accompaniment_dynamics.md) — **반주 셈여림**: MusicXML 셈여림표(pp ~ ff · sf 등 한 음 · `<sound dynamics>` · `<note dynamics>`)로 음마다 크기, 표 없는 파트는 예전 그대로. 쐐기 · 아티큘레이션은 아직
 - [`115`](20261011_115_accompaniment_hairpins_toggle.md) — 반주 **크레셴도 · 디미누엔도**(쐐기 안을 시각에 비례해, 끝에 표가 없으면 한 단계), 반주 대화상자 **"셈여림 따르기"** 끄기(연주 중 바로)
 - [`116`](20261011_116_accompaniment_articulation_words.md) — 반주 **아티큘레이션**(스타카토 등 길이 — 반주만, 악센트 · 마르카토 세기)과 **글로 쓴 cresc. · dim.**(다음 셈여림표까지), 설정 이름 "악상기호 따르기"
