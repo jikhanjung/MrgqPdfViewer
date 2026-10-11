@@ -1,0 +1,118 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- English (P18 step 5): ScoreMate link · sync · ensemble notices. Base: values/strings_connect.xml -->
+<resources>
+    <!-- ScoreMate errors -->
+    <string name="scoremate_unlinked">The ScoreMate link was removed — link again in Settings</string>
+    <string name="scoremate_bad_cursor">Sync cursor doesn\'t match</string>
+    <string name="scoremate_code_too_many">Too many link codes requested. Try again in a moment</string>
+    <string name="scoremate_code_failed">Couldn\'t get a link code (HTTP %1$d)</string>
+    <string name="scoremate_bad_response">Couldn\'t read the server response</string>
+    <string name="scoremate_device_info_failed">Couldn\'t get device info (HTTP %1$d)</string>
+    <string name="scoremate_server_error">Server error (HTTP %1$d)</string>
+    <string name="scoremate_sync_too_many">Too many sync requests. Try again shortly</string>
+    <string name="scoremate_sync_list_failed">Couldn\'t get the sync list (HTTP %1$d)</string>
+    <string name="scoremate_sync_bad_response">Couldn\'t read the sync response</string>
+    <string name="scoremate_setlists_failed">Couldn\'t get setlists (HTTP %1$d)</string>
+    <string name="scoremate_notes_list_failed">Couldn\'t get the annotations list (HTTP %1$d)</string>
+    <string name="scoremate_no_download_location">No download address (HTTP %1$d)</string>
+    <string name="scoremate_download_failed">Couldn\'t download the score (HTTP %1$d)</string>
+    <string name="scoremate_download_interrupted">Connection lost while downloading the score</string>
+    <string name="scoremate_refresh_bad_response">Couldn\'t read the token refresh response</string>
+    <string name="scoremate_refresh_failed">Couldn\'t refresh the token (HTTP %1$d)</string>
+    <string name="scoremate_unreachable">Can\'t reach the ScoreMate server</string>
+    <string name="scoremate_poll_no_token">No token in the server response</string>
+    <string name="scoremate_poll_error">Link error: %1$s</string>
+
+    <!-- Link dialog — %1$s = device noun -->
+    <string name="scoremate_link_title">Link this %1$s to ScoreMate</string>
+    <string name="scoremate_link_new_code">New code</string>
+    <string name="scoremate_link_requesting">Getting a link code from the ScoreMate server…</string>
+    <string name="scoremate_link_retry_hint">Try again with \"New code\" (%1$s)</string>
+    <string name="scoremate_link_steps">"1. Scan the QR code with your phone, or\n    go to %1$s\n2. Sign in, check this code and tap \"Link\""</string>
+    <string name="scoremate_link_waiting">Waiting for the link on your phone… (%1$d:%2$02d left)%3$s</string>
+    <string name="scoremate_link_retrying_note">\n%1$s — still trying</string>
+    <string name="scoremate_link_denied">The link was declined on the phone.</string>
+    <string name="scoremate_link_denied_hint">Press \"New code\" to link again</string>
+    <string name="scoremate_link_done">Linked</string>
+
+    <!-- Sync errors -->
+    <string name="scoremate_error_setlists">Setlists: %1$s</string>
+    <string name="scoremate_error_notes">Annotations: %1$s</string>
+    <string name="scoremate_error_notes_item">%1$s annotations: %2$s</string>
+    <string name="scoremate_error_conductor_notes_item">%1$s conductor annotations: %2$s</string>
+    <string name="scoremate_sha_mismatch">The downloaded file doesn\'t match the server version (SHA-256 mismatch)</string>
+    <string name="scoremate_save_failed">Couldn\'t save the downloaded file</string>
+    <string name="scoremate_move_occupied">Another file is already at %1$s</string>
+    <string name="scoremate_move_failed">Couldn\'t move the file</string>
+    <string name="scoremate_sidecar_sha_mismatch">The downloaded %1$s doesn\'t match the server\'s (SHA-256 mismatch)</string>
+    <string name="scoremate_sidecar_save_failed">Couldn\'t save the %1$s</string>
+    <string name="scoremate_sidecar_layout">analysis file</string>
+    <string name="scoremate_too_many_pages">Too many sync pages</string>
+    <string name="scoremate_notes_read_failed">Couldn\'t read the annotations file</string>
+    <string name="scoremate_notes_no_permission_kept">No permission to write conductor annotations, so the unsent ones were kept</string>
+    <string name="scoremate_notes_forbidden_kept">No permission to write conductor annotations — the unsent ones were kept</string>
+    <string name="scoremate_notes_get_failed">Couldn\'t download annotations (HTTP %1$d)</string>
+    <string name="scoremate_notes_put_failed">Couldn\'t upload annotations (HTTP %1$d)</string>
+    <string name="scoremate_notes_conflict">Annotations kept conflicting and couldn\'t be uploaded</string>
+
+    <!-- Sync summary — joined as "ScoreMate: a, b, c" -->
+    <plurals name="scoremate_summary_downloaded">
+        <item quantity="one">%1$d score downloaded</item>
+        <item quantity="other">%1$d scores downloaded</item>
+    </plurals>
+    <plurals name="scoremate_summary_moved">
+        <item quantity="one">%1$d renamed</item>
+        <item quantity="other">%1$d renamed</item>
+    </plurals>
+    <plurals name="scoremate_summary_removed">
+        <item quantity="one">%1$d removed</item>
+        <item quantity="other">%1$d removed</item>
+    </plurals>
+    <plurals name="scoremate_summary_pending">
+        <item quantity="one">%1$d still processing on the server</item>
+        <item quantity="other">%1$d still processing on the server</item>
+    </plurals>
+    <plurals name="scoremate_summary_musicxml">
+        <item quantity="one">%1$d MusicXML downloaded</item>
+        <item quantity="other">%1$d MusicXML downloaded</item>
+    </plurals>
+    <plurals name="scoremate_summary_layouts">
+        <item quantity="one">%1$d analysis downloaded</item>
+        <item quantity="other">%1$d analyses downloaded</item>
+    </plurals>
+    <plurals name="scoremate_summary_updated">
+        <item quantity="one">info updated for %1$d score</item>
+        <item quantity="other">info updated for %1$d scores</item>
+    </plurals>
+    <string name="scoremate_summary_setlists">setlists updated</string>
+    <plurals name="scoremate_summary_notes_uploaded">
+        <item quantity="one">annotations uploaded for %1$d score</item>
+        <item quantity="other">annotations uploaded for %1$d scores</item>
+    </plurals>
+    <plurals name="scoremate_summary_notes_downloaded">
+        <item quantity="one">annotations downloaded for %1$d score</item>
+        <item quantity="other">annotations downloaded for %1$d scores</item>
+    </plurals>
+    <string name="scoremate_summary_failed">%1$d failed (%2$s)</string>
+
+    <!-- Ensemble version notice -->
+    <string name="ensemble_version_title">Ensemble devices are on different versions</string>
+    <string name="ensemble_version_legacy">v0.2.5 or earlier</string>
+    <string name="ensemble_version_notice">%1$s\n\nWith different versions, the ensemble metronome\'s beats, measures and count-in can drift apart. Update: Settings → About → Check for updates</string>
+    <string name="ensemble_version_performer_conductor_older">The conductor device is on %1$s (this device %2$s).\nUpdate the conductor device to %2$s.</string>
+    <string name="ensemble_version_performer_self_older">This device is on %1$s (conductor %2$s).\nUpdate this device to %2$s.</string>
+    <string name="ensemble_version_performer_unknown">Conductor %1$s · this device %2$s — put both devices on the same version.</string>
+    <string name="ensemble_version_conductor_performer_older">Performer \'%1$s\' is on %2$s (conductor %3$s).\nUpdate that device to %3$s.</string>
+    <string name="ensemble_version_conductor_self_older">The conductor (this device) is on %1$s (performer \'%2$s\' %3$s).\nUpdate this device to %3$s.</string>
+    <string name="ensemble_version_conductor_unknown">Performer \'%1$s\' %2$s · conductor %3$s — put them on the same version.</string>
+
+    <!-- Ensemble status -->
+    <string name="ensemble_status_server_stopped">Server stopped</string>
+    <string name="ensemble_status_conductor">Ensemble: conductor (%1$d devices connected)</string>
+    <string name="ensemble_status_performer_connected">Ensemble: performer (connected: %1$s)</string>
+    <string name="ensemble_status_performer_disconnected">Ensemble: performer (disconnected)</string>
+    <string name="ensemble_status_off">Ensemble: off</string>
+    <string name="ensemble_viewer_conductor">Conductor (%1$d connected)</string>
+    <string name="ensemble_viewer_performer_connected">Performer (connected)</string>
+    <string name="ensemble_viewer_performer_disconnected">Performer (disconnected)</string>
+</resources>

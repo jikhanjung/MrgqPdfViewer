@@ -1,0 +1,118 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- ScoreMate 연결 · 동기화 · 합주 안내 (P18 5단계). 영어는 values-en/strings_connect.xml -->
+<resources>
+    <!-- ScoreMate 실패 (ScoreMateClient · ScoreMateProtocol) -->
+    <string name="scoremate_unlinked">ScoreMate 연결이 해제되었습니다 — 설정에서 다시 연결하세요</string>
+    <string name="scoremate_bad_cursor">동기화 커서가 맞지 않습니다</string>
+    <string name="scoremate_code_too_many">연결 코드를 너무 많이 받았습니다. 잠시 후 다시 시도하세요</string>
+    <string name="scoremate_code_failed">연결 코드를 받지 못했습니다 (HTTP %1$d)</string>
+    <string name="scoremate_bad_response">서버 응답을 해석하지 못했습니다</string>
+    <string name="scoremate_device_info_failed">기기 정보를 받지 못했습니다 (HTTP %1$d)</string>
+    <string name="scoremate_server_error">서버 오류 (HTTP %1$d)</string>
+    <string name="scoremate_sync_too_many">동기화 요청이 너무 많습니다. 잠시 후 다시</string>
+    <string name="scoremate_sync_list_failed">동기화 목록을 받지 못했습니다 (HTTP %1$d)</string>
+    <string name="scoremate_sync_bad_response">동기화 응답을 해석하지 못했습니다</string>
+    <string name="scoremate_setlists_failed">세트리스트를 받지 못했습니다 (HTTP %1$d)</string>
+    <string name="scoremate_notes_list_failed">메모 목록을 받지 못했습니다 (HTTP %1$d)</string>
+    <string name="scoremate_no_download_location">받기 주소가 없습니다 (HTTP %1$d)</string>
+    <string name="scoremate_download_failed">악보를 받지 못했습니다 (HTTP %1$d)</string>
+    <string name="scoremate_download_interrupted">악보를 받는 중 연결이 끊겼습니다</string>
+    <string name="scoremate_refresh_bad_response">토큰 갱신 응답을 해석하지 못했습니다</string>
+    <string name="scoremate_refresh_failed">토큰을 갱신하지 못했습니다 (HTTP %1$d)</string>
+    <string name="scoremate_unreachable">ScoreMate 서버에 연결할 수 없습니다</string>
+    <string name="scoremate_poll_no_token">서버 응답에 토큰이 없습니다</string>
+    <string name="scoremate_poll_error">연결 오류: %1$s</string>
+
+    <!-- 연결 화면 (DeviceLinkDialog) — %1$s = 기기 이름(TV · 태블릿 · 휴대폰) -->
+    <string name="scoremate_link_title">ScoreMate 에 이 %1$s 연결</string>
+    <string name="scoremate_link_new_code">새 코드</string>
+    <string name="scoremate_link_requesting">ScoreMate 서버에서 연결 코드를 받는 중…</string>
+    <string name="scoremate_link_retry_hint">\"새 코드\" 로 다시 시도하세요 (%1$s)</string>
+    <string name="scoremate_link_steps">"1. 휴대폰으로 QR 코드를 찍거나\n    %1$s 에 들어가\n2. 로그인한 뒤 이 코드를 확인하고 \"연결\" 을 누르세요"</string>
+    <string name="scoremate_link_waiting">휴대폰에서 연결하기를 기다리는 중… (남은 시간 %1$d:%2$02d)%3$s</string>
+    <string name="scoremate_link_retrying_note">\n%1$s — 계속 시도합니다</string>
+    <string name="scoremate_link_denied">휴대폰에서 연결을 거절했습니다.</string>
+    <string name="scoremate_link_denied_hint">다시 연결하려면 \"새 코드\" 를 누르세요</string>
+    <string name="scoremate_link_done">연결되었습니다</string>
+
+    <!-- 동기화 실패 (ScoreMateSync · ScoreNotesSync) -->
+    <string name="scoremate_error_item" translatable="false">%1$s: %2$s</string>
+    <string name="scoremate_error_setlists">세트리스트: %1$s</string>
+    <string name="scoremate_error_notes">메모: %1$s</string>
+    <string name="scoremate_error_notes_item">%1$s 메모: %2$s</string>
+    <string name="scoremate_error_conductor_notes_item">%1$s 지휘자 메모: %2$s</string>
+    <string name="scoremate_sha_mismatch">받은 파일이 서버 판과 다릅니다 (SHA-256 불일치)</string>
+    <string name="scoremate_save_failed">받은 파일을 저장하지 못했습니다</string>
+    <string name="scoremate_move_occupied">%1$s 자리에 다른 파일이 있습니다</string>
+    <string name="scoremate_move_failed">파일을 옮기지 못했습니다</string>
+    <!-- %1$s = "MusicXML" 또는 scoremate_sidecar_layout -->
+    <string name="scoremate_sidecar_sha_mismatch">받은 %1$s 이 서버 것과 다릅니다 (SHA-256 불일치)</string>
+    <string name="scoremate_sidecar_save_failed">%1$s 을 저장하지 못했습니다</string>
+    <string name="scoremate_sidecar_layout">분석 파일</string>
+    <string name="scoremate_too_many_pages">동기화 쪽이 너무 많습니다</string>
+    <string name="scoremate_notes_read_failed">메모 파일을 읽지 못했습니다</string>
+    <string name="scoremate_notes_no_permission_kept">지휘자 메모를 쓸 권한이 없어 올리지 못한 메모를 보관해 두었습니다</string>
+    <string name="scoremate_notes_forbidden_kept">지휘자 메모를 쓸 권한이 없습니다 — 올리지 못한 메모는 보관해 두었습니다</string>
+    <string name="scoremate_notes_get_failed">메모를 받지 못했습니다 (HTTP %1$d)</string>
+    <string name="scoremate_notes_put_failed">메모를 올리지 못했습니다 (HTTP %1$d)</string>
+    <string name="scoremate_notes_conflict">메모가 계속 엇갈려 올리지 못했습니다</string>
+
+    <!-- 동기화 요약 (ScoreMateSyncText.summary) — "ScoreMate: " + ", " 로 잇는다 -->
+    <plurals name="scoremate_summary_downloaded">
+        <item quantity="other">악보 %1$d개 받음</item>
+    </plurals>
+    <plurals name="scoremate_summary_moved">
+        <item quantity="other">%1$d개 이름 바뀜</item>
+    </plurals>
+    <plurals name="scoremate_summary_removed">
+        <item quantity="other">%1$d개 지움</item>
+    </plurals>
+    <plurals name="scoremate_summary_pending">
+        <item quantity="other">%1$d개는 서버 처리 중</item>
+    </plurals>
+    <plurals name="scoremate_summary_musicxml">
+        <item quantity="other">MusicXML %1$d개 받음</item>
+    </plurals>
+    <plurals name="scoremate_summary_layouts">
+        <item quantity="other">분석 %1$d개 받음</item>
+    </plurals>
+    <plurals name="scoremate_summary_updated">
+        <item quantity="other">곡 정보 %1$d개 바뀜</item>
+    </plurals>
+    <string name="scoremate_summary_setlists">세트리스트 갱신</string>
+    <plurals name="scoremate_summary_notes_uploaded">
+        <item quantity="other">메모 %1$d곡 올림</item>
+    </plurals>
+    <plurals name="scoremate_summary_notes_downloaded">
+        <item quantity="other">메모 %1$d곡 받음</item>
+    </plurals>
+    <string name="scoremate_summary_failed">%1$d개 실패 (%2$s)</string>
+
+    <!-- 합주 버전 안내 (EnsembleVersion · VersionNotice) -->
+    <string name="ensemble_version_title">합주 기기의 버전이 다릅니다</string>
+    <string name="ensemble_version_legacy">v0.2.5 이하</string>
+    <!-- %1$s = 아래 본문 하나 -->
+    <string name="ensemble_version_notice">%1$s\n\n버전이 다르면 합주 메트로놈의 박 · 마디 · 예비박이 어긋날 수 있습니다. 업데이트: 설정 → 앱 정보 → 업데이트 확인</string>
+    <!-- 연주자 화면: %1$s = 지휘자 버전, %2$s = 이 기기 -->
+    <string name="ensemble_version_performer_conductor_older">지휘자 기기가 %1$s 입니다 (이 기기 %2$s).\n지휘자 기기를 %2$s 으로 업데이트하세요.</string>
+    <!-- %1$s = 이 기기, %2$s = 지휘자 -->
+    <string name="ensemble_version_performer_self_older">이 기기가 %1$s 입니다 (지휘자 %2$s).\n이 기기를 %2$s 로 업데이트하세요.</string>
+    <!-- %1$s = 지휘자, %2$s = 이 기기 -->
+    <string name="ensemble_version_performer_unknown">지휘자 %1$s · 이 기기 %2$s — 두 기기를 같은 버전으로 맞추세요.</string>
+    <!-- 지휘자 화면: %1$s = 연주자 기기 이름, %2$s = 연주자 버전, %3$s = 지휘자(이 기기) -->
+    <string name="ensemble_version_conductor_performer_older">연주자 \'%1$s\' 이(가) %2$s 입니다 (지휘자 %3$s).\n그 기기를 %3$s 으로 업데이트하세요.</string>
+    <!-- %1$s = 지휘자(이 기기), %2$s = 연주자 기기 이름, %3$s = 연주자 버전 -->
+    <string name="ensemble_version_conductor_self_older">지휘자(이 기기)가 %1$s 입니다 (연주자 \'%2$s\' %3$s).\n이 기기를 %3$s 로 업데이트하세요.</string>
+    <!-- %1$s = 연주자 기기 이름, %2$s = 연주자 버전, %3$s = 지휘자 -->
+    <string name="ensemble_version_conductor_unknown">연주자 \'%1$s\' %2$s · 지휘자 %3$s — 같은 버전으로 맞추세요.</string>
+
+    <!-- 합주 상태 (GlobalCollaborationManager · ViewerCollaborationManager) -->
+    <string name="ensemble_status_server_stopped">서버 중지됨</string>
+    <string name="ensemble_status_conductor">합주 모드: 지휘자 (연결된 기기: %1$d대)</string>
+    <string name="ensemble_status_performer_connected">합주 모드: 연주자 (연결됨: %1$s)</string>
+    <string name="ensemble_status_performer_disconnected">합주 모드: 연주자 (연결 끊김)</string>
+    <string name="ensemble_status_off">합주 모드: 비활성화</string>
+    <string name="ensemble_viewer_conductor">지휘자 모드 (%1$d 명 연결됨)</string>
+    <string name="ensemble_viewer_performer_connected">연주자 모드 (연결됨)</string>
+    <string name="ensemble_viewer_performer_disconnected">연주자 모드 (연결 끊김)</string>
+</resources>

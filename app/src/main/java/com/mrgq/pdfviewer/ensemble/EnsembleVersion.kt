@@ -1,6 +1,8 @@
 package com.mrgq.pdfviewer.ensemble
 
+import com.mrgq.pdfviewer.R
 import com.mrgq.pdfviewer.update.AppVersion
+import com.mrgq.pdfviewer.update.UiText
 
 /**
  * 합주 연결 때 지휘자 · 연주자의 **합주 버전** 비교 (#061 → #086). 합주 메시지는 판마다 필드가 늘어(구간별 빠르기 #057, 예비박 마디 수 #060,
@@ -27,14 +29,16 @@ object EnsembleVersion {
 
     /** 옛 버전이 고정해 보내던 값 */
     const val LEGACY_REPORTED = "v0.1.5"
-    private const val LEGACY_LABEL = "v0.2.5 이하"
 
-    /** 합주 버전이 다르다. [mine] · [theirs] 는 보일 **앱** 버전(업데이트할 판), [theirsOlder] = 상대가 더 옛 합주 (판단할 수 없으면 null) */
-    data class Mismatch(val mine: String, val theirs: String, val theirsOlder: Boolean?)
+    /**
+     * 합주 버전이 다르다. [mine] · [theirs] 는 보일 **앱** 버전(업데이트할 판), [theirsOlder] = 상대가 더 옛 합주 (판단할 수 없으면 null).
+     * [theirs] null = "v0.2.5 이하"(옛 기기 — 화면 글은 `ensemble_version_legacy`, P18)
+     */
+    data class Mismatch(val mine: String, val theirs: String?, val theirsOlder: Boolean?)
 
-    /** 상대가 보낸 값을 보일 이름으로 */
-    fun describe(reported: String?): String =
-        if (reported.isNullOrBlank() || reported == LEGACY_REPORTED) LEGACY_LABEL else "v" + reported.removePrefix("v")
+    /** 상대가 보낸 값을 보일 이름으로. null = v0.2.5 이하 */
+    fun describe(reported: String?): String? =
+        if (reported.isNullOrBlank() || reported == LEGACY_REPORTED) null else "v" + reported.removePrefix("v")
 
     /**
      * 내 앱 버전 [mine] 과 상대의 앱 버전 [theirs] · 합주 버전 [theirsEnsemble](없으면 앱 버전으로 짐작). 합주 버전이 같으면 null
@@ -42,7 +46,7 @@ object EnsembleVersion {
     fun check(mine: String, theirs: String?, theirsEnsemble: String? = null): Mismatch? {
         val mineLabel = "v" + mine.removePrefix("v")
         if (theirsEnsemble == null && (theirs.isNullOrBlank() || theirs == LEGACY_REPORTED)) {
-            return Mismatch(mineLabel, LEGACY_LABEL, theirsOlder = true)
+            return Mismatch(mineLabel, null, theirsOlder = true)
         }
         val ours = AppVersion.parse(CURRENT) ?: error("합주 버전 $CURRENT 을 읽지 못함")
         val other = theirsEnsemble?.let(AppVersion::parse) ?: theirs?.let(::ensembleOf)
@@ -57,20 +61,27 @@ object EnsembleVersion {
         return if (v >= BEFORE_FIELD) BEFORE_FIELD else v
     }
 
-    /** 연주자 화면: 지휘자와 버전이 다르다 */
-    fun performerMessage(m: Mismatch): String = when (m.theirsOlder) {
-        true -> "지휘자 기기가 ${m.theirs} 입니다 (이 기기 ${m.mine}).\n지휘자 기기를 ${m.mine} 으로 업데이트하세요."
-        false -> "이 기기가 ${m.mine} 입니다 (지휘자 ${m.theirs}).\n이 기기를 ${m.theirs} 로 업데이트하세요."
-        null -> "지휘자 ${m.theirs} · 이 기기 ${m.mine} — 두 기기를 같은 버전으로 맞추세요."
-    } + FOOTER
+    /** 상대 버전을 화면 글 인자로 — 옛 기기면 "v0.2.5 이하" */
+    private fun theirsArg(m: Mismatch): Any = m.theirs ?: UiText(R.string.ensemble_version_legacy)
+
+    /** 연주자 화면: 지휘자와 버전이 다르다 (P18 — 키 + 인자, 화면이 resolve) */
+    fun performerMessage(m: Mismatch): UiText = withFooter(
+        when (m.theirsOlder) {
+            true -> UiText(R.string.ensemble_version_performer_conductor_older, theirsArg(m), m.mine)
+            false -> UiText(R.string.ensemble_version_performer_self_older, m.mine, theirsArg(m))
+            null -> UiText(R.string.ensemble_version_performer_unknown, theirsArg(m), m.mine)
+        }
+    )
 
     /** 지휘자 화면: 연주자 [deviceName] 과 버전이 다르다 */
-    fun conductorMessage(deviceName: String, m: Mismatch): String = when (m.theirsOlder) {
-        true -> "연주자 '$deviceName' 이(가) ${m.theirs} 입니다 (지휘자 ${m.mine}).\n그 기기를 ${m.mine} 으로 업데이트하세요."
-        false -> "지휘자(이 기기)가 ${m.mine} 입니다 (연주자 '$deviceName' ${m.theirs}).\n이 기기를 ${m.theirs} 로 업데이트하세요."
-        null -> "연주자 '$deviceName' ${m.theirs} · 지휘자 ${m.mine} — 같은 버전으로 맞추세요."
-    } + FOOTER
+    fun conductorMessage(deviceName: String, m: Mismatch): UiText = withFooter(
+        when (m.theirsOlder) {
+            true -> UiText(R.string.ensemble_version_conductor_performer_older, deviceName, theirsArg(m), m.mine)
+            false -> UiText(R.string.ensemble_version_conductor_self_older, m.mine, deviceName, theirsArg(m))
+            null -> UiText(R.string.ensemble_version_conductor_unknown, deviceName, theirsArg(m), m.mine)
+        }
+    )
 
-    private const val FOOTER =
-        "\n\n버전이 다르면 합주 메트로놈의 박 · 마디 · 예비박이 어긋날 수 있습니다. 업데이트: 설정 → 앱 정보 → 업데이트 확인"
+    /** 끝에 "버전이 다르면 … 업데이트 확인" */
+    private fun withFooter(body: UiText) = UiText(R.string.ensemble_version_notice, body)
 }

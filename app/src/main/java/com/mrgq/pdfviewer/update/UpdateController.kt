@@ -17,6 +17,7 @@ import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.core.content.FileProvider
 import com.mrgq.pdfviewer.BuildConfig
+import com.mrgq.pdfviewer.R
 import com.mrgq.pdfviewer.utils.DeviceForm
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -52,7 +53,11 @@ class UpdateController(
 
     fun checkForUpdate() {
         if (job?.isActive == true) return
-        val checking = progressDialog("업데이트 확인", if (isPrereleaseEnabled(activity)) "최신 버전(사전 릴리스 포함)을 확인하는 중…" else "최신 버전을 확인하는 중…", indeterminate = true)
+        val checking = progressDialog(
+            activity.getString(R.string.update_check_title),
+            activity.getString(if (isPrereleaseEnabled(activity)) R.string.update_checking_with_prerelease else R.string.update_checking),
+            indeterminate = true,
+        )
         job = scope.launch {
             try {
                 withContext(Dispatchers.IO) { updatesDir(activity).deleteRecursively() }
@@ -60,7 +65,10 @@ class UpdateController(
                 checking.dialog.dismiss()
                 val current = AppVersion.parse(BuildConfig.VERSION_NAME)
                 if (current != null && release.version <= current) {
-                    showMessage("최신 버전입니다", "현재 v${BuildConfig.VERSION_NAME} 이 최신입니다.\n\n확인한 곳: ${sourceLabel()}")
+                    showMessage(
+                        activity.getString(R.string.update_up_to_date_title),
+                        activity.getString(R.string.update_up_to_date_message, BuildConfig.VERSION_NAME, sourceLabel()),
+                    )
                 } else {
                     showUpdateOffer(release.copy(body = client.fetchReleaseNotes(release)))
                 }
@@ -114,7 +122,7 @@ class UpdateController(
         if (activity.packageManager.canRequestPackageInstalls()) {
             launchInstaller(apk)
         } else {
-            Toast.makeText(activity, "설치 허용이 꺼져 있어 설치하지 않았습니다", Toast.LENGTH_LONG).show()
+            Toast.makeText(activity, R.string.update_install_blocked, Toast.LENGTH_LONG).show()
         }
     }
 
@@ -126,7 +134,10 @@ class UpdateController(
 
     /** 마지막 확인이 어디서 왔나 — 화면용 (P15 2단계 확인, #119). 서버가 안 돼 GitHub 으로 갔으면 그렇게 보인다 */
     private fun sourceLabel(): String = when (client.lastSource) {
-        "ScoreMate" -> "ScoreMate 서버 (" + com.mrgq.pdfviewer.scoremate.ScoreMateStore(activity).server.removePrefix("https://") + ")"
+        "ScoreMate" -> activity.getString(
+            R.string.update_source_scoremate,
+            com.mrgq.pdfviewer.scoremate.ScoreMateStore(activity).server.removePrefix("https://"),
+        )
         "GitHub" -> "GitHub"
         else -> "?"
     }
@@ -134,30 +145,34 @@ class UpdateController(
     private fun showUpdateOffer(release: ReleaseInfo, fromStartup: Boolean = false) {
         val apk = release.apk
         if (apk == null) {
-            showMessage("업데이트할 수 없음", "${release.tag} 릴리스에 설치할 APK(${ReleaseInfo.APK_SUFFIX})가 없습니다.")
+            showMessage(
+                activity.getString(R.string.update_unavailable_title),
+                activity.getString(R.string.update_no_apk_message, release.tag, ReleaseInfo.APK_SUFFIX),
+            )
             return
         }
         val message = buildString {
             append("v${BuildConfig.VERSION_NAME} → ${release.tag}")
             if (apk.size > 0) append("   (${formatMb(apk.size)})")
-            append("\n받는 곳: ${sourceLabel()}")
+            append("\n").append(activity.getString(R.string.update_offer_source, sourceLabel()))
             append("\n\n")
             if (BuildConfig.DEBUG) {
                 // debug 빌드는 서명 키가 달라 release APK 로 업데이트되지 않는다 (#054 §1.3)
-                append("⚠️ 지금 앱은 debug 빌드라 서명이 달라 업데이트가 거부됩니다. 기존 앱을 지워야 설치할 수 있습니다.\n\n")
+                append(activity.getString(R.string.update_debug_warning)).append("\n\n")
             }
-            append(releaseNotesForDisplay(release.body).ifBlank { "(변경 내용 없음)" })
+            // 변경 내용(notes)은 서버 · CHANGELOG 글 그대로 — 번역하지 않는다 (P18 §4.3)
+            append(releaseNotesForDisplay(release.body).ifBlank { activity.getString(R.string.update_no_notes) })
         }
         AlertDialog.Builder(activity)
-            .setTitle("새 버전 ${release.tag}")
+            .setTitle(activity.getString(R.string.update_offer_title, release.tag))
             .setMessage(message)
-            .setPositiveButton("다운로드 및 설치") { _, _ -> download(release) }
-            .setNegativeButton("나중에") { _, _ -> if (fromStartup) declinedTag = release.tag }
+            .setPositiveButton(R.string.update_download_and_install) { _, _ -> download(release) }
+            .setNegativeButton(R.string.update_later) { _, _ -> if (fromStartup) declinedTag = release.tag }
             .apply {
                 if (fromStartup) {
-                    setNeutralButton("자동 확인 안 함") { _, _ ->
+                    setNeutralButton(R.string.update_disable_auto) { _, _ ->
                         setCheckOnStartup(activity, false)
-                        Toast.makeText(activity, "설정 → 앱 정보에서 다시 켤 수 있습니다", Toast.LENGTH_LONG).show()
+                        Toast.makeText(activity, R.string.update_reenable_hint, Toast.LENGTH_LONG).show()
                     }
                 }
             }
@@ -165,7 +180,7 @@ class UpdateController(
     }
 
     private fun download(release: ReleaseInfo) {
-        val progress = progressDialog("다운로드 중", "${release.apk?.name}", indeterminate = false)
+        val progress = progressDialog(activity.getString(R.string.update_downloading_title), "${release.apk?.name}", indeterminate = false)
         job = scope.launch {
             try {
                 val file = client.downloadApk(release, updatesDir(activity)) { done, total ->
@@ -174,7 +189,7 @@ class UpdateController(
                 progress.dialog.dismiss()
                 installWithPermission(file)
             } catch (e: CancellationException) {
-                Toast.makeText(activity, "다운로드를 취소했습니다", Toast.LENGTH_SHORT).show()
+                Toast.makeText(activity, R.string.update_download_canceled, Toast.LENGTH_SHORT).show()
                 throw e
             } catch (e: Exception) {
                 progress.dialog.dismiss()
@@ -190,13 +205,10 @@ class UpdateController(
             return
         }
         AlertDialog.Builder(activity)
-            .setTitle("설치 허용 필요")
-            .setMessage(
-                "앱을 업데이트하려면 이 앱에 \"출처를 알 수 없는 앱 설치\"를 허용해야 합니다.\n\n" +
-                    "설정 화면에서 허용을 켠 뒤 뒤로 돌아오면 설치를 이어 갑니다."
-            )
-            .setPositiveButton("설정 열기") { _, _ -> openInstallPermissionSettings(apk) }
-            .setNegativeButton("취소", null)
+            .setTitle(R.string.update_install_permission_title)
+            .setMessage(R.string.update_install_permission_message)
+            .setPositiveButton(R.string.update_open_settings) { _, _ -> openInstallPermissionSettings(apk) }
+            .setNegativeButton(R.string.cancel, null)
             .show()
     }
 
@@ -212,10 +224,8 @@ class UpdateController(
             // 일부 TV 펌웨어는 이 화면을 막아 둔다
             apkAwaitingPermission = null
             showMessage(
-                "설정 화면을 열 수 없음",
-                "이 기기는 설치 허용 화면을 바로 열 수 없습니다.\n\n" +
-                    "설정 → 앱 → 보안 및 제한사항 → 출처를 알 수 없는 앱 에서 " +
-                    "이 앱을 허용한 뒤 다시 업데이트 확인을 누르세요."
+                activity.getString(R.string.update_cannot_open_settings_title),
+                activity.getString(R.string.update_cannot_open_settings_message),
             )
         }
     }
@@ -227,7 +237,7 @@ class UpdateController(
         try {
             activity.startActivity(intent)
         } catch (e: ActivityNotFoundException) {
-            showMessage("설치할 수 없음", "이 기기에서 설치 화면을 열 수 없습니다.")
+            showMessage(activity.getString(R.string.update_cannot_install_title), activity.getString(R.string.update_cannot_install_message))
         }
     }
 
@@ -235,8 +245,9 @@ class UpdateController(
 
     private fun fail(e: Exception) {
         Log.w(TAG, "업데이트 실패", e)
-        val message = (e as? UpdateException)?.message ?: "알 수 없는 오류: ${e.message}"
-        showMessage("업데이트 실패", message)
+        val message = (e as? UpdateException)?.text?.resolve(activity)
+            ?: activity.getString(R.string.update_unknown_error, e.message.toString())
+        showMessage(activity.getString(R.string.update_failed_title), message)
     }
 
     private fun showMessage(title: String, message: String) {
@@ -244,7 +255,7 @@ class UpdateController(
         AlertDialog.Builder(activity)
             .setTitle(title)
             .setMessage(message)
-            .setPositiveButton("확인", null)
+            .setPositiveButton(R.string.ok, null)
             .show()
     }
 
@@ -280,7 +291,7 @@ class UpdateController(
             .setTitle(title)
             .setView(layout)
             // 버튼이 없으면 리모컨으로는 뒤로만 누를 수 있다 — 취소를 명시한다
-            .setNegativeButton("취소") { _, _ -> dialog.cancel() }
+            .setNegativeButton(R.string.cancel) { _, _ -> dialog.cancel() }
             .show()
         return Progress(dialog, bar, label)
     }

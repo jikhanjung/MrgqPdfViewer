@@ -1,9 +1,11 @@
 package com.mrgq.pdfviewer.scoremate
 
+import com.mrgq.pdfviewer.R
 import com.mrgq.pdfviewer.scoremate.ScoreMateProtocol.DeviceCode
 import com.mrgq.pdfviewer.scoremate.ScoreMateProtocol.DeviceInfo
 import com.mrgq.pdfviewer.scoremate.ScoreMateProtocol.PollResult
 import com.mrgq.pdfviewer.scoremate.ScoreMateProtocol.Tokens
+import com.mrgq.pdfviewer.update.UiText
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -13,14 +15,20 @@ import java.io.IOException
 import java.net.HttpURLConnection
 import java.net.URL
 
-/** 사용자에게 그대로 보일 메시지를 담은 ScoreMate 실패 */
-open class ScoreMateException(message: String, cause: Throwable? = null) : Exception(message, cause)
+/**
+ * 사용자에게 보일 메시지([text] — 리소스 키 + 인자, P18)를 담은 ScoreMate 실패. 화면에는 `e.text.resolve(context)`.
+ * [message] 는 로그용([UiText.toString])
+ */
+open class ScoreMateException(val text: UiText, cause: Throwable? = null) : Exception(text.toString(), cause)
 
 /** 서버가 이 TV 를 더 이상 받아 주지 않는다(웹에서 해제 · refresh 만료 180일) — 저장한 토큰은 이미 지웠다. 다시 연결해야 한다 */
-class ScoreMateUnlinkedException : ScoreMateException("ScoreMate 연결이 해제되었습니다 — 설정에서 다시 연결하세요")
+class ScoreMateUnlinkedException : ScoreMateException(UiText(R.string.scoremate_unlinked))
 
 /** 서버가 커서를 받지 않는다 — 버리고 처음부터 */
-class ScoreMateBadCursorException : ScoreMateException("동기화 커서가 맞지 않습니다")
+class ScoreMateBadCursorException : ScoreMateException(UiText(R.string.scoremate_bad_cursor))
+
+/** 화면에 보일 실패 글 — ScoreMate 실패면 그 글, 아니면 예외 메시지 그대로(번역 없음) */
+internal fun Throwable.uiArg(): Any = (this as? ScoreMateException)?.text ?: message.toString()
 
 /** 연결 정보 저장소. 구현은 앱 전용 SharedPreferences ([ScoreMateStore]), 테스트는 메모리 */
 interface ScoreMateTokenStore {
@@ -78,10 +86,10 @@ class ScoreMateClient(
 
     suspend fun requestDeviceCode(name: String, model: String, appVersion: String): DeviceCode {
         val response = send("POST", ScoreMateProtocol.PATH_DEVICE_CODE, ScoreMateProtocol.deviceCodeRequest(name, model, appVersion))
-        if (response.code == 429) throw ScoreMateException("연결 코드를 너무 많이 받았습니다. 잠시 후 다시 시도하세요")
-        if (response.code != 200) throw ScoreMateException("연결 코드를 받지 못했습니다 (HTTP ${response.code})")
+        if (response.code == 429) throw ScoreMateException(UiText(R.string.scoremate_code_too_many))
+        if (response.code != 200) throw ScoreMateException(UiText(R.string.scoremate_code_failed, response.code))
         return ScoreMateProtocol.parseDeviceCode(response.body)
-            ?: throw ScoreMateException("서버 응답을 해석하지 못했습니다")
+            ?: throw ScoreMateException(UiText(R.string.scoremate_bad_response))
     }
 
     /** 한 번 묻는다. [PollResult.Linked] 면 토큰을 저장한 뒤 돌려준다 */
@@ -89,7 +97,7 @@ class ScoreMateClient(
         val response = try {
             send("POST", ScoreMateProtocol.PATH_DEVICE_TOKEN, ScoreMateProtocol.tokenRequest(deviceCode))
         } catch (e: ScoreMateException) {
-            return PollResult.Failed(e.message ?: "네트워크 오류")
+            return PollResult.Failed(e.text)
         }
         val result = ScoreMateProtocol.parsePoll(response.code, response.body)
         if (result is PollResult.Linked) store.saveTokens(result.tokens)
@@ -100,15 +108,15 @@ class ScoreMateClient(
 
     suspend fun me(): DeviceInfo {
         val response = authorized("GET", ScoreMateProtocol.PATH_ME)
-        if (response.code != 200) throw ScoreMateException("기기 정보를 받지 못했습니다 (HTTP ${response.code})")
-        return ScoreMateProtocol.parseDeviceInfo(response.body) ?: throw ScoreMateException("서버 응답을 해석하지 못했습니다")
+        if (response.code != 200) throw ScoreMateException(UiText(R.string.scoremate_device_info_failed, response.code))
+        return ScoreMateProtocol.parseDeviceInfo(response.body) ?: throw ScoreMateException(UiText(R.string.scoremate_bad_response))
     }
 
     /** 앱을 켤 때 — 웹 "TV" 목록에 앱 버전 · 모델 · 마지막 접속 */
     suspend fun heartbeat(appVersion: String, model: String): DeviceInfo? {
         val response = authorized("POST", ScoreMateProtocol.PATH_HEARTBEAT, ScoreMateProtocol.heartbeatRequest(appVersion, model))
         if (response.code == 429) return null // 요청 제한 — 다음에
-        if (response.code != 200) throw ScoreMateException("서버 오류 (HTTP ${response.code})")
+        if (response.code != 200) throw ScoreMateException(UiText(R.string.scoremate_server_error, response.code))
         return ScoreMateProtocol.parseDeviceInfo(response.body)
     }
 
@@ -137,15 +145,15 @@ class ScoreMateClient(
         val query = if (cursor.isNullOrEmpty()) "" else "?cursor=" + java.net.URLEncoder.encode(cursor, "UTF-8")
         val response = authorized("GET", ScoreMateProtocol.PATH_SYNC_SCORES + query)
         if (response.code == 400 && response.body.contains("\"cursor\"")) throw ScoreMateBadCursorException()
-        if (response.code == 429) throw ScoreMateException("동기화 요청이 너무 많습니다. 잠시 후 다시")
-        if (response.code != 200) throw ScoreMateException("동기화 목록을 받지 못했습니다 (HTTP ${response.code})")
-        return ScoreMateSync.parsePage(response.body) ?: throw ScoreMateException("동기화 응답을 해석하지 못했습니다")
+        if (response.code == 429) throw ScoreMateException(UiText(R.string.scoremate_sync_too_many))
+        if (response.code != 200) throw ScoreMateException(UiText(R.string.scoremate_sync_list_failed, response.code))
+        return ScoreMateSync.parsePage(response.body) ?: throw ScoreMateException(UiText(R.string.scoremate_sync_bad_response))
     }
 
     /** 세트리스트 전부 (서버가 이 TV 에 주는 것 — 0.7.0 부터 고른 곡목만). 응답 본문을 그대로 돌려준다 (#064) */
     suspend fun fetchSetlists(): String {
         val response = authorized("GET", ScoreMateProtocol.PATH_SYNC_SETLISTS)
-        if (response.code != 200) throw ScoreMateException("세트리스트를 받지 못했습니다 (HTTP ${response.code})")
+        if (response.code != 200) throw ScoreMateException(UiText(R.string.scoremate_setlists_failed, response.code))
         return response.body
     }
 
@@ -155,7 +163,7 @@ class ScoreMateClient(
     suspend fun fetchNotesList(): String? {
         val response = authorized("GET", ScoreMateProtocol.PATH_SYNC_NOTES)
         if (response.code == 404) return null
-        if (response.code != 200) throw ScoreMateException("메모 목록을 받지 못했습니다 (HTTP ${response.code})")
+        if (response.code != 200) throw ScoreMateException(UiText(R.string.scoremate_notes_list_failed, response.code))
         return response.body
     }
 
@@ -175,7 +183,7 @@ class ScoreMateClient(
         val path = ScoreMateSync.pathOf(downloadUrl)
         val first = authorizedWith { bearer -> transportDownload(HttpRequest("GET", url(path), bearer = bearer), target) }
         val final = if (first.code in 300..399) {
-            val location = first.location ?: throw ScoreMateException("받기 주소가 없습니다 (HTTP ${first.code})")
+            val location = first.location ?: throw ScoreMateException(UiText(R.string.scoremate_no_download_location, first.code))
             val signed = if (location.startsWith("/")) url(location) else location
             transportDownload(HttpRequest("GET", signed), target)
         } else {
@@ -183,7 +191,7 @@ class ScoreMateClient(
         }
         if (final.code !in 200..299) {
             target.delete()
-            throw ScoreMateException("악보를 받지 못했습니다 (HTTP ${final.code})")
+            throw ScoreMateException(UiText(R.string.scoremate_download_failed, final.code))
         }
     }
 
@@ -192,7 +200,7 @@ class ScoreMateClient(
             transport.download(request, target)
         } catch (e: IOException) {
             target.delete()
-            throw ScoreMateException("악보를 받는 중 연결이 끊겼습니다", e)
+            throw ScoreMateException(UiText(R.string.scoremate_download_interrupted), e)
         }
     }
 
@@ -226,7 +234,7 @@ class ScoreMateClient(
         when (response.code) {
             200 -> {
                 val (access, refresh) = ScoreMateProtocol.parseRefresh(response.body, current.refresh)
-                    ?: throw ScoreMateException("토큰 갱신 응답을 해석하지 못했습니다")
+                    ?: throw ScoreMateException(UiText(R.string.scoremate_refresh_bad_response))
                 store.saveTokens(current.copy(access = access, refresh = refresh))
                 access
             }
@@ -235,7 +243,7 @@ class ScoreMateClient(
                 store.clearTokens()
                 throw ScoreMateUnlinkedException()
             }
-            else -> throw ScoreMateException("토큰을 갱신하지 못했습니다 (HTTP ${response.code})")
+            else -> throw ScoreMateException(UiText(R.string.scoremate_refresh_failed, response.code))
         }
     }
 
@@ -244,7 +252,7 @@ class ScoreMateClient(
             try {
                 transport.execute(HttpRequest(method, store.server.trimEnd('/') + path, body, bearer))
             } catch (e: IOException) {
-                throw ScoreMateException("ScoreMate 서버에 연결할 수 없습니다", e)
+                throw ScoreMateException(UiText(R.string.scoremate_unreachable), e)
             }
         }
 }

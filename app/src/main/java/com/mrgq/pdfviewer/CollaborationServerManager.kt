@@ -28,7 +28,7 @@ class CollaborationServerManager(
     private var serverStarted = false
     
     private var onClientConnected: ((String, String) -> Unit)? = null
-    private var onVersionMismatch: ((String) -> Unit)? = null
+    private var onVersionMismatch: ((com.mrgq.pdfviewer.update.UiText) -> Unit)? = null
     private var onClientDisconnected: ((String) -> Unit)? = null
     
     companion object {
@@ -338,8 +338,8 @@ class CollaborationServerManager(
         onClientDisconnected = callback
     }
 
-    /** 연주자와 앱 버전이 다르다 (#061) — 보일 안내문 */
-    fun setOnVersionMismatch(callback: ((String) -> Unit)?) {
+    /** 연주자와 앱 버전이 다르다 (#061) — 보일 안내문 (키 + 인자, P18) */
+    fun setOnVersionMismatch(callback: ((com.mrgq.pdfviewer.update.UiText) -> Unit)?) {
         onVersionMismatch = callback
     }
     

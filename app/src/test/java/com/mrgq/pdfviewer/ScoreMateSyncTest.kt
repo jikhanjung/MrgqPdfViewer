@@ -434,7 +434,7 @@ class ScoreMateSyncTest {
         // 세트리스트를 못 받아도 악보 동기화는 된 것 — 저장한 세트리스트를 그대로 쓴다
         server.setlistsFail = true
         val failed = sync().sync()
-        assertTrue(failed.errors.single().startsWith("세트리스트"))
+        assertEquals(R.string.scoremate_error_setlists, failed.errors.single().id) // "세트리스트: …" (P18 — 키 + 인자)
         assertEquals(1, com.mrgq.pdfviewer.scoremate.ScoreMateSetlists.parse(tokens.setlistsBody).size)
     }
 
@@ -797,7 +797,12 @@ class ScoreMateSyncTest {
         writeConductor("x") // 아직 못 올림
         server.conductorWritable = emptySet()
         val report = sync().sync()
-        assertTrue(report.errors.any { it.contains("보관") })
+        // "… 지휘자 메모: …보관해 두었습니다" (P18 — 키 + 인자)
+        val kept = setOf(R.string.scoremate_notes_no_permission_kept, R.string.scoremate_notes_forbidden_kept)
+        assertTrue(report.errors.any { e ->
+            val cause = e.args.last() as? com.mrgq.pdfviewer.update.UiText
+            e.id == R.string.scoremate_error_conductor_notes_item && cause != null && cause.id in kept
+        })
         assertTrue(conductorNotes()!!.ids.isEmpty())
         assertFalse(conductorNotes()!!.sync!!.writable)
         assertEquals(1, File(root, ".ScoreMateNotes").listFiles()!!.count { it.name.startsWith("1.conductor-unsent-") })

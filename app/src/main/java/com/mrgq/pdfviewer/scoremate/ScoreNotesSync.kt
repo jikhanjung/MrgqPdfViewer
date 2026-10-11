@@ -2,9 +2,11 @@ package com.mrgq.pdfviewer.scoremate
 
 import com.google.gson.JsonObject
 import com.google.gson.JsonParser
+import com.mrgq.pdfviewer.R
 import com.mrgq.pdfviewer.notes.ScoreNotesFile
 import com.mrgq.pdfviewer.notes.ScoreNotesFile.Loaded
 import com.mrgq.pdfviewer.notes.ScoreNotesFile.SyncState
+import com.mrgq.pdfviewer.update.UiText
 import java.io.File
 
 /**
@@ -29,7 +31,7 @@ class ScoreNotesSync(
     private val keptDir: File? = null,
 ) {
 
-    data class Result(val uploaded: Int = 0, val downloaded: Int = 0, val errors: List<String> = emptyList())
+    data class Result(val uploaded: Int = 0, val downloaded: Int = 0, val errors: List<UiText> = emptyList())
 
     /** [scores] = 이 기기에 있는 ScoreMate 악보 (숨긴 것 빼고) */
     suspend fun sync(scores: List<SyncedScore>): Result {
@@ -37,7 +39,7 @@ class ScoreNotesSync(
         val list = parseList(listBody)
         var up = 0
         var down = 0
-        val errors = mutableListOf<String>()
+        val errors = mutableListOf<UiText>()
         for (score in scores) {
             if (score.hidden) continue
             val pdf = File(score.filePath)
@@ -57,7 +59,8 @@ class ScoreNotesSync(
                 } catch (e: ScoreMateUnlinkedException) {
                     throw e
                 } catch (e: Exception) {
-                    errors += "${score.title} ${if (layer == LAYER_CONDUCTOR) "지휘자 메모" else "메모"}: ${e.message}"
+                    val id = if (layer == LAYER_CONDUCTOR) R.string.scoremate_error_conductor_notes_item else R.string.scoremate_error_notes_item
+                    errors += UiText(id, score.title, e.uiArg())
                 }
             }
         }
@@ -96,7 +99,7 @@ class ScoreNotesSync(
     /** [writable] 이 아니면 받기만 (지휘자 메모 — 멤버) */
     private suspend fun syncOne(score: SyncedScore, layer: String, file: File, remoteRevision: Int?, writable: Boolean): Outcome {
         val local = synchronized(ScoreNotesFile.lock) {
-            if (file.exists()) ScoreNotesFile.read(file) ?: throw ScoreMateException("메모 파일을 읽지 못했습니다")
+            if (file.exists()) ScoreNotesFile.read(file) ?: throw ScoreMateException(UiText(R.string.scoremate_notes_read_failed))
             else Loaded(emptyList(), null)
         }
         val base = local.sync ?: SyncState(0, emptySet())
@@ -104,7 +107,7 @@ class ScoreNotesSync(
             // 리더였다가 아니게 됐는데 올리지 못한 지휘자 메모가 있다 — 서버 것으로 바뀌기 전에 보관 (반장 검토)
             keepUnsent(score, file)
             resetToServer(score, layer, file, local)
-            throw ScoreMateException("지휘자 메모를 쓸 권한이 없어 올리지 못한 메모를 보관해 두었습니다")
+            throw ScoreMateException(UiText(R.string.scoremate_notes_no_permission_kept))
         }
         val dirty = writable && local.ids != base.baseIds
 
@@ -121,7 +124,7 @@ class ScoreNotesSync(
         if (response.code == 404) {
             return if (dirty) upload(score, layer, file, local, local, base, baseRevision = 0) else Outcome.NONE
         }
-        if (response.code != 200) throw ScoreMateException("메모를 받지 못했습니다 (HTTP ${response.code})")
+        if (response.code != 200) throw ScoreMateException(UiText(R.string.scoremate_notes_get_failed, response.code))
         val remote = parseDoc(response.body)
         // 쓸 수 없으면 서버 것 그대로 (내 쪽에서 바꿀 수 없다)
         val merged = if (writable) ScoreNotesFile.merge(remote.loaded, local, base.baseIds) else remote.loaded
@@ -163,12 +166,12 @@ class ScoreNotesSync(
                         setWritable(file, false)
                         resetToServer(score, layer, file, local)
                     }
-                    throw ScoreMateException("지휘자 메모를 쓸 권한이 없습니다 — 올리지 못한 메모는 보관해 두었습니다")
+                    throw ScoreMateException(UiText(R.string.scoremate_notes_forbidden_kept))
                 }
-                else -> throw ScoreMateException("메모를 올리지 못했습니다 (HTTP ${response.code})")
+                else -> throw ScoreMateException(UiText(R.string.scoremate_notes_put_failed, response.code))
             }
         }
-        throw ScoreMateException("메모가 계속 엇갈려 올리지 못했습니다")
+        throw ScoreMateException(UiText(R.string.scoremate_notes_conflict))
     }
 
     /**

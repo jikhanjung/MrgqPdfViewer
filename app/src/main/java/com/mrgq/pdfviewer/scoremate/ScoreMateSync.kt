@@ -2,7 +2,10 @@ package com.mrgq.pdfviewer.scoremate
 
 import com.google.gson.JsonObject
 import com.google.gson.JsonParser
+import android.content.Context
+import com.mrgq.pdfviewer.R
 import com.mrgq.pdfviewer.notes.ScoreNotesFile
+import com.mrgq.pdfviewer.update.UiText
 import kotlinx.coroutines.sync.withLock
 import java.io.File
 import java.security.MessageDigest
@@ -81,7 +84,8 @@ data class SyncReport(
     val updated: Int = 0,
     /** 세트리스트(곡목 · 순서 · 메모)가 바뀌었다 (#064) */
     val setlistsChanged: Boolean = false,
-    val errors: List<String> = emptyList(),
+    /** 실패마다 화면 글 (P18 — 키 + 인자, [ScoreMateSyncText.summary] 가 첫 것을 보인다) */
+    val errors: List<UiText> = emptyList(),
     /** 서버로 올린 · 서버에서 받은 메모 문서 (악보 수, P11 §6) — 목록을 다시 그릴 일은 아니다 */
     val notesUploaded: Int = 0,
     val notesDownloaded: Int = 0,
@@ -146,7 +150,7 @@ class ScoreMateSync(
         pages.forEach { page -> page.scores.forEach { incoming[it.id] = it } }
         val ids = pages.last().ids
 
-        val errors = mutableListOf<String>()
+        val errors = mutableListOf<UiText>()
         var downloaded = 0
         var moved = 0
         var removed = 0
@@ -183,11 +187,11 @@ class ScoreMateSync(
                 if (changed == Change.MOVED) moved++
                 if (changed == Change.UPDATED) updated++
                 if (applySidecar(remote.musicXml, musicXmlFileOf(File(target)), "MusicXML")) musicXml++
-                if (applySidecar(remote.layout, layoutFileOf(File(target)), "분석 파일")) layouts++
+                if (applySidecar(remote.layout, layoutFileOf(File(target)), UiText(R.string.scoremate_sidecar_layout))) layouts++
             } catch (e: ScoreMateUnlinkedException) {
                 throw e
             } catch (e: Exception) {
-                errors += "${remote.title}: ${e.message}"
+                errors += UiText(R.string.scoremate_error_item, remote.title, e.uiArg())
             }
         }
 
@@ -200,7 +204,7 @@ class ScoreMateSync(
                 moveTo(existing.copy(ensembleName = existing.ensembleId?.let { folderSource(it, incoming) } ?: existing.ensembleName), File(target))
                 moved++
             } catch (e: Exception) {
-                errors += "${existing.title}: ${e.message}"
+                errors += UiText(R.string.scoremate_error_item, existing.title, e.uiArg())
             }
         }
 
@@ -229,7 +233,7 @@ class ScoreMateSync(
         } catch (e: ScoreMateUnlinkedException) {
             throw e
         } catch (e: ScoreMateException) {
-            errors += "세트리스트: ${e.message}"
+            errors += UiText(R.string.scoremate_error_setlists, e.text)
         }
 
         // 6. 악보 메모 (개인, P11 §6) — 악보 자리가 정해진 뒤. 실패해도 악보 동기화는 된 것
@@ -240,7 +244,7 @@ class ScoreMateSync(
         } catch (e: ScoreMateUnlinkedException) {
             throw e
         } catch (e: ScoreMateException) {
-            errors += "메모: ${e.message}"
+            errors += UiText(R.string.scoremate_error_notes, e.text)
         }
         return SyncReport(downloaded, moved, removed, pending, musicXml, layouts, updated, setlistsChanged, errors,
             notesUploaded = notes.uploaded, notesDownloaded = notes.downloaded)
@@ -341,7 +345,7 @@ class ScoreMateSync(
         val got = sha256Of(part)
         if (got != sha) {
             part.delete()
-            throw ScoreMateException("받은 파일이 서버 판과 다릅니다 (SHA-256 불일치)")
+            throw ScoreMateException(UiText(R.string.scoremate_sha_mismatch))
         }
         if (currentFile != null && currentFile.path != target.path && currentFile.isFile) {
             // 새 판 + 새 이름: 레코드를 새 경로로 옮긴 뒤 옛 파일을 지운다 (파일별 설정 유지). 옛 판의 MusicXML 도
@@ -352,7 +356,7 @@ class ScoreMateSync(
         }
         if (!part.renameTo(target)) {
             target.delete()
-            if (!part.renameTo(target)) throw ScoreMateException("받은 파일을 저장하지 못했습니다")
+            if (!part.renameTo(target)) throw ScoreMateException(UiText(R.string.scoremate_save_failed))
         }
         store.upsert(record)
         restoreNotes(remote.id, target)
@@ -395,12 +399,12 @@ class ScoreMateSync(
     private suspend fun moveTo(existing: SyncedScore, target: File) {
         val from = File(existing.filePath)
         if (!from.isFile) return
-        if (target.exists()) throw ScoreMateException("${target.name} 자리에 다른 파일이 있습니다")
+        if (target.exists()) throw ScoreMateException(UiText(R.string.scoremate_move_occupied, target.name))
         target.parentFile?.mkdirs()
         records.beforeMove(from.path, target.path)
         if (!from.renameTo(target)) {
             records.beforeMove(target.path, from.path) // 되돌린다
-            throw ScoreMateException("파일을 옮기지 못했습니다")
+            throw ScoreMateException(UiText(R.string.scoremate_move_failed))
         }
         moveSidecars(from, target)
         store.upsert(existing.copy(filePath = target.path))
@@ -410,7 +414,7 @@ class ScoreMateSync(
      * PDF 옆 곁 파일 [file] 을 응답 [remote] 에 맞춘다. 받았으면 true. [remote] 가 null 이면 지운다 — 인식 · 분석 전이거나 새 판을 처리 중이라
      * 옛 판의 결과가 남으면 마디가 어긋난다.
      */
-    private suspend fun applySidecar(remote: RemoteFile?, file: File, what: String): Boolean {
+    private suspend fun applySidecar(remote: RemoteFile?, file: File, what: Any): Boolean {
         if (remote == null) {
             file.delete()
             return false
@@ -421,11 +425,11 @@ class ScoreMateSync(
         client.downloadScore(remote.url, part)
         if (sha256Of(part) != sha) {
             part.delete()
-            throw ScoreMateException("받은 $what 이 서버 것과 다릅니다 (SHA-256 불일치)")
+            throw ScoreMateException(UiText(R.string.scoremate_sidecar_sha_mismatch, what))
         }
         if (!part.renameTo(file)) {
             file.delete()
-            if (!part.renameTo(file)) throw ScoreMateException("$what 을 저장하지 못했습니다")
+            if (!part.renameTo(file)) throw ScoreMateException(UiText(R.string.scoremate_sidecar_save_failed, what))
         }
         return true
     }
@@ -447,7 +451,7 @@ class ScoreMateSync(
             val page = client.fetchSyncPage(cursor)
             pages += page
             cursor = page.cursor
-            if (pages.size > MAX_PAGES) throw ScoreMateException("동기화 쪽이 너무 많습니다")
+            if (pages.size > MAX_PAGES) throw ScoreMateException(UiText(R.string.scoremate_too_many_pages))
         } while (page.hasMore)
         return pages
     }
@@ -618,20 +622,24 @@ object ScoreMateNaming {
 
 /** 동기화 결과를 사람이 읽을 한 줄로 */
 object ScoreMateSyncText {
-    /** 알릴 것이 없으면 null */
-    fun summary(report: SyncReport): String? {
+    /** 알릴 것이 없으면 null. 글은 [context] 의 언어로 (P18) */
+    fun summary(context: Context, report: SyncReport): String? {
+        val res = context.resources
+        fun count(id: Int, n: Int) = res.getQuantityString(id, n, n)
         val parts = mutableListOf<String>()
-        if (report.downloaded > 0) parts += "악보 ${report.downloaded}개 받음"
-        if (report.moved > 0) parts += "${report.moved}개 이름 바뀜"
-        if (report.removed > 0) parts += "${report.removed}개 지움"
-        if (report.pending > 0) parts += "${report.pending}개는 서버 처리 중"
-        if (report.musicXml > 0) parts += "MusicXML ${report.musicXml}개 받음"
-        if (report.layouts > 0) parts += "분석 ${report.layouts}개 받음"
-        if (report.updated > 0) parts += "곡 정보 ${report.updated}개 바뀜"
-        if (report.setlistsChanged) parts += "세트리스트 갱신"
-        if (report.notesUploaded > 0) parts += "메모 ${report.notesUploaded}곡 올림"
-        if (report.notesDownloaded > 0) parts += "메모 ${report.notesDownloaded}곡 받음"
-        if (report.errors.isNotEmpty()) parts += "${report.errors.size}개 실패 (${report.errors.first()})"
+        if (report.downloaded > 0) parts += count(R.plurals.scoremate_summary_downloaded, report.downloaded)
+        if (report.moved > 0) parts += count(R.plurals.scoremate_summary_moved, report.moved)
+        if (report.removed > 0) parts += count(R.plurals.scoremate_summary_removed, report.removed)
+        if (report.pending > 0) parts += count(R.plurals.scoremate_summary_pending, report.pending)
+        if (report.musicXml > 0) parts += count(R.plurals.scoremate_summary_musicxml, report.musicXml)
+        if (report.layouts > 0) parts += count(R.plurals.scoremate_summary_layouts, report.layouts)
+        if (report.updated > 0) parts += count(R.plurals.scoremate_summary_updated, report.updated)
+        if (report.setlistsChanged) parts += context.getString(R.string.scoremate_summary_setlists)
+        if (report.notesUploaded > 0) parts += count(R.plurals.scoremate_summary_notes_uploaded, report.notesUploaded)
+        if (report.notesDownloaded > 0) parts += count(R.plurals.scoremate_summary_notes_downloaded, report.notesDownloaded)
+        if (report.errors.isNotEmpty()) {
+            parts += context.getString(R.string.scoremate_summary_failed, report.errors.size, report.errors.first().resolve(context))
+        }
         return if (parts.isEmpty()) null else "ScoreMate: " + parts.joinToString(", ")
     }
 }
