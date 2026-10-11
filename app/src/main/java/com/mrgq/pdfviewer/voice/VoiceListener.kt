@@ -28,10 +28,16 @@ class VoiceListener(context: Context, private val callback: Callback) {
 
     private val recognizer: SpeechRecognizer = SpeechRecognizer.createSpeechRecognizer(context)
     private var active = false
+    /** 이번 듣기에서 서비스가 준비됐다(onReadyForSpeech) / 손을 떼 끝내 달라고 했다 — 시작조차 못 한 실패를 가리려고 */
+    private var ready = false
+    private var stopping = false
 
     init {
         recognizer.setRecognitionListener(object : RecognitionListener {
-            override fun onReadyForSpeech(params: Bundle?) = callback.onListening()
+            override fun onReadyForSpeech(params: Bundle?) {
+                ready = true
+                callback.onListening()
+            }
             override fun onBeginningOfSpeech() = Unit
             override fun onRmsChanged(rmsdB: Float) = Unit
             override fun onBufferReceived(buffer: ByteArray?) = Unit
@@ -50,8 +56,11 @@ class VoiceListener(context: Context, private val callback: Callback) {
             override fun onError(error: Int) {
                 if (!active) return
                 active = false
-                Log.i(TAG, "인식 오류 $error")
-                callback.onError(error, errorMessage(error))
+                Log.i(TAG, "인식 오류 $error (준비 $ready, 끝냄 $stopping)")
+                // ERROR_CLIENT 는 보통 듣기 전에 손을 뗀 것이라 조용히 넘긴다. 그런데 준비도 안 됐고 끝내 달라고 하지도 않았는데 오면
+                // 서비스를 시작조차 못 한 것이다 — 기본 음성 입력이 비어 있으면 Android 가 곧바로 이 오류를 낸다(#084 끝)
+                val message = if (error == SpeechRecognizer.ERROR_CLIENT && !ready && !stopping) NOT_STARTED_MESSAGE else errorMessage(error)
+                callback.onError(error, message)
             }
         })
     }
@@ -78,12 +87,16 @@ class VoiceListener(context: Context, private val callback: Callback) {
             }
         }
         active = true
+        ready = false
+        stopping = false
         recognizer.startListening(intent)
     }
 
     /** 손을 뗐다 — 지금까지 말한 것으로 결과를 낸다 */
     fun stop() {
-        if (active) recognizer.stopListening()
+        if (!active) return
+        stopping = true
+        recognizer.stopListening()
     }
 
     fun cancel() {
@@ -109,6 +122,12 @@ class VoiceListener(context: Context, private val callback: Callback) {
 
         fun isAvailable(context: Context): Boolean = SpeechRecognizer.isRecognitionAvailable(context)
 
+        /** 기기에 인식 서비스가 없을 때 깔 앱 — Google "음성 인식 및 합성"(Speech Recognition & Synthesis) */
+        const val RECOGNIZER_PACKAGE = "com.google.android.tts"
+
+        private const val NOT_STARTED_MESSAGE =
+            "음성 인식을 시작하지 못했어요 — 기기 설정 → 시스템 → 언어 및 입력 → 음성 입력(기본 음성 인식)을 확인하세요"
+
         private fun Bundle?.texts(): List<String> =
             this?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION).orEmpty()
 
@@ -119,7 +138,9 @@ class VoiceListener(context: Context, private val callback: Callback) {
             SpeechRecognizer.ERROR_SERVER, SpeechRecognizer.ERROR_SERVER_DISCONNECTED -> "음성 인식 서버에 닿지 않아요 — 인터넷 연결을 확인하세요"
             SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> "마이크 권한이 필요해요"
             SpeechRecognizer.ERROR_RECOGNIZER_BUSY -> "음성 인식이 다른 곳에서 쓰이고 있어요"
-            SpeechRecognizer.ERROR_LANGUAGE_NOT_SUPPORTED, SpeechRecognizer.ERROR_LANGUAGE_UNAVAILABLE -> "이 기기의 음성 인식이 한국어를 지원하지 않아요"
+            // 중국판 롬 태블릿은 인식 앱(음성 인식 및 합성)에 마이크 권한이 없을 때도 이것이 왔다(#084)
+            SpeechRecognizer.ERROR_LANGUAGE_NOT_SUPPORTED, SpeechRecognizer.ERROR_LANGUAGE_UNAVAILABLE ->
+                "한국어 음성 인식을 쓸 수 없어요 — 음성 인식 앱(Google · 음성 인식 및 합성)의 마이크 권한을 확인하세요"
             SpeechRecognizer.ERROR_CLIENT -> null
             else -> "음성 인식 오류 ($error)"
         }

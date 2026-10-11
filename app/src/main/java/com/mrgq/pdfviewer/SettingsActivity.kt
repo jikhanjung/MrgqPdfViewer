@@ -870,7 +870,8 @@ class SettingsActivity : AppCompatActivity() {
                 icon = "🎙",
                 title = "음성 명령",
                 subtitle = when {
-                    !com.mrgq.pdfviewer.voice.VoiceListener.isAvailable(this) -> "이 기기에는 음성 인식 서비스가 없습니다 (Google 앱 등)"
+                    !com.mrgq.pdfviewer.voice.VoiceListener.isAvailable(this) ->
+                        "이 기기에는 음성 인식 서비스가 없습니다 — 누르면 설치 안내 (Google \"음성 인식 및 합성\")"
                     preferences.getBoolean(PdfViewerActivity.PREF_VOICE_COMMANDS, false) ->
                         "켜짐 — 악보 화면 오른쪽 아래 🎙 를 누른 채로 \"57마디부터 템포 72\" · \"다음 쪽\" · \"첼로 파트\". 기기의 음성 인식(대개 인터넷)을 씁니다"
                     else -> "꺼짐 — 켜면 악보 화면에 🎙 단추가 생깁니다"
@@ -1158,6 +1159,38 @@ class SettingsActivity : AppCompatActivity() {
         }
     }
     
+    /**
+     * 음성 인식 서비스가 없는 기기(주로 중국판 롬 태블릿 — Google 앱만으로는 인식 서비스가 꺼져 있다, #084): 깔 앱과 권한을 알리고 스토어로.
+     * Play 스토어가 없는 기기는 웹 페이지로
+     */
+    private fun showRecognizerInstallHelp() {
+        val pkg = com.mrgq.pdfviewer.voice.VoiceListener.RECOGNIZER_PACKAGE
+        AlertDialog.Builder(this)
+            .setTitle("음성 인식 서비스가 없습니다")
+            .setMessage(
+                "🎙 음성 명령은 기기의 음성 인식을 씁니다.\n\n" +
+                    "1. Google \"음성 인식 및 합성\"(Speech Recognition & Synthesis)을 설치합니다\n" +
+                    "2. 기기 설정 → 앱 → 음성 인식 및 합성 → 권한 → 마이크를 허용합니다\n" +
+                    "3. 이 화면으로 돌아와 🎙 음성 명령을 켭니다\n\n" +
+                    "Google 앱만 있는 중국판 롬 태블릿은 그 안의 인식 서비스가 꺼져 있어 따로 설치해야 합니다."
+            )
+            .setPositiveButton("스토어에서 열기") { _, _ ->
+                val market = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse("market://details?id=$pkg"))
+                val web = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse("https://play.google.com/store/apps/details?id=$pkg"))
+                try {
+                    startActivity(market)
+                } catch (e: android.content.ActivityNotFoundException) {
+                    try {
+                        startActivity(web)
+                    } catch (e2: android.content.ActivityNotFoundException) {
+                        Toast.makeText(this, "스토어 · 브라우저를 열 수 없습니다 — $pkg 를 찾아 설치하세요", Toast.LENGTH_LONG).show()
+                    }
+                }
+            }
+            .setNegativeButton("닫기", null)
+            .show()
+    }
+
     private fun handleDetailItemClick(item: SettingsItem) {
         if (item.id.startsWith("rec:")) {
             recordingEntries.getOrNull(item.id.removePrefix("rec:").toIntOrNull() ?: -1)?.let { showRecordingDialog(it) }
@@ -1193,7 +1226,7 @@ class SettingsActivity : AppCompatActivity() {
                 showInfoPanel()
             }
             "voice_commands_toggle" -> {
-                if (!com.mrgq.pdfviewer.voice.VoiceListener.isAvailable(this)) return
+                if (!com.mrgq.pdfviewer.voice.VoiceListener.isAvailable(this)) return showRecognizerInstallHelp()
                 val enable = !preferences.getBoolean(PdfViewerActivity.PREF_VOICE_COMMANDS, false)
                 val editor = preferences.edit().putBoolean(PdfViewerActivity.PREF_VOICE_COMMANDS, enable)
                 // 끄면 👂 계속 듣기도 함께 끈다 — 다시 켰을 때 모르는 사이 듣기 시작하지 않게
