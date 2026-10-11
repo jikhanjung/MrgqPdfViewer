@@ -600,7 +600,7 @@ class ScoreMateSync(
 /** 받은 악보의 폴더 · 파일 이름 규칙 (P05 §6) — 모든 TV 가 같은 규칙을 쓴다 */
 object ScoreMateNaming {
     /** 개인 악보 폴더 */
-    const val PERSONAL_FOLDER = "내 악보"
+    const val PERSONAL_FOLDER = "내 악보" // i18n-ignore: 기기 폴더 이름 — 바꾸면 파일이 옮겨진다
     private const val MAX_LENGTH = 80
     private val FORBIDDEN = Regex("""[/\\:*?"<>|\u0000-\u001f]""")
 
@@ -613,7 +613,7 @@ object ScoreMateNaming {
         if (ensembleName.isNullOrBlank()) PERSONAL_FOLDER else sanitize(ensembleName)
 
     fun baseName(title: String, partName: String): String {
-        val base = sanitize(title.ifBlank { "제목 없음" })
+        val base = sanitize(title.ifBlank { "제목 없음" }) // i18n-ignore: 파일 이름 — 바꾸면 다시 받는다
         return if (partName.isBlank()) base else sanitize("$base ($partName)")
     }
 

@@ -259,7 +259,7 @@ class GlobalCollaborationManager private constructor() {
             try {
                 conductorDiscovery = ConductorDiscovery()
                 val deviceName = android.os.Build.MODEL ?: "Android TV"
-                conductorDiscovery?.startConductorBroadcast("$deviceName (지휘자)", 9090)
+                conductorDiscovery?.startConductorBroadcast("$deviceName (지휘자)", 9090) // i18n-ignore: 합주 발견 방송 이름(상대 기기에 감)
                 Log.d(TAG, "Conductor discovery broadcast started")
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to start conductor broadcast", e)
@@ -531,7 +531,7 @@ class GlobalCollaborationManager private constructor() {
     
     fun connectToDiscoveredConductor(conductorInfo: ConductorDiscovery.ConductorInfo): Boolean {
         val deviceName = android.os.Build.MODEL ?: "Android TV"
-        return connectToConductor(conductorInfo.ipAddress, conductorInfo.port, "$deviceName (연주자)")
+        return connectToConductor(conductorInfo.ipAddress, conductorInfo.port, "$deviceName (연주자)") // i18n-ignore: 합주 연결 이름(상대 기기에 감)
     }
     
     // Note: Auto-discovery method removed in favor of explicit discovery management

@@ -168,7 +168,7 @@ object MusicXmlReader {
         for ((p, part) in partElements.withIndex()) {
             val read = readPart(part)
             val id = part.getAttribute("id")
-            parts += XmlPart(id, names[id]?.takeIf { it.isNotEmpty() } ?: "파트 ${p + 1}", read.staves)
+            parts += XmlPart(id, names[id]?.takeIf { it.isNotEmpty() } ?: "파트 ${p + 1}", read.staves) // i18n-ignore: 이름 없는 MusicXML 파트의 데이터 기본값
             notes += read.notes
             if (p == 0) measures = read.measures
             // 리허설 마크는 보통 맨 위 파트에만, 편집기에 따라 모든 파트에 — 모아서 같은 것은 하나로

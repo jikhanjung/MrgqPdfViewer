@@ -47,7 +47,7 @@ object ScoreMateSetlists {
                 }.sortedBy { it.position }
                 Setlist(
                     id = o.get("id").asLong,
-                    title = o.str("title")?.takeIf { it.isNotBlank() } ?: "세트리스트",
+                    title = o.str("title")?.takeIf { it.isNotBlank() } ?: "세트리스트", // i18n-ignore: 이름 없는 세트리스트의 데이터 기본값
                     ensembleName = o.get("ensemble")?.takeIf { it.isJsonObject }?.asJsonObject?.str("name"),
                     items = items,
                 )

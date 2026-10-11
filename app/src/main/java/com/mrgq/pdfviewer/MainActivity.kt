@@ -661,7 +661,7 @@ class MainActivity : AppCompatActivity() {
         
         // Connect to conductor (performer mode should already be active)
         val deviceName = android.os.Build.MODEL ?: "Android TV"
-        val connected = globalManager.connectToConductor(ip, 9090, "$deviceName (연주자)")
+        val connected = globalManager.connectToConductor(ip, 9090, "$deviceName (연주자)") // i18n-ignore: 합주 연결 이름(상대 기기에 감)
         
         if (connected) {
             Toast.makeText(this, getString(R.string.main_connecting_to_conductor_ip, ip), Toast.LENGTH_SHORT).show()

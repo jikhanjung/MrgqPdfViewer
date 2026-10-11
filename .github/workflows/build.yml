@@ -116,6 +116,10 @@ jobs:
           path: app/build/reports/tests/
           if-no-files-found: ignore
 
+      # P18 6단계 — 화면 글은 리소스로: values/ · values-en 대조 + 코드 · 레이아웃의 한글 리터럴 검사
+      - name: i18n gate
+        run: python3 tools/i18n_gate.py .
+
       - name: Android Lint
         run: ./gradlew lintDebug
 

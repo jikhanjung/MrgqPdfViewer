@@ -66,7 +66,7 @@ object EnsembleFiles {
         val base = fileName.replace('\\', '/').substringAfterLast('/')
             .replace(Regex("""[:*?"<>|\u0000-\u001f]"""), "_")
             .trim().trimStart('.')
-            .ifEmpty { "악보" }
+            .ifEmpty { "악보" } // i18n-ignore: 캐시 파일 이름
         return if (base.endsWith(".pdf", ignoreCase = true)) base else "$base.pdf"
     }
 

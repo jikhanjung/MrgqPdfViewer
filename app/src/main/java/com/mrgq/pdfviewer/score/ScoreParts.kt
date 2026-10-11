@@ -31,10 +31,10 @@ object ScoreParts {
 
     /** 로그용 한 줄 */
     fun Result.summary(): String = when (this) {
-        Result.NoStaves -> "보표 없음"
-        Result.SingleStaff -> "보표 하나"
-        is Result.VaryingStaves -> "시스템마다 보표 수가 다름 ${counts.sorted()}"
-        is Result.Parts -> "${parts.size}개 [${parts.joinToString { it.name }}]"
+        Result.NoStaves -> "보표 없음" // i18n-ignore: 로그용 요약
+        Result.SingleStaff -> "보표 하나" // i18n-ignore: 로그용 요약
+        is Result.VaryingStaves -> "시스템마다 보표 수가 다름 ${counts.sorted()}" // i18n-ignore: 로그용 요약
+        is Result.Parts -> "${parts.size}개 [${parts.joinToString { it.name }}]" // i18n-ignore: 로그용 요약
     }
 
     fun of(staves: List<ScoreStaff>): Result {
@@ -48,7 +48,7 @@ object ScoreParts {
         val ordered = staves.sortedWith(compareBy({ it.pageIndex }, { it.systemIndex }, { it.staffIndex }))
         return Result.Parts((0 until count).map { k ->
             val label = ordered.firstOrNull { it.staffIndex == k && !it.label.isNullOrBlank() }?.label
-            ScorePart(k, label ?: "보표 ${k + 1}", named = label != null)
+            ScorePart(k, label ?: "보표 ${k + 1}", named = label != null) // i18n-ignore: 데이터 기본값 — 화면은 viewer_staff_n
         })
     }
 }
