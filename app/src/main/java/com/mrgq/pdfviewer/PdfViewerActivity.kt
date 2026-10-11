@@ -5049,10 +5049,8 @@ class PdfViewerActivity : AppCompatActivity() {
                 is ScoreParts.Result.VaryingStaves -> return failed(getString(R.string.viewer_voice_varying_staves))
             }
             return when (val match = PartMatcher.match(all.map { it.staffIndex to knownPartName(it, all.size) }, parts)) {
-                is PartMatcher.Result.Missing -> failed(
-                    getString(R.string.viewer_voice_part_missing, match.part.label) + VoiceCommandRunner.partChoices(all.map { partName(it, all.size) })
-                )
-                is PartMatcher.Result.Ambiguous -> failed(getString(R.string.viewer_voice_part_ambiguous, match.part.label, match.names.joinToString()))
+                is PartMatcher.Result.Missing -> CommandOutcome.Failed(VoiceCommandRunner.partMissing(match.part, all.map { partName(it, all.size) }))
+                is PartMatcher.Result.Ambiguous -> CommandOutcome.Failed(VoiceCommandRunner.partAmbiguous(match.part, match.names))
                 is PartMatcher.Result.Staves -> applyPartStaves(fileId, match.staves.takeIf { it.size < all.size })
             }
         }
@@ -5422,7 +5420,7 @@ class PdfViewerActivity : AppCompatActivity() {
 
     /** 이 악보에서 나올 말 — 인식이 이쪽으로 기울게 (Android 13+). 사람 이름 보표는 부를 말(성 뺀 이름 포함, #094) */
     private fun voiceHints(): List<String> =
-        VoiceLexicon.INSTRUMENT_LABELS.values.toList() +
+        com.mrgq.pdfviewer.voice.VoiceLanguage.current(this).instrumentHints() +
             musicXml?.takeIf { musicXmlFileId == currentPdfFileId }?.parts?.map { it.name }.orEmpty() +
             PartNames.hints(cachedVoiceStaffNames())
 
@@ -5513,7 +5511,7 @@ class PdfViewerActivity : AppCompatActivity() {
     private fun runVoiceCandidates(candidates: List<String>, heard: List<String>, alwaysListening: Boolean) {
         val icon = if (alwaysListening) "👂" else "🎙"
         lifecycleScope.launch {
-            val best = CommandParser.parseBest(candidates, voiceStaffNames(), voiceStaffCount())
+            val best = com.mrgq.pdfviewer.voice.VoiceLanguage.current(this@PdfViewerActivity).parseBest(candidates, voiceStaffNames(), voiceStaffCount())
             if (best == null) {
                 showVoiceStatus(getString(if (alwaysListening) R.string.viewer_voice_not_understood_always else R.string.viewer_voice_not_understood), VOICE_STATUS_MS)
                 logVoiceCommand(heard, null, null, alwaysListening)
@@ -5523,7 +5521,7 @@ class PdfViewerActivity : AppCompatActivity() {
             val (text, parsed) = best
             showVoiceStatus("$icon “$text”")
             val report = runCommand(parsed)
-            showVoiceStatus("$icon “$text”\n" + (if (report.ok) "✓ " else "✗ ") + report.message, VOICE_STATUS_MS)
+            showVoiceStatus("$icon “$text”\n" + (if (report.ok) "✓ " else "✗ ") + report.text.resolve(this@PdfViewerActivity), VOICE_STATUS_MS)
             logVoiceCommand(heard, text, report, alwaysListening)
             scheduleAlwaysListening()
         }
@@ -5541,7 +5539,7 @@ class PdfViewerActivity : AppCompatActivity() {
             put("candidates", org.json.JSONArray(candidates))
             put("chosen", chosen ?: org.json.JSONObject.NULL)
             put("ok", report?.ok ?: false)
-            put("message", report?.message ?: org.json.JSONObject.NULL)
+            put("message", report?.text?.resolve(this@PdfViewerActivity) ?: org.json.JSONObject.NULL)
             put("app_version", BuildConfig.VERSION_NAME)
             // 이름 실패를 다시 읽어 보려면 그때 악보의 보표가 필요하다 (#110)
             put("staff_names", org.json.JSONArray(cachedVoiceStaffNames()))

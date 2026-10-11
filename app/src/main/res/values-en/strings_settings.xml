@@ -205,7 +205,7 @@
     <!-- Voice commands -->
     <string name="settings_voice_press_header">Push to talk</string>
     <string name="settings_voice_unavailable">This device has no speech recognition service — tap for install help (Google \"Speech Recognition &amp; Synthesis\")</string>
-    <string name="settings_voice_on">On — on the score screen, hold 🎙 at the bottom right and speak (Korean for now): \"57마디부터 템포 72\" · \"다음 쪽\" · \"첼로 파트\". Uses the device\'s speech recognition (usually online)</string>
+    <string name="settings_voice_on">On — on the score screen, hold 🎙 at the bottom right and speak: \"start from measure 57\" · \"next page\" · \"cello part\" (see Voice command language below). Uses the device\'s speech recognition (usually online)</string>
     <string name="settings_voice_off">Off — turn on to get a 🎙 button on the score screen</string>
     <string name="settings_voice_always">Always listening (experimental)</string>
     <string name="settings_voice_always_unavailable">Not available right now — being refined</string>

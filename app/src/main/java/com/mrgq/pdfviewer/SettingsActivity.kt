@@ -815,7 +815,7 @@ class SettingsActivity : AppCompatActivity() {
             .setView(box)
             .setPositiveButton(getString(R.string.settings_save)) { _, _ ->
                 val words = com.mrgq.pdfviewer.voice.WakeWord.parseSetting(input.text.toString())
-                val problem = words.firstNotNullOfOrNull { com.mrgq.pdfviewer.voice.WakeWord.problem(it) }
+                val problem = words.firstNotNullOfOrNull { com.mrgq.pdfviewer.voice.WakeWord.problemText(it) }?.resolve(this)
                 if (problem != null) {
                     Toast.makeText(this, getString(R.string.settings_wake_not_saved, problem), Toast.LENGTH_LONG).show()
                     return@setPositiveButton
@@ -940,6 +940,22 @@ class SettingsActivity : AppCompatActivity() {
             .show()
     }
 
+    /** 음성 명령 언어 (P18 8단계) — 인식 언어 · 문법. 앱 언어와 따로 둘 수 있다(한국어 화면 + 영어로 말하기) */
+    private fun showVoiceLanguageDialog() {
+        val voice = com.mrgq.pdfviewer.voice.VoiceLanguage
+        val choices = com.mrgq.pdfviewer.voice.VoiceLanguageSetting.values()
+        val current = choices.indexOf(voice.setting(this))
+        AlertDialog.Builder(this)
+            .setTitle(R.string.voice_language_title)
+            .setSingleChoiceItems(choices.map { voice.label(this, it) }.toTypedArray(), current) { dialog, which ->
+                dialog.dismiss()
+                voice.setSetting(this, choices[which])
+                showVoicePanel()
+            }
+            .setNegativeButton(R.string.cancel, null)
+            .show()
+    }
+
     override fun onSaveInstanceState(outState: Bundle) {
         super.onSaveInstanceState(outState)
         paneCategory?.let { outState.putString(STATE_PANE_CATEGORY, it) }
@@ -963,6 +979,14 @@ class SettingsActivity : AppCompatActivity() {
                 },
                 type = SettingsType.TOGGLE,
                 checked = preferences.getBoolean(PdfViewerActivity.PREF_VOICE_COMMANDS, false)
+            ),
+            // 음성 명령 언어 (P18 8단계) — 앱 언어 따름(기본) · 한국어 · English
+            SettingsItem(
+                id = "voice_language",
+                icon = "🌐",
+                title = getString(R.string.voice_language_title),
+                subtitle = com.mrgq.pdfviewer.voice.VoiceLanguage.summary(this),
+                type = SettingsType.ACTION
             ),
             header("voice_always_header", getString(R.string.settings_voice_always)),
             // 👂 계속 듣기 (#085) — 🎙 를 누르지 않고 호출어 "메이트" 뒤의 말을 명령으로
@@ -1316,6 +1340,7 @@ class SettingsActivity : AppCompatActivity() {
                 showVoicePanel()
             }
             "voice_wake_words" -> showWakeWordsDialog()
+            "voice_language" -> showVoiceLanguageDialog()
             "app_language" -> showLanguageDialog()
             "update_prerelease_toggle" -> {
                 val enable = !UpdateController.isPrereleaseEnabled(this)
