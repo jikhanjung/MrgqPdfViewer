@@ -42,6 +42,13 @@ data class UpdateDevice(
         /** 판 번호 — 공백 없이 */
         private fun token(s: String) = part(s).replace(' ', '_')
 
+        /**
+         * 에뮬레이터인가 — CI 계측 · 스모크가 앱을 띄우면 자동 확인이 운영 서버의 기기 기록에 남는다(#121).
+         * 에뮬레이터는 자동 확인을 하지 않는다(설정의 업데이트 확인은 그대로)
+         */
+        fun isEmulator(hardware: String, product: String, fingerprint: String): Boolean =
+            hardware == "ranchu" || hardware == "goldfish" || product.startsWith("sdk") || fingerprint.startsWith("generic")
+
         /** 모델 이름 — 모델이 이미 제조사로 시작하면 한 번만 */
         fun modelName(manufacturer: String, model: String): String =
             if (model.startsWith(manufacturer, ignoreCase = true)) model else "$manufacturer $model"

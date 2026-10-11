@@ -54,6 +54,17 @@ class UpdateDeviceTest {
         assertEquals("Google Pixel 8", UpdateDevice.modelName("Google", "Google Pixel 8"))
     }
 
+    @Test
+    fun 에뮬레이터() {
+        // CI 계측 에뮬레이터 (API 30 · 34)
+        assertTrue(UpdateDevice.isEmulator("ranchu", "sdk_gphone64_x86_64", "google/sdk_gphone64_x86_64/emu64x:14/..."))
+        assertTrue(UpdateDevice.isEmulator("ranchu", "sdk_gphone_x86", "google/sdk_gphone_x86/generic_x86_arm:11/..."))
+        assertTrue(UpdateDevice.isEmulator("goldfish", "sdk_google_atv_x86", "generic/sdk_google_atv_x86/..."))
+        // 실기기
+        assertFalse(UpdateDevice.isEmulator("qcom", "TB371FC", "Lenovo/TB371FC/TB371FC:13/..."))
+        assertFalse(UpdateDevice.isEmulator("amlogic", "sabrina", "google/sabrina/sabrina:14/..."))
+    }
+
     // ── 실제 HTTP: 확인 · 받기 첫 요청에만 머리글, 302 뒤 저장소 요청에는 없음 ─────────────
 
     private val seen = Collections.synchronizedList(mutableListOf<Pair<String, String?>>())

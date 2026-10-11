@@ -84,6 +84,8 @@ class UpdateController(
     fun checkIfDue() {
         val now = SystemClock.elapsedRealtime()
         if (!isAutoCheckDue(nextAutoCheckAtMs, now) || job?.isActive == true) return
+        // 에뮬레이터(CI)는 자동 확인 안 함 — 운영 서버의 기기 기록에 남지 않게 (#121)
+        if (UpdateDevice.isEmulator(Build.HARDWARE, Build.PRODUCT, Build.FINGERPRINT)) return
         nextAutoCheckAtMs = now + AUTO_CHECK_INTERVAL_MS
         job = scope.launch {
             try {

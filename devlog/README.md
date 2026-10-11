@@ -183,6 +183,7 @@ MrgqPdfViewer 개발 로그 모음. 구현 기록은 `YYYYMMDD_NNN_` 형식(NNN 
 - [`118`](20261011_118_update_from_scoremate_server.md) (2026-10-11) — **P15 1단계**: 앱 업데이트를 ScoreMate 서버 먼저(`latest/?channel=`, notes · sha256 · 고정 받기 주소) + GitHub 폴백, CI 가 사전 릴리스 · notes · version_code 도 올리고 200 도 성공 · -test 빼기, 문서만 바꾼 푸시는 빌드 안 함. v0.7.6-beta.1
 - [`119`](20261011_119_update_source_label.md) — 업데이트 대화상자에 **"받는 곳 · 확인한 곳: ScoreMate 서버 / GitHub"**(P15 2단계를 adb 없이 확인). v0.7.6-beta.2 = 서버에서 받는 첫 다음 beta
 - [`120`](20261011_120_update_device_info.md) — 업데이트 확인 · 받기에 **기기 정보**(User-Agent 버전 · 종류 · 모델, `X-Mrgq-Install`, 연결됐으면 `X-ScoreMate-Device`) — ScoreMate 서버에만, 서버가 기기별로 기록. v0.7.7-beta.1
+- [`121`](20261011_121_no_auto_update_check_on_emulator.md) — 에뮬레이터(CI)는 업데이트 **자동 확인 안 함** — 운영 서버 기기 기록에 CI 에뮬레이터가 잡히던 것. v0.7.7-beta.3
 
 ## 📱 터치 UI 껍질 (2026-10-11)
 - [`P17`](20261011_P17_touch_ui_shell_plan.md) — **계획: 태블릿 · 휴대폰 UI 껍질** — TV 는 그대로, 터치 기기만: 악보 화면 가운데 탭 = 도구 막대(위 제목 · 쪽, 아래 ▶ 연주 · 👁 보기 · ✏️ 메모 · 🎙, 연주 시작에 숨음, 마디 고르는 중엔 상황 막대), 가운데 두 번 탭 없앰, 메뉴는 스위치가 든 하단 시트, 메트로놈 설정 한 화면, 곡 목록 세트리스트 칩 · 당겨서 동기화, 설정 한 칸 · 스위치(정할 것 모두 추천대로). 메뉴 내용(`ViewerMenus`)과 그리기를 나눠 P13 원칙 유지 · iOS(P14)와 공유. 단계: 0 Material 다리 테마 + 내용 모델(화면 변화 없음) → 1 하단 시트 → 2 도구 막대 → 3 메트로놈 → 4 곡 목록 → 5 설정
