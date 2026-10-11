@@ -7,11 +7,12 @@ import androidx.recyclerview.widget.RecyclerView
 import com.mrgq.pdfviewer.databinding.ItemSettingsBinding
 
 /**
- * 설정 줄 목록. [onItemFocus] 가 있으면 TV 두 칸의 왼쪽 카테고리 목록이다 — 포커스가 오면 알리고(오른쪽 미리 보기),
- * 오른쪽에 보이는 카테고리([selectedId])를 표시한다
+ * 설정 줄 목록. [selectable] 이면 두 칸의 왼쪽 카테고리 목록이다 — 오른쪽에 보이는 카테고리([selectedId])를 표시한다.
+ * [onItemFocus] 는 TV 에서 포커스가 온 줄을 알린다(오른쪽 미리 보기)
  */
 class SettingsAdapter(
     private val items: List<SettingsItem>,
+    private val selectable: Boolean = false,
     private val onItemFocus: ((SettingsItem) -> Unit)? = null,
     private val onItemClick: (SettingsItem) -> Unit,
 ) : RecyclerView.Adapter<SettingsAdapter.SettingsViewHolder>() {
@@ -54,12 +55,12 @@ class SettingsAdapter(
                     onItemClick(item)
                 }
             }
-            val focus = onItemFocus
-            if (focus != null) {
+            if (selectable) {
                 binding.root.setBackgroundResource(R.drawable.settings_category_background)
                 binding.root.isSelected = item.id == selectedId
-                binding.root.setOnFocusChangeListener { _, hasFocus -> if (hasFocus) focus(item) }
             }
+            val focus = onItemFocus
+            if (focus != null) binding.root.setOnFocusChangeListener { _, hasFocus -> if (hasFocus) focus(item) }
         }
     }
 

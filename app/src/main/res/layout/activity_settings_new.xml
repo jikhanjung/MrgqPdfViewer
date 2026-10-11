@@ -19,7 +19,22 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent">
 
+        <!-- 태블릿 · 휴대폰: 왼쪽 위 ← (터치 앱의 흔한 자리) — 그때는 앱 아이콘과 오른쪽 "돌아가기"를 숨긴다 -->
+        <TextView
+            android:id="@+id/backArrow"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:layout_marginEnd="8dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="돌아가기"
+            android:gravity="center"
+            android:text="←"
+            android:textColor="@android:color/white"
+            android:textSize="24sp"
+            android:visibility="gone" />
+
         <ImageView
+            android:id="@+id/headerIcon"
             android:layout_width="36dp"
             android:layout_height="36dp"
             android:src="@mipmap/ic_launcher_round"
@@ -48,7 +63,7 @@
             android:minHeight="0dp" />
     </LinearLayout>
 
-    <!-- TV 두 칸의 경계 — 왼쪽 카테고리 · 오른쪽 그 항목 (코드에서 두 칸일 때만 이어 붙인다). 한 칸(태블릿 · 휴대폰)에서는 쓰지 않는다 -->
+    <!-- 두 칸의 경계 — 왼쪽 카테고리 · 오른쪽 그 항목 (코드에서 두 칸일 때만 이어 붙인다 — TV 는 36%, 넓은 태블릿은 고정 폭). 한 칸(휴대폰)에서는 쓰지 않는다 -->
     <androidx.constraintlayout.widget.Guideline
         android:id="@+id/paneGuide"
         android:layout_width="wrap_content"

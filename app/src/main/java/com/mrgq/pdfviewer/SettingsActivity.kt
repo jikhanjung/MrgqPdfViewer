@@ -52,10 +52,14 @@ class SettingsActivity : AppCompatActivity() {
     private var currentItems = mutableListOf<SettingsItem>()
 
     /**
-     * TV 는 **두 칸** — 왼쪽 카테고리 · 오른쪽 그 항목. 왼쪽에서 포커스를 옮기면 오른쪽이 바로 바뀌고, → · OK 로 들어가고 ← · 뒤로로 나온다.
-     * 태블릿 · 휴대폰은 폭이 좁아 한 칸(목록 → 상세가 자리를 대신)
+     * **두 칸** — 왼쪽 카테고리 · 오른쪽 그 항목. TV(#106)와 넓은 태블릿(세로 폭 [TWO_PANE_MIN_WIDTH_DP] 이상, #107 — iPad 설정처럼).
+     * TV 는 왼쪽에서 포커스를 옮기면 오른쪽이 바로 바뀌고, → · OK 로 들어가고 ← · 뒤로로 나온다. 태블릿은 카테고리를 탭하면 오른쪽이 바뀐다.
+     * 휴대폰 · 좁은 태블릿은 한 칸(목록 → 상세가 자리를 대신)
      */
-    private val twoPane by lazy { com.mrgq.pdfviewer.utils.DeviceForm.isTv(this) }
+    private val isTv by lazy { com.mrgq.pdfviewer.utils.DeviceForm.isTv(this) }
+    private val twoPane by lazy {
+        isTv || (!com.mrgq.pdfviewer.utils.DeviceForm.isPhone(this) && resources.configuration.screenWidthDp >= TWO_PANE_MIN_WIDTH_DP)
+    }
     /** 두 칸: 오른쪽에 보이는 카테고리 */
     private var paneCategory: String? = null
     /** 왼쪽에서 포커스를 빨리 훑을 때 오른쪽을 매번 만들지 않게 */
@@ -98,10 +102,14 @@ class SettingsActivity : AppCompatActivity() {
         setupMainMenu()
     }
 
-    /** 두 칸: 목록은 경계선 왼쪽, 상세는 오른쪽 — 둘 다 늘 보인다. 상세의 취소 · 적용 단추는 쓰지 않는다(닫을 칸이 없다) */
+    /**
+     * 두 칸: 목록은 경계선 왼쪽, 상세는 오른쪽 — 둘 다 늘 보인다. 상세의 취소 · 적용 단추는 쓰지 않는다(닫을 칸이 없다).
+     * TV 는 경계를 36%(XML), 태블릿은 왼쪽을 [TABLET_LIST_WIDTH_DP] 로 — 오른쪽 줄 설명이 길다
+     */
     private fun applyTwoPaneLayout() {
         val set = androidx.constraintlayout.widget.ConstraintSet()
         set.clone(binding.root)
+        if (!isTv) set.setGuidelineBegin(R.id.paneGuide, (resources.displayMetrics.density * TABLET_LIST_WIDTH_DP).toInt())
         set.connect(R.id.settingsRecyclerView, androidx.constraintlayout.widget.ConstraintSet.END, R.id.paneGuide, androidx.constraintlayout.widget.ConstraintSet.START)
         set.connect(R.id.detailPanelLayout, androidx.constraintlayout.widget.ConstraintSet.START, R.id.paneGuide, androidx.constraintlayout.widget.ConstraintSet.END)
         val gap = (resources.displayMetrics.density * 16).toInt()
@@ -173,6 +181,13 @@ class SettingsActivity : AppCompatActivity() {
     }
     
     private fun setupUI() {
+        // 태블릿 · 휴대폰: 왼쪽 위 ← · "설정" (#107) — TV 는 오른쪽 "돌아가기" 그대로
+        if (!isTv) {
+            binding.backArrow.visibility = View.VISIBLE
+            binding.headerIcon.visibility = View.GONE
+            binding.backButton.visibility = View.GONE
+            binding.backArrow.setOnClickListener { binding.backButton.performClick() }
+        }
         // RecyclerView 설정
         binding.settingsRecyclerView.layoutManager = LinearLayoutManager(this)
         
@@ -317,7 +332,7 @@ class SettingsActivity : AppCompatActivity() {
     
     private fun updateAdapter() {
         val listHadFocus = binding.settingsRecyclerView.hasFocus()
-        settingsAdapter = SettingsAdapter(currentItems, onItemFocus = if (twoPane) ::onCategoryFocused else null) { item ->
+        settingsAdapter = SettingsAdapter(currentItems, selectable = twoPane, onItemFocus = if (isTv) ::onCategoryFocused else null) { item ->
             handleItemClick(item)
         }
         if (twoPane) settingsAdapter.select(binding.settingsRecyclerView, paneCategory)
@@ -1856,5 +1871,9 @@ class SettingsActivity : AppCompatActivity() {
     companion object {
         /** 두 칸: 왼쪽 포커스가 이만큼 머물면 오른쪽을 그 카테고리로 */
         private const val PANE_PREVIEW_DELAY_MS = 150L
+        /** 이만큼 넓은 태블릿은 두 칸 (샤오신패드 12.7 세로 ≈ 791dp, iPad 세로 ≈ 820pt) */
+        private const val TWO_PANE_MIN_WIDTH_DP = 700
+        /** 태블릿 두 칸의 왼쪽 카테고리 폭 */
+        private const val TABLET_LIST_WIDTH_DP = 280
     }
 }
