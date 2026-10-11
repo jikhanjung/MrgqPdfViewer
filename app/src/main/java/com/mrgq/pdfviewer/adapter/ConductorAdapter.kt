@@ -8,6 +8,7 @@ import android.widget.TextView
 import androidx.recyclerview.widget.RecyclerView
 import com.mrgq.pdfviewer.ConductorDiscovery
 import com.mrgq.pdfviewer.R
+import com.mrgq.pdfviewer.utils.AppLanguage
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -16,7 +17,6 @@ class ConductorAdapter(
 ) : RecyclerView.Adapter<ConductorAdapter.ConductorViewHolder>() {
     
     private val conductors = mutableListOf<ConductorDiscovery.ConductorInfo>()
-    private val dateFormat = SimpleDateFormat("HH:mm:ss", Locale.getDefault())
     
     class ConductorViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
         val nameText: TextView = itemView.findViewById(R.id.conductorName)
@@ -36,7 +36,9 @@ class ConductorAdapter(
         
         holder.nameText.text = conductor.name
         holder.addressText.text = "${conductor.ipAddress}:${conductor.port}"
-        holder.timestampText.text = "발견: ${dateFormat.format(Date(conductor.timestamp))}"
+        val context = holder.itemView.context
+        val dateFormat = SimpleDateFormat("HH:mm:ss", AppLanguage.locale(context))
+        holder.timestampText.text = context.getString(R.string.main_conductor_found_at, dateFormat.format(Date(conductor.timestamp)))
         
         holder.connectButton.setOnClickListener {
             onConductorConnect(conductor)
