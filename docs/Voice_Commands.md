@@ -171,3 +171,40 @@ MRGQ 설정의 그 줄을 누르면 같은 안내와 스토어 열기 단추가 
 🎙 를 눌렀는데 **"음성 인식을 시작하지 못했어요"** 가 뜨면 기기의 기본 음성 입력이 비어 있는 것입니다 — 기기 설정 → 시스템 → 언어 및 입력 → 음성 입력에서 Google(또는 음성 인식 및 합성)을 고릅니다.
 
 일반 Google 휴대폰은 처음 누를 때 마이크 권한만 주면 됩니다. 자세한 조사는 [`devlog/084`](../devlog/20261009_084_voice_tablet_setup_and_clipped_endings.md) 에 있습니다.
+
+## English voice commands
+
+> P18 8단계. 영어는 **좁은 범위**만 받습니다 — 사람 이름 보표("지한이 파트")는 한국어만. 규칙의 정본은 `voice/EnglishCommandParser`, 문장 표는 단위 테스트 `VoiceEnglishCommandTest`.
+
+**설정**: 설정 → 🎙 음성 명령 → **음성 명령 언어** — 앱 언어 따름(기본) · 한국어 · English. 앱 언어와 따로 고를 수 있습니다(한국어 화면에서 영어로 말하기도 됨).
+앱 언어 따름이면 앱이 영어로 보일 때 영어로 듣습니다. 영어로 고르면 음성 인식도 `en-US` 로 듣고, 결과 줄은 앱 언어로 보입니다.
+
+영어 문장은 한국어 문법과 같은 명령이 됩니다 — "start from measure 57" = "57마디부터 시작". 시작 · 듣기 · 막는 규칙(부정 · 상대 위치 · 둘 · 모르는 수 · 대화)도 같습니다.
+
+| Say | 같은 한국어 | 명령 |
+|---|---|---|
+| "measure 57" · "bar 57" · "go to bar 57" · "the 57th measure" | 57마디 | 57마디 고르기만 |
+| "from measure 57" · "from bar 57" · "from 57" | 57마디부터 | 57마디부터 바로 시작 |
+| "start from measure 57" · "play from bar 57" · "start at measure 57" · "measure 57 start" | 57마디 시작 | 57마디부터 바로 시작 |
+| "start" · "play" · "metronome" · "turn on the metronome" | 시작 | 고른 마디(없으면 이 쪽 첫 마디)부터 |
+| "stop" · "pause" · "stop the metronome" · "metronome off" | 멈춰 | 정지 |
+| "again" · "one more time" | 다시 | 마지막으로 시작한 마디부터 |
+| "resume" · "continue" · "keep going" | 이어서 | 멈춘 마디부터 |
+| "from the top" · "from the beginning" · "start over" | 처음부터 | 첫 마디부터 |
+| "tempo 72" · "set tempo to 72" · "72 bpm" · "tempo one twenty" | 템포 72 | 템포 |
+| "next page" · "turn the page" / "previous page" · "go back a page" | 다음 쪽 / 이전 쪽 | 쪽 넘김 |
+| "page 3" · "go to page three" · "first page" · "last page" | 3쪽 · 마지막 쪽 | 그 쪽으로 |
+| "cello" · "cello part" · "violin 2" · "second violin" · "violin II" · "double bass part" | 첼로 파트 · 바이올린 2 | 파트 보기 |
+| "1st violin and viola parts" · "staff 2" · "second part" | 바이올린 1 비올라 · 보표 2 | 여러 파트 · 보표 번호 |
+| "full score" · "show the full score" | 총보 | 총보 |
+| "listen" · "start listening" · "listen from measure 57" · "listen from page 3" | 듣기 · 57마디부터 듣기 | 🎤 연주 듣고 넘기기 |
+| "listen from the beginning" · "resume listening" | 처음부터 듣기 · 이어서 듣기 | 🎤 그 자리부터 |
+| "letter B" · "rehearsal B" · "rehearsal mark C" · "letter bee" · "from letter A" | 레터 B | 리허설 마크 마디부터 |
+| "count-in one bar" · "count in two bars" · "two bar count-in" | 예비박 한 마디 · 두 마디 | 예비박 |
+| "count-in two bars tempo 72 from measure 57" | 예비박 두 마디 템포 72 57마디부터 | 한 번에 여럿 |
+
+- 수는 숫자("57")와 영어 수 낱말 둘 다: "fifty seven" · "fifty-seven" · "one hundred and five" · "a hundred", 템포처럼 "one twenty" = 120
+- 뜻 없는 말("the · to · please · go · set · show me")은 버립니다: "set the tempo to seventy two please" = 템포 72
+- 실행하지 않는 말: "not · no · cancel · never mind"(부정), "two bars back · go back"(상대 위치 — "go back to measure 12" 는 됨),
+  "measure 57 page 3"(위치 둘), "measure 57 72"(모르는 수), "kazoo part"(없는 악기), "the cello is too loud"(대화)
+- 수만 말하면("seventy two") 한국어처럼 지금 화면이 정합니다 — 메트로놈 대화상자가 열려 있으면 템포, 아니면 마디 고르기

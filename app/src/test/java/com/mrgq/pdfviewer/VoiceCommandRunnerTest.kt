@@ -1,5 +1,7 @@
 package com.mrgq.pdfviewer
 
+import com.mrgq.pdfviewer.VoiceTestStrings.ko
+import com.mrgq.pdfviewer.metronome.MetronomeClock
 import com.mrgq.pdfviewer.voice.CommandOutcome
 import com.mrgq.pdfviewer.voice.CommandParser
 import com.mrgq.pdfviewer.voice.ListenFrom
@@ -7,6 +9,7 @@ import com.mrgq.pdfviewer.voice.PartMatcher
 import com.mrgq.pdfviewer.voice.PartRef
 import com.mrgq.pdfviewer.voice.ViewerCommands
 import com.mrgq.pdfviewer.voice.VoiceCommandRunner
+import com.mrgq.pdfviewer.voice.VoiceText
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -14,7 +17,10 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/** 음성 명령 명령 층(P12 §5): 읽은 결과 → 실행 순서 · 범위 검사 · 실패 보고, 파트 이름 맞추기. */
+/**
+ * 음성 명령 명령 층(P12 §5): 읽은 결과 → 실행 순서 · 범위 검사 · 실패 보고, 파트 이름 맞추기.
+ * 보고는 키([VoiceText], P18) — 한국어 글은 `values/strings_voice.xml` 로 채워([ko]) 옮기기 전 글과 같은지 본다.
+ */
 class VoiceCommandRunnerTest {
 
     /** 부른 명령을 적어 두는 가짜 악보 화면. [failOn] 에 든 명령은 실패한다 */
@@ -52,7 +58,7 @@ class VoiceCommandRunnerTest {
         assertEquals(listOf("listen START"), run("처음부터 듣기").second)
         assertEquals(listOf("listen RESUME"), run("이어서 듣기").second)
         assertEquals(listOf("listen"), run("듣기").second)
-        assertEquals("🎤 처음부터 듣기", run("처음부터 듣기").first.message)
+        assertEquals("🎤 처음부터 듣기", ko(run("처음부터 듣기").first.text))
     }
 
     @Test
@@ -60,7 +66,7 @@ class VoiceCommandRunnerTest {
         val (report, calls) = run("오십칠 마디부터 템포 칠십이")
         assertEquals(listOf("tempo 72", "measure 57"), calls)
         assertTrue(report.ok)
-        assertEquals("57마디부터 · ♩=72", report.message)
+        assertEquals("57마디부터 · ♩=72", ko(report.text))
     }
 
     @Test
@@ -69,8 +75,13 @@ class VoiceCommandRunnerTest {
         val (report, calls) = run("지환 파트 57마디부터", viewer)
         assertFalse(report.ok)
         assertEquals(emptyList<String>(), calls)
-        assertEquals("'지환' 파트를 이 악보에서 찾지 못했어요 — 이 악보: 김지한 · 박서연 · 보표 3", report.message)
-        assertEquals("무슨 파트인지 못 알아들었어요", run("파트 보여줘").first.message)
+        assertEquals(
+            VoiceText.of(R.string.voice_with_part_choices, VoiceText.of(R.string.voice_part_not_found_heard, "지환"), "김지한 · 박서연 · 보표 3"),
+            report.text,
+        )
+        assertEquals("'지환' 파트를 이 악보에서 찾지 못했어요 — 이 악보: 김지한 · 박서연 · 보표 3", ko(report.text))
+        assertEquals(VoiceText.of(R.string.voice_part_not_heard), run("파트 보여줘").first.text)
+        assertEquals("무슨 파트인지 못 알아들었어요", ko(run("파트 보여줘").first.text))
     }
 
     @Test
@@ -90,7 +101,8 @@ class VoiceCommandRunnerTest {
         val (report, calls) = run("템포 삼백 57마디")
         assertFalse(report.ok)
         assertTrue(calls.isEmpty())
-        assertTrue(report.message, report.message.contains("20 ~ 240"))
+        assertEquals(VoiceText.of(R.string.voice_tempo_out_of_range, 300, MetronomeClock.MIN_BPM, MetronomeClock.MAX_BPM), report.text)
+        assertEquals("템포 300 은 쓸 수 없어요 (20 ~ 240)", ko(report.text))
         assertTrue(run("템포 10").second.isEmpty())
         assertEquals(listOf("tempo 20"), run("템포 이십").second)
     }
@@ -110,12 +122,12 @@ class VoiceCommandRunnerTest {
         val (report, calls) = run("57마디 템포 72 시작", viewer)
         assertEquals(listOf("tempo 72", "measure 57"), calls)
         assertFalse(report.ok)
-        assertEquals("♩=72 했지만 — measure 57 실패", report.message)
+        assertEquals("♩=72 했지만 — measure 57 실패", ko(report.text))
 
         val first = FakeViewer(failOn = setOf("tempo"))
         val (r2, c2) = run("템포 72 57마디", first)
         assertEquals(listOf("tempo 72"), c2)
-        assertEquals("tempo 72 실패", r2.message)
+        assertEquals(VoiceText.Plain("tempo 72 실패"), r2.text)
     }
 
     @Test
@@ -133,7 +145,8 @@ class VoiceCommandRunnerTest {
         val (report, calls) = run("예비박 세 마디")
         assertFalse(report.ok)
         assertTrue(calls.isEmpty())
-        assertEquals("예비박은 한 마디나 두 마디만 돼요", report.message)
+        assertEquals(VoiceText.of(R.string.voice_count_in_range), report.text)
+        assertEquals("예비박은 한 마디나 두 마디만 돼요", ko(report.text))
     }
 
     @Test
@@ -218,6 +231,20 @@ class VoiceCommandRunnerTest {
         assertEquals(PartMatcher.Result.Ambiguous(PartRef("violin"), listOf("Violin I", "Violin II")), ambiguous)
         assertEquals(PartMatcher.Result.Missing(PartRef("flute")), PartMatcher.match(quartet, listOf(PartRef("flute"))))
         assertEquals(PartMatcher.Result.Missing(PartRef("violin", 3)), PartMatcher.match(quartet, listOf(PartRef("violin", 3))))
+    }
+
+    @Test
+    fun 파트_실패_안내() {
+        assertEquals(
+            "첼로 파트가 없어요 — 이 악보: Violin I · Viola",
+            ko(VoiceCommandRunner.partMissing(PartRef("cello"), listOf("Violin I", "Viola"))),
+        )
+        assertEquals("바이올린 3 파트가 없어요", ko(VoiceCommandRunner.partMissing(PartRef("violin", 3), emptyList())))
+        assertEquals(
+            "바이올린 파트가 여럿이에요 (Violin I, Violin II) — 번호까지 말하세요",
+            ko(VoiceCommandRunner.partAmbiguous(PartRef("violin"), listOf("Violin I", "Violin II"))),
+        )
+        assertEquals("보표 2 파트가 없어요", ko(VoiceCommandRunner.partMissing(PartRef.staff(2), emptyList())))
     }
 
     @Test

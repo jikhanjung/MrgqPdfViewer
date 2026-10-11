@@ -3,7 +3,10 @@ package com.mrgq.pdfviewer.voice
 /** 명령 하나를 실행한 결과 — 실패면 화면에 보일 이유("57마디가 없어요 (1 ~ 120)") */
 sealed class CommandOutcome {
     object Done : CommandOutcome()
-    data class Failed(val message: String) : CommandOutcome()
+    /** [text] = 화면에 보일 이유. 화면이 이미 글로 만든 이유는 [Failed] (String) 로 (P18) */
+    data class Failed(val text: VoiceText) : CommandOutcome() {
+        constructor(message: String) : this(VoiceText.Plain(message))
+    }
 }
 
 /**
