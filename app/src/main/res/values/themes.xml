@@ -59,4 +59,27 @@
         <item name="android:windowTranslucentStatus">true</item>
         <item name="android:windowTranslucentNavigation">true</item>
     </style>
+
+    <!-- 악보 화면 메뉴 하단 시트 (P17 1단계, 태블릿 · 휴대폰): 어두운 면 · 위 모서리만 둥글게, 스위치는 앱 파랑 -->
+    <style name="ThemeOverlay.MrgqPdfViewer.BottomSheet" parent="Theme.MaterialComponents.BottomSheetDialog">
+        <item name="colorSurface">@color/tv_surface</item>
+        <item name="colorOnSurface">@color/tv_text_primary</item>
+        <item name="colorPrimary">@color/tv_primary</item>
+        <item name="colorSecondary">@color/tv_primary</item>
+        <item name="android:textColorPrimary">@color/tv_text_primary</item>
+        <item name="android:textColorSecondary">@color/tv_text_secondary</item>
+        <item name="bottomSheetStyle">@style/Widget.MrgqPdfViewer.BottomSheet</item>
+    </style>
+
+    <style name="Widget.MrgqPdfViewer.BottomSheet" parent="Widget.MaterialComponents.BottomSheet.Modal">
+        <item name="shapeAppearanceOverlay">@style/ShapeAppearance.MrgqPdfViewer.BottomSheet</item>
+    </style>
+
+    <style name="ShapeAppearance.MrgqPdfViewer.BottomSheet" parent="">
+        <item name="cornerFamily">rounded</item>
+        <item name="cornerSizeTopLeft">16dp</item>
+        <item name="cornerSizeTopRight">16dp</item>
+        <item name="cornerSizeBottomLeft">0dp</item>
+        <item name="cornerSizeBottomRight">0dp</item>
+    </style>
 </resources>

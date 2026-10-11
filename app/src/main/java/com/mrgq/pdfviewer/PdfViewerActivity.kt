@@ -132,6 +132,8 @@ class PdfViewerActivity : AppCompatActivity() {
         private const val REQUEST_VOICE = 7303
         /** 🎙 결과를 화면에 남겨 두는 시간 */
         private const val VOICE_STATUS_MS = 5_000L
+        /** 하단 시트 메뉴의 최대 폭 — 태블릿에서 화면 끝까지 늘지 않게 (P17 1단계) */
+        private const val MENU_SHEET_MAX_WIDTH_DP = 600
         /** 손을 뗀 뒤에도 이만큼 더 듣는다 — 바로 떼면 끝 음절이 잘린다("50 마디" → "50 마", #084) */
         private const val VOICE_RELEASE_TAIL_MS = 600L
         /** 🎙 를 이보다 짧게 눌렀다 떼면 말하려던 게 아니라 정지 단추로 쓴 것 — 조용히 접는다 (사용자 요청 2026-10-10) */
@@ -2558,12 +2560,12 @@ class PdfViewerActivity : AppCompatActivity() {
         noteDoneButton?.setBackgroundColor(if (hasPendingNote()) 0xCC43A047.toInt() else 0)
     }
 
-    private fun toggleNotesVisible() {
+    private fun toggleNotesVisible(announce: Boolean = true) {
         val show = !notesVisible()
         preferences.edit().putBoolean(PREF_SHOW_NOTES, show).apply()
         if (!show) exitNoteMode()
         refreshNotes()
-        toast(if (show) "메모 보이기" else "메모 숨김")
+        if (announce) toast(if (show) "메모 보이기" else "메모 숨김")
     }
 
     // ── 마이크로 연주를 듣고 넘기기 — 태블릿 지휘자 (P10) ─────────────────────────────────
@@ -4498,11 +4500,13 @@ class PdfViewerActivity : AppCompatActivity() {
      * 빠져 있고 지휘자가 연주 중이면 "다시 합류". 설정은 소리 켜기/끄기뿐 (사용자 결정). 닫으면 그대로.
      */
     private fun showPerformerEnsembleMenu() {
-        val soundOn = preferences.getBoolean(PREF_ENSEMBLE_SOUND, false)
-        val following = ensembleRole == EnsembleRole.FOLLOWING
-        val menu = ViewerMenus.performer(ViewerMenus.PerformerState(following, !following && canRejoinEnsemble(), soundOn))
+        fun build(): Menu {
+            val following = ensembleRole == EnsembleRole.FOLLOWING
+            val soundOn = preferences.getBoolean(PREF_ENSEMBLE_SOUND, false)
+            return ViewerMenus.performer(ViewerMenus.PerformerState(following, !following && canRejoinEnsemble(), soundOn))
+        }
         metronomeMenuShowing = true
-        showViewerMenu(menu, onDismiss = { metronomeMenuShowing = false }) { action ->
+        showViewerMenu(::build, onDismiss = { metronomeMenuShowing = false }) { action ->
             when (action) {
                 MenuAction.DETACH -> detachFromEnsemble()
                 MenuAction.REJOIN -> {
@@ -4510,23 +4514,75 @@ class PdfViewerActivity : AppCompatActivity() {
                     performerRun?.let { joinEnsembleRun(it) }
                 }
                 // 소리는 누르면 바로 켬 ↔ 끔 (P13). 파트 보기 · 메모는 보기 메뉴(길게)에
-                MenuAction.ENSEMBLE_SOUND -> setPerformerSound(!soundOn)
+                MenuAction.ENSEMBLE_SOUND -> setPerformerSound(!preferences.getBoolean(PREF_ENSEMBLE_SOUND, false), announce = !sheetMenus())
                 else -> Unit
             }
         }
     }
 
+    /** 메뉴를 하단 시트로 그리는 기기 — 태블릿 · 휴대폰 (P17 1단계). TV 는 목록 대화상자 */
+    private fun sheetMenus(): Boolean = !com.mrgq.pdfviewer.utils.DeviceForm.isTv(this)
+
     /**
-     * 악보 화면 메뉴 그리기 (P17) — 내용은 [ViewerMenus], 여기는 TV 목록 대화상자. 터치 기기의 하단 시트는 P17 1단계.
+     * 악보 화면 메뉴 그리기 (P17) — 내용은 [ViewerMenus] 로 [build] 가 만들고, TV 는 목록 대화상자 · 터치 기기는 하단 시트([showMenuSheet]).
      * [onChosen] 은 줄을 고른 뒤, [onDismiss] 는 고르든 말든 닫힐 때
      */
-    private fun showViewerMenu(menu: Menu, onDismiss: () -> Unit = {}, onChosen: (MenuAction) -> Unit) {
+    private fun showViewerMenu(build: () -> Menu, onDismiss: () -> Unit = {}, onChosen: (MenuAction) -> Unit) {
+        if (sheetMenus()) return showMenuSheet(build, onDismiss, onChosen)
+        val menu = build()
         AlertDialog.Builder(this)
             .setTitle(menu.title)
             .setItems(menu.items.map { it.text }.toTypedArray()) { _, which -> onChosen(menu.items[which].action) }
             .apply { if (menu.closeButton) setNegativeButton("닫기") { dialog, _ -> dialog.dismiss() } }
             .setOnDismissListener { onDismiss() }
             .show()
+    }
+
+    /**
+     * 하단 시트 메뉴 (P17 1단계). 켜기 · 끄기 줄(`checked`)은 스위치 — 누르면 시트를 연 채로 바꾸고 내용을 [build] 로 다시 그린다.
+     * 다른 줄은 목록 대화상자처럼 고른 뒤 닫는다(고른 동작이 먼저 — 다음 대화상자가 뜬 뒤 시트가 닫힌다). "닫기" 단추 대신 아래로 밀기 · 바깥 탭.
+     * 태블릿은 폭을 [MENU_SHEET_MAX_WIDTH_DP] 로 줄여 가운데, 처음부터 다 펼친다(휴대폰 가로는 시트 안에서 스크롤)
+     */
+    private fun showMenuSheet(build: () -> Menu, onDismiss: () -> Unit, onChosen: (MenuAction) -> Unit) {
+        val sheet = com.google.android.material.bottomsheet.BottomSheetDialog(this, R.style.ThemeOverlay_MrgqPdfViewer_BottomSheet)
+        val content = layoutInflater.cloneInContext(sheet.context).inflate(R.layout.sheet_viewer_menu, null)
+        val title = content.findViewById<android.widget.TextView>(R.id.sheetTitle)
+        val rows = content.findViewById<android.widget.LinearLayout>(R.id.sheetRows)
+
+        fun render() {
+            val menu = build()
+            title.text = menu.title
+            rows.removeAllViews()
+            for (item in menu.items) {
+                val row = layoutInflater.cloneInContext(sheet.context).inflate(R.layout.item_menu_sheet_row, rows, false)
+                row.findViewById<android.widget.TextView>(R.id.rowLabel).text = item.label
+                val toggle = item.checked
+                if (toggle != null) {
+                    row.findViewById<com.google.android.material.switchmaterial.SwitchMaterial>(R.id.rowSwitch).apply {
+                        visibility = View.VISIBLE
+                        isChecked = toggle
+                    }
+                } else if (item.value != null) {
+                    row.findViewById<android.widget.TextView>(R.id.rowValue).apply {
+                        visibility = View.VISIBLE
+                        text = item.value
+                    }
+                }
+                row.setOnClickListener {
+                    onChosen(item.action)
+                    if (toggle != null) render() else sheet.dismiss()
+                }
+                rows.addView(row)
+            }
+        }
+
+        render()
+        sheet.setContentView(content)
+        sheet.behavior.maxWidth = (MENU_SHEET_MAX_WIDTH_DP * resources.displayMetrics.density).toInt()
+        sheet.behavior.state = com.google.android.material.bottomsheet.BottomSheetBehavior.STATE_EXPANDED
+        sheet.behavior.skipCollapsed = true
+        sheet.setOnDismissListener { onDismiss() }
+        sheet.show()
     }
 
     /** 연주자의 메트로놈 설정 — 이 기기가 소리를 낼지만 고른다. 템포 · 박자는 지휘자 것 */
@@ -4544,13 +4600,13 @@ class PdfViewerActivity : AppCompatActivity() {
     }
 
     /** 연주자 소리 설정을 바꾸고, 따라가는 중이면 바로 적용한다 — 같은 시간표로 다시 시작해도 박은 그대로다 */
-    private fun setPerformerSound(on: Boolean) {
+    private fun setPerformerSound(on: Boolean, announce: Boolean = true) {
         preferences.edit().putBoolean(PREF_ENSEMBLE_SOUND, on).apply()
         val schedule = ensembleSchedule
         if (ensembleRole == EnsembleRole.FOLLOWING && metronome.isRunning && schedule != null) {
             metronome.startScheduled(schedule, withSound = on)
         }
-        Toast.makeText(this, if (on) "이 기기도 메트로놈 소리를 냅니다" else "이 기기는 메트로놈 소리를 내지 않습니다", Toast.LENGTH_SHORT).show()
+        if (announce) Toast.makeText(this, if (on) "이 기기도 메트로놈 소리를 냅니다" else "이 기기는 메트로놈 소리를 내지 않습니다", Toast.LENGTH_SHORT).show()
     }
 
     /** 다른 곡으로 넘어가면 멈춘다 — 템포가 파일별이라 이전 곡 템포로 계속 도는 건 틀린 동작이다. */
@@ -4703,7 +4759,7 @@ class PdfViewerActivity : AppCompatActivity() {
 
         var chosen = false
         metronomeMenuShowing = true
-        showViewerMenu(menu, onDismiss = {
+        showViewerMenu({ menu }, onDismiss = {
             metronomeMenuShowing = false
             if (!chosen && followState == FollowState.PAUSED) {
                 stopMetronome()
@@ -5501,10 +5557,10 @@ class PdfViewerActivity : AppCompatActivity() {
      * 마디 박스 오버레이 켜기/끄기 — 악보 분석 결과를 눈으로 확인하는 용도 (전역 설정).
      * 켜면 현재 파일을 처음 한 번 분석해 DB 에 캐시한다 (ScoreLayoutStore).
      */
-    private fun toggleScoreOverlay() {
+    private fun toggleScoreOverlay(announce: Boolean = true) {
         val enabled = !isScoreOverlayEnabled()
         preferences.edit().putBoolean("score_overlay_enabled", enabled).apply()
-        Toast.makeText(this, if (enabled) "마디 박스 표시 켜짐" else "마디 박스 표시 꺼짐", Toast.LENGTH_SHORT).show()
+        if (announce) Toast.makeText(this, if (enabled) "마디 박스 표시 켜짐" else "마디 박스 표시 꺼짐", Toast.LENGTH_SHORT).show()
         refreshScoreOverlay()
     }
 
@@ -5838,7 +5894,7 @@ class PdfViewerActivity : AppCompatActivity() {
      */
     private fun showPdfDisplayOptions() {
         val twoPageCapable = !phoneView && !isPortraitScreen()
-        val menu = ViewerMenus.view(ViewerMenus.ViewState(
+        fun build() = ViewerMenus.view(ViewerMenus.ViewState(
             conductor = collaborationMode == CollaborationMode.CONDUCTOR,
             partViewName = partViewName,
             measureBoxes = isScoreOverlayEnabled(),
@@ -5849,11 +5905,13 @@ class PdfViewerActivity : AppCompatActivity() {
             twoPage = isTwoPageMode,
             phoneRotation = if (phoneView) phoneOrientationName(phoneOrientationMode()) else null,
         ))
-        showViewerMenu(menu) { action ->
+        // 시트의 스위치는 스스로 상태를 보이므로 알림(토스트)을 띄우지 않는다
+        val announce = !sheetMenus()
+        showViewerMenu(::build) { action ->
             when (action) {
                 MenuAction.PART_VIEW -> showPartViewDialog()
-                MenuAction.MEASURE_BOXES -> toggleScoreOverlay()
-                MenuAction.SHOW_NOTES -> toggleNotesVisible()
+                MenuAction.MEASURE_BOXES -> toggleScoreOverlay(announce)
+                MenuAction.SHOW_NOTES -> toggleNotesVisible(announce)
                 MenuAction.NOTE_MODE -> toggleNoteMode()
                 // 두 쪽 모드를 바꾼 뒤 지금 쪽을 다시 그린다
                 MenuAction.TWO_PAGE -> showTwoPageModeDialog { showPage(pageIndex) }
