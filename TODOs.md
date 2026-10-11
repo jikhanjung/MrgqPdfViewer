@@ -97,6 +97,7 @@
 - [x] 1. 앱 `update/` 서버 먼저 + GitHub 폴백, CI beta · notes · version_code 올리기 · 200 도 성공 · -test 빼기 · Android Build paths-ignore → **v0.7.6-beta.1** (#118)
 - [x] 2. beta 기기가 서버 경로로 업데이트되는지 — v0.7.6-beta.1 기기가 **v0.7.6-beta.2** 를 받을 때 대화상자 "받는 곳: ScoreMate 서버"(#119), 설치 뒤 업데이트 확인 "확인한 곳: ScoreMate 서버" — 2026-10-11 사용자가 정식으로 진행
 - [~] 3. 그 뒤 첫 정식 **v0.7.6** 릴리스 → 모든 기기(Z18TV × 2 · Google TV Streamer · 태블릿 · 휴대폰) ≥ 그 정식 확인
+  - 서버에서 기기별로 보기: 업데이트 요청에 기기 정보 → **v0.7.7-beta.1**(#120), 서버 기록 · 관리자 목록은 서버 세션(배포 대기)
 - [ ] 4. 사용자가 GitHub 에서 private 으로 → 업데이트 확인 · 다운로드 페이지 확인. 같은 때 Instrumentation 을 릴리스 커밋 · 수동만으로
 - [ ] 5. GitHub 폴백 코드 · 문서 정리 (CLAUDE.md `.guides` 규칙 다시 정하기)
 
