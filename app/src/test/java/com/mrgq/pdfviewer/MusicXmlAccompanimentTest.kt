@@ -317,4 +317,65 @@ class MusicXmlAccompanimentTest {
         assertTrue(off.velocities.all { it == 1f })
         assertEquals(on.size, off.size)
     }
+
+    /** p "cresc." → f, 그 마디에 스타카토 · 악센트 · 마르카토 · 보통 (#116) */
+    private val articulationXml = """
+        <score-partwise version="4.0">
+          <part-list><score-part id="P1"/></part-list>
+          <part id="P1">
+            <measure number="1"><attributes><divisions>1</divisions><time><beats>4</beats><beat-type>4</beat-type></time></attributes>
+              <direction><direction-type><dynamics><p/></dynamics></direction-type></direction>
+              <direction><direction-type><words>cresc.</words></direction-type></direction>
+              <note><pitch><step>C</step><octave>4</octave></pitch><duration>1</duration></note>
+              <note><pitch><step>D</step><octave>4</octave></pitch><duration>1</duration></note>
+              <note><pitch><step>E</step><octave>4</octave></pitch><duration>1</duration></note>
+              <note><pitch><step>F</step><octave>4</octave></pitch><duration>1</duration></note>
+            </measure>
+            <measure number="2">
+              <direction><direction-type><dynamics><f/></dynamics></direction-type></direction>
+              <note><pitch><step>G</step><octave>4</octave></pitch><duration>1</duration><notations><articulations><staccato/></articulations></notations></note>
+              <note><pitch><step>A</step><octave>4</octave></pitch><duration>1</duration><notations><articulations><accent/></articulations></notations></note>
+              <note><pitch><step>B</step><octave>4</octave></pitch><duration>1</duration><notations><articulations><strong-accent/></articulations></notations></note>
+              <note><pitch><step>C</step><octave>5</octave></pitch><duration>1</duration></note>
+            </measure>
+          </part>
+        </score-partwise>
+    """.trimIndent()
+
+    @Test
+    fun 글로_쓴_크레셴도와_아티큘레이션() {
+        val read = MusicXmlReader.read(articulationXml.byteInputStream())!!
+        val notes = read.notes[0]
+        val p = Dynamics.LEVELS.getValue("p")
+        val f = Dynamics.LEVELS.getValue("f")
+        // "cresc." 은 다음 셈여림표(f)까지 쐐기와 같다
+        listOf(p, p + (f - p) * 0.25f, p + (f - p) * 0.5f, p + (f - p) * 0.75f).forEachIndexed { i, want -> assertEquals(want, notes[i].velocity, 1e-4f) }
+        // 스타카토는 반 길이 · 크기 그대로, 악센트 한 단계 · 마르카토 두 단계 세게
+        assertEquals(0.5f, notes[4].soundLength)
+        assertEquals(f, notes[4].velocity, 1e-4f)
+        assertEquals(Dynamics.LEVELS.getValue("ff"), notes[5].velocity, 1e-4f)
+        assertEquals(Dynamics.LEVELS.getValue("fff"), notes[6].velocity, 1e-4f)
+        assertEquals(f, notes[7].velocity, 1e-4f)
+        assertEquals(1f, notes[7].soundLength)
+        // 악보 길이(🎤 듣기가 쓴다)는 그대로
+        assertEquals(1.0, notes[4].duration, 1e-9)
+        assertEquals(true, Dynamics.hairpinWord("(cresc. poco a poco)"))
+        assertEquals(false, Dynamics.hairpinWord("dim."))
+        assertEquals(false, Dynamics.hairpinWord("decresc."))
+        assertNull(Dynamics.hairpinWord("dolce"))
+    }
+
+    @Test
+    fun 스타카토는_반주_길이만_짧게_악상기호를_끄면_그대로() {
+        val read = MusicXmlReader.read(articulationXml.byteInputStream())!!
+        val measures = (1..2).map { measure(it, 4, 4) }
+        val match = MusicXmlMatch.check(read, measures)
+        val follower = ScoreFollower(measures, 1, dottedBeat = false)
+        val on = Accompaniment.build(read, follower, setOf(0), match::measureNumberOf)
+        val off = Accompaniment.build(read, follower, setOf(0), match::measureNumberOf, dynamics = false)
+        // 4/4 박 = 4분음표: 스타카토 4분음표 → 반 박
+        assertEquals(0.5, on.lengths[4], 1e-9)
+        assertEquals(1.0, off.lengths[4], 1e-9)
+        assertEquals(on.beats.toList(), off.beats.toList())
+    }
 }

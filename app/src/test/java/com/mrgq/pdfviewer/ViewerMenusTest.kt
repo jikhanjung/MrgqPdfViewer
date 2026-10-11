@@ -58,7 +58,7 @@ class ViewerMenusTest {
         assertEquals("반주 (MusicXML): 꺼짐", ViewerMenus.play(idle.copy(accompaniment = Accompaniment(false, 60))).items.last().text)
         // 셈여림 따르기를 끈 때만 줄에 (#115)
         assertEquals(
-            "반주 (MusicXML): 켜짐 · 크기 60% · 셈여림 끔",
+            "반주 (MusicXML): 켜짐 · 크기 60% · 악상기호 끔",
             ViewerMenus.play(idle.copy(accompaniment = Accompaniment(true, 60, dynamics = false))).items.last().text,
         )
     }

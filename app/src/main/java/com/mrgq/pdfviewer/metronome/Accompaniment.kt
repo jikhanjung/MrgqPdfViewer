@@ -38,7 +38,7 @@ class Accompaniment private constructor(
          * @param follower 이번 연주의 박 시간표 (시작 마디 · 예비박 · 세는 단위)
          * @param playParts 소리 낼 파트 순번 (MusicXML 파트 순서)
          * @param measureNumberOf MusicXML 마디 순서(0부터) → 악보(PDF) 마디 번호 ([MusicXmlMatch.measureNumberOf])
-         * @param dynamics 셈여림을 따른다 — 끄면 모든 음을 같은 크기로(예전처럼, 반주 설정 "셈여림 따르기", #115)
+         * @param dynamics 악상기호(셈여림 · 크레셴도 · 아티큘레이션)를 따른다 — 끄면 모든 음을 같은 크기 · 적힌 길이로(예전처럼, 반주 설정 "악상기호 따르기", #115 · #116)
          */
         fun build(
             score: MusicXmlScore,
@@ -53,7 +53,9 @@ class Accompaniment private constructor(
                 for (note in score.notes.getOrNull(p).orEmpty()) {
                     val number = measureNumberOf(note.measure) ?: continue
                     val start = follower.beatAt(number, note.onset) ?: continue
-                    val end = follower.beatAt(number, note.onset + note.duration) ?: continue
+                    // 스타카토 등은 울리는 길이만 짧게 (#116) — 박 위치(시작)는 그대로
+                    val sounding = if (dynamics) note.duration * note.soundLength else note.duration
+                    val end = follower.beatAt(number, note.onset + sounding) ?: continue
                     if (end > start) list += N(start, end - start, note.midi, p, if (dynamics) note.velocity else 1f)
                 }
             }

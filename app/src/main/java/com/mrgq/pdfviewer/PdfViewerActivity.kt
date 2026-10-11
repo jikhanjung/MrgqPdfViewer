@@ -6235,10 +6235,10 @@ class PdfViewerActivity : AppCompatActivity() {
             val current = follower
             metronome.accompaniment = if (on && current != null && followState == FollowState.PLAYING) accompanimentFor(current) else null
         }
-        // 셈여림 따르기 (#114 · #115) — 끄면 모든 음을 같은 크기로. 연주 중이면 바로 다시 만든다
-        val hasDynamics = score.notes.any { part -> part.any { it.velocity != 1f } }
+        // 악상기호 따르기 (#114 ~ #116) — 끄면 모든 음을 같은 크기 · 적힌 길이로. 연주 중이면 바로 다시 만든다
+        val hasDynamics = score.notes.any { part -> part.any { it.velocity != 1f || it.soundLength != 1f } }
         val dynamicsToggle = android.widget.CheckBox(this).apply {
-            text = "셈여림 따르기 (p · f · 크레셴도)" + if (hasDynamics) "" else " — 이 곡에는 셈여림표가 없습니다"
+            text = "악상기호 따르기 (셈여림 · 크레셴도 · 스타카토)" + if (hasDynamics) "" else " — 이 곡에는 악상기호가 없습니다"
             textSize = 16f
             isChecked = preferences.getBoolean(PREF_ACCOMPANIMENT_DYNAMICS, true)
             setOnCheckedChangeListener { _, on ->

@@ -93,7 +93,7 @@ object ViewerMenus {
         // 연주(소리 · 시간)만 — 파트 보기 · 메모는 보기 메뉴에 (P13)
         items += MenuItem(MenuAction.METRONOME_SETTINGS, "메트로놈 설정…")
         s.accompaniment?.let {
-            val value = if (it.on) "켜짐 · 크기 ${it.volumePercent}%" + (if (it.dynamics) "" else " · 셈여림 끔") else "꺼짐"
+            val value = if (it.on) "켜짐 · 크기 ${it.volumePercent}%" + (if (it.dynamics) "" else " · 악상기호 끔") else "꺼짐"
             items += MenuItem(MenuAction.ACCOMPANIMENT, "반주 (MusicXML)", value)
         }
         return Menu(if (s.paused) "연주 — 일시정지" else "연주", items)

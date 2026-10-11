@@ -62,9 +62,17 @@ data class XmlMeasure(val index: Int, val number: String, val beats: Int, val be
 
 /**
  * 음 하나. [measure] 는 마디 순서(0부터), [onset] · [duration] 은 **4분음표 단위**(마디 첫머리부터), [midi] 는 음높이 (가온 다 = 60).
- * [velocity] 는 셈여림(0 ~ 1, #114) — 셈여림표가 하나도 없는 파트는 모두 1(예전 그대로)
+ * [velocity] 는 셈여림(0 ~ 1, #114) — 셈여림표가 하나도 없는 파트는 모두 1(예전 그대로).
+ * [soundLength] 는 실제로 울리는 길이의 비율(아티큘레이션, #116 — 스타카토 0.5) — 반주만 쓴다. [duration] 은 악보의 길이 그대로(🎤 듣기가 쓴다)
  */
-data class XmlNote(val measure: Int, val onset: Double, val duration: Double, val midi: Int, val velocity: Float = 1f)
+data class XmlNote(
+    val measure: Int,
+    val onset: Double,
+    val duration: Double,
+    val midi: Int,
+    val velocity: Float = 1f,
+    val soundLength: Float = 1f,
+)
 
 /**
  * 셈여림 (#114). 반주 소리 크기에 곱한다 — 크게(fff) 1 에서 작게(ppp) 0.28 까지. 악기 소리의 실제 차이보다 좁게 잡았다
@@ -82,6 +90,23 @@ object Dynamics {
     )
     /** 셈여림표가 있는 파트에서 첫 표 앞의 음 */
     const val UNMARKED = 0.74f
+
+    /** 아티큘레이션 → 울리는 길이 비율 (#116) */
+    val LENGTHS: Map<String, Float> = mapOf(
+        "staccato" to 0.5f, "spiccato" to 0.35f, "staccatissimo" to 0.3f, "detached-legato" to 0.75f, "tenuto" to 1f,
+    )
+    /** 아티큘레이션 → 셈여림 몇 단계 세게 (#116): 악센트 > · 마르카토 ^ */
+    val ACCENT_STEPS: Map<String, Int> = mapOf("accent" to 1, "strong-accent" to 2)
+
+    /** 글로 쓴 "cresc." · "dim." (#116) — 위로 true, 아래로 false, 아니면 null */
+    fun hairpinWord(text: String): Boolean? {
+        val t = text.trim().lowercase().trimStart('(', '[').replace(" ", "")
+        return when {
+            t.startsWith("cresc") -> true
+            t.startsWith("dim") || t.startsWith("decresc") -> false
+            else -> null
+        }
+    }
     /** `<sound dynamics="X">` — 포르테(MIDI 90)에 대한 백분율 */
     fun ofSound(percent: Double): Float = (LEVELS.getValue("f") * percent / 100.0).toFloat().coerceIn(0.05f, 1f)
 
@@ -173,6 +198,9 @@ object MusicXmlReader {
         var openWedge: Pair<Double, Boolean>? = null
         val noteTimes = ArrayList<Double>()
         val noteFollowsDynamic = ArrayList<Boolean>()
+        val noteAccentSteps = ArrayList<Int>()
+        // 글로 쓴 cresc. · dim. — 다음 셈여림표까지(#116)
+        val wordHairpins = ArrayList<Pair<Double, Boolean>>()
         var divisions = 1.0
         var beats = 4
         var beatType = 4
@@ -208,6 +236,12 @@ object MusicXmlReader {
                                     if (name == "fp" || name == "sfp") dynamic = Dynamics.LEVELS.getValue("p")
                                     if (name == "sfpp") dynamic = Dynamics.LEVELS.getValue("pp")
                                 }
+                            }
+                        }
+                        node.children("direction-type").flatMap { it.children("words") }.forEach { w ->
+                            Dynamics.hairpinWord(w.textContent.orEmpty())?.let { up ->
+                                wordHairpins += (measureStart + cursor) to up
+                                anyDynamics = true
                             }
                         }
                         // 쐐기 — 열고 닫는 자리. 겹친 쐐기(성부마다)는 가장 최근 것만
@@ -263,7 +297,13 @@ object MusicXmlReader {
                             }
                             val accent = accentLevel.takeIf { accentAt == m to onset }
                             val velocity = own ?: accent ?: dynamic ?: -1f
-                            out += XmlNote(m, onset, duration, midi, velocity)
+                            // 아티큘레이션 (#116): 스타카토 등은 짧게, 악센트 · 마르카토는 세게(셈여림이 정해진 뒤 — 아래)
+                            val articulations = node.child("notations")?.children("articulations")?.flatMap { it.childElements() }.orEmpty()
+                            val length = articulations.mapNotNull { Dynamics.LENGTHS[it.tagName] }.minOrNull() ?: 1f
+                            val accentSteps = articulations.sumOf { Dynamics.ACCENT_STEPS[it.tagName] ?: 0 }
+                            if (accentSteps > 0) anyDynamics = true
+                            out += XmlNote(m, onset, duration, midi, velocity, length)
+                            noteAccentSteps += accentSteps
                             noteTimes += measureStart + onset
                             noteFollowsDynamic += own == null && accent == null
                             if ("start" in ties) openTies[midi] = out.size - 1 else openTies.remove(midi)
@@ -277,7 +317,15 @@ object MusicXmlReader {
         // 셈여림표가 하나도 없는 파트는 모두 1(예전과 같은 크기), 있으면 첫 표 앞의 음은 보통(mf)
         val unmarked = if (anyDynamics) Dynamics.UNMARKED else 1f
         for (i in out.indices) if (out[i].velocity < 0f) out[i] = out[i].copy(velocity = unmarked)
-        applyWedges(out, noteTimes, noteFollowsDynamic, marks.sortedBy { it.first }, wedges, unmarked)
+        val sortedMarks = marks.sortedBy { it.first }
+        // 글로 쓴 cresc. · dim. 은 다음 셈여림표까지(없으면 두 마디쯤)의 쐐기로
+        for ((from, up) in wordHairpins) {
+            val to = sortedMarks.firstOrNull { it.first > from + 1e-6 }?.first ?: (from + WORD_HAIRPIN_DEFAULT)
+            wedges += Triple(from, to, up)
+        }
+        applyWedges(out, noteTimes, noteFollowsDynamic, sortedMarks, wedges.sortedBy { it.first }, unmarked)
+        // 악센트 · 마르카토 — 셈여림이 정해진 뒤 그만큼 위로
+        for (i in out.indices) if (noteAccentSteps[i] > 0) out[i] = out[i].copy(velocity = Dynamics.step(out[i].velocity, noteAccentSteps[i]))
         return PartRead(out, measures, staves, rehearsals)
     }
 
@@ -314,6 +362,9 @@ object MusicXmlReader {
 
     /** 쐐기 끝에서 이만큼(4분음표) 안의 셈여림표를 목표로 본다 — 보통 끝 자리 바로 그 음에 붙는다 */
     private const val WEDGE_TARGET_REACH = 1.0
+
+    /** 글로 쓴 cresc. · dim. 뒤에 셈여림표가 없을 때의 길이(4분음표) — 4/4 두 마디 */
+    private const val WORD_HAIRPIN_DEFAULT = 8.0
 
     private val STEPS = mapOf('C' to 0, 'D' to 2, 'E' to 4, 'F' to 5, 'G' to 7, 'A' to 9, 'B' to 11)
 
