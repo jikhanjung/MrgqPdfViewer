@@ -361,6 +361,8 @@ class PdfViewerActivity : AppCompatActivity() {
         // TV 가 아니면 세로가 기본. 휴대폰은 설정의 회전 모드 — 기본은 기기 회전(가로면 시스템 1 ~ 2개씩, 세로면 보통 한 쪽 전체, #090)
         if (phoneView) requestedOrientation = phoneOrientationRequest()
         else com.mrgq.pdfviewer.utils.DeviceForm.applyOrientation(this)
+        // 볼륨 키 = 미디어 소리(메트로놈 · 반주 · 넘김 소리) — 멈춰 있을 때도 벨소리가 아니라 이것을 바꾸게 (#111)
+        volumeControlStream = android.media.AudioManager.STREAM_MUSIC
         binding = ActivityPdfViewerBinding.inflate(layoutInflater)
         setContentView(binding.root)
         // 세로 화면(태블릿): 한 쪽이 폭에 맞고 위아래가 빈다 — 박 표시를 가운데 위로 옮겨 악보 왼쪽 위를 가리지 않게

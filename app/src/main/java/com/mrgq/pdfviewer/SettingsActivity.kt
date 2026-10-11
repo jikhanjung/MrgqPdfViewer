@@ -87,6 +87,8 @@ class SettingsActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         com.mrgq.pdfviewer.utils.DeviceForm.applyOrientation(this) // TV 가 아니면 세로가 기본
+        // 볼륨 키 = 미디어 소리(녹음 재생 · 넘김 소리) — 아무것도 안 울릴 때 벨소리를 바꾸지 않게 (#111)
+        volumeControlStream = android.media.AudioManager.STREAM_MUSIC
         binding = ActivitySettingsNewBinding.inflate(layoutInflater)
         setContentView(binding.root)
         
@@ -1053,6 +1055,11 @@ class SettingsActivity : AppCompatActivity() {
 
     private fun startRecordingPlayback(entry: com.mrgq.pdfviewer.recording.RecordingLibrary.Entry, onEnd: () -> Unit): Boolean {
         stopRecordingPlayback()
+        // 미디어 소리가 0 이면 재생돼도 들리지 않는다 — 기기 설정이라 알리기만 (태블릿 실제 사례, #111)
+        val audio = getSystemService(AUDIO_SERVICE) as? android.media.AudioManager
+        if (audio != null && audio.getStreamVolume(android.media.AudioManager.STREAM_MUSIC) == 0) {
+            Toast.makeText(this, "미디어 소리가 0 이에요 — 볼륨 키(위)로 올리세요", Toast.LENGTH_LONG).show()
+        }
         return try {
             recordingPlayer = android.media.MediaPlayer().apply {
                 setDataSource(entry.wav.path)
