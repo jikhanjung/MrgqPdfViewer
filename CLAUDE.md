@@ -13,11 +13,12 @@ Android TV OS용 PDF 악보 리더 앱으로, 무선 파일 업로드와 리모�
 > SurfaceFlinger 가 4K 로 업스케일한다. 4K 관련 작업을 시작하기 전에
 > [`devlog/20260815_040_4k_display_investigation.md`](devlog/20260815_040_4k_display_investigation.md) 를 먼저 읽을 것.
 
-**현재 버전**: v0.7.6-beta.1 (2026-10-11)  
+**현재 버전**: v0.7.6-beta.2 (2026-10-11)  
 **빌드 상태**: 🟢 빌드 가능 (GitHub Actions CI 로 커밋마다 검증)  
 **CI 게이트**: 🟢 단위 테스트 480개 + Android Lint + 에뮬레이터 계측 60개·release APK 스모크(API 30/34 — ⚠️ 문서 정보 검사는 모든 매트릭스에서 건너뜀, #047 §5). 계측은 main 푸시와 수동 실행에서만 (회당 5~6분)  
 **테스트 상태**: 🟢 v0.3.x 기능을 Z18TV Pro 에서 확인(2026-09-28): 파트보(한 · 여러 파트, 넓혀 자르기, 번호) · 파트 화면 악보 연동 · MusicXML 반주(K488) · MusicXML · 서버 분석 동기화 · 목록 곡 정보 · 앱 안 업데이트(v0.2.9 → v0.3.3). 🟡 **두 대가 필요한 것만 남음** — 합주 중 파트 보기, 합주 Phase 0 동기 넘김. 렌더 품질 · 키 매핑 등 전반 스모크는 2026-08-15(Google TV Streamer + 4K 모니터)
 **최근 업데이트** (전체는 [`CHANGELOG.md`](CHANGELOG.md), 오늘 작업 요약은 devlog [`065`](devlog/20260928_065_part_view_accompaniment_server_analysis.md)):
+- **v0.7.6-beta.2** — 업데이트 대화상자에 "받는 곳 · 확인한 곳: ScoreMate 서버 / GitHub"(P15 2단계 확인용, #119)
 - **v0.7.6-beta.1** — 앱 업데이트를 **ScoreMate 서버 먼저**(+ GitHub 폴백), CI 가 사전 릴리스 · 변경 내용도 서버에 — 저장소 private 전환 1단계(P15, #118). 쓰지 않던 WSS 코드 · 키 정리
 - **v0.7.5** — 태블릿 · 휴대폰 화면 정리(도구 막대 · 하단 시트 · 메트로놈 한 화면 · 당겨서 동기화, P17) · **TV · 넓은 태블릿 설정 두 칸** · 음성 명령 실녹음 다듬기 · 레터 · 처음부터/이어서 듣기 · 대화 막기 · 반주 악상기호(셈여림 · 크레셴도 · 스타카토). beta.1 ~ beta.16 묶음
 - **v0.7.5-beta.16** — 🎙 악기 · 이름이 든 대화("여기 첼로가 좀 커요")는 실행 안 함(#117), 음성 명령 사례집 `docs/Voice_Command_Examples.md`
