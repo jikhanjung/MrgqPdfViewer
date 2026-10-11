@@ -1,7 +1,7 @@
 # P17 — 태블릿 · 휴대폰 UI 껍질 (터치에 맞게)
 
 2026-10-11 · 사용자: "현재 UI 가 전반적으로 TV UI 잖아. 타블렛/폰에서는 그에 맞는 UI 로 껍질을 좀 바꿔야 할 것 같아."
-상태: 🔨 **진행 중** — §9 모두 추천대로 결정(2026-10-11). 0단계(메뉴 내용 모델 · Material 다리 테마, [#100](20261011_100_menu_model_material_bridge.md)) · 1단계(하단 시트, [#101](20261011_101_menu_bottom_sheets.md)) · 2단계(도구 막대, [#102](20261011_102_viewer_touch_bars.md)) · 3단계(메트로놈 설정 펼침, [#103](20261011_103_metronome_dialog_inline.md)) · 4단계(곡 목록 당겨서 동기화, [#104](20261011_104_list_pull_to_sync.md)). 다음은 5단계 설정
+상태: ✅ **1차 완료** (2026-10-11, v0.7.5-beta.1 ~ beta.5) — §9 모두 추천대로 결정(2026-10-11). 0단계(메뉴 내용 모델 · Material 다리 테마, [#100](20261011_100_menu_model_material_bridge.md)) · 1단계(하단 시트, [#101](20261011_101_menu_bottom_sheets.md)) · 2단계(도구 막대, [#102](20261011_102_viewer_touch_bars.md)) · 3단계(메트로놈 설정 펼침, [#103](20261011_103_metronome_dialog_inline.md)) · 4단계(곡 목록 당겨서 동기화, [#104](20261011_104_list_pull_to_sync.md)) · 5단계(설정 스위치, [#105](20261011_105_settings_switches.md) — 설정은 이미 한 칸이었다). 남은 것: 실기기 확인, 세트리스트 칩 · 머리줄 아이콘 단추(모양만이라 뺌), 탭 템포(§9-6)
 관련: [`P13`](20261010_P13_viewer_menu_reorg_plan.md) · [`docs/Viewer_Menus.md`](../docs/Viewer_Menus.md)(메뉴 내용 — 이 계획은 **그리는 방식**만 바꾼다),
 [`066`](20260928_066_tablet_support.md)(태블릿 터치), [`090`](20261009_090_phone_rotation_mode.md)(휴대폰 회전), [`072`](20261007_072_score_notes_ink.md)(메모 도구 줄),
 [`P14`](20261010_P14_ios_app_plan.md)(iOS — 메뉴 내용을 공용으로 두면 SwiftUI 가 같은 것을 그린다)

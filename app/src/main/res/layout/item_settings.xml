@@ -54,4 +54,14 @@
         android:textColor="#B0FFFFFF"
         android:layout_marginStart="12dp" />
 
+    <!-- 켜기 · 끄기 줄 (태블릿 · 휴대폰, P17 5단계) — 줄 전체가 눌리므로 스위치는 보이기만 -->
+    <com.google.android.material.switchmaterial.SwitchMaterial
+        android:id="@+id/toggleSwitch"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="12dp"
+        android:clickable="false"
+        android:focusable="false"
+        android:visibility="gone" />
+
 </LinearLayout>

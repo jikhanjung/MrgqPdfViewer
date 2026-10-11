@@ -24,6 +24,10 @@ class SettingsAdapter(
             }
             
             binding.arrowText.text = item.arrow
+            // 태블릿 · 휴대폰은 켜기 · 끄기를 스위치로도 보인다 (P17 5단계) — TV 는 부제목 글만
+            val toggle = item.checked?.takeIf { !com.mrgq.pdfviewer.utils.DeviceForm.isTv(binding.root.context) }
+            binding.toggleSwitch.visibility = if (toggle != null) View.VISIBLE else View.GONE
+            if (toggle != null) binding.toggleSwitch.isChecked = toggle
             binding.root.alpha = if (item.enabled) 1.0f else 0.5f
             
             binding.root.setOnClickListener {

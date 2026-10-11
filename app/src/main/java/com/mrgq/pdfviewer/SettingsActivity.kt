@@ -357,14 +357,16 @@ class SettingsActivity : AppCompatActivity() {
                 } else {
                     "꺼짐 — 연주자 기기는 박 표시 · 현재 마디 · 넘김만 따라갑니다"
                 },
-                type = SettingsType.TOGGLE
+                type = SettingsType.TOGGLE,
+                checked = preferences.getBoolean(PdfViewerActivity.PREF_ENSEMBLE_SOUND, false)
             ),
             SettingsItem(
                 id = "sync_turn_toggle",
                 icon = "🎯",
                 title = "동기 페이지 넘김",
                 subtitle = if (syncEnabled) "현재: ON · 예약 후 모든 기기 동시 넘김" else "현재: OFF · 신호 즉시 넘김(기존)",
-                type = SettingsType.TOGGLE
+                type = SettingsType.TOGGLE,
+                checked = syncEnabled
             ),
             SettingsItem(
                 id = "sync_turn_lead",
@@ -578,14 +580,16 @@ class SettingsActivity : AppCompatActivity() {
                 icon = "🎬",
                 title = "페이지 전환 애니메이션",
                 subtitle = if (animationEnabled) "활성화됨" else "비활성화됨",
-                type = SettingsType.TOGGLE
+                type = SettingsType.TOGGLE,
+                checked = animationEnabled
             ),
             SettingsItem(
                 id = "sound_toggle",
                 icon = "🔊",
                 title = "페이지 넘기기 사운드",
                 subtitle = if (soundEnabled) "활성화됨" else "비활성화됨",
-                type = SettingsType.TOGGLE
+                type = SettingsType.TOGGLE,
+                checked = soundEnabled
             ),
             SettingsItem(
                 id = "volume_setting",
@@ -600,7 +604,8 @@ class SettingsActivity : AppCompatActivity() {
                 icon = "📄",
                 title = getString(R.string.settings_show_page_info),
                 subtitle = if (showPageInfo) "표시함" else "숨김",
-                type = SettingsType.TOGGLE
+                type = SettingsType.TOGGLE,
+                checked = showPageInfo
             )
         )
         
@@ -730,7 +735,8 @@ class SettingsActivity : AppCompatActivity() {
                 icon = "🔔",
                 title = "자동 업데이트 확인",
                 subtitle = if (UpdateController.isCheckOnStartup(this)) "켜짐 — 파일 목록에서 10분마다 확인해 새 버전이 있으면 알려 줍니다" else "꺼짐",
-                type = SettingsType.TOGGLE
+                type = SettingsType.TOGGLE,
+                checked = UpdateController.isCheckOnStartup(this)
             ),
             SettingsItem(
                 id = "update_prerelease_toggle",
@@ -738,7 +744,8 @@ class SettingsActivity : AppCompatActivity() {
                 title = "사전 릴리스(beta) 받기",
                 subtitle = if (UpdateController.isPrereleaseEnabled(this)) "켜짐 — 시험 중인 판도 받습니다. 확인 전 기능이 포함될 수 있습니다"
                     else "꺼짐 — 정식 릴리스만 받습니다",
-                type = SettingsType.TOGGLE
+                type = SettingsType.TOGGLE,
+                checked = UpdateController.isPrereleaseEnabled(this)
             ),
             // 🎙 음성 명령 (P12 2단계) — 태블릿 · 휴대폰. 기기의 음성 인식(보통 Google)을 쓴다
             SettingsItem(
@@ -751,7 +758,8 @@ class SettingsActivity : AppCompatActivity() {
                         "켜짐 — 악보 화면 오른쪽 아래 🎙 를 누른 채로 \"57마디부터 템포 72\" · \"다음 쪽\" · \"첼로 파트\". 기기의 음성 인식(대개 인터넷)을 씁니다"
                     else -> "꺼짐 — 켜면 악보 화면에 🎙 단추가 생깁니다"
                 },
-                type = SettingsType.TOGGLE
+                type = SettingsType.TOGGLE,
+                checked = preferences.getBoolean(PdfViewerActivity.PREF_VOICE_COMMANDS, false)
             ).takeIf { !com.mrgq.pdfviewer.utils.DeviceForm.isTv(this) },
             // 👂 계속 듣기 (#085) — 🎙 를 누르지 않고 호출어 "메이트" 뒤의 말을 명령으로
             SettingsItem(
@@ -769,6 +777,7 @@ class SettingsActivity : AppCompatActivity() {
                     else -> "꺼짐 — 켜면 🎙 를 누르지 않고 \"${wakeWords().first()}, …\"로 명령합니다"
                 },
                 type = SettingsType.TOGGLE,
+                checked = PdfViewerActivity.VOICE_ALWAYS_AVAILABLE && preferences.getBoolean(PdfViewerActivity.PREF_VOICE_ALWAYS, false),
                 enabled = PdfViewerActivity.VOICE_ALWAYS_AVAILABLE
             ).takeIf { !com.mrgq.pdfviewer.utils.DeviceForm.isTv(this) },
             // 🗣 계속 듣기의 호출어 (#091)
