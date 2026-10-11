@@ -2678,7 +2678,7 @@ class PdfViewerActivity : AppCompatActivity() {
             micWaitingMeasure = mapped[startMeasure] // 시작을 찾을 때까지 이 마디만 연하게 (#089)
             refreshVoiceButton()
             refreshScoreOverlay()
-            Toast.makeText(this@PdfViewerActivity, getString(R.string.viewer_mic_listening_from, mapped[startMeasure]?.measureNumber), Toast.LENGTH_LONG).show()
+            Toast.makeText(this@PdfViewerActivity, getString(R.string.viewer_mic_listening_from, mapped[startMeasure]?.measureNumber.toString()), Toast.LENGTH_LONG).show()
         }.invokeOnCompletion {
             binding.voiceButton.post {
                 micFollowStarting = false
