@@ -24,16 +24,19 @@ import com.mrgq.pdfviewer.voice.VoiceCommand.SetTempo
  */
 object CommandParser {
 
-    /** [staffNames] = 이 악보의 보표 이름 — 사람 이름 보표를 부를 수 있게 (#094) */
-    fun parse(text: String, staffNames: List<String> = emptyList()): ParseResult =
-        parse(CommandNormalizer.normalize(text, staffNames))
+    /**
+     * [staffNames] = 이 악보의 보표 이름 — 사람 이름 보표를 부를 수 있게 (#094).
+     * [staffCount] = 파트 보기 목록의 보표 수(모르면 null) — "보표 23"이 보표 수보다 크면 "보표 2 3"으로 (#110)
+     */
+    fun parse(text: String, staffNames: List<String> = emptyList(), staffCount: Int? = null): ParseResult =
+        parse(CommandNormalizer.normalize(text, staffNames), staffCount)
 
     /**
      * 음성 인식 후보 여럿(가능성 높은 순) → 쓸 후보와 그 결과. 첫 후보가 명령이 아니면 다음 후보를 보되, 첫 후보가 **일부러 한 말로
      * 막힌 것**(부정 · 상대 위치 · 둘)이면 그대로 둔다 — "57마디 말고"를 둘째 후보 "57마디"로 실행하지 않게. 후보가 없으면 null
      */
-    fun parseBest(candidates: List<String>, staffNames: List<String> = emptyList()): Pair<String, ParseResult>? {
-        val parsed = candidates.filter { it.isNotBlank() }.map { it to parse(it, staffNames) }
+    fun parseBest(candidates: List<String>, staffNames: List<String> = emptyList(), staffCount: Int? = null): Pair<String, ParseResult>? {
+        val parsed = candidates.filter { it.isNotBlank() }.map { it to parse(it, staffNames, staffCount) }
         val first = parsed.firstOrNull() ?: return null
         val top = first.second
         if (top is ParseResult.Unrecognized && top.reason !in RETRYABLE) return first
@@ -50,7 +53,7 @@ object CommandParser {
     /** 수 뒤에 붙으면 그 수가 마디 · 쪽 · 빠르기인 말 */
     private val UNITS = setOf(Kw.MEASURE, Kw.FROM, Kw.PAGE, Kw.BPM)
 
-    fun parse(raw: List<Token>): ParseResult {
+    fun parse(raw: List<Token>, staffCount: Int? = null): ParseResult {
         if (raw.any { it == Token.Word(Kw.NEGATION) }) return ParseResult.Unrecognized(Reason.NEGATION)
         if (raw.any { it == Token.Word(Kw.RELATIVE) }) return ParseResult.Unrecognized(Reason.RELATIVE)
         val tokens = dropParticles(raw)
@@ -137,7 +140,7 @@ object CommandParser {
                     while (true) {
                         val n = tokens.getOrNull(j) as? Token.Num ?: break
                         if ((tokens.getOrNull(skipCounters(tokens, j + 1)) as? Token.Word)?.kw in UNITS) break
-                        parts += PartRef.staff(n.value)
+                        parts += staffNumbers(n.value, staffCount).map { PartRef.staff(it) }
                         j++
                     }
                     i = j
@@ -171,6 +174,16 @@ object CommandParser {
     /** 조사 · 말끝만인 조각을 버린다. 레터 바로 뒤 조각은 알파벳 읽기("레터 이" = E)라 남긴다 */
     private fun dropParticles(tokens: List<Token>): List<Token> = tokens.filterIndexed { index, t ->
         t !is Token.Other || tokens.getOrNull(index - 1) == Token.Word(Kw.LETTER) || !VoiceLexicon.isParticles(t.text)
+    }
+
+    /**
+     * 보표 뒤의 수 — STT 가 "보표 2 3"을 "보표 23"으로 붙여 적는다(실녹음 #109). 보표 수를 알고 두 자리 수가 그보다 크며
+     * 두 숫자가 모두 있는 보표 번호면 나눈다. 아니면 그대로(없는 보표면 실행할 때 "못 찾았어요")
+     */
+    private fun staffNumbers(n: Int, staffCount: Int?): List<Int> {
+        if (staffCount == null || n <= staffCount || n !in 11..99) return listOf(n)
+        val digits = listOf(n / 10, n % 10)
+        return if (digits.all { it in 1..staffCount } && digits[0] != digits[1]) digits else listOf(n)
     }
 
     private fun skipCounters(tokens: List<Token>, from: Int): Int {

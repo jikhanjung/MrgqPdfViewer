@@ -16,8 +16,8 @@ class VoiceRecordingsTest {
     /** 블타바(몰다우) 합주 악보의 사람 이름 보표 — 기록에서 성공한 이름들 */
     private val moldau = listOf("은석", "예완", "하진")
 
-    private fun heard(vararg candidates: String, names: List<String> = emptyList()): Any? =
-        when (val r = CommandParser.parseBest(candidates.toList(), names)?.second) {
+    private fun heard(vararg candidates: String, names: List<String> = emptyList(), staffCount: Int? = null): Any? =
+        when (val r = CommandParser.parseBest(candidates.toList(), names, staffCount)?.second) {
             is ParseResult.Commands -> r.label
             is ParseResult.Unrecognized -> r.reason
             else -> r
@@ -47,6 +47,18 @@ class VoiceRecordingsTest {
         assertEquals("보표 1 파트", heard("스테프원 파트보", "스테프원 파트버", "스테프원 파트복"))
         assertEquals("보표 1 파트", heard("보표 1 파트", "보표일 파트", "보표 1 p"))
         assertEquals("보표 1 · 보표 2 파트", heard("보표 1 2 파트복", "보표 1 2 파트보", "보표 12 파트복"))
+    }
+
+    @Test
+    fun 붙여_적은_보표_번호는_보표_수로_나눈다() {
+        // 아르페지오네(보표 3): "목표 23 파트" = 보표 2 · 3 (#110)
+        assertEquals("보표 2 · 보표 3 파트", heard("목표 23 파트", "목표 2 3 파트", staffCount = 3))
+        assertEquals("보표 2 · 보표 3 파트", heard("보표 23 파트", staffCount = 3))
+        // 보표 수를 모르거나, 그만큼 보표가 있거나, 나눠도 없는 번호면 그대로
+        assertEquals("보표 23 파트", heard("보표 23 파트"))
+        assertEquals("보표 12 파트", heard("보표 12 파트", staffCount = 20))
+        assertEquals("보표 45 파트", heard("보표 45 파트", staffCount = 3))
+        assertEquals("보표 22 파트", heard("보표 22 파트", staffCount = 3))
     }
 
     @Test

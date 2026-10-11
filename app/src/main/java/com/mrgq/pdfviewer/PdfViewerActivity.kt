@@ -5398,6 +5398,10 @@ class PdfViewerActivity : AppCompatActivity() {
         if (voiceStaffParts?.first != fileId) lifecycleScope.launch { voiceStaffNames() }
     }
 
+    /** 파트 보기 목록의 보표 수 — "보표 23" → 2 · 3 을 가리려고 (#110). 읽어 둔 것이 없으면 null */
+    private fun voiceStaffCount(): Int? =
+        voiceStaffParts?.takeIf { it.first == currentPdfFileId }?.second?.size?.takeIf { it > 0 }
+
     /** 이미 읽어 둔 보표 이름만 (기다리지 않는다) — 듣기 시작할 때의 힌트용 */
     private fun cachedVoiceStaffNames(): List<String> {
         val parts = voiceStaffParts?.takeIf { it.first == currentPdfFileId }?.second ?: return emptyList()
@@ -5458,7 +5462,7 @@ class PdfViewerActivity : AppCompatActivity() {
     private fun runVoiceCandidates(candidates: List<String>, heard: List<String>, alwaysListening: Boolean) {
         val icon = if (alwaysListening) "👂" else "🎙"
         lifecycleScope.launch {
-            val best = CommandParser.parseBest(candidates, voiceStaffNames())
+            val best = CommandParser.parseBest(candidates, voiceStaffNames(), voiceStaffCount())
             if (best == null) {
                 showVoiceStatus(if (alwaysListening) "👂 못 알아들었어요" else "🎙 못 알아들었어요 — 누른 채로 말하세요", VOICE_STATUS_MS)
                 logVoiceCommand(heard, null, null, alwaysListening)
@@ -5488,6 +5492,9 @@ class PdfViewerActivity : AppCompatActivity() {
             put("ok", report?.ok ?: false)
             put("message", report?.message ?: org.json.JSONObject.NULL)
             put("app_version", BuildConfig.VERSION_NAME)
+            // 이름 실패를 다시 읽어 보려면 그때 악보의 보표가 필요하다 (#110)
+            put("staff_names", org.json.JSONArray(cachedVoiceStaffNames()))
+            voiceStaffCount()?.let { put("staff_count", it) }
         }.toString()
         Log.i("VoiceCommand", line)
         val file = File(File(getExternalFilesDir(null), "voice"), "commands.jsonl")
