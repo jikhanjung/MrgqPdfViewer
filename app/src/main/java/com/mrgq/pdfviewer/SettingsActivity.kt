@@ -50,6 +50,18 @@ class SettingsActivity : AppCompatActivity() {
     // Settings adapter
     private lateinit var settingsAdapter: SettingsAdapter
     private var currentItems = mutableListOf<SettingsItem>()
+
+    /**
+     * TV 는 **두 칸** — 왼쪽 카테고리 · 오른쪽 그 항목. 왼쪽에서 포커스를 옮기면 오른쪽이 바로 바뀌고, → · OK 로 들어가고 ← · 뒤로로 나온다.
+     * 태블릿 · 휴대폰은 폭이 좁아 한 칸(목록 → 상세가 자리를 대신)
+     */
+    private val twoPane by lazy { com.mrgq.pdfviewer.utils.DeviceForm.isTv(this) }
+    /** 두 칸: 오른쪽에 보이는 카테고리 */
+    private var paneCategory: String? = null
+    /** 왼쪽에서 포커스를 빨리 훑을 때 오른쪽을 매번 만들지 않게 */
+    private val panePreview = android.os.Handler(android.os.Looper.getMainLooper())
+    /** 오른쪽(상세)에 지금 있는 줄 — 다시 그린 뒤 같은 줄로 포커스를 돌려놓는다 */
+    private var detailItems: List<SettingsItem> = emptyList()
     
     // Web server log management
     private val webServerLogs = mutableListOf<String>()
@@ -81,8 +93,83 @@ class SettingsActivity : AppCompatActivity() {
         updateController = UpdateController(this)
         
         setupUI()
+        if (twoPane) applyTwoPaneLayout()
         checkWebServerStatus()
         setupMainMenu()
+    }
+
+    /** 두 칸: 목록은 경계선 왼쪽, 상세는 오른쪽 — 둘 다 늘 보인다. 상세의 취소 · 적용 단추는 쓰지 않는다(닫을 칸이 없다) */
+    private fun applyTwoPaneLayout() {
+        val set = androidx.constraintlayout.widget.ConstraintSet()
+        set.clone(binding.root)
+        set.connect(R.id.settingsRecyclerView, androidx.constraintlayout.widget.ConstraintSet.END, R.id.paneGuide, androidx.constraintlayout.widget.ConstraintSet.START)
+        set.connect(R.id.detailPanelLayout, androidx.constraintlayout.widget.ConstraintSet.START, R.id.paneGuide, androidx.constraintlayout.widget.ConstraintSet.END)
+        val gap = (resources.displayMetrics.density * 16).toInt()
+        set.setMargin(R.id.detailPanelLayout, androidx.constraintlayout.widget.ConstraintSet.START, gap)
+        set.setMargin(R.id.detailPanelLayout, androidx.constraintlayout.widget.ConstraintSet.TOP, (resources.displayMetrics.density * 24).toInt())
+        set.applyTo(binding.root)
+        binding.detailButtons.visibility = View.GONE
+    }
+
+    /** 두 칸: 왼쪽 [id] 카테고리를 오른쪽에 보인다 (들어가지는 않는다) */
+    private fun showCategory(id: String) {
+        paneCategory = id
+        if (::settingsAdapter.isInitialized) settingsAdapter.select(binding.settingsRecyclerView, id)
+        when (id) {
+            "file_management" -> showFileManagementPanel()
+            "web_server" -> showWebServerPanel()
+            "collaboration" -> showCollaborationPanel()
+            "scoremate" -> showScoreMatePanel()
+            "animation_sound" -> showAnimationSoundPanel()
+            "recordings" -> showRecordingsPanel()
+            "display_mode" -> showDisplayModePanel()
+            "info" -> showInfoPanel()
+        }
+    }
+
+    /** 두 칸: 왼쪽에서 포커스가 온 카테고리를 잠깐 뒤 오른쪽에 (빨리 훑으면 마지막 것만) */
+    private fun onCategoryFocused(item: SettingsItem) {
+        panePreview.removeCallbacksAndMessages(null)
+        if (item.id == paneCategory) return
+        panePreview.postDelayed({ if (item.id != paneCategory) showCategory(item.id) }, PANE_PREVIEW_DELAY_MS)
+    }
+
+    /** 두 칸: 왼쪽의 지금 카테고리로 포커스 */
+    private fun focusCategory() {
+        val list = binding.settingsRecyclerView
+        val position = currentItems.indexOfFirst { it.id == paneCategory }.takeIf { it >= 0 } ?: 0
+        list.scrollToPosition(position)
+        list.post { list.findViewHolderForAdapterPosition(position)?.itemView?.requestFocus() }
+    }
+
+    /** 두 칸: 오른쪽 첫 줄로 들어간다 */
+    private fun focusDetail() {
+        panePreview.removeCallbacksAndMessages(null)
+        binding.detailPanelLayout.scrollTo(0, 0)
+        binding.detailRecyclerView.post { binding.detailRecyclerView.getChildAt(0)?.requestFocus() }
+    }
+
+    private fun detailHasFocus(): Boolean = binding.detailPanelLayout.hasFocus()
+
+    /** 두 칸의 좌우: 왼쪽에서 → = 오른쪽으로 들어감, 오른쪽에서 ← = 왼쪽 지금 카테고리로 (가까운 줄이 아니라) */
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        if (twoPane && event.action == KeyEvent.ACTION_DOWN) {
+            when (event.keyCode) {
+                KeyEvent.KEYCODE_DPAD_RIGHT -> if (binding.settingsRecyclerView.hasFocus()) {
+                    // 미리 보기를 기다리지 않고 지금 포커스의 카테고리로 들어간다
+                    val list = binding.settingsRecyclerView
+                    val focused = list.focusedChild?.let { currentItems.getOrNull(list.getChildAdapterPosition(it))?.id }
+                    if (focused != null && focused != paneCategory) showCategory(focused)
+                    focusDetail()
+                    return true
+                }
+                KeyEvent.KEYCODE_DPAD_LEFT -> if (detailHasFocus()) {
+                    focusCategory()
+                    return true
+                }
+            }
+        }
+        return super.dispatchKeyEvent(event)
     }
     
     private fun setupUI() {
@@ -91,7 +178,9 @@ class SettingsActivity : AppCompatActivity() {
         
         // 뒤로 가기 버튼
         binding.backButton.setOnClickListener {
-            if (binding.detailPanelLayout.visibility == View.VISIBLE) {
+            if (twoPane) {
+                handleBackPress()
+            } else if (binding.detailPanelLayout.visibility == View.VISIBLE) {
                 hideDetailPanel()
             } else {
                 handleBackPress()
@@ -227,13 +316,26 @@ class SettingsActivity : AppCompatActivity() {
     }
     
     private fun updateAdapter() {
-        settingsAdapter = SettingsAdapter(currentItems) { item ->
+        val listHadFocus = binding.settingsRecyclerView.hasFocus()
+        settingsAdapter = SettingsAdapter(currentItems, onItemFocus = if (twoPane) ::onCategoryFocused else null) { item ->
             handleItemClick(item)
         }
+        if (twoPane) settingsAdapter.select(binding.settingsRecyclerView, paneCategory)
         binding.settingsRecyclerView.adapter = settingsAdapter
+        if (twoPane) {
+            // 처음엔 첫 카테고리를 오른쪽에. 목록을 다시 만들면(요약이 바뀜) 왼쪽 포커스를 지금 카테고리로 돌려놓는다
+            if (paneCategory == null) currentItems.firstOrNull()?.let { showCategory(it.id) }
+            if (listHadFocus || currentFocus == null) focusCategory()
+        }
     }
     
     private fun handleItemClick(item: SettingsItem) {
+        // 두 칸: 오른쪽에 보이고 그리로 들어간다. 웹서버는 카테고리를 옮겨도 멈추지 않는다 — 설정을 나갈 때 묻는다(handleBackPress)
+        if (twoPane) {
+            if (item.id != paneCategory) showCategory(item.id)
+            focusDetail()
+            return
+        }
         // 웹서버 설정 화면에서 다른 메뉴로 이동할 때 웹서버가 실행 중이면 확인
         if (binding.detailPanelLayout.visibility == View.VISIBLE && 
             binding.detailTitle.text == "웹서버" && 
@@ -1002,19 +1104,34 @@ class SettingsActivity : AppCompatActivity() {
     }
 
     private fun showDetailPanel(title: String, items: List<SettingsItem>) {
+        // 같은 칸을 다시 그릴 때(켜기 · 끄기 뒤) 포커스가 있던 줄 — 새 목록에서 같은 줄로 돌려놓는다(리모컨 포커스가 맨 위로 튀지 않게)
+        val focusedId = binding.detailRecyclerView.focusedChild
+            ?.let { detailItems.getOrNull(binding.detailRecyclerView.getChildAdapterPosition(it))?.id }
+            ?.takeIf { title == binding.detailTitle.text }
         binding.detailTitle.text = title
-        
+        detailItems = items
+        // 웹서버 칸이 아니면 로그는 숨긴다 (웹서버 칸은 이 뒤에 다시 보인다)
+        hideWebServerLogSection()
+
         val detailAdapter = SettingsAdapter(items) { item ->
             handleDetailItemClick(item)
         }
         binding.detailRecyclerView.layoutManager = LinearLayoutManager(this)
         binding.detailRecyclerView.adapter = detailAdapter
         
-        binding.settingsRecyclerView.visibility = View.GONE
+        if (!twoPane) binding.settingsRecyclerView.visibility = View.GONE
         binding.detailPanelLayout.visibility = View.VISIBLE
+        val again = items.indexOfFirst { it.id == focusedId }
+        if (again >= 0) binding.detailRecyclerView.post { binding.detailRecyclerView.layoutManager?.findViewByPosition(again)?.requestFocus() }
     }
     
     private fun hideDetailPanel() {
+        // 두 칸: 닫을 칸이 없다 — 지금 카테고리를 새 값으로 다시 그리고 왼쪽으로 (설정 대화상자를 마친 뒤 등)
+        if (twoPane) {
+            paneCategory?.let { showCategory(it) }
+            focusCategory()
+            return
+        }
         // 웹서버 설정 화면에서 벗어날 때 웹서버가 실행 중이면 확인
         if (binding.detailTitle.text == "웹서버" && isWebServerRunning) {
             showWebServerDetailExitConfirmDialog()
@@ -1434,10 +1551,12 @@ class SettingsActivity : AppCompatActivity() {
     override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
         when (keyCode) {
             KeyEvent.KEYCODE_BACK, KeyEvent.KEYCODE_ESCAPE -> {
-                if (binding.detailPanelLayout.visibility == View.VISIBLE) {
-                    hideDetailPanel()
-                } else {
-                    handleBackPress()
+                when {
+                    // 두 칸: 오른쪽에 있으면 왼쪽으로, 왼쪽이면 설정을 나간다
+                    twoPane && detailHasFocus() -> focusCategory()
+                    twoPane -> handleBackPress()
+                    binding.detailPanelLayout.visibility == View.VISIBLE -> hideDetailPanel()
+                    else -> handleBackPress()
                 }
                 return true
             }
@@ -1493,8 +1612,8 @@ class SettingsActivity : AppCompatActivity() {
         com.mrgq.pdfviewer.ensemble.VersionNotice.attach(this) // 합주 상대와 버전이 다르면 대화상자로 (#061)
         updateController.onResume()
         checkWebServerStatus()
-        // 메인 화면으로 돌아올 때 전체 메뉴를 다시 로드하여 웹서버 상태 반영
-        if (binding.detailPanelLayout.visibility == android.view.View.GONE) {
+        // 메인 화면으로 돌아올 때 전체 메뉴를 다시 로드하여 웹서버 상태 반영 (두 칸은 상세 칸이 늘 보이므로 늘 다시 읽는다)
+        if (twoPane || binding.detailPanelLayout.visibility == android.view.View.GONE) {
             setupMainMenu()
         } else {
             updateWebServerStatus()
@@ -1506,6 +1625,8 @@ class SettingsActivity : AppCompatActivity() {
      * (웹서버는 이미 웹서버 설정 화면에서 벗어날 때 확인했으므로)
      */
     private fun handleBackPress() {
+        // 두 칸은 웹서버 칸을 떠나도 웹서버가 돈다 — 설정을 나갈 때 묻는다(나가면 멈춘다, onDestroy)
+        if (twoPane && isWebServerRunning) return showWebServerExitConfirmDialog()
         finish()
     }
     
@@ -1687,7 +1808,8 @@ class SettingsActivity : AppCompatActivity() {
      * Update the web server panel with current status
      */
     private fun updateWebServerPanel() {
-        if (binding.detailPanelLayout.visibility == android.view.View.VISIBLE) {
+        // 두 칸은 상세 칸이 늘 보이므로 웹서버 칸일 때만
+        if (binding.detailPanelLayout.visibility == android.view.View.VISIBLE && binding.detailTitle.text == "웹서버") {
             // 웹서버 패널이 열려있으면 새로고침
             showWebServerPanel()
         }
@@ -1729,5 +1851,10 @@ class SettingsActivity : AppCompatActivity() {
     private fun clearWebServerLog() {
         webServerLogs.clear()
         updateWebServerLogDisplay()
+    }
+
+    companion object {
+        /** 두 칸: 왼쪽 포커스가 이만큼 머물면 오른쪽을 그 카테고리로 */
+        private const val PANE_PREVIEW_DELAY_MS = 150L
     }
 }

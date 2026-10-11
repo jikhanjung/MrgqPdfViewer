@@ -48,6 +48,14 @@
             android:minHeight="0dp" />
     </LinearLayout>
 
+    <!-- TV 두 칸의 경계 — 왼쪽 카테고리 · 오른쪽 그 항목 (코드에서 두 칸일 때만 이어 붙인다). 한 칸(태블릿 · 휴대폰)에서는 쓰지 않는다 -->
+    <androidx.constraintlayout.widget.Guideline
+        android:id="@+id/paneGuide"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        app:layout_constraintGuide_percent="0.36" />
+
     <!-- Settings List -->
     <androidx.recyclerview.widget.RecyclerView
         android:id="@+id/settingsRecyclerView"
@@ -174,6 +182,7 @@
         </LinearLayout>
 
         <LinearLayout
+            android:id="@+id/detailButtons"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="horizontal"
