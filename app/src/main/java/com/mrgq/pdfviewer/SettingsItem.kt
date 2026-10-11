@@ -20,5 +20,7 @@ enum class SettingsType {
     INPUT,
     INFO,
     /** 오른쪽 칸의 묶음 제목 (#122) — [SettingsItem.title] 만, 포커스 · 누름 없음 */
-    HEADER
+    HEADER,
+    /** 누르면 바로 무언가를 하는 줄 — 단추 모양으로 보인다(제목 = 단추 글, 설명은 아래) (#123) */
+    BUTTON
 }

@@ -130,6 +130,7 @@ class SettingsActivity : AppCompatActivity() {
             "web_server" -> showWebServerPanel()
             "collaboration" -> showCollaborationPanel()
             "scoremate" -> showScoreMatePanel()
+            "voice" -> showVoicePanel()
             "animation_sound" -> showAnimationSoundPanel()
             "recordings" -> showRecordingsPanel()
             "display_mode" -> showDisplayModePanel()
@@ -285,6 +286,17 @@ class SettingsActivity : AppCompatActivity() {
             arrow = "▶"
         ))
         
+        // 🎙 음성 명령 · 👂 계속 듣기 — 태블릿 · 휴대폰 (P12). 예전엔 앱 정보 안에 있었다 (#123)
+        if (!isTv) {
+            currentItems.add(SettingsItem(
+                id = "voice",
+                icon = "🎙",
+                title = "음성 명령",
+                subtitle = "누르고 말하기 · 계속 듣기",
+                arrow = "▶"
+            ))
+        }
+
         // 🎤 녹음 기록 (P10) — 태블릿에서만 (TV 는 녹음하지 않는다 — 연주 듣고 넘기기도 태블릿 전용)
         if (!com.mrgq.pdfviewer.utils.DeviceForm.isTv(this) &&
             packageManager.hasSystemFeature(android.content.pm.PackageManager.FEATURE_MICROPHONE)
@@ -368,6 +380,7 @@ class SettingsActivity : AppCompatActivity() {
                     "file_management" -> showFileManagementPanel()
                     "collaboration" -> showCollaborationPanel()
                     "scoremate" -> showScoreMatePanel()
+                    "voice" -> showVoicePanel()
                     "animation_sound" -> showAnimationSoundPanel()
                     "recordings" -> showRecordingsPanel()
                     "display_mode" -> showDisplayModePanel()
@@ -380,6 +393,7 @@ class SettingsActivity : AppCompatActivity() {
                 "web_server" -> showWebServerPanel()
                 "collaboration" -> showCollaborationPanel()
                 "scoremate" -> showScoreMatePanel()
+                "voice" -> showVoicePanel()
                 "animation_sound" -> showAnimationSoundPanel()
                 "recordings" -> showRecordingsPanel()
                 "display_mode" -> showDisplayModePanel()
@@ -810,11 +824,11 @@ class SettingsActivity : AppCompatActivity() {
                 if (input.text.isBlank()) editor.remove(PdfViewerActivity.PREF_VOICE_WAKE_WORDS)
                 else editor.putString(PdfViewerActivity.PREF_VOICE_WAKE_WORDS, com.mrgq.pdfviewer.voice.WakeWord.toSetting(words))
                 editor.apply()
-                showInfoPanel()
+                showVoicePanel()
             }
             .setNeutralButton("기본값") { _, _ ->
                 preferences.edit().remove(PdfViewerActivity.PREF_VOICE_WAKE_WORDS).apply()
-                showInfoPanel()
+                showVoicePanel()
             }
             .setNegativeButton("취소", null)
             .show()
@@ -860,6 +874,13 @@ class SettingsActivity : AppCompatActivity() {
                 type = SettingsType.INFO
             ),
             SettingsItem(
+                id = "check_update",
+                icon = "🔄",
+                title = "업데이트 확인",
+                subtitle = "ScoreMate 서버에서 새 버전 찾기",
+                type = SettingsType.BUTTON
+            ),
+            SettingsItem(
                 id = "update_on_start_toggle",
                 icon = "🔔",
                 title = "자동 업데이트 확인",
@@ -876,14 +897,23 @@ class SettingsActivity : AppCompatActivity() {
                 type = SettingsType.TOGGLE,
                 checked = UpdateController.isPrereleaseEnabled(this)
             ),
+            header("about_header", "정보"),
             SettingsItem(
-                id = "check_update",
-                icon = "🔄",
-                title = "업데이트 확인",
-                subtitle = "ScoreMate 서버에서 새 버전 찾기",
-                type = SettingsType.ACTION
-            ),
-            header("voice_header", "음성 명령").takeIf { !isTv },
+                id = "app_info",
+                icon = "ℹ️",
+                title = "앱 정보",
+                subtitle = "MRGQ PDF Viewer — TV · 태블릿 · 휴대폰을 위한 스마트 악보 리더",
+                type = SettingsType.INFO
+            )
+        )
+        
+        showDetailPanel("앱 정보", items)
+    }
+    
+    /** 🎙 음성 명령 · 👂 계속 듣기 (#123 — 설정 맨 위 칸으로) */
+    private fun showVoicePanel() {
+        val items = listOfNotNull(
+            header("voice_press_header", "누르고 말하기"),
             // 🎙 음성 명령 (P12 2단계) — 태블릿 · 휴대폰. 기기의 음성 인식(보통 Google)을 쓴다
             SettingsItem(
                 id = "voice_commands_toggle",
@@ -898,7 +928,8 @@ class SettingsActivity : AppCompatActivity() {
                 },
                 type = SettingsType.TOGGLE,
                 checked = preferences.getBoolean(PdfViewerActivity.PREF_VOICE_COMMANDS, false)
-            ).takeIf { !com.mrgq.pdfviewer.utils.DeviceForm.isTv(this) },
+            ),
+            header("voice_always_header", "계속 듣기 (시험)"),
             // 👂 계속 듣기 (#085) — 🎙 를 누르지 않고 호출어 "메이트" 뒤의 말을 명령으로
             SettingsItem(
                 id = "voice_always_toggle",
@@ -917,7 +948,7 @@ class SettingsActivity : AppCompatActivity() {
                 type = SettingsType.TOGGLE,
                 checked = PdfViewerActivity.VOICE_ALWAYS_AVAILABLE && preferences.getBoolean(PdfViewerActivity.PREF_VOICE_ALWAYS, false),
                 enabled = PdfViewerActivity.VOICE_ALWAYS_AVAILABLE
-            ).takeIf { !com.mrgq.pdfviewer.utils.DeviceForm.isTv(this) },
+            ),
             // 🗣 계속 듣기의 호출어 (#091)
             SettingsItem(
                 id = "voice_wake_words",
@@ -927,20 +958,11 @@ class SettingsActivity : AppCompatActivity() {
                     (if (preferences.getString(PdfViewerActivity.PREF_VOICE_WAKE_WORDS, null).isNullOrBlank()) " (기본)" else "") +
                     " — 누르면 바꿉니다",
                 type = SettingsType.ACTION
-            ).takeIf { !com.mrgq.pdfviewer.utils.DeviceForm.isTv(this) && PdfViewerActivity.VOICE_ALWAYS_AVAILABLE },
-            header("about_header", "정보"),
-            SettingsItem(
-                id = "app_info",
-                icon = "ℹ️",
-                title = "앱 정보",
-                subtitle = "MRGQ PDF Viewer — TV · 태블릿 · 휴대폰을 위한 스마트 악보 리더",
-                type = SettingsType.INFO
-            )
+            ).takeIf { PdfViewerActivity.VOICE_ALWAYS_AVAILABLE },
         )
-        
-        showDetailPanel("앱 정보", items)
+        showDetailPanel("음성 명령", items)
     }
-    
+
     /** 오른쪽 칸의 묶음 제목 (#122) */
     private fun header(id: String, title: String) = SettingsItem(id = id, icon = "", title = title, type = SettingsType.HEADER)
 
@@ -1254,14 +1276,14 @@ class SettingsActivity : AppCompatActivity() {
                 // 끄면 👂 계속 듣기도 함께 끈다 — 다시 켰을 때 모르는 사이 듣기 시작하지 않게
                 if (!enable) editor.putBoolean(PdfViewerActivity.PREF_VOICE_ALWAYS, false)
                 editor.apply()
-                showInfoPanel()
+                showVoicePanel()
             }
             "voice_always_toggle" -> {
                 if (!PdfViewerActivity.VOICE_ALWAYS_AVAILABLE) return
                 if (!preferences.getBoolean(PdfViewerActivity.PREF_VOICE_COMMANDS, false)) return
                 val enable = !preferences.getBoolean(PdfViewerActivity.PREF_VOICE_ALWAYS, false)
                 preferences.edit().putBoolean(PdfViewerActivity.PREF_VOICE_ALWAYS, enable).apply()
-                showInfoPanel()
+                showVoicePanel()
             }
             "voice_wake_words" -> showWakeWordsDialog()
             "update_prerelease_toggle" -> {

@@ -7,12 +7,14 @@ import android.widget.TextView
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.switchmaterial.SwitchMaterial
 import com.mrgq.pdfviewer.databinding.ItemSettingsBinding
+import com.mrgq.pdfviewer.databinding.ItemSettingsButtonBinding
 import com.mrgq.pdfviewer.databinding.ItemSettingsHeaderBinding
 import com.mrgq.pdfviewer.databinding.ItemSettingsRowBinding
 
 /**
  * 설정 줄 목록. [selectable] 이면 두 칸의 왼쪽 카테고리 목록이다 — 오른쪽에 보이는 카테고리([selectedId])를 표시한다.
- * [detail] 이면 오른쪽(상세) 목록 — Android 설정처럼 카드 없는 평평한 줄 · 묶음 제목([SettingsType.HEADER]), 아이콘 없음 (#122).
+ * [detail] 이면 오른쪽(상세) 목록 — Android 설정처럼 카드 없는 평평한 줄 · 묶음 제목([SettingsType.HEADER]), 아이콘 없음 (#122),
+ * 누르면 바로 하는 줄은 단추 모양([SettingsType.BUTTON], #123).
  * [onItemFocus] 는 TV 에서 포커스가 온 줄을 알린다(오른쪽 미리 보기)
  */
 class SettingsAdapter(
@@ -71,8 +73,22 @@ class SettingsAdapter(
     private inner class RowHolder(val views: RowViews) : RecyclerView.ViewHolder(views.root)
     private class HeaderHolder(val binding: ItemSettingsHeaderBinding) : RecyclerView.ViewHolder(binding.root)
 
+    /** 단추 줄 (#123) — 오른쪽 목록에서만. 왼쪽 · 한 칸 카드 목록에는 보통 줄로 */
+    private inner class ButtonHolder(val binding: ItemSettingsButtonBinding) : RecyclerView.ViewHolder(binding.root) {
+        fun bind(item: SettingsItem) {
+            binding.buttonText.text = item.title
+            binding.subtitleText.text = item.subtitle
+            binding.subtitleText.visibility = if (item.subtitle.isNotEmpty()) View.VISIBLE else View.GONE
+            binding.root.alpha = if (item.enabled) 1.0f else 0.38f
+            binding.root.setOnClickListener { if (item.enabled) onItemClick(item) }
+            val focus = onItemFocus
+            if (focus != null) binding.root.setOnFocusChangeListener { _, hasFocus -> if (hasFocus) focus(item) }
+        }
+    }
+
     override fun getItemViewType(position: Int): Int = when {
         items[position].type == SettingsType.HEADER -> TYPE_HEADER
+        detail && items[position].type == SettingsType.BUTTON -> TYPE_BUTTON
         detail -> TYPE_ROW
         else -> TYPE_CARD
     }
@@ -81,6 +97,7 @@ class SettingsAdapter(
         val inflater = LayoutInflater.from(parent.context)
         return when (viewType) {
             TYPE_HEADER -> HeaderHolder(ItemSettingsHeaderBinding.inflate(inflater, parent, false))
+            TYPE_BUTTON -> ButtonHolder(ItemSettingsButtonBinding.inflate(inflater, parent, false))
             TYPE_ROW -> ItemSettingsRowBinding.inflate(inflater, parent, false).let {
                 RowHolder(RowViews(it.root, it.titleText, it.subtitleText, it.arrowText, it.toggleSwitch, icon = null))
             }
@@ -94,6 +111,7 @@ class SettingsAdapter(
         val item = items[position]
         when (holder) {
             is HeaderHolder -> holder.binding.headerText.text = item.title
+            is ButtonHolder -> holder.bind(item)
             is RowHolder -> holder.views.bind(item)
         }
     }
@@ -104,5 +122,6 @@ class SettingsAdapter(
         private const val TYPE_CARD = 0
         private const val TYPE_ROW = 1
         private const val TYPE_HEADER = 2
+        private const val TYPE_BUTTON = 3
     }
 }

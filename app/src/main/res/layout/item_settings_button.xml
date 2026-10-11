@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    설정 오른쪽의 단추 줄 (#123) — "업데이트 확인"처럼 누르면 바로 하는 일. 글자 줄과 헷갈리지 않게 채운 둥근 단추,
+    설명은 단추 아래. 포커스 · 누름은 줄(바깥)이 받고 단추가 그 상태를 그린다(duplicateParentState)
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:paddingHorizontal="20dp"
+    android:paddingVertical="10dp"
+    android:layout_marginHorizontal="8dp"
+    android:focusable="true"
+    android:clickable="true">
+
+    <TextView
+        android:id="@+id/buttonText"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:minHeight="44dp"
+        android:gravity="center"
+        android:paddingHorizontal="24dp"
+        android:background="@drawable/settings_button_background"
+        android:duplicateParentState="true"
+        android:textColor="@android:color/white"
+        android:textSize="16sp"
+        android:textStyle="bold" />
+
+    <TextView
+        android:id="@+id/subtitleText"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="6dp"
+        android:textSize="13sp"
+        android:textColor="#A6FFFFFF"
+        android:visibility="gone" />
+</LinearLayout>

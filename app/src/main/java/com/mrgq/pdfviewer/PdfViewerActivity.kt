@@ -130,7 +130,7 @@ class PdfViewerActivity : AppCompatActivity() {
         const val PHONE_ORIENTATION_PORTRAIT = "portrait"
         /** 파트 보기를 바꾼 명령이 파일이 다시 열리기를 기다리는 한도 */
         private const val FILE_RELOAD_TIMEOUT_MS = 15_000L
-        /** 설정 → 앱 정보 → 🎙 음성 명령 (P12 2단계) — 켜면 악보 화면 오른쪽 아래 🎙 단추 */
+        /** 설정 → 🎙 음성 명령 (P12 2단계, #123 전엔 앱 정보 안) — 켜면 악보 화면 오른쪽 아래 🎙 단추 */
         const val PREF_VOICE_COMMANDS = "voice_commands"
         private const val REQUEST_VOICE = 7303
         /** 🎙 결과를 화면에 남겨 두는 시간 */
@@ -5271,7 +5271,7 @@ class PdfViewerActivity : AppCompatActivity() {
     private var alwaysErrorStreak = 0
     private val restartAlwaysListening = Runnable { startAlwaysListening() }
 
-    /** 설정 → 앱 정보 → 🎙 음성 명령을 켰고, TV 가 아니고, 마이크와 음성 인식 서비스가 있으면 단추를 보인다. 🎤 추적 중에는 흐리게(§4.1) */
+    /** 설정 → 🎙 음성 명령을 켰고, TV 가 아니고, 마이크와 음성 인식 서비스가 있으면 단추를 보인다. 🎤 추적 중에는 흐리게(§4.1) */
     private fun refreshVoiceButton() {
         val show = preferences.getBoolean(PREF_VOICE_COMMANDS, false) && micFollowCapable() && VoiceListener.isAvailable(this)
         binding.voiceButton.visibility = if (show) View.VISIBLE else View.GONE
