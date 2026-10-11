@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 앱별 언어 (P18) — Android 13+ 시스템 설정 → 앱 → 언어에 보이는 목록. 기본(values/)은 한국어 -->
+<locale-config xmlns:android="http://schemas.android.com/apk/res/android">
+    <locale android:name="ko" />
+    <locale android:name="en" />
+</locale-config>

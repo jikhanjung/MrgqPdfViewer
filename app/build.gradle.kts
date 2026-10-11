@@ -86,6 +86,8 @@ android {
             // 스토리지/패키지 가시성 변경을 재검증해야 하므로 별도 작업으로 다룬다.
             "ExpiredTargetSdkVersion"
         )
+        // 언어 (P18): values/(한국어)의 줄이 values-en 에 없으면 빌드 실패 — 번역 빠진 채 내지 않는다
+        error += setOf("MissingTranslation")
     }
     
     compileOptions {

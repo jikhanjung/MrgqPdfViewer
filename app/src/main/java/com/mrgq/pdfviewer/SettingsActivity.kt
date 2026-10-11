@@ -62,6 +62,8 @@ class SettingsActivity : AppCompatActivity() {
     }
     /** 두 칸: 오른쪽에 보이는 카테고리 */
     private var paneCategory: String? = null
+    /** 다시 만들어지기 전에 보던 카테고리 (P18 — 언어를 바꾸면 액티비티가 다시 만들어진다) */
+    private var restoredCategory: String? = null
     /** 왼쪽에서 포커스를 빨리 훑을 때 오른쪽을 매번 만들지 않게 */
     private val panePreview = android.os.Handler(android.os.Looper.getMainLooper())
     /** 오른쪽(상세)에 지금 있는 줄 — 다시 그린 뒤 같은 줄로 포커스를 돌려놓는다 */
@@ -91,6 +93,8 @@ class SettingsActivity : AppCompatActivity() {
         volumeControlStream = android.media.AudioManager.STREAM_MUSIC
         binding = ActivitySettingsNewBinding.inflate(layoutInflater)
         setContentView(binding.root)
+        // 언어를 바꿔 다시 만들어졌으면 보던 칸으로 (P18)
+        restoredCategory = savedInstanceState?.getString(STATE_PANE_CATEGORY)
         
         preferences = getSharedPreferences("pdf_viewer_prefs", MODE_PRIVATE)
         
@@ -357,7 +361,9 @@ class SettingsActivity : AppCompatActivity() {
         binding.settingsRecyclerView.adapter = settingsAdapter
         if (twoPane) {
             // 처음엔 첫 카테고리를 오른쪽에. 목록을 다시 만들면(요약이 바뀜) 왼쪽 포커스를 지금 카테고리로 돌려놓는다
-            if (paneCategory == null) currentItems.firstOrNull()?.let { showCategory(it.id) }
+            if (paneCategory == null) {
+                (restoredCategory?.takeIf { id -> currentItems.any { it.id == id } } ?: currentItems.firstOrNull()?.id)?.let { showCategory(it) }
+            }
             if (listHadFocus || currentFocus == null) focusCategory()
         }
     }
@@ -864,7 +870,23 @@ class SettingsActivity : AppCompatActivity() {
     }
 
     private fun showInfoPanel() {
+        val language = com.mrgq.pdfviewer.utils.AppLanguage
         val items = listOfNotNull(
+            // 언어 (P18) — 맨 위: 못 읽는 언어로 바뀌어도 찾기 쉽게(제목에 두 언어)
+            header("language_header", getString(R.string.settings_language_header)),
+            SettingsItem(
+                id = "app_language",
+                icon = "🌐",
+                title = getString(R.string.settings_language_title),
+                subtitle = language.current().let { choice ->
+                    if (choice == com.mrgq.pdfviewer.utils.AppLanguage.Choice.SYSTEM) {
+                        getString(R.string.settings_language_system_with, language.locale(this).getDisplayLanguage(language.locale(this)))
+                    } else {
+                        language.label(this, choice)
+                    }
+                },
+                type = SettingsType.ACTION
+            ),
             header("update_header", "업데이트"),
             SettingsItem(
                 id = "app_version",
@@ -910,6 +932,26 @@ class SettingsActivity : AppCompatActivity() {
         showDetailPanel("앱 정보", items)
     }
     
+    /** 언어 고르기 (P18) — 고르면 AppCompat 이 액티비티를 다시 만든다(지금 칸은 [onSaveInstanceState] 로 지킨다) */
+    private fun showLanguageDialog() {
+        val language = com.mrgq.pdfviewer.utils.AppLanguage
+        val choices = com.mrgq.pdfviewer.utils.AppLanguage.Choice.values()
+        val current = choices.indexOf(language.current())
+        AlertDialog.Builder(this)
+            .setTitle(R.string.settings_language_dialog_title)
+            .setSingleChoiceItems(choices.map { language.label(this, it) }.toTypedArray(), current) { dialog, which ->
+                dialog.dismiss()
+                if (which != current) language.set(choices[which])
+            }
+            .setNegativeButton(R.string.cancel, null)
+            .show()
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        paneCategory?.let { outState.putString(STATE_PANE_CATEGORY, it) }
+    }
+
     /** 🎙 음성 명령 · 👂 계속 듣기 (#123 — 설정 맨 위 칸으로) */
     private fun showVoicePanel() {
         val items = listOfNotNull(
@@ -1286,6 +1328,7 @@ class SettingsActivity : AppCompatActivity() {
                 showVoicePanel()
             }
             "voice_wake_words" -> showWakeWordsDialog()
+            "app_language" -> showLanguageDialog()
             "update_prerelease_toggle" -> {
                 val enable = !UpdateController.isPrereleaseEnabled(this)
                 UpdateController.setPrereleaseEnabled(this, enable)
@@ -1964,6 +2007,7 @@ class SettingsActivity : AppCompatActivity() {
     }
 
     companion object {
+        private const val STATE_PANE_CATEGORY = "pane_category"
         /** 설정 화면에서 자동 업데이트 확인을 두드리는 간격 — 실제 확인은 UpdateController 가 10분마다 한 번(파일 목록과 같은 시계, #124) */
         private const val UPDATE_CHECK_TICK_MS = 60_000L
         /** 화면이 뜬 뒤 첫 두드림 */

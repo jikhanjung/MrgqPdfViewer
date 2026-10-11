@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- English (P18). Base values/ is Korean — every key there needs a line here (lint MissingTranslation is an error) -->
+<resources>
+    <!-- Main Activity -->
+    <string name="no_pdf_files">No PDF files\nTurn on the web server in Settings and upload files from a browser</string>
+    <string name="server_running">Server running: %s</string>
+    <string name="server_stopped">Server stopped</string>
+    <string name="web_server">Web server</string>
+
+    <!-- PDF Viewer -->
+    <string name="loading_pdf">Loading PDF…</string>
+    <string name="error_loading_pdf">Can\'t open the PDF file</string>
+    <string name="error_rendering_temporary">Page rendering delayed</string>
+
+    <!-- Permissions -->
+    <string name="permission_required">File access permission is required</string>
+    <string name="permission_denied">Permission denied</string>
+
+    <!-- Content Descriptions -->
+    <string name="pdf_icon_desc">PDF file icon</string>
+    <string name="previous_page">Previous page</string>
+    <string name="next_page">Next page</string>
+
+    <!-- Web Server -->
+    <string name="server_start_failed">Couldn\'t start the server</string>
+    <string name="server_started">Web server started</string>
+    <string name="server_stopped_message">Web server stopped</string>
+
+    <!-- File Operations -->
+    <string name="file_uploaded">File uploaded</string>
+    <string name="upload_failed">Upload failed</string>
+    <string name="error_file_not_found_or_moved">The file was not found or has been moved</string>
+
+    <!-- Settings -->
+    <string name="settings_show_page_info">Show page info</string>
+    <string name="settings_show_page_info_desc">Shows the file name and page number at the bottom of the screen</string>
+    <string name="settings_animation_speed">Animation speed</string>
+    <string name="settings_animation_speed_desc">Adjusts the page-turn animation speed</string>
+
+    <!-- Collaboration Settings -->
+    <string name="settings_input_block_time">Input block time</string>
+    <string name="settings_input_block_time_desc">How long to block input on a performer after a sync</string>
+    <string name="settings_input_block_time_title">Input block time</string>
+    <string name="settings_input_block_time_message">How long to block the performer\'s input after a sync message (milliseconds)</string>
+    <string name="settings_message_queue_stats">Message queue stats</string>
+    <string name="settings_message_queue_stats_desc">Shows ensemble message processing stats</string>
+    <string name="settings_reset_queue_stats">Reset stats</string>
+    <string name="settings_reset_queue_stats_desc">Resets the message queue stats</string>
+
+    <!-- Queue Stats Dialog -->
+    <string name="queue_stats_title">Message queue stats</string>
+    <string name="queue_stats_queue_size">Current queue size: %d</string>
+    <string name="queue_stats_total_processed">Processed messages: %d</string>
+    <string name="queue_stats_total_dropped">Dropped messages: %d</string>
+    <string name="queue_stats_total_retries">Retries: %d</string>
+    <string name="queue_stats_last_processing_time">Last processing time: %d ms</string>
+    <string name="queue_stats_reset_confirm">Reset the stats?</string>
+    <string name="ok">OK</string>
+    <string name="cancel">Cancel</string>
+
+    <!-- Language (P18) -->
+    <string name="settings_language_header">Language</string>
+    <string name="settings_language_title">Language (언어)</string>
+    <string name="settings_language_system">System default</string>
+    <string name="settings_language_system_with">System default — %1$s</string>
+    <string name="settings_language_dialog_title">Language</string>
+</resources>
