@@ -210,8 +210,15 @@ object CommandParser {
         // "57마디부터 듣기", "듣기 시작" — 메트로놈이 아니라 🎤 연주 듣기로 시작한다: 마디는 고르기로, "시작"은 듣기에 든다
         if (VoiceCommand.Listen in commands) {
             commands = commands.map { if (it is GotoMeasure) SelectMeasure(it.measure) else it } - VoiceCommand.Start
-            // "처음부터 듣기" · "이어서 듣기" · "듣기 멈춰"는 아직 받지 않는다
+            // "처음부터 듣기" · "이어서 듣기" — 그 자리부터 듣는 명령 하나로 (#113)
+            if (VoiceCommand.GotoStart in commands) commands = commands - VoiceCommand.GotoStart - VoiceCommand.Listen + VoiceCommand.ListenFromStart
+            else if (VoiceCommand.Resume in commands) commands = commands - VoiceCommand.Resume - VoiceCommand.Listen + VoiceCommand.ListenResume
+            // "다시 듣기" · "듣기 멈춰" · 위치가 둘이면 받지 않는다
             if (VoiceCommand.Stop in commands || commands.any { it.startsPlayback }) return ParseResult.Unrecognized(Reason.CONFLICT)
+            val listens = commands.count { it == VoiceCommand.Listen || it == VoiceCommand.ListenFromStart || it == VoiceCommand.ListenResume }
+            if (listens > 1 || (listens == 1 && VoiceCommand.Listen !in commands && commands.any { it.isPosition })) {
+                return ParseResult.Unrecognized(Reason.CONFLICT)
+            }
         }
         // "57마디 시작", "57마디 다시" — 고르기에 시작이 붙으면 그 마디부터
         val select = commands.filterIsInstance<SelectMeasure>()

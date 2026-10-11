@@ -2,6 +2,7 @@ package com.mrgq.pdfviewer
 
 import com.mrgq.pdfviewer.voice.CommandOutcome
 import com.mrgq.pdfviewer.voice.CommandParser
+import com.mrgq.pdfviewer.voice.ListenFrom
 import com.mrgq.pdfviewer.voice.PartMatcher
 import com.mrgq.pdfviewer.voice.PartRef
 import com.mrgq.pdfviewer.voice.ViewerCommands
@@ -39,12 +40,20 @@ class VoiceCommandRunnerTest {
         override suspend fun showFullScore() = call("full")
         override suspend fun start() = call("start")
         override suspend fun stop() = call("stop")
-        override suspend fun listen() = call("listen")
+        override suspend fun listen(from: ListenFrom) = call(if (from == ListenFrom.HERE) "listen" else "listen $from")
         override suspend fun partNames() = parts
     }
 
     private fun run(text: String, viewer: FakeViewer = FakeViewer(), bareNumberIsTempo: Boolean = false) =
         runBlocking { VoiceCommandRunner.run(CommandParser.parse(text), viewer, bareNumberIsTempo) } to viewer.calls
+
+    @Test
+    fun 처음부터_이어서_듣기() {
+        assertEquals(listOf("listen START"), run("처음부터 듣기").second)
+        assertEquals(listOf("listen RESUME"), run("이어서 듣기").second)
+        assertEquals(listOf("listen"), run("듣기").second)
+        assertEquals("🎤 처음부터 듣기", run("처음부터 듣기").first.message)
+    }
 
     @Test
     fun 템포를_먼저_마디는_뒤에() {

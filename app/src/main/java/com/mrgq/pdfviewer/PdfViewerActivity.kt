@@ -44,6 +44,7 @@ import com.mrgq.pdfviewer.menu.MenuAction
 import com.mrgq.pdfviewer.menu.ViewerMenus
 import com.mrgq.pdfviewer.voice.CommandOutcome
 import com.mrgq.pdfviewer.voice.CommandParser
+import com.mrgq.pdfviewer.voice.ListenFrom
 import com.mrgq.pdfviewer.voice.PartMatcher
 import com.mrgq.pdfviewer.voice.PartNames
 import com.mrgq.pdfviewer.voice.PartRef
@@ -2593,6 +2594,8 @@ class PdfViewerActivity : AppCompatActivity() {
 
     /** 다음 [startMicFollow] 가 시작할 마디 — 시작 마디 고르기의 "🎤 여기서부터 듣기"(#087). null = 지금 쪽 첫 마디 */
     private var micStartAt: ScoreMeasure? = null
+    /** 🎤 듣기가 마지막으로 멈춘 (파일, 마디 번호) — "이어서 듣기" (#113) */
+    private var lastListenPosition: Pair<String, Int>? = null
     /** [startMicFollow] 가 마디 · 악보 크로마를 준비하는 중 — 그사이 👂 계속 듣기가 마이크를 다시 잡지 않게 (#087) */
     private var micFollowStarting = false
 
@@ -2684,6 +2687,8 @@ class PdfViewerActivity : AppCompatActivity() {
         val f = micFollower ?: return
         micFollower = null
         f.stop()
+        // "이어서 듣기"(#113)가 여기서 — 추정한 지금 마디
+        micFocus?.let { at -> currentPdfFileId?.let { lastListenPosition = it to at.measureNumber } }
         micFocus = null
         micWaitingMeasure = null
         if (micSentSystem != null && collaborationMode == CollaborationMode.CONDUCTOR) {
@@ -5086,10 +5091,33 @@ class PdfViewerActivity : AppCompatActivity() {
             return startFollowingAt(fileId, startable, chosen ?: firstShownMeasure(startable))
         }
 
-        override suspend fun listen(): CommandOutcome {
+        override suspend fun listen(from: ListenFrom): CommandOutcome {
             if (!micFollowCapable()) return failed("이 기기에서는 연주를 들을 수 없어요")
             if (micFollower != null) return CommandOutcome.Done
             micFollowBlocker()?.let { return failed(it) }
+            // "처음부터 듣기" · "이어서 듣기" (#113) — 그 마디의 쪽으로 넘기고(보이지 않으면) 그 마디부터
+            if (from != ListenFrom.HERE) {
+                val (fileId, startable) = when (val target = followableMeasures()) {
+                    is MeasureTarget.Unavailable -> return target.outcome
+                    is MeasureTarget.Ready -> target
+                }
+                val at = if (from == ListenFrom.START) {
+                    startable.first()
+                } else {
+                    val number = (lastListenPosition ?: lastFollowPosition)?.takeIf { it.first == fileId }?.second
+                        ?: return failed("이어서 들을 마디가 없어요 — 이 곡에서 멈춘 적이 없어요")
+                    startable.firstOrNull { it.measureNumber == number } ?: return noSuchMeasure("${number}마디", startable)
+                }
+                if (followState == FollowState.SELECTING) cancelMeasureSelection()
+                val page = pairStart(at.pageIndex)
+                if (page != (if (isTwoPageMode) pairStart(pageIndex) else pageIndex)) {
+                    turnTo(page, if (page > pageIndex) 1 else -1)
+                    awaitPageIndex(page)
+                }
+                micStartAt = at
+                toggleMicFollow()
+                return CommandOutcome.Done
+            }
             val page = commandPageTarget
             micStartAt = when {
                 // "3쪽 듣기" — 넘김이 끝나 그 쪽이 보인 뒤 그 쪽 첫 마디부터 (startMicFollow 가 지금 쪽에서 고른다)

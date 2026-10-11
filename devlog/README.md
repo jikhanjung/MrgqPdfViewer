@@ -151,6 +151,7 @@ MrgqPdfViewer 개발 로그 모음. 구현 기록은 `YYYYMMDD_NNN_` 형식(NNN 
 - [`110`](20261011_110_voice_staff_split_log_staves.md) — "보표 23"이 보표 수보다 크면 보표 2 · 3(파서가 `staffCount` 를 받음), 음성 기록에 `staff_names` · `staff_count`
 - [`111`](20261011_111_media_volume_zero_hint.md) — 녹음 재생이 안 들리던 것 = 태블릿 미디어 소리 0(adb `dumpsys audio`, 앱 탓 아님) → 재생 때 0 이면 안내, 설정 · 악보 화면 볼륨 키 = 미디어 소리
 - [`112`](20261011_112_rehearsal_marks.md) — **리허설 마크 "레터 B"**(P12 4단계): MusicXML `<rehearsal>` 를 읽어 그 마디부터 시작(`MusicXmlMatch` 로 악보 마디 번호), 없으면 마크 목록 안내. PDF 의 마크는 아직
+- [`113`](20261011_113_listen_from_start_resume.md) — 🎙 **"처음부터 듣기" · "이어서 듣기"**(`ListenFrom.START · RESUME` — 첫 마디 / 지난번 듣기가 멈춘 마디, 그 쪽으로 넘긴 뒤). "다시 듣기"는 그대로 안 받음
 
 ## ✏️ 악보 메모 (2026-10-07)
 - [`P11`](20261007_P11_score_annotations_plan.md) — **계획**: 태블릿 · 휴대폰에서 펜 · 손가락으로 **선 긋기**와 **고른 자리에 글자**. 원본 PDF 는 그대로, 원본 쪽 pt 로 PDF 옆 곁 파일 `.notes.json` 에 따로(악보를 따라다님) — 클리핑 · 두 쪽 · 휴대폰 조각에서도 같은 자리. 펜은 바로 그리기 · 손가락은 ✏️ 메모 모드, 손바닥 무시, 획 단위 지우개 · 되돌리기. 단계: 0 좌표 공식 → 1 선 → 2 글자 → 3 다듬기 → 4 기기 간 공유

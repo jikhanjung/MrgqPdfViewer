@@ -64,6 +64,8 @@ object VoiceCommandRunner {
         VoiceCommand.Start -> target.start()
         VoiceCommand.Stop -> target.stop()
         VoiceCommand.Listen -> target.listen()
+        VoiceCommand.ListenFromStart -> target.listen(ListenFrom.START)
+        VoiceCommand.ListenResume -> target.listen(ListenFrom.RESUME)
     }
 
     /** 값이 모두 쓸 수 있는 범위인가 — 음성 인식 후보 고르기가 쓴다("템포 8" · "템포 80" 이면 80, #109) */

@@ -42,6 +42,12 @@ interface ViewerCommands {
     suspend fun start(): CommandOutcome
     /** 연주를 멈춘다 — 합주 지휘자면 연주자도, 연주자면 이 기기만 빠진다. 시작 마디를 고르는 중이면 고르기를 접는다 */
     suspend fun stop(): CommandOutcome
-    /** 🎤 연주 듣고 넘기기 — 같은 말의 쪽 명령의 쪽 첫 마디, 고른 마디, 아니면 이 쪽 첫 마디부터 (#087) */
-    suspend fun listen(): CommandOutcome
+    /**
+     * 🎤 연주 듣고 넘기기 — [from] 이 [ListenFrom.HERE] 면 같은 말의 쪽 명령의 쪽 첫 마디, 고른 마디, 아니면 이 쪽 첫 마디부터 (#087).
+     * [ListenFrom.START] = 곡 첫 마디부터, [ListenFrom.RESUME] = 지난번 듣기(없으면 연주)가 멈춘 마디부터 (#113)
+     */
+    suspend fun listen(from: ListenFrom = ListenFrom.HERE): CommandOutcome
 }
+
+/** 🎤 듣기를 어디서 시작하나 (#113) */
+enum class ListenFrom { HERE, START, RESUME }

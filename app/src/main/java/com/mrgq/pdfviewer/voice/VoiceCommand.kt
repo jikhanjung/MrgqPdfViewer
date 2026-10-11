@@ -51,6 +51,10 @@ sealed class VoiceCommand {
      * 듣는 동안은 마이크가 듣기 몫이라 음성 명령을 쓸 수 없다(멈춤은 ↑ 메뉴)
      */
     object Listen : VoiceCommand() { override val label get() = "🎤 연주 듣기" }
+    /** "처음부터 듣기" — 곡 첫 마디부터 듣기 (#113) */
+    object ListenFromStart : VoiceCommand() { override val label get() = "🎤 처음부터 듣기" }
+    /** "이어서 듣기" — 지난번 듣기(없으면 연주)가 멈춘 마디부터 (#113) */
+    object ListenResume : VoiceCommand() { override val label get() = "🎤 이어서 듣기" }
 
     /** 연주(메트로놈 · 악보 연동)를 멈춘다 — 👂 계속 듣기에서 (🎙 단추는 누르는 순간 멈추므로 필요 없었다, #085) */
     object Stop : VoiceCommand() { override val label get() = "정지" }

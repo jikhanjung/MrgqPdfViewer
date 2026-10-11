@@ -245,7 +245,13 @@ class VoiceCommandTest {
         assertCommands("3쪽 듣기", GotoPage(3), VoiceCommand.Listen)
         assertCommands("템포 72 듣기", SetTempo(72), VoiceCommand.Listen)
         assertCommands("다음 쪽 넘겨", VoiceCommand.NextPage) // "넘겨"는 그대로 넘김
-        assertUnrecognized("처음부터 듣기", Reason.CONFLICT)
+        // "처음부터 듣기" · "이어서 듣기" — 그 자리부터 듣기 하나로 (#113)
+        assertCommands("처음부터 듣기", VoiceCommand.ListenFromStart)
+        assertCommands("처음부터 듣고 넘기기", VoiceCommand.ListenFromStart)
+        assertCommands("이어서 듣기", VoiceCommand.ListenResume)
+        assertCommands("계속 듣기", VoiceCommand.ListenResume)
+        assertUnrecognized("다시 듣기", Reason.CONFLICT)
+        assertUnrecognized("3쪽 처음부터 듣기", Reason.CONFLICT)
         assertUnrecognized("듣기 멈춰", Reason.CONFLICT)
     }
 
