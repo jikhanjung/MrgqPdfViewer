@@ -24,10 +24,14 @@ class UpdateException(message: String, cause: Throwable? = null) : Exception(mes
  * 최신 버전은 API 가 아니라 웹 주소 `…/releases/latest` 의 리다이렉트(Location 의 태그)로 안다 — API 의 비인증 한도
  * (IP 당 시간 60회)를 쓰지 않아 10분마다 확인해도 된다. 변경 내용은 알릴 때만 그 태그의 `CHANGELOG.md` 에서 받는다.
  * 다운로드 URL 은 GitHub 파일 서버로 https→https 리다이렉트되며 자동으로 따라간다.
+ *
+ * ScoreMate 서버로 가는 요청(확인 · 받기 주소의 첫 요청)에는 [device] 를 붙인다(#120) — 서버가 기기별로 기록한다.
  */
 class UpdateClient(
     /** ScoreMate 서버 주소 — null 이면 GitHub 만 */
     private val server: (() -> String)? = null,
+    /** 서버에 알릴 이 기기 (#120) — ScoreMate 서버 요청에만 */
+    private val device: (() -> UpdateDevice)? = null,
     private val repoUrl: String = REPO_URL,
     private val rawUrl: String = RAW_URL,
 ) {
@@ -66,7 +70,7 @@ class UpdateClient(
     /** 서버의 최신 — 사전 릴리스 받기면 `beta`(정식 · 사전 릴리스 통틀어 가장 새것), 아니면 `stable` */
     private suspend fun fetchFromScoreMate(server: String, includePrerelease: Boolean): ReleaseInfo = withContext(Dispatchers.IO) {
         val url = server.trimEnd('/') + ReleaseInfo.SCOREMATE_RELEASES_PATH + "latest/?channel=" + if (includePrerelease) "beta" else "stable"
-        val text = open(url, accept = "application/json").use { it.readText() }
+        val text = open(url, accept = "application/json", device = deviceOrNull()).use { it.readText() }
         ReleaseInfo.fromScoreMate(text, server)
     }
 
@@ -160,7 +164,8 @@ class UpdateClient(
 
         val digest = MessageDigest.getInstance("SHA-256")
         try {
-            open(apk.downloadUrl, accept = "application/octet-stream").use { conn ->
+            val toServer = server?.let { apk.downloadUrl.startsWith(it().trimEnd('/') + "/") } == true
+            open(apk.downloadUrl, accept = "application/octet-stream", device = if (toServer) deviceOrNull() else null).use { conn ->
                 val total = conn.contentLengthLong.takeIf { it > 0 } ?: apk.size
                 conn.inputStream.use { input ->
                     part.outputStream().use { output ->
@@ -228,14 +233,32 @@ class UpdateClient(
         override fun close() = conn.disconnect()
     }
 
-    private fun open(url: String, accept: String): Connection {
+    /** 기기 정보를 못 만들어도 업데이트는 그대로 — 기록만 빈다 */
+    private fun deviceOrNull(): UpdateDevice? = try {
+        device?.invoke()
+    } catch (e: Exception) {
+        null
+    }
+
+    /**
+     * [device] 가 있으면(ScoreMate 서버) 그 머리글을 붙이고 리다이렉트는 직접 한 번 따라간다 —
+     * 기기 정보가 서명 URL(저장소)까지 따라가지 않게
+     */
+    private fun open(url: String, accept: String, device: UpdateDevice? = null): Connection {
         val conn = URL(url).openConnection() as HttpURLConnection
         conn.connectTimeout = 10_000
         conn.readTimeout = 30_000
-        conn.instanceFollowRedirects = true
+        conn.instanceFollowRedirects = device == null
         conn.setRequestProperty("Accept", accept)
         conn.setRequestProperty("User-Agent", USER_AGENT)
+        device?.headers?.forEach { (name, value) -> conn.setRequestProperty(name, value) }
         val code = conn.responseCode
+        if (device != null && code in 300..399) {
+            val location = conn.getHeaderField("Location")
+            conn.disconnect()
+            if (location != null) return open(URL(URL(url), location).toString(), accept)
+            throw HttpStatusException(code)
+        }
         if (code !in 200..299) {
             conn.disconnect()
             throw HttpStatusException(code)

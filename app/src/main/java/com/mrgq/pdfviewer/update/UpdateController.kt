@@ -5,6 +5,7 @@ import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.os.Build
 import android.os.SystemClock
 import android.provider.Settings
 import android.util.Log
@@ -16,6 +17,7 @@ import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.core.content.FileProvider
 import com.mrgq.pdfviewer.BuildConfig
+import com.mrgq.pdfviewer.utils.DeviceForm
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -36,7 +38,11 @@ import java.util.Locale
 class UpdateController(
     private val activity: Activity,
     // 업데이트는 ScoreMate 서버 먼저(설정의 서버 주소), 안 되면 GitHub (P15 §2.2, #118)
-    private val client: UpdateClient = UpdateClient(server = { com.mrgq.pdfviewer.scoremate.ScoreMateStore(activity).server })
+    // 서버에는 어느 기기인지도 알린다(#120)
+    private val client: UpdateClient = UpdateClient(
+        server = { com.mrgq.pdfviewer.scoremate.ScoreMateStore(activity).server },
+        device = { updateDevice(activity) },
+    )
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private var job: Job? = null
@@ -307,6 +313,24 @@ class UpdateController(
 
         fun setPrereleaseEnabled(context: Context, enabled: Boolean) {
             context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putBoolean(PREF_PRERELEASE, enabled).apply()
+        }
+
+        /** 서버에 알릴 이 기기 (#120) */
+        fun updateDevice(context: Context): UpdateDevice {
+            val store = com.mrgq.pdfviewer.scoremate.ScoreMateStore(context)
+            val form = when {
+                DeviceForm.isTv(context) -> "tv"
+                DeviceForm.isPhone(context) -> "phone"
+                else -> "tablet"
+            }
+            return UpdateDevice(
+                appVersion = BuildConfig.VERSION_NAME,
+                form = form,
+                model = UpdateDevice.modelName(Build.MANUFACTURER, Build.MODEL),
+                android = Build.VERSION.RELEASE,
+                installId = store.installId,
+                scoreMateDeviceId = store.tokens?.deviceId,
+            )
         }
 
         private const val APK_MIME = "application/vnd.android.package-archive"

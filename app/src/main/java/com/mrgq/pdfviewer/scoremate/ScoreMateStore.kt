@@ -52,6 +52,14 @@ class ScoreMateStore(context: Context) : ScoreMateTokenStore {
             prefs.edit().putString(KEY_DEVICE_NAME, value).apply()
         }
 
+    /**
+     * 앱 설치마다 무작위 — 업데이트 확인 때 서버가 기기를 가르는 데 쓴다(#120, 연결 여부 무관).
+     * 이 파일은 백업에서 빠지므로 다른 기기로 복원돼 겹치지 않는다. 연결을 끊어도([clearTokens]) 남긴다
+     */
+    val installId: String
+        get() = prefs.getString(KEY_INSTALL_ID, null)
+            ?: java.util.UUID.randomUUID().toString().also { prefs.edit().putString(KEY_INSTALL_ID, it).commit() }
+
     // commit — refresh 가 회전하므로 디스크에 쓰기 전에 앱이 죽으면 다시 연결해야 한다
     override fun saveTokens(tokens: Tokens) {
         prefs.edit()
@@ -84,5 +92,6 @@ class ScoreMateStore(context: Context) : ScoreMateTokenStore {
         private const val KEY_CURSOR = "sync_cursor"
         private const val KEY_SYNC_FORMAT = "sync_format"
         private const val KEY_SETLISTS = "setlists"
+        private const val KEY_INSTALL_ID = "install_id"
     }
 }
