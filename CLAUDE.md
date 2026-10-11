@@ -13,11 +13,12 @@ Android TV OS용 PDF 악보 리더 앱으로, 무선 파일 업로드와 리모�
 > SurfaceFlinger 가 4K 로 업스케일한다. 4K 관련 작업을 시작하기 전에
 > [`devlog/20260815_040_4k_display_investigation.md`](devlog/20260815_040_4k_display_investigation.md) 를 먼저 읽을 것.
 
-**현재 버전**: v0.7.5-beta.15 (2026-10-11)  
+**현재 버전**: v0.7.5-beta.16 (2026-10-11)  
 **빌드 상태**: 🟢 빌드 가능 (GitHub Actions CI 로 커밋마다 검증)  
-**CI 게이트**: 🟢 단위 테스트 475개 + Android Lint + 에뮬레이터 계측 60개·release APK 스모크(API 30/34 — ⚠️ 문서 정보 검사는 모든 매트릭스에서 건너뜀, #047 §5). 계측은 main 푸시와 수동 실행에서만 (회당 5~6분)  
+**CI 게이트**: 🟢 단위 테스트 476개 + Android Lint + 에뮬레이터 계측 60개·release APK 스모크(API 30/34 — ⚠️ 문서 정보 검사는 모든 매트릭스에서 건너뜀, #047 §5). 계측은 main 푸시와 수동 실행에서만 (회당 5~6분)  
 **테스트 상태**: 🟢 v0.3.x 기능을 Z18TV Pro 에서 확인(2026-09-28): 파트보(한 · 여러 파트, 넓혀 자르기, 번호) · 파트 화면 악보 연동 · MusicXML 반주(K488) · MusicXML · 서버 분석 동기화 · 목록 곡 정보 · 앱 안 업데이트(v0.2.9 → v0.3.3). 🟡 **두 대가 필요한 것만 남음** — 합주 중 파트 보기, 합주 Phase 0 동기 넘김. 렌더 품질 · 키 매핑 등 전반 스모크는 2026-08-15(Google TV Streamer + 4K 모니터)
 **최근 업데이트** (전체는 [`CHANGELOG.md`](CHANGELOG.md), 오늘 작업 요약은 devlog [`065`](devlog/20260928_065_part_view_accompaniment_server_analysis.md)):
+- **v0.7.5-beta.16** — 🎙 악기 · 이름이 든 대화("여기 첼로가 좀 커요")는 실행 안 함(#117), 음성 명령 사례집 `docs/Voice_Command_Examples.md`
 - **v0.7.5-beta.15** — 🎹 반주 스타카토 · 악센트 · 글로 쓴 cresc. · dim., 설정 "악상기호 따르기"(#116)
 - **v0.7.5-beta.14** — 🎹 반주 크레셴도 · 디미누엔도(쐐기), 반주 대화상자 "셈여림 따르기" 끄기(#115)
 - **v0.7.5-beta.13** — 🎹 반주 셈여림(MusicXML pp ~ ff · sf · `<sound dynamics>`, 표 없는 곡은 그대로, #114)
