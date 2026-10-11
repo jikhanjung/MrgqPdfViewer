@@ -68,6 +68,8 @@ class SettingsActivity : AppCompatActivity() {
     private val panePreview = android.os.Handler(android.os.Looper.getMainLooper())
     /** 오른쪽(상세)에 지금 있는 줄 — 다시 그린 뒤 같은 줄로 포커스를 돌려놓는다 */
     private var detailItems: List<SettingsItem> = emptyList()
+    /** 오른쪽(상세)에 지금 보이는 카테고리 id — 화면 글(제목) 대신 이것으로 비교한다 (P18) */
+    private var detailCategory: String? = null
     
     // Web server log management
     private val webServerLogs = mutableListOf<String>()
@@ -240,25 +242,21 @@ class SettingsActivity : AppCompatActivity() {
         currentItems.add(SettingsItem(
             id = "file_management",
             icon = "📂",
-            title = "파일 관리",
-            subtitle = "저장된 PDF 파일: ${pdfCount}개",
+            title = getString(R.string.settings_cat_files),
+            subtitle = getString(R.string.settings_cat_files_summary, pdfCount),
             arrow = "▶"
         ))
         
         // 웹서버 섹션 — ScoreMate 에 연결된 TV 에서는 쓰지 않는다 (#063)
         val webStatus = if (scoreMateClient.isLinked) {
-            "ScoreMate 연결 중에는 쓸 수 없음"
-        } else if (isWebServerRunning) {
-            val port = preferences.getInt("web_server_port", 8080)
-            val ipAddress = NetworkUtils.getLocalIpAddress()
-            "실행 중 ($ipAddress:$port)"
+            getString(R.string.settings_web_unavailable_linked)
         } else {
-            "중지됨"
+            webServerStatusText()
         }
         currentItems.add(SettingsItem(
             id = "web_server",
             icon = "🌐",
-            title = "웹서버",
+            title = getString(R.string.settings_cat_web),
             subtitle = webStatus,
             arrow = "▶"
         ))
@@ -267,8 +265,8 @@ class SettingsActivity : AppCompatActivity() {
         currentItems.add(SettingsItem(
             id = "collaboration",
             icon = "🎼",
-            title = "협업 모드",
-            subtitle = "합주 설정 관리",
+            title = getString(R.string.settings_cat_collab),
+            subtitle = getString(R.string.settings_cat_collab_summary),
             arrow = "▶"
         ))
         
@@ -285,8 +283,8 @@ class SettingsActivity : AppCompatActivity() {
         currentItems.add(SettingsItem(
             id = "animation_sound",
             icon = "🎵",
-            title = "애니메이션 & 사운드",
-            subtitle = "페이지 전환 효과 설정",
+            title = getString(R.string.settings_cat_animation),
+            subtitle = getString(R.string.settings_cat_animation_summary),
             arrow = "▶"
         ))
         
@@ -295,8 +293,8 @@ class SettingsActivity : AppCompatActivity() {
             currentItems.add(SettingsItem(
                 id = "voice",
                 icon = "🎙",
-                title = "음성 명령",
-                subtitle = "누르고 말하기 · 계속 듣기",
+                title = getString(R.string.settings_cat_voice),
+                subtitle = getString(R.string.settings_cat_voice_summary),
                 arrow = "▶"
             ))
         }
@@ -309,8 +307,8 @@ class SettingsActivity : AppCompatActivity() {
             currentItems.add(SettingsItem(
                 id = "recordings",
                 icon = "🎤",
-                title = "녹음 기록",
-                subtitle = if (recCount == 0) "없음" else "${recCount}개 · ${megabytes(recBytes)}",
+                title = getString(R.string.settings_cat_recordings),
+                subtitle = if (recCount == 0) getString(R.string.settings_recordings_none) else getString(R.string.settings_recordings_summary, recCount, megabytes(recBytes)),
                 arrow = "▶"
             ))
         }
@@ -330,8 +328,8 @@ class SettingsActivity : AppCompatActivity() {
                     currentItems.add(SettingsItem(
                         id = "display_mode",
                         icon = "🔧",
-                        title = "표시 모드",
-                        subtitle = "저장된 설정: ${displayModeCount}개",
+                        title = getString(R.string.settings_cat_display),
+                        subtitle = getString(R.string.settings_cat_display_summary, displayModeCount),
                         arrow = "▶"
                     ))
                 }
@@ -341,7 +339,7 @@ class SettingsActivity : AppCompatActivity() {
                     currentItems.add(SettingsItem(
                         id = "info",
                         icon = "📊",
-                        title = "앱 정보",
+                        title = getString(R.string.settings_cat_info),
                         subtitle = "v${BuildConfig.VERSION_NAME}",
                         arrow = "▶"
                     ))
@@ -377,7 +375,7 @@ class SettingsActivity : AppCompatActivity() {
         }
         // 웹서버 설정 화면에서 다른 메뉴로 이동할 때 웹서버가 실행 중이면 확인
         if (binding.detailPanelLayout.visibility == View.VISIBLE && 
-            binding.detailTitle.text == "웹서버" && 
+            detailCategory == "web_server" && 
             isWebServerRunning && 
             item.id != "web_server") {
             showWebServerDetailExitConfirmDialog {
@@ -413,46 +411,45 @@ class SettingsActivity : AppCompatActivity() {
             SettingsItem(
                 id = "delete_all_pdf",
                 icon = "🗑️",
-                title = "모든 PDF 파일 삭제",
-                subtitle = "저장된 모든 PDF 파일을 삭제합니다",
+                title = getString(R.string.settings_delete_all_pdf),
+                subtitle = getString(R.string.settings_delete_all_pdf_desc),
                 type = SettingsType.ACTION
             )
         )
         
-        showDetailPanel("파일 관리", items)
+        showDetailPanel("file_management", getString(R.string.settings_cat_files), items)
     }
     
     private fun showWebServerPanel() {
         // ScoreMate 에 연결된 TV 는 서재가 ScoreMate 악보뿐이라 웹서버로 올린 파일이 보이지 않는다 → 쓰지 않는다 (#063, 사용자 결정)
         if (scoreMateClient.isLinked) {
-            showDetailPanel("웹서버", listOf(
+            showDetailPanel("web_server", getString(R.string.settings_cat_web), listOf(
                 SettingsItem(
                     id = "web_server_disabled",
                     icon = "☁️",
-                    title = "ScoreMate 에 연결된 TV 에서는 쓸 수 없습니다",
-                    subtitle = "악보는 ScoreMate 웹에 올리고 동기화하세요. 웹서버를 쓰려면 설정 → ScoreMate 에서 연결을 해제하세요",
+                    title = getString(R.string.settings_web_linked_title),
+                    subtitle = getString(R.string.settings_web_linked_desc),
                     type = SettingsType.INFO
                 )
             ))
             return
         }
         val port = preferences.getInt("web_server_port", 8080)
-        val ipAddress = NetworkUtils.getLocalIpAddress()
-        val status = if (isWebServerRunning) "실행 중 ($ipAddress:$port)" else "중지됨"
+        val status = webServerStatusText()
         
         val items = mutableListOf(
             SettingsItem(
                 id = "web_server_toggle",
                 icon = if (isWebServerRunning) "⏹️" else "▶️",
-                title = if (isWebServerRunning) "웹서버 중지" else "웹서버 시작",
-                subtitle = "현재 상태: $status",
+                title = getString(if (isWebServerRunning) R.string.settings_web_stop else R.string.settings_web_start),
+                subtitle = getString(R.string.settings_web_status, status),
                 type = SettingsType.TOGGLE
             ),
             SettingsItem(
                 id = "web_server_port",
                 icon = "🔧",
-                title = "포트 설정",
-                subtitle = "현재 포트: $port",
+                title = getString(R.string.settings_web_port),
+                subtitle = getString(R.string.settings_web_port_current, port),
                 type = SettingsType.INPUT
             )
         )
@@ -463,14 +460,14 @@ class SettingsActivity : AppCompatActivity() {
                 SettingsItem(
                     id = "web_server_log_info",
                     icon = "🌐",
-                    title = "활동 로그",
-                    subtitle = "실시간 웹서버 활동이 아래에 표시됩니다",
+                    title = getString(R.string.settings_web_log),
+                    subtitle = getString(R.string.settings_web_log_desc),
                     type = SettingsType.INFO
                 )
             )
         }
         
-        showDetailPanel("웹서버", items)
+        showDetailPanel("web_server", getString(R.string.settings_cat_web), items)
         
         // 웹서버가 실행 중이면 로그 섹션 표시
         if (isWebServerRunning) {
@@ -484,78 +481,79 @@ class SettingsActivity : AppCompatActivity() {
         val syncLeadMs = preferences.getLong("sync_turn_lead_ms", 2000L)
 
         val items = listOf(
-            header("ensemble_header", "합주"),
+            header("ensemble_header", getString(R.string.settings_ensemble_header)),
             SettingsItem(
                 id = "collaboration_info",
                 icon = "ℹ️",
-                title = "협업 모드 정보",
-                subtitle = "메인 화면에서 협업 모드를 시작할 수 있습니다",
+                title = getString(R.string.settings_collab_info),
+                subtitle = getString(R.string.settings_collab_info_desc),
                 type = SettingsType.INFO
             ),
             SettingsItem(
                 id = "ensemble_sound_toggle",
                 icon = "🥁",
-                title = "합주 메트로놈 소리 (연주자)",
+                title = getString(R.string.settings_ensemble_sound),
                 subtitle = if (preferences.getBoolean(PdfViewerActivity.PREF_ENSEMBLE_SOUND, false)) {
-                    "켜짐 — 연주자 기기도 지휘자 메트로놈에 맞춰 소리를 냅니다"
+                    getString(R.string.settings_ensemble_sound_on)
                 } else {
-                    "꺼짐 — 연주자 기기는 박 표시 · 현재 마디 · 넘김만 따라갑니다"
+                    getString(R.string.settings_ensemble_sound_off)
                 },
                 type = SettingsType.TOGGLE,
                 checked = preferences.getBoolean(PdfViewerActivity.PREF_ENSEMBLE_SOUND, false)
             ),
-            header("sync_turn_header", "동기 넘김 (시험)"),
+            header("sync_turn_header", getString(R.string.settings_sync_turn_header)),
             SettingsItem(
                 id = "sync_turn_toggle",
                 icon = "🎯",
-                title = "동기 페이지 넘김",
-                subtitle = if (syncEnabled) "현재: ON · 예약 후 모든 기기 동시 넘김" else "현재: OFF · 신호 즉시 넘김(기존)",
+                title = getString(R.string.settings_sync_turn),
+                subtitle = getString(if (syncEnabled) R.string.settings_sync_turn_on_desc else R.string.settings_sync_turn_off_desc),
                 type = SettingsType.TOGGLE,
                 checked = syncEnabled
             ),
             SettingsItem(
                 id = "sync_turn_lead",
                 icon = "⏲️",
-                title = "예약 시간",
-                subtitle = "현재: ${syncLeadMs}ms · 누른 뒤 넘기까지 여유",
+                title = getString(R.string.settings_sync_lead),
+                subtitle = getString(R.string.settings_sync_lead_desc, syncLeadMs),
                 type = SettingsType.ACTION,
                 enabled = syncEnabled
             ),
-            header("diagnostics_header", "고급"),
+            header("diagnostics_header", getString(R.string.settings_advanced_header)),
             SettingsItem(
                 id = "input_block_time",
                 icon = "⏱️",
-                title = "입력 차단 시간",
-                subtitle = "현재: ${inputBlockTime}ms",
+                title = getString(R.string.settings_input_block_time),
+                subtitle = getString(R.string.settings_input_block_current, inputBlockTime),
                 type = SettingsType.ACTION
             ),
             SettingsItem(
                 id = "message_queue_stats",
                 icon = "📊",
-                title = "메시지 큐 통계",
-                subtitle = "비활성화됨 (성능 최적화)",
+                title = getString(R.string.settings_message_queue_stats),
+                subtitle = getString(R.string.settings_message_queue_disabled),
                 type = SettingsType.INFO
             )
         )
         
-        showDetailPanel("협업 모드", items)
+        showDetailPanel("collaboration", getString(R.string.settings_cat_collab), items)
     }
     
     // ── ScoreMate (P05 C1) ──────────────────────────────────────────────────
 
     private fun scoreMateSummary(): String =
-        if (scoreMateClient.isLinked) "연결됨 — ${scoreMateStore.deviceName ?: "이 $device"}" else "연결 안 됨 — 악보 서버에 이 $device 연결"
+        if (scoreMateClient.isLinked) getString(R.string.settings_scoremate_linked_summary, scoreMateStore.deviceName ?: getString(R.string.settings_this_device, device))
+        else getString(R.string.settings_scoremate_unlinked_summary, device)
 
     private fun showScoreMatePanel() {
         val linked = scoreMateClient.isLinked
         val server = scoreMateStore.server.removePrefix("https://")
         val items = mutableListOf(
-            header("scoremate_link_header", "연결"),
+            header("scoremate_link_header", getString(R.string.settings_scoremate_link_header)),
             SettingsItem(
                 id = "scoremate_status",
                 icon = if (linked) "✅" else "⚪",
-                title = if (linked) "연결됨" else "연결 안 됨",
-                subtitle = if (linked) "${scoreMateStore.deviceName ?: "이 $device"} · $server" else "휴대폰으로 QR 을 찍어 ScoreMate 계정에 이 $device 를 연결합니다",
+                title = getString(if (linked) R.string.settings_scoremate_linked else R.string.settings_scoremate_unlinked),
+                subtitle = if (linked) "${scoreMateStore.deviceName ?: getString(R.string.settings_this_device, device)} · $server" else getString(R.string.settings_scoremate_unlinked_desc, device),
                 type = SettingsType.INFO
             )
         )
@@ -563,58 +561,58 @@ class SettingsActivity : AppCompatActivity() {
             items += SettingsItem(
                 id = "scoremate_check",
                 icon = "🔍",
-                title = "연결 확인",
-                subtitle = "서버에서 이 $device 정보 받기",
+                title = getString(R.string.settings_scoremate_check),
+                subtitle = getString(R.string.settings_scoremate_check_desc, device),
                 type = SettingsType.ACTION
             )
             items += SettingsItem(
                 id = "scoremate_unlink",
                 icon = "⛔",
-                title = "연결 해제",
-                subtitle = "이 $device 의 ScoreMate 연결을 끊습니다",
+                title = getString(R.string.settings_scoremate_unlink),
+                subtitle = getString(R.string.settings_scoremate_unlink_desc, device),
                 type = SettingsType.ACTION
             )
         } else {
             items += SettingsItem(
                 id = "scoremate_link",
                 icon = "🔗",
-                title = "이 $device 연결",
-                subtitle = "화면의 QR 코드 · 연결 코드로 휴대폰에서 연결",
+                title = getString(R.string.settings_scoremate_link, device),
+                subtitle = getString(R.string.settings_scoremate_link_desc),
                 type = SettingsType.ACTION
             )
             items += SettingsItem(
                 id = "scoremate_server",
                 icon = "🌐",
-                title = "서버 주소",
+                title = getString(R.string.settings_scoremate_server),
                 subtitle = server,
                 type = SettingsType.INPUT
             )
         }
         if (linked) {
-            items += header("scoremate_sync_header", "악보")
+            items += header("scoremate_sync_header", getString(R.string.settings_scoremate_scores_header))
             items += SettingsItem(
                 id = "scoremate_sync",
                 icon = "📥",
-                title = "지금 동기화",
-                subtitle = "앙상블 · 내 악보를 받습니다 (앱을 켤 때도 저절로). 받은 악보는 파일 목록에 ☁️",
+                title = getString(R.string.settings_scoremate_sync),
+                subtitle = getString(R.string.settings_scoremate_sync_desc),
                 type = SettingsType.ACTION
             )
             items += SettingsItem(
                 id = "scoremate_unhide",
                 icon = "♻️",
-                title = "숨긴 악보 다시 받기",
-                subtitle = "TV 에서 지운 서버 악보를 다음 동기화에 다시 받습니다",
+                title = getString(R.string.settings_scoremate_unhide),
+                subtitle = getString(R.string.settings_scoremate_unhide_desc),
                 type = SettingsType.ACTION
             )
         }
-        showDetailPanel("ScoreMate", items)
+        showDetailPanel("scoremate", "ScoreMate", items)
     }
 
     private fun linkScoreMate() {
         DeviceLinkDialog(this, scoreMateClient, scoreMateStore) {
             // 연결되면 서재가 ScoreMate 악보로 바뀌고 웹서버는 쓰지 않는다 (#063)
             if (isWebServerRunning) stopWebServer()
-            Toast.makeText(this, "ScoreMate 에 연결되었습니다 — 파일 목록에는 ScoreMate 악보가 보입니다", Toast.LENGTH_LONG).show()
+            Toast.makeText(this, getString(R.string.settings_scoremate_linked_toast), Toast.LENGTH_LONG).show()
             setupMainMenu() // 뒤의 메인 메뉴 요약도
             showScoreMatePanel()
         }.show()
@@ -626,9 +624,9 @@ class SettingsActivity : AppCompatActivity() {
                 val info = scoreMateClient.me()
                 if (info.name.isNotBlank()) scoreMateStore.deviceName = info.name
                 AlertDialog.Builder(this@SettingsActivity)
-                    .setTitle("ScoreMate 연결 확인")
-                    .setMessage("이 $device: ${info.name}\n서버: ${scoreMateStore.server}\n마지막 접속: ${info.lastSeenAt ?: "-"}")
-                    .setPositiveButton("확인", null)
+                    .setTitle(getString(R.string.settings_scoremate_check_title))
+                    .setMessage(getString(R.string.settings_scoremate_check_message, device, info.name, scoreMateStore.server, info.lastSeenAt ?: "-"))
+                    .setPositiveButton(getString(R.string.ok), null)
                     .show()
             } catch (e: ScoreMateException) {
                 Toast.makeText(this@SettingsActivity, e.message, Toast.LENGTH_LONG).show()
@@ -638,7 +636,7 @@ class SettingsActivity : AppCompatActivity() {
     }
 
     private fun syncScoreMateNow() {
-        Toast.makeText(this, "ScoreMate 동기화 중…", Toast.LENGTH_SHORT).show()
+        Toast.makeText(this, getString(R.string.settings_scoremate_syncing), Toast.LENGTH_SHORT).show()
         lifecycleScope.launch {
             val report = try {
                 scoreMateSync.sync()
@@ -649,7 +647,7 @@ class SettingsActivity : AppCompatActivity() {
             }
             Toast.makeText(
                 this@SettingsActivity,
-                com.mrgq.pdfviewer.scoremate.ScoreMateSyncText.summary(report) ?: "ScoreMate: 바뀐 악보가 없습니다",
+                com.mrgq.pdfviewer.scoremate.ScoreMateSyncText.summary(report) ?: getString(R.string.settings_scoremate_no_changes),
                 Toast.LENGTH_LONG
             ).show()
         }
@@ -659,7 +657,7 @@ class SettingsActivity : AppCompatActivity() {
         lifecycleScope.launch {
             val count = scoreMateSync.unhideAll()
             if (count == 0) {
-                Toast.makeText(this@SettingsActivity, "숨긴 악보가 없습니다", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this@SettingsActivity, getString(R.string.settings_scoremate_no_hidden), Toast.LENGTH_SHORT).show()
             } else {
                 syncScoreMateNow()
             }
@@ -668,14 +666,11 @@ class SettingsActivity : AppCompatActivity() {
 
     private fun confirmUnlinkScoreMate() {
         AlertDialog.Builder(this)
-            .setTitle("ScoreMate 연결 해제")
-            .setMessage(
-                "이 $device 의 ScoreMate 연결을 끊습니다. 다시 쓰려면 휴대폰으로 다시 연결해야 합니다.\n\n" +
-                    "받아 둔 악보는 어떻게 할까요? 남기면 이 기기 파일로 옮겨져 연결 해제 뒤의 파일 목록에 보입니다."
-            )
-            .setPositiveButton("해제 · 악보 남기기") { _, _ -> unlinkScoreMate(deleteFiles = false) }
-            .setNeutralButton("해제 · 악보 지우기") { _, _ -> unlinkScoreMate(deleteFiles = true) }
-            .setNegativeButton("취소", null)
+            .setTitle(getString(R.string.settings_scoremate_unlink_title))
+            .setMessage(getString(R.string.settings_scoremate_unlink_message, device))
+            .setPositiveButton(getString(R.string.settings_scoremate_unlink_keep)) { _, _ -> unlinkScoreMate(deleteFiles = false) }
+            .setNeutralButton(getString(R.string.settings_scoremate_unlink_delete)) { _, _ -> unlinkScoreMate(deleteFiles = true) }
+            .setNegativeButton(getString(R.string.cancel), null)
             .show()
     }
 
@@ -685,7 +680,7 @@ class SettingsActivity : AppCompatActivity() {
             val notified = scoreMateClient.unlink()
             Toast.makeText(
                 this@SettingsActivity,
-                if (notified) "ScoreMate 연결을 해제했습니다" else "이 $device 에서 연결을 해제했습니다 (서버에 닿지 못함 — 웹의 TV 화면에서도 해제하세요)",
+                if (notified) getString(R.string.settings_scoremate_unlinked_toast) else getString(R.string.settings_scoremate_unlinked_local_toast, device),
                 Toast.LENGTH_LONG
             ).show()
             setupMainMenu()
@@ -699,20 +694,20 @@ class SettingsActivity : AppCompatActivity() {
             hint = ScoreMateProtocol.DEFAULT_SERVER
         }
         AlertDialog.Builder(this)
-            .setTitle("ScoreMate 서버 주소")
-            .setMessage("보통은 바꿀 필요가 없습니다 (개발 서버용). 비우면 기본값.")
+            .setTitle(getString(R.string.settings_scoremate_server_title))
+            .setMessage(getString(R.string.settings_scoremate_server_message))
             .setView(editText)
-            .setPositiveButton("저장") { _, _ ->
+            .setPositiveButton(getString(R.string.settings_save)) { _, _ ->
                 val input = editText.text.toString()
                 val server = if (input.isBlank()) ScoreMateProtocol.DEFAULT_SERVER else ScoreMateProtocol.normalizeServer(input)
                 if (server == null) {
-                    Toast.makeText(this, "서버 주소를 해석할 수 없습니다", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this, getString(R.string.settings_scoremate_server_invalid), Toast.LENGTH_SHORT).show()
                 } else {
                     scoreMateStore.server = server
                     showScoreMatePanel()
                 }
             }
-            .setNegativeButton("취소", null)
+            .setNegativeButton(getString(R.string.cancel), null)
             .show()
     }
 
@@ -726,23 +721,23 @@ class SettingsActivity : AppCompatActivity() {
             SettingsItem(
                 id = "animation_toggle",
                 icon = "🎬",
-                title = "페이지 전환 애니메이션",
-                subtitle = if (animationEnabled) "활성화됨" else "비활성화됨",
+                title = getString(R.string.settings_page_turn_animation),
+                subtitle = getString(if (animationEnabled) R.string.settings_enabled else R.string.settings_disabled),
                 type = SettingsType.TOGGLE,
                 checked = animationEnabled
             ),
             SettingsItem(
                 id = "sound_toggle",
                 icon = "🔊",
-                title = "페이지 넘기기 사운드",
-                subtitle = if (soundEnabled) "활성화됨" else "비활성화됨",
+                title = getString(R.string.settings_page_turn_sound),
+                subtitle = getString(if (soundEnabled) R.string.settings_enabled else R.string.settings_disabled),
                 type = SettingsType.TOGGLE,
                 checked = soundEnabled
             ),
             SettingsItem(
                 id = "volume_setting",
                 icon = "🎚️",
-                title = "사운드 볼륨",
+                title = getString(R.string.settings_sound_volume),
                 subtitle = "${(volume * 100).toInt()}%",
                 type = SettingsType.INPUT,
                 enabled = soundEnabled
@@ -751,13 +746,13 @@ class SettingsActivity : AppCompatActivity() {
                 id = "page_info_toggle",
                 icon = "📄",
                 title = getString(R.string.settings_show_page_info),
-                subtitle = if (showPageInfo) "표시함" else "숨김",
+                subtitle = getString(if (showPageInfo) R.string.settings_page_info_shown else R.string.settings_page_info_hidden),
                 type = SettingsType.TOGGLE,
                 checked = showPageInfo
             )
         )
         
-        showDetailPanel("애니메이션 & 사운드", items)
+        showDetailPanel("animation_sound", getString(R.string.settings_cat_animation), items)
     }
     
     private fun showDisplayModePanel() {
@@ -766,27 +761,27 @@ class SettingsActivity : AppCompatActivity() {
             SettingsItem(
                 id = "phone_orientation",
                 icon = "📱",
-                title = "회전 모드 (악보 화면)",
+                title = getString(R.string.settings_phone_orientation),
                 subtitle = phoneOrientationLabel(),
                 type = SettingsType.ACTION
             ).takeIf { com.mrgq.pdfviewer.utils.DeviceForm.isPhone(this) },
             SettingsItem(
                 id = "view_display_modes",
                 icon = "👁️",
-                title = "설정 목록 보기",
-                subtitle = "저장된 파일별 표시 모드를 확인합니다",
+                title = getString(R.string.settings_view_display_modes),
+                subtitle = getString(R.string.settings_view_display_modes_desc),
                 type = SettingsType.ACTION
             ),
             SettingsItem(
                 id = "reset_display_modes",
                 icon = "🔄",
-                title = "설정 초기화",
-                subtitle = "모든 파일의 표시 모드를 초기화합니다",
+                title = getString(R.string.settings_reset_display_modes),
+                subtitle = getString(R.string.settings_reset_display_modes_desc),
                 type = SettingsType.ACTION
             )
         )
         
-        showDetailPanel("표시 모드", items)
+        showDetailPanel("display_mode", getString(R.string.settings_cat_display), items)
     }
     
     private fun wakeWords(): List<String> =
@@ -805,8 +800,7 @@ class SettingsActivity : AppCompatActivity() {
             setSingleLine(true)
         }
         val help = android.widget.TextView(this).apply {
-            text = "👂 계속 듣기에서 이 말 뒤의 말만 명령으로 실행합니다. 쉼표로 여럿 — 음성 인식이 달리 적는 표기도 함께 넣으면 좋습니다" +
-                " (예: 마에스트로, maestro). 비우면 기본(메이트)"
+            text = getString(R.string.settings_wake_help)
             textSize = 13f
             setPadding(0, (8 * density).toInt(), 0, 0)
         }
@@ -817,13 +811,13 @@ class SettingsActivity : AppCompatActivity() {
             addView(help)
         }
         AlertDialog.Builder(this)
-            .setTitle("🗣 호출어")
+            .setTitle(getString(R.string.settings_wake_title))
             .setView(box)
-            .setPositiveButton("저장") { _, _ ->
+            .setPositiveButton(getString(R.string.settings_save)) { _, _ ->
                 val words = com.mrgq.pdfviewer.voice.WakeWord.parseSetting(input.text.toString())
                 val problem = words.firstNotNullOfOrNull { com.mrgq.pdfviewer.voice.WakeWord.problem(it) }
                 if (problem != null) {
-                    Toast.makeText(this, "저장하지 않았습니다 — $problem", Toast.LENGTH_LONG).show()
+                    Toast.makeText(this, getString(R.string.settings_wake_not_saved, problem), Toast.LENGTH_LONG).show()
                     return@setPositiveButton
                 }
                 val editor = preferences.edit()
@@ -832,11 +826,11 @@ class SettingsActivity : AppCompatActivity() {
                 editor.apply()
                 showVoicePanel()
             }
-            .setNeutralButton("기본값") { _, _ ->
+            .setNeutralButton(getString(R.string.settings_default)) { _, _ ->
                 preferences.edit().remove(PdfViewerActivity.PREF_VOICE_WAKE_WORDS).apply()
                 showVoicePanel()
             }
-            .setNegativeButton("취소", null)
+            .setNegativeButton(getString(R.string.cancel), null)
             .show()
     }
 
@@ -844,28 +838,28 @@ class SettingsActivity : AppCompatActivity() {
         preferences.getString(PdfViewerActivity.PREF_PHONE_ORIENTATION, PdfViewerActivity.PHONE_ORIENTATION_AUTO)
             ?: PdfViewerActivity.PHONE_ORIENTATION_AUTO
 
-    private fun phoneOrientationLabel(): String = when (phoneOrientationMode()) {
-        PdfViewerActivity.PHONE_ORIENTATION_LANDSCAPE -> "가로 — 휴대폰을 돌려도 가로(시스템 1 ~ 2개씩)"
-        PdfViewerActivity.PHONE_ORIENTATION_PORTRAIT -> "세로 — 휴대폰을 돌려도 세로(보통 한 쪽 전체)"
-        else -> "기기 회전 — 휴대폰을 돌리는 대로(기기의 자동 회전 · 회전 잠금을 따름)"
-    }
+    private fun phoneOrientationLabel(): String = getString(when (phoneOrientationMode()) {
+        PdfViewerActivity.PHONE_ORIENTATION_LANDSCAPE -> R.string.settings_orientation_landscape_desc
+        PdfViewerActivity.PHONE_ORIENTATION_PORTRAIT -> R.string.settings_orientation_portrait_desc
+        else -> R.string.settings_orientation_auto_desc
+    })
 
     /** 회전 모드 고르기 (#090): 기기 회전 · 가로 · 세로 */
     private fun showPhoneOrientationDialog() {
         val modes = listOf(
-            PdfViewerActivity.PHONE_ORIENTATION_AUTO to "기기 회전",
-            PdfViewerActivity.PHONE_ORIENTATION_LANDSCAPE to "가로",
-            PdfViewerActivity.PHONE_ORIENTATION_PORTRAIT to "세로",
+            PdfViewerActivity.PHONE_ORIENTATION_AUTO to getString(R.string.settings_orientation_auto),
+            PdfViewerActivity.PHONE_ORIENTATION_LANDSCAPE to getString(R.string.settings_orientation_landscape),
+            PdfViewerActivity.PHONE_ORIENTATION_PORTRAIT to getString(R.string.settings_orientation_portrait),
         )
         val current = modes.indexOfFirst { it.first == phoneOrientationMode() }.coerceAtLeast(0)
         AlertDialog.Builder(this)
-            .setTitle("회전 모드 (악보 화면)")
+            .setTitle(getString(R.string.settings_phone_orientation))
             .setSingleChoiceItems(modes.map { it.second }.toTypedArray(), current) { dialog, which ->
                 preferences.edit().putString(PdfViewerActivity.PREF_PHONE_ORIENTATION, modes[which].first).apply()
                 dialog.dismiss()
                 showDisplayModePanel()
             }
-            .setNegativeButton("닫기", null)
+            .setNegativeButton(getString(R.string.settings_close), null)
             .show()
     }
 
@@ -887,49 +881,48 @@ class SettingsActivity : AppCompatActivity() {
                 },
                 type = SettingsType.ACTION
             ),
-            header("update_header", "업데이트"),
+            header("update_header", getString(R.string.settings_update_header)),
             SettingsItem(
                 id = "app_version",
                 icon = "📱",
-                title = "앱 버전",
+                title = getString(R.string.settings_app_version),
                 subtitle = "v${BuildConfig.VERSION_NAME}",
                 type = SettingsType.INFO
             ),
             SettingsItem(
                 id = "check_update",
                 icon = "🔄",
-                title = "업데이트 확인",
-                subtitle = "ScoreMate 서버에서 새 버전 찾기",
+                title = getString(R.string.settings_check_update),
+                subtitle = getString(R.string.settings_check_update_desc),
                 type = SettingsType.BUTTON
             ),
             SettingsItem(
                 id = "update_on_start_toggle",
                 icon = "🔔",
-                title = "자동 업데이트 확인",
-                subtitle = if (UpdateController.isCheckOnStartup(this)) "켜짐 — 파일 목록 · 설정 화면에서 10분마다 확인해 새 버전이 있으면 알려 줍니다" else "꺼짐",
+                title = getString(R.string.settings_auto_update),
+                subtitle = getString(if (UpdateController.isCheckOnStartup(this)) R.string.settings_auto_update_on else R.string.settings_off),
                 type = SettingsType.TOGGLE,
                 checked = UpdateController.isCheckOnStartup(this)
             ),
             SettingsItem(
                 id = "update_prerelease_toggle",
                 icon = "🧪",
-                title = "사전 릴리스(beta) 받기",
-                subtitle = if (UpdateController.isPrereleaseEnabled(this)) "켜짐 — 시험 중인 판도 받습니다. 확인 전 기능이 포함될 수 있습니다"
-                    else "꺼짐 — 정식 릴리스만 받습니다",
+                title = getString(R.string.settings_prerelease),
+                subtitle = getString(if (UpdateController.isPrereleaseEnabled(this)) R.string.settings_prerelease_on else R.string.settings_prerelease_off),
                 type = SettingsType.TOGGLE,
                 checked = UpdateController.isPrereleaseEnabled(this)
             ),
-            header("about_header", "정보"),
+            header("about_header", getString(R.string.settings_about_header)),
             SettingsItem(
                 id = "app_info",
                 icon = "ℹ️",
-                title = "앱 정보",
-                subtitle = "MRGQ PDF Viewer — TV · 태블릿 · 휴대폰을 위한 스마트 악보 리더",
+                title = getString(R.string.settings_cat_info),
+                subtitle = getString(R.string.settings_app_info_desc),
                 type = SettingsType.INFO
             )
         )
         
-        showDetailPanel("앱 정보", items)
+        showDetailPanel("info", getString(R.string.settings_cat_info), items)
     }
     
     /** 언어 고르기 (P18) — 고르면 AppCompat 이 액티비티를 다시 만든다(지금 칸은 [onSaveInstanceState] 로 지킨다) */
@@ -955,37 +948,34 @@ class SettingsActivity : AppCompatActivity() {
     /** 🎙 음성 명령 · 👂 계속 듣기 (#123 — 설정 맨 위 칸으로) */
     private fun showVoicePanel() {
         val items = listOfNotNull(
-            header("voice_press_header", "누르고 말하기"),
+            header("voice_press_header", getString(R.string.settings_voice_press_header)),
             // 🎙 음성 명령 (P12 2단계) — 태블릿 · 휴대폰. 기기의 음성 인식(보통 Google)을 쓴다
             SettingsItem(
                 id = "voice_commands_toggle",
                 icon = "🎙",
-                title = "음성 명령",
+                title = getString(R.string.settings_cat_voice),
                 subtitle = when {
                     !com.mrgq.pdfviewer.voice.VoiceListener.isAvailable(this) ->
-                        "이 기기에는 음성 인식 서비스가 없습니다 — 누르면 설치 안내 (Google \"음성 인식 및 합성\")"
+                        getString(R.string.settings_voice_unavailable)
                     preferences.getBoolean(PdfViewerActivity.PREF_VOICE_COMMANDS, false) ->
-                        "켜짐 — 악보 화면 오른쪽 아래 🎙 를 누른 채로 \"57마디부터 템포 72\" · \"다음 쪽\" · \"첼로 파트\". 기기의 음성 인식(대개 인터넷)을 씁니다"
-                    else -> "꺼짐 — 켜면 악보 화면에 🎙 단추가 생깁니다"
+                        getString(R.string.settings_voice_on)
+                    else -> getString(R.string.settings_voice_off)
                 },
                 type = SettingsType.TOGGLE,
                 checked = preferences.getBoolean(PdfViewerActivity.PREF_VOICE_COMMANDS, false)
             ),
-            header("voice_always_header", "계속 듣기 (시험)"),
+            header("voice_always_header", getString(R.string.settings_voice_always)),
             // 👂 계속 듣기 (#085) — 🎙 를 누르지 않고 호출어 "메이트" 뒤의 말을 명령으로
             SettingsItem(
                 id = "voice_always_toggle",
                 icon = "👂",
-                title = "계속 듣기 (시험)",
+                title = getString(R.string.settings_voice_always),
                 subtitle = when {
-                    !PdfViewerActivity.VOICE_ALWAYS_AVAILABLE -> "지금은 쓸 수 없습니다 — 다듬는 중"
-                    !preferences.getBoolean(PdfViewerActivity.PREF_VOICE_COMMANDS, false) -> "위의 🎙 음성 명령을 먼저 켜세요"
-                    preferences.getBoolean(PdfViewerActivity.PREF_VOICE_ALWAYS, false) -> wakeWords().first().let { w ->
-                        "켜짐 — 악보 화면에서 늘 듣다가 호출어 \"$w\" 뒤의 말만 실행(\"$w, 57마디부터\" · \"$w, 멈춰\"). " +
-                            "연주 중에도 듣습니다. 듣는 동안 알림 소리를 끕니다(휴대폰은 전화가 진동으로 올 수 있음). " +
-                        "듣는 소리는 계속 기기의 음성 인식(대개 Google, 인터넷)으로 갑니다"
-                    }
-                    else -> "꺼짐 — 켜면 🎙 를 누르지 않고 \"${wakeWords().first()}, …\"로 명령합니다"
+                    !PdfViewerActivity.VOICE_ALWAYS_AVAILABLE -> getString(R.string.settings_voice_always_unavailable)
+                    !preferences.getBoolean(PdfViewerActivity.PREF_VOICE_COMMANDS, false) -> getString(R.string.settings_voice_always_needs_voice)
+                    preferences.getBoolean(PdfViewerActivity.PREF_VOICE_ALWAYS, false) ->
+                        getString(R.string.settings_voice_always_on, wakeWords().first())
+                    else -> getString(R.string.settings_voice_always_off, wakeWords().first())
                 },
                 type = SettingsType.TOGGLE,
                 checked = PdfViewerActivity.VOICE_ALWAYS_AVAILABLE && preferences.getBoolean(PdfViewerActivity.PREF_VOICE_ALWAYS, false),
@@ -995,14 +985,16 @@ class SettingsActivity : AppCompatActivity() {
             SettingsItem(
                 id = "voice_wake_words",
                 icon = "🗣",
-                title = "호출어 (계속 듣기)",
-                subtitle = wakeWords().joinToString(" · ") +
-                    (if (preferences.getString(PdfViewerActivity.PREF_VOICE_WAKE_WORDS, null).isNullOrBlank()) " (기본)" else "") +
-                    " — 누르면 바꿉니다",
+                title = getString(R.string.settings_wake_words),
+                subtitle = getString(
+                    if (preferences.getString(PdfViewerActivity.PREF_VOICE_WAKE_WORDS, null).isNullOrBlank()) R.string.settings_wake_words_desc_default
+                    else R.string.settings_wake_words_desc,
+                    wakeWords().joinToString(" · "),
+                ),
                 type = SettingsType.ACTION
             ).takeIf { PdfViewerActivity.VOICE_ALWAYS_AVAILABLE },
         )
-        showDetailPanel("음성 명령", items)
+        showDetailPanel("voice", getString(R.string.settings_cat_voice), items)
     }
 
     /** 오른쪽 칸의 묶음 제목 (#122) */
@@ -1033,8 +1025,8 @@ class SettingsActivity : AppCompatActivity() {
             SettingsItem(
                 id = "rec_folder",
                 icon = "📁",
-                title = "저장 위치",
-                subtitle = "내부 저장소/Android/data/$packageName/files/recordings · ${recordingEntries.size}개 · ${megabytes(recordingEntries.sumOf { it.bytes })}",
+                title = getString(R.string.settings_rec_folder),
+                subtitle = getString(R.string.settings_rec_folder_desc, packageName, recordingEntries.size, megabytes(recordingEntries.sumOf { it.bytes })),
                 type = SettingsType.INFO
             )
         )
@@ -1042,8 +1034,8 @@ class SettingsActivity : AppCompatActivity() {
             items += SettingsItem(
                 id = "rec_empty",
                 icon = "ℹ️",
-                title = "녹음이 없습니다",
-                subtitle = "악보 화면 ↑ 메뉴의 🎤 연주 듣고 넘기기가 소리와 추적 기록을 남깁니다",
+                title = getString(R.string.settings_rec_empty),
+                subtitle = getString(R.string.settings_rec_empty_desc),
                 type = SettingsType.INFO
             )
         }
@@ -1055,11 +1047,11 @@ class SettingsActivity : AppCompatActivity() {
                 add(clock(e.durationSec))
                 add(megabytes(e.bytes))
                 if (s != null && e.isFollow) {
-                    s.startMeasurePos?.let { add("${it.toInt() + 1}마디부터") }
-                    if (s.pageTurns > 0) add("넘김 ${s.pageTurns}번")
-                    s.lastPage?.let { add("${it + 1}쪽까지") }
+                    s.startMeasurePos?.let { add(getString(R.string.settings_rec_from_measure, it.toInt() + 1)) }
+                    if (s.pageTurns > 0) add(getString(R.string.settings_rec_turns, s.pageTurns))
+                    s.lastPage?.let { add(getString(R.string.settings_rec_to_page, it + 1)) }
                 }
-                if (!e.isFollow) add("연습 녹음")
+                if (!e.isFollow) add(getString(R.string.settings_rec_practice))
             }.joinToString(" · ")
             items += SettingsItem(
                 id = "rec:$i",
@@ -1074,25 +1066,25 @@ class SettingsActivity : AppCompatActivity() {
             items += SettingsItem(
                 id = "rec_delete_all",
                 icon = "🗑️",
-                title = "모두 지우기",
-                subtitle = "녹음 ${recordingEntries.size}개 (${megabytes(recordingEntries.sumOf { it.bytes })}) 를 지웁니다",
+                title = getString(R.string.settings_rec_delete_all),
+                subtitle = getString(R.string.settings_rec_delete_all_desc, recordingEntries.size, megabytes(recordingEntries.sumOf { it.bytes })),
                 type = SettingsType.ACTION
             )
         }
-        showDetailPanel("녹음 기록", items)
+        showDetailPanel("recordings", getString(R.string.settings_cat_recordings), items)
     }
 
     private fun showRecordingDialog(entry: com.mrgq.pdfviewer.recording.RecordingLibrary.Entry) {
         val s = entry.summary
         val lines = buildList {
-            entry.recordedAt?.let { add("녹음: " + java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.KOREA).format(it)) }
-            add("길이: ${clock(entry.durationSec)} · ${megabytes(entry.bytes)}")
+            entry.recordedAt?.let { add(getString(R.string.settings_rec_recorded, java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.KOREA).format(it))) }
+            add(getString(R.string.settings_rec_length, clock(entry.durationSec), megabytes(entry.bytes)))
             if (s != null && entry.isFollow) {
-                s.quarterBpm?.let { add("기준 빠르기: ♩=$it") }
-                if (s.startSec != null) add("연주 시작: ${clock(s.startSec)} — ${s.startMeasurePos?.let { "${it.toInt() + 1}마디" } ?: "?"}")
-                add("쪽 넘김 ${s.pageTurns}번 · 반 쪽 ${s.halfTurns}번" + (s.lastPage?.let { " · ${it + 1}쪽까지" } ?: ""))
-                s.lastMeasurePos?.let { add("마지막 위치: ${it.toInt() + 1}마디") }
-                add("재위치 ${s.relocations}번" + if (s.manualAnchors > 0) " · 손으로 넘김 ${s.manualAnchors}번" else "")
+                s.quarterBpm?.let { add(getString(R.string.settings_rec_tempo, it)) }
+                if (s.startSec != null) add(getString(R.string.settings_rec_start, clock(s.startSec), s.startMeasurePos?.let { getString(R.string.settings_rec_measure, it.toInt() + 1) } ?: "?"))
+                add(getString(R.string.settings_rec_turns_detail, s.pageTurns, s.halfTurns) + (s.lastPage?.let { " · " + getString(R.string.settings_rec_to_page, it + 1) } ?: ""))
+                s.lastMeasurePos?.let { add(getString(R.string.settings_rec_last_position, it.toInt() + 1)) }
+                add(getString(R.string.settings_rec_relocations, s.relocations) + if (s.manualAnchors > 0) " · " + getString(R.string.settings_rec_manual_turns, s.manualAnchors) else "")
             }
             add("")
             add(entry.wav.name)
@@ -1100,9 +1092,9 @@ class SettingsActivity : AppCompatActivity() {
         val dialog = AlertDialog.Builder(this)
             .setTitle(entry.title)
             .setMessage(lines.joinToString("\n"))
-            .setPositiveButton("▶ 재생", null)
-            .setNeutralButton("📤 공유", null)
-            .setNegativeButton("🗑️ 지우기", null)
+            .setPositiveButton(getString(R.string.settings_rec_play), null)
+            .setNeutralButton(getString(R.string.settings_rec_share), null)
+            .setNegativeButton(getString(R.string.settings_rec_delete), null)
             .setOnDismissListener { stopRecordingPlayback() }
             .create()
         dialog.setOnShowListener {
@@ -1110,22 +1102,22 @@ class SettingsActivity : AppCompatActivity() {
             play.setOnClickListener {
                 if (recordingPlayer != null) {
                     stopRecordingPlayback()
-                    play.text = "▶ 재생"
-                } else if (startRecordingPlayback(entry) { play.text = "▶ 재생" }) {
-                    play.text = "■ 정지"
+                    play.text = getString(R.string.settings_rec_play)
+                } else if (startRecordingPlayback(entry) { play.text = getString(R.string.settings_rec_play) }) {
+                    play.text = getString(R.string.settings_rec_stop)
                 }
             }
             dialog.getButton(AlertDialog.BUTTON_NEUTRAL).setOnClickListener { shareRecording(entry) }
             dialog.getButton(AlertDialog.BUTTON_NEGATIVE).setOnClickListener {
                 AlertDialog.Builder(this)
-                    .setMessage("이 녹음을 지울까요?\n${entry.wav.name}")
-                    .setPositiveButton("지우기") { _, _ ->
+                    .setMessage(getString(R.string.settings_rec_delete_confirm, entry.wav.name))
+                    .setPositiveButton(getString(R.string.settings_delete)) { _, _ ->
                         dialog.dismiss()
                         com.mrgq.pdfviewer.recording.RecordingLibrary.delete(entry)
-                        Toast.makeText(this, "지웠습니다", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(this, getString(R.string.settings_rec_deleted), Toast.LENGTH_SHORT).show()
                         showRecordingsPanel()
                     }
-                    .setNegativeButton("취소", null)
+                    .setNegativeButton(getString(R.string.cancel), null)
                     .show()
             }
         }
@@ -1137,7 +1129,7 @@ class SettingsActivity : AppCompatActivity() {
         // 미디어 소리가 0 이면 재생돼도 들리지 않는다 — 기기 설정이라 알리기만 (태블릿 실제 사례, #111)
         val audio = getSystemService(AUDIO_SERVICE) as? android.media.AudioManager
         if (audio != null && audio.getStreamVolume(android.media.AudioManager.STREAM_MUSIC) == 0) {
-            Toast.makeText(this, "미디어 소리가 0 이에요 — 볼륨 키(위)로 올리세요", Toast.LENGTH_LONG).show()
+            Toast.makeText(this, getString(R.string.settings_rec_media_volume_zero), Toast.LENGTH_LONG).show()
         }
         return try {
             recordingPlayer = android.media.MediaPlayer().apply {
@@ -1152,7 +1144,7 @@ class SettingsActivity : AppCompatActivity() {
             true
         } catch (e: Exception) {
             Log.w("SettingsActivity", "녹음 재생 실패", e)
-            Toast.makeText(this, "재생할 수 없습니다", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, getString(R.string.settings_rec_cannot_play), Toast.LENGTH_SHORT).show()
             stopRecordingPlayback()
             false
         }
@@ -1183,33 +1175,35 @@ class SettingsActivity : AppCompatActivity() {
                 putExtra(android.content.Intent.EXTRA_SUBJECT, entry.wav.nameWithoutExtension)
                 addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
             }
-            startActivity(android.content.Intent.createChooser(intent, "녹음 보내기"))
+            startActivity(android.content.Intent.createChooser(intent, getString(R.string.settings_rec_send)))
         } catch (e: Exception) {
             Log.w("SettingsActivity", "녹음 공유 실패", e)
-            Toast.makeText(this, "공유할 수 없습니다: ${e.message}", Toast.LENGTH_LONG).show()
+            Toast.makeText(this, getString(R.string.settings_rec_cannot_share, e.message), Toast.LENGTH_LONG).show()
         }
     }
 
     private fun confirmDeleteAllRecordings() {
         val total = recordingEntries.sumOf { it.bytes }
         AlertDialog.Builder(this)
-            .setTitle("녹음 모두 지우기")
-            .setMessage("녹음 ${recordingEntries.size}개 (${megabytes(total)}) 를 모두 지웁니다. 되돌릴 수 없습니다.")
-            .setPositiveButton("모두 지우기") { _, _ ->
+            .setTitle(getString(R.string.settings_rec_delete_all_title))
+            .setMessage(getString(R.string.settings_rec_delete_all_confirm, recordingEntries.size, megabytes(total)))
+            .setPositiveButton(getString(R.string.settings_rec_delete_all)) { _, _ ->
                 stopRecordingPlayback()
                 recordingEntries.forEach { com.mrgq.pdfviewer.recording.RecordingLibrary.delete(it) }
-                Toast.makeText(this, "모두 지웠습니다", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, getString(R.string.settings_rec_all_deleted), Toast.LENGTH_SHORT).show()
                 showRecordingsPanel()
             }
-            .setNegativeButton("취소", null)
+            .setNegativeButton(getString(R.string.cancel), null)
             .show()
     }
 
-    private fun showDetailPanel(title: String, items: List<SettingsItem>) {
+    /** [category] = 카테고리 id("web_server" 등) — 지금 칸을 화면 글(제목)로 비교하지 않는다(P18 — 언어마다 다르다) */
+    private fun showDetailPanel(category: String, title: String, items: List<SettingsItem>) {
         // 같은 칸을 다시 그릴 때(켜기 · 끄기 뒤) 포커스가 있던 줄 — 새 목록에서 같은 줄로 돌려놓는다(리모컨 포커스가 맨 위로 튀지 않게)
         val focusedId = binding.detailRecyclerView.focusedChild
             ?.let { detailItems.getOrNull(binding.detailRecyclerView.getChildAdapterPosition(it))?.id }
-            ?.takeIf { title == binding.detailTitle.text }
+            ?.takeIf { category == detailCategory }
+        detailCategory = category
         binding.detailTitle.text = title
         detailItems = items
         // 웹서버 칸이 아니면 로그는 숨긴다 (웹서버 칸은 이 뒤에 다시 보인다)
@@ -1235,7 +1229,7 @@ class SettingsActivity : AppCompatActivity() {
             return
         }
         // 웹서버 설정 화면에서 벗어날 때 웹서버가 실행 중이면 확인
-        if (binding.detailTitle.text == "웹서버" && isWebServerRunning) {
+        if (detailCategory == "web_server" && isWebServerRunning) {
             showWebServerDetailExitConfirmDialog()
         } else {
             binding.detailPanelLayout.visibility = View.GONE
@@ -1252,15 +1246,9 @@ class SettingsActivity : AppCompatActivity() {
     private fun showRecognizerInstallHelp() {
         val pkg = com.mrgq.pdfviewer.voice.VoiceListener.RECOGNIZER_PACKAGE
         AlertDialog.Builder(this)
-            .setTitle("음성 인식 서비스가 없습니다")
-            .setMessage(
-                "🎙 음성 명령은 기기의 음성 인식을 씁니다.\n\n" +
-                    "1. Google \"음성 인식 및 합성\"(Speech Recognition & Synthesis)을 설치합니다\n" +
-                    "2. 기기 설정 → 앱 → 음성 인식 및 합성 → 권한 → 마이크를 허용합니다\n" +
-                    "3. 이 화면으로 돌아와 🎙 음성 명령을 켭니다\n\n" +
-                    "Google 앱만 있는 중국판 롬 태블릿은 그 안의 인식 서비스가 꺼져 있어 따로 설치해야 합니다."
-            )
-            .setPositiveButton("스토어에서 열기") { _, _ ->
+            .setTitle(getString(R.string.settings_recognizer_missing_title))
+            .setMessage(getString(R.string.settings_recognizer_missing_message))
+            .setPositiveButton(getString(R.string.settings_recognizer_open_store)) { _, _ ->
                 val market = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse("market://details?id=$pkg"))
                 val web = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse("https://play.google.com/store/apps/details?id=$pkg"))
                 try {
@@ -1269,11 +1257,11 @@ class SettingsActivity : AppCompatActivity() {
                     try {
                         startActivity(web)
                     } catch (e2: android.content.ActivityNotFoundException) {
-                        Toast.makeText(this, "스토어 · 브라우저를 열 수 없습니다 — $pkg 를 찾아 설치하세요", Toast.LENGTH_LONG).show()
+                        Toast.makeText(this, getString(R.string.settings_recognizer_no_store, pkg), Toast.LENGTH_LONG).show()
                     }
                 }
             }
-            .setNegativeButton("닫기", null)
+            .setNegativeButton(getString(R.string.settings_close), null)
             .show()
     }
 
@@ -1332,7 +1320,7 @@ class SettingsActivity : AppCompatActivity() {
             "update_prerelease_toggle" -> {
                 val enable = !UpdateController.isPrereleaseEnabled(this)
                 UpdateController.setPrereleaseEnabled(this, enable)
-                if (enable) Toast.makeText(this, "사전 릴리스도 받습니다 — 확인 전 기능이 포함될 수 있습니다", Toast.LENGTH_LONG).show()
+                if (enable) Toast.makeText(this, getString(R.string.settings_prerelease_on_toast), Toast.LENGTH_LONG).show()
                 showInfoPanel()
             }
         }
@@ -1342,32 +1330,32 @@ class SettingsActivity : AppCompatActivity() {
         val currentPort = preferences.getInt("web_server_port", 8080)
         val editText = EditText(this)
         editText.setText(currentPort.toString())
-        editText.hint = "포트 번호 (1024-65535)"
+        editText.hint = getString(R.string.settings_web_port_hint)
         
         AlertDialog.Builder(this)
-            .setTitle("웹서버 포트 설정")
+            .setTitle(getString(R.string.settings_web_port_title))
             .setView(editText)
-            .setPositiveButton("저장") { _, _ ->
+            .setPositiveButton(getString(R.string.settings_save)) { _, _ ->
                 val portText = editText.text.toString().trim()
                 if (portText.isNotEmpty()) {
                     try {
                         val port = portText.toInt()
                         if (port in 1024..65535) {
                             preferences.edit().putInt("web_server_port", port).apply()
-                            Toast.makeText(this, "포트 설정이 저장되었습니다: $port", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(this, getString(R.string.settings_web_port_saved, port), Toast.LENGTH_SHORT).show()
                             hideDetailPanel()
                             setupMainMenu()
                         } else {
-                            Toast.makeText(this, "포트 번호는 1024-65535 범위여야 합니다", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(this, getString(R.string.settings_web_port_range), Toast.LENGTH_SHORT).show()
                         }
                     } catch (e: NumberFormatException) {
-                        Toast.makeText(this, "유효한 포트 번호를 입력해주세요", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(this, getString(R.string.settings_web_port_invalid), Toast.LENGTH_SHORT).show()
                     }
                 } else {
-                    Toast.makeText(this, "포트 번호를 입력해주세요", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this, getString(R.string.settings_web_port_empty), Toast.LENGTH_SHORT).show()
                 }
             }
-            .setNegativeButton("취소", null)
+            .setNegativeButton(getString(R.string.cancel), null)
             .show()
     }
     
@@ -1391,17 +1379,17 @@ class SettingsActivity : AppCompatActivity() {
         val pdfFiles = getAllPdfFiles()
         
         if (pdfFiles.isEmpty()) {
-            Toast.makeText(this, "삭제할 PDF 파일이 없습니다", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, getString(R.string.settings_delete_all_pdf_none), Toast.LENGTH_SHORT).show()
             return
         }
         
         AlertDialog.Builder(this)
-            .setTitle("모든 PDF 파일 삭제")
-            .setMessage("모든 PDF 파일(${pdfFiles.size}개)을 삭제하시겠습니까?\n이 작업은 되돌릴 수 없습니다.")
-            .setPositiveButton("삭제") { _, _ ->
+            .setTitle(getString(R.string.settings_delete_all_pdf))
+            .setMessage(getString(R.string.settings_delete_all_pdf_confirm, pdfFiles.size))
+            .setPositiveButton(getString(R.string.settings_delete_button)) { _, _ ->
                 deleteAllPdfFiles(pdfFiles)
             }
-            .setNegativeButton("취소", null)
+            .setNegativeButton(getString(R.string.cancel), null)
             .show()
     }
     
@@ -1425,9 +1413,9 @@ class SettingsActivity : AppCompatActivity() {
             
             withContext(Dispatchers.Main) {
                 if (failedCount == 0) {
-                    Toast.makeText(this@SettingsActivity, "${deletedCount}개 파일이 삭제되었습니다", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this@SettingsActivity, getString(R.string.settings_delete_all_pdf_done, deletedCount), Toast.LENGTH_SHORT).show()
                 } else {
-                    Toast.makeText(this@SettingsActivity, "${deletedCount}개 파일 삭제 완료, ${failedCount}개 파일 삭제 실패", Toast.LENGTH_LONG).show()
+                    Toast.makeText(this@SettingsActivity, getString(R.string.settings_delete_all_pdf_partial, deletedCount, failedCount), Toast.LENGTH_LONG).show()
                 }
                 
                 hideDetailPanel()
@@ -1443,7 +1431,7 @@ class SettingsActivity : AppCompatActivity() {
         
         preferences.edit().putBoolean("page_turn_animation_enabled", newEnabled).apply()
         
-        val message = if (newEnabled) "페이지 전환 애니메이션이 활성화되었습니다" else "페이지 전환 애니메이션이 비활성화되었습니다"
+        val message = getString(if (newEnabled) R.string.settings_animation_on_toast else R.string.settings_animation_off_toast)
         Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
         
         // 상세 패널 새로고침
@@ -1456,7 +1444,7 @@ class SettingsActivity : AppCompatActivity() {
         
         preferences.edit().putBoolean("page_turn_sound_enabled", newEnabled).apply()
         
-        val message = if (newEnabled) "페이지 넘기기 사운드가 활성화되었습니다" else "페이지 넘기기 사운드가 비활성화되었습니다"
+        val message = getString(if (newEnabled) R.string.settings_sound_on_toast else R.string.settings_sound_off_toast)
         Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
         
         // 상세 패널 새로고침
@@ -1469,7 +1457,7 @@ class SettingsActivity : AppCompatActivity() {
         
         preferences.edit().putBoolean("show_page_info", newEnabled).apply()
         
-        val message = if (newEnabled) "페이지 정보가 표시됩니다" else "페이지 정보가 숨겨집니다"
+        val message = getString(if (newEnabled) R.string.settings_page_info_on_toast else R.string.settings_page_info_off_toast)
         Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
         
         // 상세 패널 새로고침
@@ -1500,19 +1488,27 @@ class SettingsActivity : AppCompatActivity() {
         
         AlertDialog.Builder(this)
             .setView(dialogView)
-            .setPositiveButton("저장") { _, _ ->
+            .setPositiveButton(getString(R.string.settings_save)) { _, _ ->
                 val volumePercent = seekBar.progress
                 val volume = volumePercent / 100.0f
                 preferences.edit().putFloat("page_turn_volume", volume).apply()
-                Toast.makeText(this, "볼륨이 ${volumePercent}%로 설정되었습니다", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, getString(R.string.settings_volume_saved, volumePercent), Toast.LENGTH_SHORT).show()
                 // 상세 패널 새로고침
                 showAnimationSoundPanel()
             }
-            .setNegativeButton("취소", null)
+            .setNegativeButton(getString(R.string.cancel), null)
             .show()
     }
     
     // 웹서버 관리 함수들
+    /** "실행 중 (IP:포트)" · "중지됨" */
+    private fun webServerStatusText(): String =
+        if (isWebServerRunning) {
+            getString(R.string.settings_web_running, NetworkUtils.getLocalIpAddress(), preferences.getInt("web_server_port", 8080))
+        } else {
+            getString(R.string.settings_web_stopped)
+        }
+
     private fun checkWebServerStatus() {
         val serverStatus = webServerManager.isServerRunning()
         Log.d("SettingsActivity", "웹서버 상태 확인 - 이전: $isWebServerRunning, 현재: $serverStatus")
@@ -1524,13 +1520,7 @@ class SettingsActivity : AppCompatActivity() {
         val webServerItem = currentItems.find { it.id == "web_server" }
         if (webServerItem != null && ::settingsAdapter.isInitialized) {
             val index = currentItems.indexOf(webServerItem)
-            val status = if (isWebServerRunning) {
-                val port = preferences.getInt("web_server_port", 8080)
-                val ipAddress = NetworkUtils.getLocalIpAddress()
-                "실행 중 ($ipAddress:$port)"
-            } else {
-                "중지됨"
-            }
+            val status = webServerStatusText()
             
             currentItems[index] = webServerItem.copy(subtitle = status)
             settingsAdapter.notifyItemChanged(index)
@@ -1539,7 +1529,7 @@ class SettingsActivity : AppCompatActivity() {
     
     private fun toggleWebServer() {
         if (!isWebServerRunning && scoreMateClient.isLinked) {
-            Toast.makeText(this, "ScoreMate 에 연결된 TV 에서는 웹서버를 쓸 수 없습니다", Toast.LENGTH_LONG).show()
+            Toast.makeText(this, getString(R.string.settings_web_linked_toast), Toast.LENGTH_LONG).show()
             return
         }
         if (isWebServerRunning) {
@@ -1565,8 +1555,8 @@ class SettingsActivity : AppCompatActivity() {
                     }
                     
                     // 로그에 시작 메시지 추가
-                    addWebServerLog("✅ 웹서버 시작됨 - http://$serverAddress:$currentPort")
-                    addWebServerLog("📁 업로드 대기 중...")
+                    addWebServerLog(getString(R.string.settings_web_log_started, serverAddress, currentPort))
+                    addWebServerLog(getString(R.string.settings_web_log_waiting))
                     
                     // 웹서버 패널 업데이트 (설정으로 돌아가지 않고 패널에 머물기)
                     updateWebServerPanel()
@@ -1574,11 +1564,11 @@ class SettingsActivity : AppCompatActivity() {
                     
                     Toast.makeText(
                         this,
-                        "웹서버가 시작되었습니다\nhttp://$serverAddress:$currentPort",
+                        getString(R.string.settings_web_started_toast, serverAddress, currentPort),
                         Toast.LENGTH_LONG
                     ).show()
                 } else {
-                    Toast.makeText(this, "웹서버 시작 실패", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this, getString(R.string.settings_web_start_failed), Toast.LENGTH_SHORT).show()
                     hideDetailPanel()
                     setupMainMenu()
                 }
@@ -1592,8 +1582,8 @@ class SettingsActivity : AppCompatActivity() {
         
         webServerManager.stopServer()
         isWebServerRunning = false
-        addWebServerLog("⏹️ 웹서버 중지됨")
-        Toast.makeText(this, "웹서버가 중지되었습니다", Toast.LENGTH_SHORT).show()
+        addWebServerLog(getString(R.string.settings_web_log_stopped))
+        Toast.makeText(this, getString(R.string.settings_web_stopped_toast), Toast.LENGTH_SHORT).show()
         hideDetailPanel()
         setupMainMenu()
     }
@@ -1601,12 +1591,12 @@ class SettingsActivity : AppCompatActivity() {
     // Display mode management functions
     private fun showResetDisplayModeDialog() {
         AlertDialog.Builder(this)
-            .setTitle("표시 모드 초기화")
-            .setMessage("모든 파일의 표시 모드 설정을 초기화하시겠습니까?\n이 작업은 되돌릴 수 없습니다.")
-            .setPositiveButton("초기화") { _, _ ->
+            .setTitle(getString(R.string.settings_reset_display_modes_title))
+            .setMessage(getString(R.string.settings_reset_display_modes_confirm))
+            .setPositiveButton(getString(R.string.settings_reset_button)) { _, _ ->
                 resetAllDisplayModes()
             }
-            .setNegativeButton("취소", null)
+            .setNegativeButton(getString(R.string.cancel), null)
             .show()
     }
     
@@ -1616,14 +1606,14 @@ class SettingsActivity : AppCompatActivity() {
                 musicRepository.deleteAllUserPreferences()
                 
                 withContext(Dispatchers.Main) {
-                    Toast.makeText(this@SettingsActivity, "모든 표시 모드 설정이 초기화되었습니다", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this@SettingsActivity, getString(R.string.settings_reset_display_modes_done), Toast.LENGTH_SHORT).show()
                     hideDetailPanel()
                     setupMainMenu()
                 }
             } catch (e: Exception) {
                 Log.e("SettingsActivity", "Error resetting display modes", e)
                 withContext(Dispatchers.Main) {
-                    Toast.makeText(this@SettingsActivity, "설정 초기화 중 오류가 발생했습니다", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this@SettingsActivity, getString(R.string.settings_reset_display_modes_error), Toast.LENGTH_SHORT).show()
                 }
             }
         }
@@ -1647,7 +1637,7 @@ class SettingsActivity : AppCompatActivity() {
                         
                         withContext(Dispatchers.Main) {
                             if (preferenceList.isEmpty()) {
-                                Toast.makeText(this@SettingsActivity, "저장된 표시 모드 설정이 없습니다", Toast.LENGTH_SHORT).show()
+                                Toast.makeText(this@SettingsActivity, getString(R.string.settings_display_modes_empty), Toast.LENGTH_SHORT).show()
                             } else {
                                 showDisplayModeList(preferenceList)
                             }
@@ -1659,7 +1649,7 @@ class SettingsActivity : AppCompatActivity() {
             } catch (e: Exception) {
                 Log.e("SettingsActivity", "Error loading display mode list", e)
                 withContext(Dispatchers.Main) {
-                    Toast.makeText(this@SettingsActivity, "설정 목록을 불러오는 중 오류가 발생했습니다", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this@SettingsActivity, getString(R.string.settings_display_modes_load_error), Toast.LENGTH_SHORT).show()
                 }
             }
         }
@@ -1668,18 +1658,18 @@ class SettingsActivity : AppCompatActivity() {
     private fun showDisplayModeList(preferences: List<Pair<String, DisplayMode>>) {
         val displayText = StringBuilder()
         preferences.forEach { (fileName, mode) ->
-            val modeText = when (mode) {
-                DisplayMode.AUTO -> "자동"
-                DisplayMode.SINGLE -> "한 페이지"
-                DisplayMode.DOUBLE -> "두 페이지"
-            }
+            val modeText = getString(when (mode) {
+                DisplayMode.AUTO -> R.string.settings_display_mode_auto
+                DisplayMode.SINGLE -> R.string.settings_display_mode_single
+                DisplayMode.DOUBLE -> R.string.settings_display_mode_double
+            })
             displayText.append("• $fileName: $modeText\n")
         }
         
         AlertDialog.Builder(this)
-            .setTitle("저장된 표시 모드 설정")
+            .setTitle(getString(R.string.settings_display_modes_title))
             .setMessage(displayText.toString().trimEnd())
-            .setPositiveButton("확인", null)
+            .setPositiveButton(getString(R.string.ok), null)
             .show()
     }
     
@@ -1702,37 +1692,41 @@ class SettingsActivity : AppCompatActivity() {
     private fun getAnimationSpeedText(): String {
         val duration = preferences.getLong("page_animation_duration", 350L)
         return when (duration) {
-            0L -> "즉시"
-            200L -> "빠르게"
-            350L -> "보통"
-            500L -> "느리게"
-            800L -> "매우 느리게"
+            0L -> getString(R.string.settings_speed_instant)
+            200L -> getString(R.string.settings_speed_fast)
+            350L -> getString(R.string.settings_speed_normal)
+            500L -> getString(R.string.settings_speed_slow)
+            800L -> getString(R.string.settings_speed_very_slow)
             else -> "${duration}ms"
         }
     }
     
     private fun showAnimationSpeedDialog() {
         val currentDuration = preferences.getLong("page_animation_duration", 350L)
-        val speeds = arrayOf("즉시 (0ms)", "빠르게 (200ms)", "보통 (350ms)", "느리게 (500ms)", "매우 느리게 (800ms)")
         val durations = longArrayOf(0L, 200L, 350L, 500L, 800L)
+        val speedNames = intArrayOf(
+            R.string.settings_speed_instant, R.string.settings_speed_fast, R.string.settings_speed_normal,
+            R.string.settings_speed_slow, R.string.settings_speed_very_slow,
+        )
+        val speeds = Array(durations.size) { getString(R.string.settings_speed_with_ms, getString(speedNames[it]), durations[it]) }
         
         var selectedIndex = durations.indexOf(currentDuration)
         if (selectedIndex == -1) selectedIndex = 2 // 기본값 "보통"
         
         AlertDialog.Builder(this)
-            .setTitle("페이지 넘기기 애니메이션 속도")
+            .setTitle(getString(R.string.settings_speed_title))
             .setSingleChoiceItems(speeds, selectedIndex) { dialog, which ->
                 val newDuration = durations[which]
                 preferences.edit().putLong("page_animation_duration", newDuration).apply()
                 
-                val message = "애니메이션 속도가 변경되었습니다: ${speeds[which]}"
+                val message = getString(R.string.settings_speed_saved, speeds[which])
                 Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
                 
                 dialog.dismiss()
                 hideDetailPanel()
                 setupMainMenu()
             }
-            .setNegativeButton("취소", null)
+            .setNegativeButton(getString(R.string.cancel), null)
             .show()
     }
     
@@ -1791,16 +1785,16 @@ class SettingsActivity : AppCompatActivity() {
         val ipAddress = NetworkUtils.getLocalIpAddress()
         
         AlertDialog.Builder(this)
-            .setTitle("웹서버 실행 중")
-            .setMessage("웹서버가 실행 중입니다 ($ipAddress:$port)\n\n설정을 나가면 웹서버가 중지됩니다.\n계속하시겠습니까?")
-            .setPositiveButton("나가기") { _, _ ->
+            .setTitle(getString(R.string.settings_web_running_title))
+            .setMessage(getString(R.string.settings_web_exit_settings_message, ipAddress, port))
+            .setPositiveButton(getString(R.string.settings_web_leave)) { _, _ ->
                 // Stop web server and exit
                 Log.d("SettingsActivity", "User confirmed exit, stopping web server")
                 webServerManager.stopServer()
                 isWebServerRunning = false
                 finish()
             }
-            .setNegativeButton("머물기", null)
+            .setNegativeButton(getString(R.string.settings_web_stay), null)
             .setCancelable(true)
             .show()
     }
@@ -1824,7 +1818,7 @@ class SettingsActivity : AppCompatActivity() {
         val currentTime = preferences.getLong("input_block_duration", 500L)
         val editText = EditText(this).apply {
             setText(currentTime.toString())
-            hint = "밀리초 (100-2000)"
+            hint = getString(R.string.settings_input_block_hint)
             inputType = android.text.InputType.TYPE_CLASS_NUMBER
         }
         
@@ -1837,14 +1831,14 @@ class SettingsActivity : AppCompatActivity() {
                     val newTime = editText.text.toString().toLongOrNull()
                     if (newTime != null && newTime in 100..2000) {
                         preferences.edit().putLong("input_block_duration", newTime).apply()
-                        Toast.makeText(this, "입력 차단 시간이 ${newTime}ms로 변경되었습니다", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(this, getString(R.string.settings_input_block_saved, newTime), Toast.LENGTH_SHORT).show()
                         hideDetailPanel()
                         setupMainMenu()
                     } else {
-                        Toast.makeText(this, "100-2000 사이의 값을 입력하세요", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(this, getString(R.string.settings_input_block_range), Toast.LENGTH_SHORT).show()
                     }
                 } catch (e: Exception) {
-                    Toast.makeText(this, "올바른 숫자를 입력하세요", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this, getString(R.string.settings_invalid_number), Toast.LENGTH_SHORT).show()
                 }
                 dialog.dismiss()
             }
@@ -1860,14 +1854,14 @@ class SettingsActivity : AppCompatActivity() {
     private fun toggleEnsembleSound() {
         val enabled = !preferences.getBoolean(PdfViewerActivity.PREF_ENSEMBLE_SOUND, false)
         preferences.edit().putBoolean(PdfViewerActivity.PREF_ENSEMBLE_SOUND, enabled).apply()
-        Toast.makeText(this, if (enabled) "연주자 기기도 메트로놈 소리를 냅니다" else "연주자 기기는 메트로놈 소리를 내지 않습니다", Toast.LENGTH_SHORT).show()
+        Toast.makeText(this, getString(if (enabled) R.string.settings_ensemble_sound_on_toast else R.string.settings_ensemble_sound_off_toast), Toast.LENGTH_SHORT).show()
         showCollaborationPanel()
     }
 
     private fun toggleSyncPageTurn() {
         val newEnabled = !preferences.getBoolean("sync_page_turn_enabled", false)
         preferences.edit().putBoolean("sync_page_turn_enabled", newEnabled).apply()
-        val msg = if (newEnabled) "동기 페이지 넘김 ON (예약 후 동시 넘김)" else "동기 페이지 넘김 OFF (즉시 넘김)"
+        val msg = getString(if (newEnabled) R.string.settings_sync_turn_on_toast else R.string.settings_sync_turn_off_toast)
         Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
         showCollaborationPanel()  // 패널 새로고침
     }
@@ -1880,22 +1874,22 @@ class SettingsActivity : AppCompatActivity() {
         val currentMs = preferences.getLong("sync_turn_lead_ms", 2000L)
         val editText = EditText(this).apply {
             setText(currentMs.toString())
-            hint = "밀리초 (500-5000)"
+            hint = getString(R.string.settings_sync_lead_hint)
             inputType = android.text.InputType.TYPE_CLASS_NUMBER
         }
 
         AlertDialog.Builder(this)
-            .setTitle("예약 시간 설정")
-            .setMessage("지휘자가 페이지 넘김을 누른 뒤 실제로 넘어가기까지의 시간(ms)입니다.\n모든 기기가 이 시각에 동시에 넘깁니다. (권장 1000~2500)")
+            .setTitle(getString(R.string.settings_sync_lead_title))
+            .setMessage(getString(R.string.settings_sync_lead_message))
             .setView(editText)
             .setPositiveButton(getString(R.string.ok)) { dialog, _ ->
                 val v = editText.text.toString().toLongOrNull()
                 if (v != null && v in 500..5000) {
                     preferences.edit().putLong("sync_turn_lead_ms", v).apply()
-                    Toast.makeText(this, "예약 시간이 ${v}ms로 변경되었습니다", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this, getString(R.string.settings_sync_lead_saved, v), Toast.LENGTH_SHORT).show()
                     showCollaborationPanel()
                 } else {
-                    Toast.makeText(this, "500-5000 사이의 값을 입력하세요", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this, getString(R.string.settings_sync_lead_range), Toast.LENGTH_SHORT).show()
                 }
                 dialog.dismiss()
             }
@@ -1908,9 +1902,8 @@ class SettingsActivity : AppCompatActivity() {
      */
     private fun showMessageQueueDisabledDialog() {
         AlertDialog.Builder(this)
-            .setTitle("메시지 큐 시스템")
-            .setMessage("메시지 큐 시스템은 성능 최적화를 위해 비활성화되었습니다.\n\n" +
-                        "협업 메시지는 이제 직접 처리되어 더 빠른 반응 속도를 제공합니다.")
+            .setTitle(getString(R.string.settings_message_queue_title))
+            .setMessage(getString(R.string.settings_message_queue_message))
             .setPositiveButton(getString(R.string.ok), null)
             .show()
     }
@@ -1962,7 +1955,7 @@ class SettingsActivity : AppCompatActivity() {
      */
     private fun updateWebServerPanel() {
         // 두 칸은 상세 칸이 늘 보이므로 웹서버 칸일 때만
-        if (binding.detailPanelLayout.visibility == android.view.View.VISIBLE && binding.detailTitle.text == "웹서버") {
+        if (binding.detailPanelLayout.visibility == android.view.View.VISIBLE && detailCategory == "web_server") {
             // 웹서버 패널이 열려있으면 새로고침
             showWebServerPanel()
         }
@@ -1976,9 +1969,9 @@ class SettingsActivity : AppCompatActivity() {
         val ipAddress = NetworkUtils.getLocalIpAddress()
         
         AlertDialog.Builder(this)
-            .setTitle("웹서버 실행 중")
-            .setMessage("웹서버가 실행 중입니다 ($ipAddress:$port)\n\n웹서버 설정을 나가면 웹서버가 중지됩니다.\n계속하시겠습니까?")
-            .setPositiveButton("나가기") { _, _ ->
+            .setTitle(getString(R.string.settings_web_running_title))
+            .setMessage(getString(R.string.settings_web_exit_panel_message, ipAddress, port))
+            .setPositiveButton(getString(R.string.settings_web_leave)) { _, _ ->
                 // Stop web server and exit detail panel
                 Log.d("SettingsActivity", "User confirmed exit from web server panel, stopping web server")
                 webServerManager.clearLogCallback()
@@ -1996,7 +1989,7 @@ class SettingsActivity : AppCompatActivity() {
                 // Execute callback if provided
                 onConfirm?.invoke()
             }
-            .setNegativeButton("머물기", null)
+            .setNegativeButton(getString(R.string.settings_web_stay), null)
             .setCancelable(true)
             .show()
     }
