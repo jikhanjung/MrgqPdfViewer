@@ -38,7 +38,7 @@
     <string name="viewer_menu_full_score">Full score</string>
     <string name="viewer_menu_measure_boxes">Measure boxes</string>
     <string name="viewer_menu_show_notes">Show annotations</string>
-    <string name="viewer_menu_note_mode_start">✏️ Annotate</string>
+    <string name="viewer_menu_note_mode_start">✏️ Mark</string>
     <string name="viewer_menu_note_mode_end">✏️ Done annotating</string>
     <string name="viewer_menu_two_page">Two-page view</string>
     <string name="viewer_menu_two_page_double">Two pages</string>

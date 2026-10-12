@@ -57,7 +57,7 @@ For security and convenience, the app does not browse folders on the device. Ins
 ### 4.3. View menu · Play menu
 *   **Press and hold OK on the remote (about 0.8 seconds)** (on tablets and phones, press and hold the screen) to open the **View menu (보기)**.
     *   **Part view (파트 보기):** shows only the parts you choose, cut out of the score.
-    *   **Measure boxes (마디 박스) · Show annotations (메모 보이기):** turn these overlays on the score on or off. On tablets and phones, **✏️ Annotate (메모 쓰기)** is here too.
+    *   **Measure boxes (마디 박스) · Show annotations (메모 보이기):** turn these overlays on the score on or off. On tablets and phones, **✏️ Mark (메모 쓰기)** is here too.
     *   **Two-page view (두 쪽 보기):** (TV, landscape) show two pages side by side on one screen, or a single page larger.
     *   **Top/bottom crop (위/아래 자르기):** trim unneeded margins at the top and bottom of the score so it displays larger. In two-page view, the **center gap (가운데 여백)** — the space between the two pages — is adjusted here as well.
     *   **Rotation (회전):** (phone) Device rotation (기기 회전) · Landscape (가로) · Portrait (세로).

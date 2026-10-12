@@ -39,7 +39,7 @@
 | 도구 막대 | toolbar | |
 | 연주 메뉴 · 보기 메뉴 | Play menu · View menu | |
 | 메모 · 지휘자 메모 | annotations · conductor annotations | |
-| 메모 모드 | annotate mode | |
+| 메모 모드 | annotate mode | 단추 · 메뉴 이름은 "✏️ Mark"(짧고 연주자에게 익은 말, "Note" 는 음표와 헷갈림) |
 | 회전 모드 | rotation | |
 | 표시 모드 | display mode | |
 

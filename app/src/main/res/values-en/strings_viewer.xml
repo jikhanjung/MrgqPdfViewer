@@ -62,7 +62,7 @@
     <string name="viewer_bar_listen_from">🎤 Listen from measure %1$d</string>
     <string name="viewer_bar_play">▶ Play</string>
     <string name="viewer_bar_view">👁 View</string>
-    <string name="viewer_bar_notes">✏️ Annotate</string>
+    <string name="viewer_bar_notes">✏️ Mark</string>
     <string name="viewer_nav_next_file">Next file</string>
     <string name="viewer_nav_previous_file">Previous file</string>
     <string name="viewer_ensemble_device_connected">%1$s connected</string>
