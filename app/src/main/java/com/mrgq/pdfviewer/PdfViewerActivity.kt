@@ -221,6 +221,11 @@ class PdfViewerActivity : AppCompatActivity() {
     // Rendering state management
     private var isRenderingInProgress = false
     private var lastRenderTime = 0L
+    /**
+     * showPage 요청 번호 — 늦게 끝난 렌더가 더 새 화면을 덮지 않게 (#130). 휴대폰을 빨리 돌리면 돌기 전 폭으로 시작한 렌더가
+     * 돈 뒤에 끝나 그 비트맵이 새 방향 화면에 얹혔다(가로 = 쪽 왼쪽 위만, 세로 = 쪽 왼쪽 아래 조각만)
+     */
+    private var showSeq = 0
     
     // Database repository
     private lateinit var musicRepository: MusicRepository
@@ -371,6 +376,13 @@ class PdfViewerActivity : AppCompatActivity() {
         volumeControlStream = android.media.AudioManager.STREAM_MUSIC
         binding = ActivityPdfViewerBinding.inflate(layoutInflater)
         setContentView(binding.root)
+        // 악보 뷰의 크기가 바뀌면(회전 · 창 크기) 지금 비트맵의 행렬을 새 크기로 — 회전 직후 post 가 레이아웃보다 먼저 돌면
+        // 옛 크기로 행렬을 잡아 쪽 일부만 보였다 (#130)
+        binding.pdfView.addOnLayoutChangeListener { _, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom ->
+            if (right - left == oldRight - oldLeft && bottom - top == oldBottom - oldTop) return@addOnLayoutChangeListener
+            val bitmap = (binding.pdfView.drawable as? android.graphics.drawable.BitmapDrawable)?.bitmap
+            if (bitmap != null && !bitmap.isRecycled && !isAnimating) setImageViewMatrix(bitmap)
+        }
         // 세로 화면(태블릿): 한 쪽이 폭에 맞고 위아래가 빈다 — 박 표시를 가운데 위로 옮겨 악보 왼쪽 위를 가리지 않게
         if (isPortraitScreen()) {
             (binding.metronomeBeat.layoutParams as androidx.constraintlayout.widget.ConstraintLayout.LayoutParams).endToEnd =
@@ -854,6 +866,7 @@ class PdfViewerActivity : AppCompatActivity() {
         
         Log.d("PdfViewerActivity", "showPage called: index=$index, isTwoPageMode=$isTwoPageMode, pageCount=$pageCount")
         lastRenderTime = currentTime
+        val seq = ++showSeq
         if (phoneView) {
             // 같은 쪽을 다시 그리면(설정 변경 등) 보던 조각 그대로, 다른 쪽이면 첫 조각부터
             chunkIndex = pendingChunk ?: if (index == pageIndex) chunkIndex else 0
@@ -896,6 +909,7 @@ class PdfViewerActivity : AppCompatActivity() {
             pageIndex = index
             updatePageInfo()
             binding.loadingProgress.visibility = View.GONE
+            isRenderingInProgress = false // 앞서 시작한 렌더가 있어도 이것이 최신 — 그 결과는 버려진다(showSeq)
             
             // Save last page number to database
             saveLastPageNumber(index + 1)
@@ -926,6 +940,11 @@ class PdfViewerActivity : AppCompatActivity() {
             val renderResult = renderWithRetry(index, maxRetries = 2)
             
             withContext(Dispatchers.Main) {
+                // 그새 더 새 요청이 있었다(다른 쪽 · 휴대폰 회전) — 이 결과는 낡았다. 표시 · 진행 표시는 새 요청 몫
+                if (seq != showSeq) {
+                    Log.d("PdfViewerActivity", "⏭️ 낡은 렌더 버림: 쪽 $index (요청 $seq, 최신 $showSeq)")
+                    return@withContext
+                }
                 binding.loadingProgress.visibility = View.GONE
                 isRenderingInProgress = false
                 
@@ -6101,6 +6120,11 @@ class PdfViewerActivity : AppCompatActivity() {
         Log.i("PdfViewerActivity", "📱 휴대폰 회전: 렌더 폭 $screenWidth → $width")
         screenWidth = width
         screenHeight = width * 3
+        // 돌기 전 폭으로 그리던 렌더는 버리고(showSeq), 다시 그리기가 "빠른 넘김"으로 건너뛰어지지 않게 (#130)
+        showSeq++
+        isRenderingInProgress = false
+        lastRenderTime = 0L
+        phoneDrag = null
         val renderer = pdfRenderer ?: return
         if (pageCount == 0) return
         pageCache?.destroy()
