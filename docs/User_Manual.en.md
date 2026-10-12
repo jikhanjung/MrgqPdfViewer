@@ -1,137 +1,438 @@
 한국어: [User_Manual.md](User_Manual.md)
 
-# MrgqPdfViewer User Manual
+# MRGQ PDF Viewer User Manual
 
-> This is the English edition of the Korean user manual. The app's English screens are still being translated, so
-> the first time a menu or button is named, its Korean screen name follows in parentheses — e.g. "Play menu (연주)" —
-> so you can find it on a Korean screen too.
-
-## 🎵 1. About MrgqPdfViewer
-
-**MrgqPdfViewer** is a PDF score viewer built for Android TV. Beyond simply showing PDFs, its core feature is a powerful **ensemble mode (합주 모드)** that lets several people keep their scores in sync in real time.
-
-This manual is here to help you get the most out of every feature of the app.
+> **As of v0.8** (October 2026). Names are written exactly as they appear in the app's English screens.
 
 ---
 
-## 🖥️ 2. Getting started: adding PDF files
+## 1. Introduction
 
-For security and convenience, the app does not browse folders on the device. Instead, you add files through its built-in web server.
+**MRGQ PDF Viewer** shows PDF scores on a TV, tablet or phone. Besides turning pages it has a metronome, accompaniment, listening to your playing to turn pages, annotations, voice commands, and an ensemble mode where several devices follow one another.
 
-**Step 1: Turn on the web server**
-1.  From the app's main screen, press the **⚙️ (Settings)** button at the top right.
-2.  Choose the **Web server (웹서버)** menu.
-3.  Choose **Turn on web server (웹서버 켜기)** to start the server.
-4.  Note the **IP address and port** shown on screen (e.g. `http://192.168.1.10:8080`).
+### 1.1 Devices
 
-**Step 2: Upload files**
-1.  On a computer or smartphone **connected to the same Wi-Fi network** as the TV, open a web browser.
-2.  Type the IP address you noted above (e.g. `http://192.168.1.10:8080`) into the address bar.
-3.  When the page opens, press the "Choose file" button, pick the PDF scores to upload, and upload them.
-4.  As soon as the upload finishes, the files appear on the app's main screen.
+| Device | How you use it |
+|---|---|
+| **TV** (Android TV · Google TV) | Remote control. A large screen on the music stand, two pages side by side in landscape |
+| **Tablet** | Touch · stylus · page-turn pedal. One page at a time in portrait |
+| **Phone** | Touch. The score fits the screen width and moves line (system) by line |
 
----
+It is the same app on every device; it adapts to each one. Where the controls differ, this manual shows them in a small table.
 
-## 📄 3. Main screen and basic controls
+### 1.2 Three ways to use it
 
-### 3.1. File list
-*   The main screen lists every uploaded PDF file.
-*   Each entry shows the file name, total page count, file size, and other details.
-*   Use the remote's **arrow keys (D-pad)** to move through the files.
-
-### 3.2. Opening a file
-*   Select a file and press **OK** on the remote to open that score in the viewer.
+- **On your own** — put PDFs on the device and read them (→ 3.2 Uploading through the web server).
+- **With ScoreMate** — the device downloads the scores and setlists you keep on the ScoreMate website (→ 3.1).
+- **Ensemble** — one device (the conductor) chooses the piece, page and metronome; the other devices (performers) follow (→ chapter 9).
 
 ---
 
-## 🎼 4. The PDF viewer: reading a score
+## 2. Installing · updates · language
 
-### 4.1. Turning pages
-*   **Right arrow key**: go to the next page.
-*   **Left arrow key**: go to the previous page.
+### 2.1 Installing
 
-### 4.2. Moving between files
-*   On the **last page**, pressing the right arrow key shows a prompt asking whether to go to the next file.
-*   On the **first page**, pressing the left arrow key shows a prompt asking whether to go to the previous file.
+Open the APK file you received to install it. The first time, Android asks whether to allow installing "unknown apps" — allow it.
 
-### 4.3. View menu · Play menu
-*   **Press and hold OK on the remote (about 0.8 seconds)** (on tablets and phones, press and hold the screen) to open the **View menu (보기)**.
-    *   **Part view (파트 보기):** shows only the parts you choose, cut out of the score.
-    *   **Measure boxes (마디 박스) · Show annotations (메모 보이기):** turn these overlays on the score on or off. On tablets and phones, **✏️ Mark (메모 쓰기)** is here too.
-    *   **Two-page view (두 쪽 보기):** (TV, landscape) show two pages side by side on one screen, or a single page larger.
-    *   **Top/bottom crop (위/아래 자르기):** trim unneeded margins at the top and bottom of the score so it displays larger. In two-page view, the **center gap (가운데 여백)** — the space between the two pages — is adjusted here as well.
-    *   **Rotation (회전):** (phone) Device rotation (기기 회전) · Landscape (가로) · Portrait (세로).
-*   Press the **up arrow key** (on tablets and phones, tap the middle of the screen and choose **▶ Play (▶ 연주)** on the bottom bar) to open the **Play menu (연주)** — Start · Stop, Metronome settings (메트로놈 설정), Accompaniment (반주), and (tablets and phones) 🎤 Listen & turn pages (연주 듣고 넘기기).
-*   For the full list of menu items, see [`Viewer_Menus.md`](Viewer_Menus.md) (Korean).
+### 2.2 Updates
 
-> **Voice commands — Korean only for now.** On tablets and phones, voice commands work **only in Korean**; English voice
-> commands are in preparation. Say the Korean phrase as written, for example:
-> *   "57마디부터" — start from measure 57
-> *   "템포 72" — set the tempo to 72
-> *   "멈춰" — stop
->
-> The full list is in [`Voice_Commands.md`](Voice_Commands.md) (Korean).
+The app checks for new versions by itself. While the score list or Settings is on screen it checks **every 10 minutes**, and only tells you when there is a new version.
 
-### 4.4. Page info
-*   The current file name and page number are shown faintly at the bottom of the screen.
-*   You can hide this completely with the **Settings > System > Show page info (설정 > 시스템 > 페이지 정보 표시)** option.
+- **Download and install** downloads and installs it. **Later** won't ask about that version again until the app restarts.
+- To check right away: **Settings → About → Check for updates**.
+- Turn off **Auto check** to stop automatic checks.
+- Turn on **Get betas** to also receive pre-releases (beta). You get new features earlier, but they are less tested.
+- No update notice appears during an ensemble or while another dialog is open.
+
+> If "Install permission needed" appears on the first update, press **Open settings**, allow installs for this app, and come back. The install continues.
+
+### 2.3 Language
+
+In **Settings → 🔤 Language (언어)**, choose **System default · 한국어 · English**. The screen changes immediately and the choice is remembered.
+
+- The section name is written in both languages ("Language (언어)"). If the app ever switches to a language you can't read, look for 🔤.
+- Voice commands have their own language setting (→ 8.3).
 
 ---
 
-## 🎻 5. Ensemble mode
+## 3. Adding scores
 
-Ensemble mode consists of one **conductor (지휘자)** and several **performers (연주자)**. When the conductor opens a file or turns a page, every performer's screen follows in real time.
+### 3.1 Linking to ScoreMate
 
-### 5.1. Becoming the conductor
-1.  Go to **Settings > Ensemble mode (설정 > 합주 모드)**.
-2.  Choose **Enable conductor mode (지휘자 모드 활성화)**.
-3.  Your device is now the conductor. Go back to the main screen and open a score; other performers can now connect.
+ScoreMate is a website for managing scores and setlists. A linked device downloads its scores from there.
 
-### 5.2. Becoming a performer
-1.  Go to **Settings > Ensemble mode (설정 > 합주 모드)**.
-2.  Choose **Enable performer mode (연주자 모드 활성화)**.
-3.  Choose **Find conductor (지휘자 찾기)** to search automatically for conductor devices on the same network.
-4.  Select the conductor that was found to connect.
-5.  Once connected, your screen follows along automatically whenever the conductor opens a file or turns a page.
+**Linking**
+1. **Settings → ☁️ ScoreMate → Link this TV** (on a tablet or phone: "Link this tablet" · "Link this phone").
+2. A QR code and a link code appear.
+3. Scan the QR code with your phone, or go to the address shown.
+4. Sign in, check the code and tap **Link**.
+5. When the device shows "Linked", you're done. The code is valid only for a few minutes — after that, press **New code**.
 
-### 5.3. What is synced
-*   **Opening/closing files:** when the conductor opens a file or goes back to the list, every performer follows.
-*   **Page turns:** when the conductor turns a page, every performer's page turns with it.
+**Sync**
+- The app syncs when it starts. To sync right away, press **🔄 Sync** in the score list (on a tablet or phone you can also pull the list down) or **Settings → ☁️ ScoreMate → Sync now**.
+- **Setlists**: when you choose setlists to send to this device on the website, their names appear as a row above the score list. A linked device shows **only the pieces in its setlists**. Removing a piece from a setlist also removes it from the device — that's expected.
+- Deleting a ScoreMate score on the device only hides it. To get it back: **Settings → ☁️ ScoreMate → Restore hidden scores**.
+- If ScoreMate has MusicXML or analysis data for a piece, it is downloaded too. It is used by accompaniment (6.4), listen & turn pages (6.5) and the letter command (chapter 8).
 
----
+**Unlinking**: **Settings → ☁️ ScoreMate → Unlink**. Choose whether to **keep or delete** the downloaded scores. Kept scores become ordinary files on this device.
 
-## ⚙️ 6. Settings in detail
+> A linked device **doesn't use the web server.** While linked, the score list only shows ScoreMate scores, so files uploaded through the web server would not appear.
 
-### 6.1. File management
-*   See how many PDF files are stored and manage them.
+### 3.2 Uploading through the web server (unlinked devices)
 
-### 6.2. Web server
-*   Turn the built-in web server for uploading PDF files on or off.
+Upload PDFs from a browser on a computer or phone on the same Wi-Fi.
 
-### 6.3. Ensemble mode
-*   Enable the conductor or performer role, or turn ensemble mode off completely.
+1. In **⚙️ Settings → 🌐 Web server**, turn on the **Web server** switch.
+2. The address appears on the right of the row (e.g. `192.168.0.10:8080`).
+3. In a browser on the same Wi-Fi, open that address with `http://` in front.
+4. Choose files and upload. You can upload several at once and see the progress. You can also delete uploaded files from the browser.
+5. When you're done, leave the web server section. **The web server only runs while you are in that section** — it stops by itself when you go to another section or leave Settings.
 
-### 6.4. Animation & sound
-*   **Page turn animation:** turn the smooth slide effect for page turns on or off.
-*   **Page turn sound:** turn the sound effect for page turns on or off.
-*   **Sound volume:** adjust the volume of the sound effect with a slider.
-*   **Animation speed:** set the speed of the animation to "Instant", "Fast", "Normal", "Slow", and so on. (If animations stutter because the TV is underpowered, changing the speed can help.)
-
-### 6.5. System
-*   **Show page info:** turn the file/page info at the bottom of the viewer on or off.
+- The **Web server activity log** in the same section shows requests and uploads.
+- Change the port under **Port** in the same section (default 8080).
+- The browser page follows the browser's language (Korean · English).
 
 ---
 
-## ❓ 7. Troubleshooting (FAQ)
+## 4. Score list
 
-*   **Q: In ensemble mode, the connection becomes unstable when several people connect.**
-    *   A: This has been fixed. Each device is now identified by its IP address, so the connection stays stable even when several devices of the same model connect at once.
+The first screen when the app starts.
 
-*   **Q: The conductor opens a second file, but my screen doesn't change.**
-    *   A: This bug has been fixed. Callbacks are now re-registered following the `MainActivity` lifecycle, so syncing works reliably no matter how many files the conductor opens.
+### 4.1 Header
 
-*   **Q: With animation turned on, page turns don't sync.**
-    *   A: This has also been fixed. The sync signal that was missing from the animation path has been added, and state updates and broadcasts now happen at consistent points, so syncing always works regardless of the animation setting.
+- **× ScoreMate ☁️** next to (or below) the app name — the device is linked to ScoreMate.
+- The ensemble status (e.g. "Ensemble: off").
+- **Ensemble button** at the top right (two people) — start or stop an ensemble (→ chapter 9).
+- **⚙️** at the top right — Settings.
+
+### 4.2 Score cards
+
+| | What you see |
+|---|---|
+| ScoreMate score | First line: title + part. Second line: composer · arranger. On the right: size · pages · date |
+| File on the device | File name, pages · size · date |
+| ✏️ Needs sync | Annotations not yet uploaded to ScoreMate (they go up on the next sync) |
+
+- **Setlist row**: on a linked device, setlist names appear in a row above the list, and the chosen setlist's pieces are shown **in order, numbered**. If no setlist has been received, a hint tells you to choose one for this device on the website and press 🔄 Sync.
+- Unlinked devices have **Sort** (Name · Date) and **Manage files** (delete) buttons.
+
+### 4.3 Opening a score
+
+| TV | Tablet · phone |
+|---|---|
+| Choose with ↑↓ and press OK | Tap the card once |
 
 ---
-We hope this manual helps you get the most out of MrgqPdfViewer.
+
+## 5. Viewing a score
+
+### 5.1 Turning pages
+
+| | TV (remote) | Tablet · phone |
+|---|---|---|
+| Next · previous page | → · ← | Tap the right · left side, or swipe |
+| Page-turn pedal | — | Bluetooth pedal (PageUp/Down · media keys) |
+| Back to the list | Back | Back, or ← on the toolbar |
+
+- Turning past the **last page** shows "Next file"; turn once more to open the next piece. Turning back from the **first page** shows "Previous file". When you are viewing a setlist, the setlist order is used.
+- On a **phone** the page fits the screen width. Drag up or down; when you let go it settles on the nearest line (system). Dragging past the end of the page goes to the next page.
+- Page-turn animation and sound are set in **Settings → 🎵 Animation & sound**.
+
+### 5.2 Toolbar (tablet · phone)
+
+**Tap the middle** of the score once to show the toolbar; tap again to hide it.
+
+- Top: **←** list · title · page
+- Bottom: **▶ Play** (chapter 6) · **👁 View** (5.3) · **✏️ Mark** (chapter 7)
+
+The toolbar folds away when playing starts.
+
+### 5.3 View menu
+
+| TV | Tablet · phone |
+|---|---|
+| **Hold OK** (about 0.8 s) | **👁 View** on the toolbar, or long-press the score |
+
+| Row | What it does | Shown on |
+|---|---|---|
+| **Part view** | Shows only the chosen parts (staves), cut out and joined — see 5.4 | when not the conductor |
+| **Measure boxes** | Draws a numbered box on each measure | all |
+| **Show annotations** | Shows or hides annotations | all |
+| **✏️ Mark** | Annotate mode (chapter 7) | tablet · phone |
+| **Two-page view** | Two pages · One page | TV in landscape |
+| **Top/bottom crop…** | Crops 0–15% of empty space at the top and bottom to make the score bigger. In two-page view it becomes **Crop · gap…** and also sets the center gap. Previews as you move, saved for this file | all |
+| **Rotation** | Device rotation · Landscape · Portrait | phone |
+
+On a tablet or phone this menu slides up from the bottom, and on/off rows are switches. Swipe it down or tap outside to close it.
+
+### 5.4 Part view
+
+Pick your part (staff) from a full score and read it as a part cut out and joined together.
+
+- In **View → Part view**, pick one or more staves and press **Show**. To go back, choose **Full score**.
+- Each line shows the original measure and page numbers; with several parts, a part number appears before each staff.
+- Measure boxes and the score-linked metronome also work in part view.
+- The chosen parts are remembered per file.
+- **Supported scores**: **vector scores** exported to PDF from notation software (Sibelius · MuseScore). Scanned scores (images) have no measures or staves the app can find, so part view and measure boxes don't work on them.
+
+### 5.5 Two-page view (TV)
+
+When you first open a portrait score on a landscape screen, the app asks **Two pages at a time · One page at a time**. With **Remember this choice** on, it won't ask again for that file. Change it later with **View → Two-page view**, or reset everything with **Settings → 🔧 Display → Reset all**.
+
+---
+
+## 6. Playing
+
+### 6.1 Play menu
+
+| TV | Tablet · phone |
+|---|---|
+| **↑** | **▶ Play** on the toolbar |
+
+| Row | What it does |
+|---|---|
+| 🎤 Listen & turn pages | Listens to you play and turns pages (6.5, tablet · phone) |
+| Start — pick a measure on the score | Pick a start measure, then start the metronome (6.3) |
+| Metronome settings… | Time signature · tempo · sound (6.2) |
+| Accompaniment (MusicXML) | Accompaniment on · volume (6.4). Only for pieces with MusicXML |
+
+While the metronome runs you get **Stop**; while paused, **Resume · Pick a measure and restart · Stop**.
+
+### 6.2 Metronome settings
+
+| Row | What it does |
+|---|---|
+| **Time signature** | 2/4 · 3/4 · 4/4 · 6/8. **Details…** for other signatures (numerator · denominator), and for compound meters like 6/8 the **counting unit** (6 eighths · 2 dotted quarters) |
+| **Tempo** | BPM. **Details…** for fine control |
+| **Volume** | Click volume. In **Details…**, turning the click sound off leaves only the beat display |
+| **Count-in** | **1 bar · 2 bars** — counted before starting from a measure picked on the score |
+
+- Time signature and tempo are saved **per file**; sound and count-in are **shared by all files**.
+- If the time signature can be read from the score, it is filled in at first.
+- The beat is shown at the top left of the screen.
+- **Tempo sections**: when the time signature changes during a piece, each change starts a **section**, listed in the dialog. For each section, choose how to carry the tempo over from the previous one (**Same note length · Same beat length · Set manually**) and the counting unit.
+
+### 6.3 Score-linked metronome (picking a start measure)
+
+If the app can read the time signature and measures of a piece, the metronome follows the score, **highlights the current measure in yellow**, and turns the page 2 beats before the end.
+
+1. **Play → Start — pick a measure on the score**.
+2. Pick the start measure.
+
+| TV | Tablet · phone |
+|---|---|
+| ←→ measure, ↑↓ line, **OK** start, Back cancel | Tap a measure, then tap it again or press **▶ Start from measure N** on the bottom bar |
+
+3. After the count-in (1 or 2 bars) playing starts. The remaining count-in bars are shown in the middle of the screen.
+
+**While playing**
+- Opening the Play menu (↑ · ▶ Play) or the View menu **pauses**. Then choose **Resume** (from the measure where you stopped, after the count-in) · **Pick a measure and restart** · **Stop**.
+- Closing the Play menu without choosing anything stops.
+- On a TV, Back stops only the metronome.
+
+Pieces whose time signature can't be read run as an ordinary metronome without following the score.
+
+### 6.4 Accompaniment (MusicXML)
+
+If there is **MusicXML** for the same piece (downloaded from ScoreMate, or a `.musicxml` with the same name next to the PDF), the score-linked metronome **plays the other parts with a simple sound**.
+
+- In **Play → Accompaniment (MusicXML)**: **Accompaniment on**, and the accompaniment volume (separate from the metronome click).
+- If you pick your own part in **Part view**, your part is left out.
+- **Follow expression marks**: dynamics (pp–ff) · crescendo · diminuendo · staccato · accents shape the accompaniment. When off, it plays at the chosen volume.
+- Only used when the MusicXML's measure count and time signatures match the score; otherwise the app tells you why.
+- Accompaniment is off during an ensemble.
+
+### 6.5 🎤 Listen & turn pages (tablet · phone)
+
+The device listens through its microphone, follows where you are in the score, and turns pages.
+
+- **You need**: MusicXML for the piece, the full score (turn part view off), and microphone permission.
+- **Play → 🎤 Listen & turn pages — from this page**. While picking a measure, use **🎤 Listen from measure N** on the bottom bar.
+- "Start playing" appears. It starts following when it hears **music that matches the beginning of the score**, not just any first sound.
+- The current measure and line are shown. When you reach the bottom half, only the top half changes to the next page (**half-page turn**; not on phones).
+- If it loses its place, **long-press the measure you are playing** — it re-anchors there. Turning a page by hand also re-anchors.
+- The reference tempo is the metronome tempo. To stop: **Play → 🎤 Stop listening**.
+- What it hears is saved as a recording (**Settings → 🎤 Recordings**, chapter 10).
+- Not available on a performer's device in an ensemble — the conductor's device listens and turns.
+
+---
+
+## 7. Annotations (tablet · phone)
+
+Write on the score with a finger or stylus. Annotations travel with the score file (a companion file with the same name), and on a linked device your annotations sync with ScoreMate.
+
+### 7.1 Writing
+
+- A **stylus** writes on the score at any time.
+- To write with a **finger**, turn on annotate mode with **✏️ Mark** (toolbar) or **View → ✏️ Mark**. In annotate mode, use two fingers to zoom and move.
+
+The annotate toolbar:
+
+| Button | What it does |
+|---|---|
+| ✏️ | Pen |
+| 🧽 | Eraser — erases annotations you drag over |
+| 🅰 | Text — tap the score and type (e.g. rit. · breath · 4 · bow change). Tap existing text to edit or delete it |
+| ✋ | Move — drag an annotation to move it |
+| ● | Color |
+| Width | Pen width (text size with the text tool) |
+| 👤 Mine / 🎼 Conductor | Which annotations to write (only when you can write conductor annotations) |
+| ↶ ↷ | Undo · redo |
+| **OK** / **Done** | Group the strokes into one annotation / leave annotate mode |
+
+- After drawing several strokes, press **OK** to group them into one annotation. It attaches to the nearest staff.
+- Annotations can't be written in part view yet — use the full score.
+- To hide annotations, turn off **View → Show annotations**.
+
+### 7.2 Conductor annotations
+
+The owner and leaders of a ScoreMate ensemble can write **conductor annotations**, which everyone in the ensemble sees. In annotate mode, press **👤 Mine ↔ 🎼 Conductor** to switch. Selecting a conductor annotation briefly shows who wrote it.
+
+### 7.3 Sync
+
+- A linked device exchanges your annotations and conductor annotations with ScoreMate when it syncs, merging annotations from several devices.
+- The score list checks for annotation changes about every 10 minutes, and syncs when you return from a score.
+- Annotations not yet uploaded show **✏️ Needs sync** on the score card.
+- When a new edition of a score arrives from ScoreMate, the app warns that "annotations may be out of place".
+
+---
+
+## 8. 🎙 Voice commands (tablet · phone)
+
+Change measures, pages, the metronome and parts by speaking.
+
+### 8.1 Turning it on
+
+1. Turn on **Settings → 🎙 Voice commands → Voice commands**.
+2. A **🎙** button appears at the bottom right of the score. Allow microphone access the first time you press it.
+
+It uses the device's speech recognition (usually Google, needs internet). If you see "Not installed", → 11.1.
+
+### 8.2 Speaking
+
+- **Hold 🎙 while you speak**, then let go. It keeps listening for a moment after you let go.
+- A short tap on 🎙 just stops playback, without speaking.
+- If you say nothing, the app shows "**Say "help" to see what you can say**".
+- Say **"help"** or **"how to use"** to see common commands and examples (close with OK).
+
+### 8.3 Voice language
+
+**Settings → 🎙 Voice commands → Voice language** — Same as app language · Korean · English. You can speak English with Korean screens, or the other way round. Staves named after people are recognized in Korean only.
+
+### 8.4 Common commands
+
+| Say | What it does |
+|---|---|
+| measure 57 | Selects measure 57 (doesn't start yet) |
+| from measure 57 | Starts at measure 57 right away |
+| start · from the top · again · resume | From the selected measure · the first measure · the last start · where you stopped |
+| stop | Stops |
+| letter B | The measure with rehearsal mark B (with MusicXML) |
+| next page · previous page · page 5 · last page | Turns pages |
+| tempo 72 · count-in one bar · metronome | Metronome |
+| cello part · violin 2 part · staff 2 · full score | Part view |
+| listen · listen from measure 57 · resume listening | 🎤 Listen & turn pages |
+
+Several at once work too: "tempo 80 from measure 57", "cello part letter C", "count-in one bar from the top".
+All commands: [Voice command list](Voice_Commands.md).
+
+- Phrases that rule something out ("not measure 57"), or conversation mentioning instruments or names ("the cello is a bit loud here"), are not run.
+- On a performer's device in an ensemble, the conductor sets tempo, start and measure, so those commands only show a notice.
+
+---
+
+## 9. Ensemble
+
+Several devices read together. One device is the **conductor**; the others are **performers**. All must be on the same Wi-Fi.
+
+### 9.1 Starting · stopping
+
+1. On the conductor's device: **Ensemble button** at the top right of the score list **→ Start conductor mode**.
+2. On each performer's device: **Ensemble button → Start performer mode**. It finds and connects to the conductor by itself. If it can't, choose **Enter manually** and type the conductor's IP address.
+3. To finish: **Ensemble button → Stop conductor mode** (performers: **Stop performer mode**). When the conductor stops, the performers stop too.
+
+### 9.2 What stays in step
+
+| | |
+|---|---|
+| Piece | Performers open the piece the conductor opens. If a performer doesn't have it, the app asks whether to download it from the conductor |
+| Page | When the conductor turns, performers turn |
+| Metronome | Performers follow the conductor's tempo, time signature, start measure and count-in, on the same beat |
+| 🎤 Listen & turn pages | When the conductor's device listens, performers also see the current line and turn pages |
+
+- **Performer metronome sound**: by default a performer's device makes no sound and only follows the beat display, current measure and page turns. Change it in the performer's **Play menu → Metronome sound**, or **Settings → Ensemble → Performer metronome**.
+- A performer can step out with **Play menu → Leave on this device only** and come back with **Rejoin the conductor**.
+- **The conductor always sees the full score.** Performers can use part view for their own part; pages stay in step with the original.
+- If devices have different ensemble versions, the app says which device to update when they connect.
+
+---
+
+## 10. Settings at a glance
+
+**⚙️** at the top right of the score list. On a TV or wide tablet, sections are on the left and the selected section's rows on the right (on a TV, → enters and ← leaves). On a phone, tap a section to see its rows.
+
+| Section | Rows | What they do |
+|---|---|---|
+| 📂 **Files** | Delete all PDFs | Deletes every PDF on this device (can't be undone) |
+| 🌐 **Web server** | Web server · Port | 3.2. Not available on a device linked to ScoreMate |
+| **Ensemble** | Performer metronome | 9.2 |
+| | Experimental: Synced turns · Turn delay | chapter 12 |
+| | Advanced: Input block · Message queue | e.g. how long a performer can't turn right after the conductor turns — usually leave as is |
+| ☁️ **ScoreMate** | Link: Linked/Not linked · Check link · Unlink · Link this device · Server | 3.1. The server address normally doesn't need changing |
+| | Scores: Sync now · Restore hidden scores | 3.1 |
+| 🎵 **Animation & sound** | Turn animation · Turn sound · Volume · Page info | Page-turn effects, page number on screen |
+| 🎙 **Voice commands** | Voice commands · Voice language | chapter 8 (tablet · phone) |
+| | Always listening (experimental) · Wake word | chapter 12 |
+| 🎤 **Recordings** | List of recordings · Delete all | Recordings from 6.5 — play · share · delete (tablet · phone) |
+| 🔧 **Display** | Rotation | Phone score screen: Device rotation · Landscape · Portrait |
+| | Per-file settings · Reset all | The two-page · one-page choices remembered in 5.5 |
+| 🔤 **Language (언어)** | Language | 2.3 |
+| 📊 **About** | Version · Check for updates · Auto check · Get betas | 2.2 |
+
+---
+
+## 11. Troubleshooting
+
+### 11.1 🎙 Voice commands don't work
+
+- **"Not installed"** or "No speech recognition service": install Google **Speech Recognition & Synthesis**, allow its **microphone** permission in device Settings → Apps → Speech Recognition & Synthesis → Permissions, then turn voice commands on again in this app. Some tablets (especially China-market ROMs) need this app installed separately.
+- **Error 12**: the speech recognition app has no microphone permission. Check the permission above.
+- Recognition usually needs internet.
+
+### 11.2 The web server page won't open
+
+- Make sure the browser device and this device are on **the same Wi-Fi**.
+- Put `http://` in front, and type the address and port exactly as shown on the right of the row.
+- **The web server stops when you leave its section.** Stay in that section while uploading.
+- Devices linked to ScoreMate can't use the web server (3.1).
+
+### 11.3 An update won't install
+
+- "Install permission needed": use **Open settings** to allow "Install unknown apps" for this app. On TVs where that screen won't open, allow it under device Settings → Apps → Security & restrictions → Unknown sources.
+- "The downloaded file is corrupt": try again.
+
+### 11.4 Performers can't find the conductor
+
+- Check that every device is on the same Wi-Fi. Some routers block the signal devices use to find each other — use **Enter manually** with the conductor's IP address.
+- If a version notice appears, update the device it names.
+
+### 11.5 Recordings play with no sound
+
+Media volume is 0. Turn it up with the volume key (up).
+
+### 11.6 Measure boxes or part view don't work
+
+Scanned scores (image PDFs) have no measures or staves the app can find. Use PDFs exported from notation software (Sibelius · MuseScore).
+
+### 11.7 The score looks soft on a 4K screen
+
+Some TV devices draw apps at 1080p and stretch them to 4K. This is a device limit the app can't change.
+
+---
+
+## 12. Experimental features
+
+Still being tested; off by default.
+
+- **Synced turns** (Settings → Ensemble): when the conductor turns, every device turns at the same moment after the **Turn delay**. Turns always lag by that delay, which makes it hard to react to surprises.
+- **Always listening · Wake word** (Settings → 🎙 Voice commands): runs only what you say after the wake word ("Mate"), without pressing a button. Currently turned off.

@@ -120,6 +120,10 @@ jobs:
       - name: i18n gate
         run: python3 tools/i18n_gate.py .
 
+      # P19 — 설명서 한 · 영 제목 구조가 같은지
+      - name: Manual structure check
+        run: python3 tools/manual_check.py .
+
       - name: Android Lint
         run: ./gradlew lintDebug
 

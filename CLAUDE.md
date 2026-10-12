@@ -15,7 +15,7 @@ Android TV OS용 PDF 악보 리더 앱으로, 무선 파일 업로드와 리모�
 
 **현재 버전**: v0.8.0 (2026-10-12)  
 **빌드 상태**: 🟢 빌드 가능 (GitHub Actions CI 로 커밋마다 검증)  
-**CI 게이트**: 🟢 단위 테스트 506개 + **화면 글 게이트**(`tools/i18n_gate.py` — 코드 · 레이아웃의 한글 리터럴 · values-en 빠짐, P18) + Android Lint(`MissingTranslation` 오류) + 에뮬레이터 계측 60개·release APK 스모크(API 30/34 — ⚠️ 문서 정보 검사는 모든 매트릭스에서 건너뜀, #047 §5). 계측은 main 푸시와 수동 실행에서만 (회당 5~6분)  
+**CI 게이트**: 🟢 단위 테스트 506개 + **화면 글 게이트**(`tools/i18n_gate.py` — 코드 · 레이아웃의 한글 리터럴 · values-en 빠짐, P18) + 설명서 한 · 영 구조(`tools/manual_check.py`, P19) + Android Lint(`MissingTranslation` 오류) + 에뮬레이터 계측 60개·release APK 스모크(API 30/34 — ⚠️ 문서 정보 검사는 모든 매트릭스에서 건너뜀, #047 §5). 계측은 main 푸시와 수동 실행에서만 (회당 5~6분)  
 **테스트 상태**: 🟢 v0.3.x 기능을 Z18TV Pro 에서 확인(2026-09-28): 파트보(한 · 여러 파트, 넓혀 자르기, 번호) · 파트 화면 악보 연동 · MusicXML 반주(K488) · MusicXML · 서버 분석 동기화 · 목록 곡 정보 · 앱 안 업데이트(v0.2.9 → v0.3.3). 🟡 **두 대가 필요한 것만 남음** — 합주 중 파트 보기, 합주 Phase 0 동기 넘김. 렌더 품질 · 키 매핑 등 전반 스모크는 2026-08-15(Google TV Streamer + 4K 모니터)
 **최근 업데이트** (전체는 [`CHANGELOG.md`](CHANGELOG.md), 오늘 작업 요약은 devlog [`065`](devlog/20260928_065_part_view_accompaniment_server_analysis.md)):
 - **v0.8.0** — 🌐 **영어 화면** · 영어 음성 명령 · 🎙 도움말 페이지 · 설정 제목만 · 🔤 언어 칸 · 웹서버는 칸을 떠나면 멈춤 · 첫 화면 아이콘 단추 · 휴대폰 회전 렌더. beta.1 ~ beta.13 묶음
@@ -192,6 +192,7 @@ Android TV OS용 PDF 악보 리더 앱으로, 무선 파일 업로드와 리모�
 
 ## 개발 가이드라인
 - **화면 글은 리소스로**(P18): `res/values/strings_<영역>.xml`(한국어) + `values-en/` 같은 키(영어, 용어집 `docs/Glossary_ko_en.md`). 코드에 한글 문자열을 쓰면 CI(`tools/i18n_gate.py`)가 막는다 — 로그 · 화면에 안 나가는 예외는 됨, 바꾸면 안 되는 글(합주 메시지 · 파일 경로)은 `// i18n-ignore: 이유`. 순수 JVM 코드는 글 대신 키(`menu/Text` · `update/UiText` · `voice/VoiceText`)를 돌려준다
+- **설명서도 같이**(P19): 화면 · 조작 · 설정 이름을 바꾸는 커밋은 [`docs/User_Manual.md`](docs/User_Manual.md) · [`.en.md`](docs/User_Manual.en.md) 의 해당 절도 고친다 — 낱말은 화면 글(리소스)과 똑같이, 한 · 영 제목 구조는 CI(`tools/manual_check.py`)가 맞춰 본다. 사용자용 메뉴 · 설정 표는 설명서에만(`docs/Viewer_Menus.md` 는 개발용)
 - Android SDK 네이티브 컴포넌트 사용
 - 파일 작업용 적절한 에러 처리 구현
 - TV 하드웨어에서 원활한 성능 보장

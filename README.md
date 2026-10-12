@@ -4,6 +4,8 @@
 
 ScoreMate 서버와 연결하면 웹에서 고른 세트리스트의 악보를 받아 곡 순서대로 보고, 서버가 옮겨 둔 MusicXML 로 다른 파트의 반주를 들을 수 있다.
 
+📖 **사용 설명서**: [한국어](docs/User_Manual.md) · [English](docs/User_Manual.en.md)
+
 ## ✨ 주요 기능
 
 ### 📄 악보 보기
