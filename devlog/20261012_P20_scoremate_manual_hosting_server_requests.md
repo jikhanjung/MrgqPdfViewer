@@ -115,5 +115,21 @@ curl -s 'https://scoremate.noematica.kr/manual/?lang=ko&v=v9.9.9' | grep -o 'v0\
 curl -s 'https://scoremate.noematica.kr/manual/voice-commands/' | grep -c 'github.com'                # 0
 ```
 
+## 서버 검토 — 정한 것 (2026-10-12, 서버 세션)
+
+서버 구현은 **ScoreMate 앱 작업이 끝난 뒤**(사용자 결정). 방향은 그대로, 아래로 바뀜:
+
+| | 정한 것 |
+|---|---|
+| 링크 바꾸기 | **볼 때** 한다 — 서버는 Markdown 만 저장, 그릴 때 그 판에 올라온 `filename` 목록으로 바꾼다. 올리는 순서에 기대지 않음 |
+| 엔드포인트 | 정식 `POST /api/v1/app-manuals/` + **`app`**(기본 `mrgqpdfviewer`) — 서버가 앱 릴리스에도 `app` 칸을 더하는 중(새 ScoreMate 앱). `/api/v1/app-manuals/android/` 는 별칭. `/manual/` = MrgqPdfViewer 설명서. **CI 는 정식 경로에 `app=mrgqpdfviewer` 를 명시** |
+| `doc` | 두 값으로 묶지 않고 형식 `[a-z0-9-]{1,40}` 만 — 주소 `/manual/<doc>/` |
+| 언어 대체 | 일반 규칙: 그 `lang` 이 없으면 `ko` |
+| 다시 올리기 | 200 으로 바꾸고 바뀐 기록(언제 · 크기)을 남김 |
+| 보관 | 앱 릴리스와 같은 규칙을 **판 순서만으로**(APK 없이도 받으므로) |
+| 그리기 | markdown-it-py(raw HTML 끔 · `javascript:` 막음, `table` 켬) |
+| 앵커 | GitHub 이 렌더한 HTML(`Accept: application/vnd.github.html` 의 `id="user-content-…"`)에서 뽑은 "제목 → 앵커" 짝을 서버 테스트에 고정 — 예: `2. 설치 · 업데이트 · 언어` → `2-설치--업데이트--언어`, `6.5 🎤 Listen & turn pages (tablet · phone)` → `65--listen--turn-pages-tablet--phone`, `🎙 음성 명령 목록` → `-음성-명령-목록`, `👂 계속 듣기 (시험, v0.7.1-beta.1)` → `-계속-듣기-시험-v071-beta1`. 규칙: 소문자, `·` `&` `.` `()` `,` `'` · 이모지 지움, 공백 하나하나 `-`, 앞뒤 `-` 안 다듬음, 중복은 `-1` |
+
 ## 변경 이력
 - 2026-10-12: 처음 작성 (P19 4단계 — 사용자 "서버 요청 문서 써줘")
+- 2026-10-12: 서버 검토 반영 — 볼 때 링크 바꾸기 · `app` 칸(`/api/v1/app-manuals/`) · `doc` 형식만 · lang 대체 일반 규칙 · 앵커 짝(GitHub 렌더 기준)
