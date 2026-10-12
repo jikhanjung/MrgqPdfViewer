@@ -13,6 +13,9 @@ object ScoreMateProtocol {
 
     const val DEFAULT_SERVER = "https://scoremate.noematica.kr"
 
+    /** 이 앱의 이름 — 서버가 앱을 나눈 뒤(서버 0.24.0) 연결 · heartbeat 에 붙여 웹 "기기 관리"에 앱 이름이 보이게 한다. 빈 칸 = 옛 앱 */
+    const val CLIENT = "mrgqpdfviewer"
+
     const val PATH_DEVICE_CODE = "/api/v1/device/code"
     const val PATH_DEVICE_TOKEN = "/api/v1/device/token"
     const val PATH_REFRESH = "/api/v1/auth/token/refresh/"
@@ -61,6 +64,7 @@ object ScoreMateProtocol {
         addProperty("name", name.take(100))
         addProperty("model", model.take(100))
         addProperty("app_version", appVersion.take(50))
+        addProperty("client", CLIENT)
     }.toString()
 
     fun tokenRequest(deviceCode: String): String = JsonObject().apply {
@@ -73,6 +77,7 @@ object ScoreMateProtocol {
     fun heartbeatRequest(appVersion: String, model: String): String = JsonObject().apply {
         addProperty("app_version", appVersion.take(50))
         addProperty("model", model.take(100))
+        addProperty("client", CLIENT)
     }.toString()
 
     /** 코드 받기 응답. 필수 필드가 없으면 null */

@@ -41,6 +41,15 @@ class ScoreMateClientTest {
     // ── 응답 해석 ───────────────────────────────────────────────────────────
 
     @Test
+    fun 연결_heartbeat_에_앱_이름() {
+        val code = com.google.gson.JsonParser.parseString(ScoreMateProtocol.deviceCodeRequest("거실 TV", "Z18TV Pro", "0.8.2")).asJsonObject
+        assertEquals("mrgqpdfviewer", code.get("client").asString)
+        assertEquals("0.8.2", code.get("app_version").asString)
+        val beat = com.google.gson.JsonParser.parseString(ScoreMateProtocol.heartbeatRequest("0.8.2", "Z18TV Pro")).asJsonObject
+        assertEquals("mrgqpdfviewer", beat.get("client").asString)
+    }
+
+    @Test
     fun 코드_응답() {
         val code = ScoreMateProtocol.parseDeviceCode(
             """{"device_code":"dc","user_code":"BCDF-GHJK","verification_uri":"https://s/activate/",

@@ -205,7 +205,7 @@ jobs:
           APP_RELEASE_TOKEN: ${{ secrets.APP_RELEASE_TOKEN }}
           SIGNED: ${{ needs.build.outputs.signed-with-release-key }}
           TAG: ${{ needs.verify.outputs.tag }}
-          UPLOAD_URL: https://scoremate.noematica.kr/api/v1/app-releases/android/
+          UPLOAD_URL: https://scoremate.noematica.kr/api/v1/app-releases/mrgqpdfviewer/android/  # 앱 이름을 주소에(서버 0.24.0) — 옛 …/app-releases/android/ 와 같은 뜻
         run: |
           set -euo pipefail
           if [ -z "${APP_RELEASE_TOKEN:-}" ]; then
