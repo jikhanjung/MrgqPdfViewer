@@ -88,7 +88,7 @@
     <!-- 🎙 도움말 (VoiceHelp, #128) — "도움말" · "사용법"이라고 말하면 뜨는 안내 페이지. 말할 문장은 음성 언어로, 뜻은 여기 -->
     <string name="voice_help_title">🎙 음성 명령</string>
     <string name="voice_help_intro">🎙 를 누른 채로 말하세요. 아래 문장은 예시 — 수와 이름은 바꿔 말하면 됩니다</string>
-    <string name="voice_help_hint">\"%1$s\"라고 말하면 쓸 수 있는 명령을 보여 줘요</string>
+    <string name="voice_help_hint">\"%1$s\" 이라고 말하면 쓸 수 있는 명령을 보여 줘요</string>
     <string name="voice_help_shown">도움말</string>
     <string name="voice_help_sec_position">마디 · 시작</string>
     <string name="voice_help_sec_page">쪽</string>

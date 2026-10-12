@@ -5260,14 +5260,14 @@ class PdfViewerActivity : AppCompatActivity() {
     private val showPushListening = Runnable { if (voicePushToTalk && binding.voiceButton.isActivated) showVoiceStatus(getString(R.string.viewer_voice_status_listening)) }
     /** 이번 🎙 누름에서 말이 들렸다(중간 결과) — 조용하면 [showVoiceHelpHint] */
     private var voiceHeardSpeech = false
-    /** 누른 채 조용하면: 듣는 중 + "“도움말”이라고 말하면 …" (#128) */
+    /** 누른 채 조용하면: 듣는 중 + "“도움말” 이라고 말하면 …" (#128) */
     private val showVoiceHelpHint = Runnable {
         if (voicePushToTalk && binding.voiceButton.isActivated && !voiceHeardSpeech) {
             showVoiceStatus(getString(R.string.viewer_voice_status_listening) + "\n" + voiceHelpHint())
         }
     }
 
-    /** "“도움말”이라고 말하면 쓸 수 있는 명령을 보여 줘요" — 부를 말은 음성 언어로 */
+    /** "“도움말” 이라고 말하면 쓸 수 있는 명령을 보여 줘요" — 부를 말은 음성 언어로 */
     private fun voiceHelpHint(): String =
         getString(R.string.voice_help_hint, com.mrgq.pdfviewer.voice.VoiceHelp.word(com.mrgq.pdfviewer.voice.VoiceLanguage.current(this)))
 

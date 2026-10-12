@@ -63,7 +63,7 @@ object VoiceHelp {
         )),
     )
 
-    /** 도움말을 부르는 말 — 안내 글에 넣는다("“도움말”이라고 말하면 …") */
+    /** 도움말을 부르는 말 — 안내 글에 넣는다("“도움말” 이라고 말하면 …") */
     fun word(language: VoiceLanguage): String = if (language == VoiceLanguage.ENGLISH) "help" else "도움말"
 
     /** 인식 힌트(Android 13+) */
