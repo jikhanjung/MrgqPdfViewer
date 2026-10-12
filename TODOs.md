@@ -114,6 +114,7 @@
 - [x] P19 4단계 게시 — 서버 [`P20`](devlog/20261012_P20_scoremate_manual_hosting_server_requests.md)(ScoreMateServer 0.23.1) · CI 올리기 단계 · 앱 설정 → 앱 정보 "설명서" 줄(TV 는 QR) → v0.8.1-beta.2 [`#134`](devlog/20261012_134_manual_row_ci_upload.md)
 - [x] 서버 다중 앱(ScoreMateServer 0.24.0, 서버 devlog 083) — 지금 주소 · app 없음 = 그대로 MrgqPdfViewer, 새 앱은 `…/scoremate/…` 따로라 우리 기기에 안 감. 바꿀 것 없음(2026-10-12)
 - [x] device/code · devices/me/heartbeat 에 `"client":"mrgqpdfviewer"` · CI APK 올리기 주소에 앱 이름 → v0.8.2-beta.1, 앱 업데이트 확인 주소 → v0.8.2-beta.2(사용자 "앞으로 이 앱에서도 mrgqpdfviewer 를 붙여서 보내도록", 2026-10-12)
+- [x] v0.8.2 를 휴대폰 · 태블릿 · TV 에 앱 안 업데이트로 설치(2026-10-12) — 옛 주소(`/app-releases/android/`)로 받기 확인. 새 주소로 받기는 다음 판에서
 - [ ] 설명서 줄 실기기 확인(태블릿 브라우저 · TV QR). 정식 판(v0.8.1)이 나오기 전엔 서버에 정식 설명서가 없다 — 정식 v0.8.0 기기는 줄이 없으니 괜찮음
 - [ ] 설명서에서 기기로 확인할 것: 지우개(옆으로 밀기 · 같은 마디 다시 탭 = 시작은 코드로 확인) (낡은 안내 글 `viewer_select_hint_touch` 는 v0.8.1-beta.1 에서 고침)
 
