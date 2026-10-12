@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- 첫 화면 합주 단추 — 두 사람(Material "group", Apache 2.0). 🎼 이모지는 검은 그림이라 어두운 단추에서 안 보였고,
+<!-- 합주 그림(첫 화면 단추 · 설정 카테고리) — 두 사람(Material "group", Apache 2.0). 🎼 이모지는 검은 그림이라 어두운 단추에서 안 보였고,
      밝은 바탕은 고른 것처럼 보였다. 흰 선 그림이라 ⚙️ 단추와 같은 바탕을 쓴다.
      위아래 빈칸을 잘라(뷰포트 24×16, 4 위로) 글 한 줄 높이 안에 들어가게 — ⚙️ 단추와 높이가 같다 -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"

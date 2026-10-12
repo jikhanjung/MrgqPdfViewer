@@ -3,6 +3,8 @@ package com.mrgq.pdfviewer
 data class SettingsItem(
     val id: String,
     val icon: String,
+    /** 이모지 대신 그릴 그림(벡터) — 있으면 [icon] 글 대신. 첫 화면과 같은 합주 그림처럼 */
+    @androidx.annotation.DrawableRes val iconRes: Int? = null,
     val title: String,
     val arrow: String = "",
     /** 줄 오른쪽에 보일 지금 값(포트 · 언어 · 버전 등) — 설명 줄 대신 (#127). 있으면 [arrow] 대신 */

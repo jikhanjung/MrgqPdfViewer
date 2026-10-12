@@ -262,7 +262,8 @@ class SettingsActivity : AppCompatActivity() {
         // 협업 모드 섹션
         currentItems.add(SettingsItem(
             id = "collaboration",
-            icon = "🎼",
+            icon = "",
+            iconRes = R.drawable.ic_ensemble,
             title = getString(R.string.settings_cat_collab),
             arrow = "▶"
         ))

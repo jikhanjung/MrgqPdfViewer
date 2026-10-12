@@ -48,7 +48,7 @@ class SettingsAdapter(
         val icon: TextView?,
     ) {
         fun bind(item: SettingsItem) {
-            icon?.text = item.icon
+            icon?.text = item.iconRes?.let { iconSpan(icon.context, it) } ?: item.icon
             // 검은 그림 이모지는 회색 동그라미 위에서 안 보여 밝은 동그라미로
             icon?.setBackgroundResource(
                 if (item.icon in DARK_GLYPH_ICONS) R.drawable.elegant_icon_background_light else R.drawable.elegant_icon_background
@@ -165,7 +165,21 @@ class SettingsAdapter(
         /** 구분줄 굵기 · 색 — 어두운 바탕에서 보일 듯 말 듯 (Android 설정의 outlineVariant 쯤) */
         private const val DIVIDER_DP = 1f
         private const val DIVIDER_COLOR = 0x26FFFFFF
-        /** 그림이 검은 이모지 — 합주 🎼 · 메트로놈 🎵 */
-        private val DARK_GLYPH_ICONS = setOf("🎼", "🎵")
+        /** 그림이 검은 이모지 — 메트로놈 🎵 */
+        private val DARK_GLYPH_ICONS = setOf("🎵")
+        /** 벡터 그림 아이콘의 폭 — 이모지 동그라미(32dp) 안에 */
+        private const val ICON_RES_WIDTH_DP = 20f
+
+        /** 그림을 글 한 칸으로 — 동그라미 TextView 의 가운데 맞춤을 그대로 쓴다 */
+        private fun iconSpan(context: android.content.Context, @androidx.annotation.DrawableRes res: Int): CharSequence {
+            val drawable = androidx.core.content.ContextCompat.getDrawable(context, res) ?: return ""
+            val width = (ICON_RES_WIDTH_DP * context.resources.displayMetrics.density).toInt()
+            val height = width * drawable.intrinsicHeight / maxOf(1, drawable.intrinsicWidth)
+            drawable.setBounds(0, 0, width, height)
+            return android.text.SpannableString(" ").apply {
+                setSpan(android.text.style.ImageSpan(drawable, android.text.style.DynamicDrawableSpan.ALIGN_CENTER),
+                    0, 1, android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+            }
+        }
     }
 }
