@@ -59,7 +59,6 @@
     <string name="cancel">Cancel</string>
 
     <!-- Language (P18) -->
-    <string name="settings_language_header">Language</string>
     <string name="settings_language_title">Language (언어)</string>
     <string name="settings_language_system">System default</string>
     <string name="settings_language_system_with">System (%1$s)</string>

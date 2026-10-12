@@ -145,6 +145,7 @@ class SettingsActivity : AppCompatActivity() {
             "animation_sound" -> showAnimationSoundPanel()
             "recordings" -> showRecordingsPanel()
             "display_mode" -> showDisplayModePanel()
+            "language" -> showLanguagePanel()
             "info" -> showInfoPanel()
         }
     }
@@ -310,6 +311,13 @@ class SettingsActivity : AppCompatActivity() {
             id = "display_mode",
             icon = "🔧",
             title = getString(R.string.settings_cat_display),
+            arrow = "▶"
+        ))
+        // 언어 (P18) — 앱 정보 안에 있던 것을 따로 칸으로. 제목에 두 언어라 못 읽는 언어로 바뀌어도 찾기 쉽다
+        currentItems.add(SettingsItem(
+            id = "language",
+            icon = "🔤",
+            title = getString(R.string.settings_language_title),
             arrow = "▶"
         ))
         currentItems.add(SettingsItem(
@@ -763,14 +771,13 @@ class SettingsActivity : AppCompatActivity() {
             .show()
     }
 
-    private fun showInfoPanel() {
+    /** 언어 칸 (P18) — 예전엔 앱 정보 맨 위에 있었다 */
+    private fun showLanguagePanel() {
         val language = com.mrgq.pdfviewer.utils.AppLanguage
-        val items = listOfNotNull(
-            // 언어 (P18) — 맨 위: 못 읽는 언어로 바뀌어도 찾기 쉽게(제목에 두 언어)
-            header("language_header", getString(R.string.settings_language_header)),
+        val items = listOf(
             SettingsItem(
                 id = "app_language",
-                icon = "🌐",
+                icon = "🔤",
                 title = getString(R.string.settings_language_title),
                 value = language.current().let { choice ->
                     if (choice == com.mrgq.pdfviewer.utils.AppLanguage.Choice.SYSTEM) {
@@ -781,6 +788,12 @@ class SettingsActivity : AppCompatActivity() {
                 },
                 type = SettingsType.ACTION
             ),
+        )
+        showDetailPanel("language", getString(R.string.settings_language_title), items)
+    }
+
+    private fun showInfoPanel() {
+        val items = listOfNotNull(
             header("update_header", getString(R.string.settings_update_header)),
             SettingsItem(
                 id = "app_version",

@@ -60,7 +60,6 @@
     <string name="cancel">취소</string>
 
     <!-- 언어 (P18) — 언어 이름은 그 언어로(못 읽는 언어에서도 찾게) -->
-    <string name="settings_language_header">언어</string>
     <string name="settings_language_title">언어 (Language)</string>
     <string name="settings_language_system">시스템 따름</string>
     <string name="settings_language_system_with">시스템 (%1$s)</string>
