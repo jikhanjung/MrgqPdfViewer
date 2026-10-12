@@ -1149,56 +1149,46 @@ class MainActivity : AppCompatActivity() {
         }
     }
     
+    /**
+     * 합주 상태는 글 대신 합주 단추로 (사용자 요청 2026-10-12) — 꺼짐 = 흰 그림, 연결됨(지휘자 모드 · 지휘자에 붙은 연주자) = 초록,
+     * 연주자인데 아직 지휘자에 못 붙음 = 빨강. 지휘자는 그림 옆에 연결된 연주자 수. 자세한 상태 글은 단추의 contentDescription 에
+     */
     private fun updateCollaborationStatus() {
         val globalCollaborationManager = GlobalCollaborationManager.getInstance()
         val currentMode = globalCollaborationManager.getCurrentMode()
-        
-        when (currentMode) {
+
+        val (color, count, description) = when (currentMode) {
             CollaborationMode.CONDUCTOR -> {
                 val clientCount = globalCollaborationManager.getConnectedClientCount()
-                binding.collaborationStatus.text = getString(R.string.main_status_conductor, clientCount)
-                binding.collaborationStatus.visibility = android.view.View.VISIBLE
-                binding.collaborationStatus.setTextColor(ContextCompat.getColor(this, R.color.tv_secondary)) // 녹색으로 변경
+                Triple(R.color.tv_secondary, clientCount.toString(), getString(R.string.main_status_conductor, clientCount))
             }
             CollaborationMode.PERFORMER -> {
-                val isConnected = globalCollaborationManager.isClientConnected()
                 val conductorAddress = globalCollaborationManager.getConductorAddress()
-                val conductorIp = if (conductorAddress.contains(":")) {
-                    conductorAddress.split(":")[0]
-                } else conductorAddress
-                
-                Log.d("MainActivity", "🎼 updateCollaborationStatus - 연주자 모드")
-                Log.d("MainActivity", "🎼   isConnected: $isConnected")
-                Log.d("MainActivity", "🎼   conductorAddress: '$conductorAddress'")
-                Log.d("MainActivity", "🎼   conductorIp: '$conductorIp'")
-                
-                // 더 관대한 연결 상태 판단: isConnected가 true이면 연결된 것으로 간주
-                if (isConnected) {
-                    val displayIp = if (conductorIp.isNotEmpty()) conductorIp else getString(R.string.main_status_conductor_fallback)
-                    binding.collaborationStatus.text = getString(R.string.main_status_performer, displayIp)
-                    binding.collaborationStatus.setTextColor(ContextCompat.getColor(this, R.color.tv_secondary)) // 녹색으로 변경
-                    Log.d("MainActivity", "🎼 UI 업데이트: 연결됨 상태로 표시 - '$displayIp'")
+                val conductorIp = conductorAddress.substringBefore(":")
+                if (globalCollaborationManager.isClientConnected()) {
+                    val displayIp = conductorIp.ifEmpty { getString(R.string.main_status_conductor_fallback) }
+                    Triple(R.color.tv_secondary, "", getString(R.string.main_status_performer, displayIp))
                 } else {
-                    binding.collaborationStatus.text = getString(R.string.main_status_performer_disconnected)
-                    binding.collaborationStatus.setTextColor(ContextCompat.getColor(this, R.color.tv_error))
-                    Log.d("MainActivity", "🎼 UI 업데이트: 연결 끊김 상태로 표시")
+                    Triple(R.color.tv_error, "", getString(R.string.main_status_performer_disconnected))
                 }
-                binding.collaborationStatus.visibility = android.view.View.VISIBLE
             }
-            CollaborationMode.NONE -> {
-                binding.collaborationStatus.text = getString(R.string.main_status_off)
-                binding.collaborationStatus.visibility = android.view.View.VISIBLE
-                binding.collaborationStatus.setTextColor(ContextCompat.getColor(this, R.color.tv_text_secondary))
-            }
+            CollaborationMode.NONE -> Triple(null, "", getString(R.string.main_status_off))
         }
-        
+        val button = binding.collaborationButton
+        val tint = color?.let { android.content.res.ColorStateList.valueOf(ContextCompat.getColor(this, it)) }
+        androidx.core.widget.TextViewCompat.setCompoundDrawableTintList(button, tint)
+        button.text = count
+        if (tint != null) button.setTextColor(tint)
+        button.compoundDrawablePadding = if (count.isEmpty()) 0 else (4 * resources.displayMetrics.density).toInt()
+        button.contentDescription = "${getString(R.string.main_ensemble_button)} — $description"
+
         Log.d("MainActivity", "협업 상태 업데이트: $currentMode")
     }
     
     /**
      * 휴대폰(짧은 변 600dp 미만) — 첫 줄 [아이콘 · 앱 이름 · 합주 상태 · 합주 · 설정] 이 한 줄에 다 안 들어가
      * 앱 이름 칸이 0 으로 눌려 글자가 세로로 쌓이고(머리줄이 화면 가운데까지 길어짐) 설정 버튼이 잘렸다 (사용자 요청 2026-10-05).
-     * 합주 상태는 앱 이름 아래 줄로, 버튼은 기본 최소 폭(88dp)을 풀고, 바깥 여백 · 글자를 줄인다. TV · 태블릿은 그대로
+     * 버튼은 기본 최소 폭(88dp)을 풀고, 바깥 여백 · 글자를 줄인다(합주 상태 글은 2026-10-12 부터 합주 단추 색 · 수로). TV · 태블릿은 그대로
      */
     /**
      * 휴대폰 첫 화면 앱 이름: "MRGQ [× ScoreMate ☁️]" / "PDF Viewer v0.5.2" (사용자 요청 2026-10-06).
@@ -1251,14 +1241,6 @@ class MainActivity : AppCompatActivity() {
         (binding.titleText.parent as android.view.View).layoutParams.width = android.view.ViewGroup.LayoutParams.MATCH_PARENT
         binding.titleText.layoutParams = android.widget.LinearLayout.LayoutParams(0, android.view.ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
         binding.titleText.maxLines = 2
-        // 합주 상태 → 제목 칸(세로) 맨 아래
-        val status = binding.collaborationStatus
-        (status.parent as? android.view.ViewGroup)?.removeView(status)
-        val titleColumn = binding.scoreMateBadgeBelow.parent as android.view.ViewGroup
-        titleColumn.addView(status, android.widget.LinearLayout.LayoutParams(
-            android.view.ViewGroup.LayoutParams.WRAP_CONTENT, android.view.ViewGroup.LayoutParams.WRAP_CONTENT
-        ).apply { topMargin = (2 * dp).toInt() })
-        status.maxLines = 2
         listOf(binding.collaborationButton, binding.settingsButton, binding.scoreMateSyncBtn,
             binding.sortByNameBtn, binding.sortByTimeBtn, binding.fileManageBtn).forEach {
             it.minWidth = 0

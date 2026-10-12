@@ -102,8 +102,10 @@ The first screen when the app starts.
 ### 4.1 Header
 
 - **× ScoreMate ☁️** next to (or below) the app name — the device is linked to ScoreMate.
-- The ensemble status (e.g. "Ensemble: off").
-- **Ensemble button** at the top right (two people) — start or stop an ensemble (→ chapter 9).
+- **Ensemble button** at the top right (two people) — start or stop an ensemble (→ chapter 9). Its color shows the ensemble status:
+  - White — no ensemble
+  - **Green** — in an ensemble (conductor mode, or a performer connected to the conductor). For the conductor, the number of connected performers is shown next to the icon
+  - **Red** — performer mode, but not connected to the conductor yet
 - **⚙️** at the top right — Settings.
 
 ### 4.2 Score cards

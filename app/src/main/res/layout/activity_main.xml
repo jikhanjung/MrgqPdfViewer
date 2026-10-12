@@ -87,15 +87,12 @@
             android:orientation="horizontal"
             android:gravity="center_vertical">
 
+            <!-- 합주 상태는 합주 단추의 색 · 연주자 수로 (2026-10-12) — 이 글은 보이지 않고, 지연 작업(postDelayed)의 손잡이로만 남는다 -->
             <TextView
                 android:id="@+id/collaborationStatus"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="@string/main_status_off"
-                android:textColor="#B0FFFFFF"
-                android:textSize="12sp"
-                android:layout_marginEnd="12dp"
-                android:visibility="visible" />
+                android:visibility="gone" />
 
             <Button
                 android:id="@+id/collaborationButton"
