@@ -219,6 +219,9 @@ class ConductorDiscovery {
     /**
      * 지휘자 발견 중지
      */
+    /** 지휘자를 찾는 중(최대 [MAX_DISCOVERY_TIME]) — 첫 화면 합주 단추가 깜박인다 */
+    fun isDiscovering(): Boolean = discoveryJob?.isActive == true
+
     fun stopConductorDiscovery() {
         Log.d(TAG, "Stopping conductor discovery")
         

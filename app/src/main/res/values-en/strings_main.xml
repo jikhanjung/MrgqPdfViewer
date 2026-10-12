@@ -45,6 +45,7 @@
     <string name="main_status_conductor">🎼 Conductor mode (performers: %1$d)</string>
     <string name="main_status_performer">🎵 Performer mode (conductor: %1$s)</string>
     <string name="main_status_performer_disconnected">🎵 Performer mode (disconnected)</string>
+    <string name="main_status_performer_connecting">🎵 Performer mode (connecting to conductor)</string>
     <string name="main_status_conductor_fallback">conductor</string>
 
     <string name="main_ensemble_mode_title">Ensemble mode</string>

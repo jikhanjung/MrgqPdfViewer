@@ -31,6 +31,8 @@ class MainActivity : AppCompatActivity() {
         const val STARTUP_UPDATE_CHECK_DELAY_MS = 1500L
         /** 파일 목록이 떠 있는 동안 자동 확인을 두드리는 간격 — 실제 확인은 UpdateController 가 10분마다 한 번 */
         const val UPDATE_CHECK_TICK_MS = 60_000L
+        /** 연주자가 연결을 시도하는 동안 합주 그림이 깜박이는 간격 */
+        const val ENSEMBLE_BLINK_MS = 500L
 
 
         /** 마지막으로 고른 세트리스트 id (#064). [ALL_SCORES] = 고른 적 없음(첫 세트리스트) */
@@ -600,6 +602,7 @@ class MainActivity : AppCompatActivity() {
             if (!discoveryStarted) {
                 Toast.makeText(this, getString(R.string.main_discovery_start_failed), Toast.LENGTH_SHORT).show()
             }
+            updateCollaborationStatus() // 찾는 중 = 합주 단추 깜박임
         } else {
             Toast.makeText(this, getString(R.string.main_performer_start_failed), Toast.LENGTH_SHORT).show()
         }
@@ -614,7 +617,7 @@ class MainActivity : AppCompatActivity() {
                 val connected = globalManager.connectToDiscoveredConductor(conductorInfo)
                 if (connected) {
                     Toast.makeText(this, getString(R.string.main_connecting_to_conductor), Toast.LENGTH_SHORT).show()
-                    // 상태 업데이트는 콜백에서 처리되도록 함
+                    updateCollaborationStatus() // 연결하는 중 = 합주 단추 깜박임, 결과는 콜백에서
                 } else {
                     Toast.makeText(this, getString(R.string.main_connect_failed), Toast.LENGTH_SHORT).show()
                 }
@@ -665,7 +668,7 @@ class MainActivity : AppCompatActivity() {
         
         if (connected) {
             Toast.makeText(this, getString(R.string.main_connecting_to_conductor_ip, ip), Toast.LENGTH_SHORT).show()
-            // 상태 업데이트는 콜백에서 처리되도록 함
+            updateCollaborationStatus() // 연결하는 중 = 합주 단추 깜박임, 결과는 콜백에서
         } else {
             Toast.makeText(this, getString(R.string.main_manual_connect_failed), Toast.LENGTH_LONG).show()
         }
@@ -793,6 +796,7 @@ class MainActivity : AppCompatActivity() {
     
     override fun onPause() {
         super.onPause()
+        binding.collaborationButton.removeCallbacks(ensembleBlink)
         com.mrgq.pdfviewer.ensemble.VersionNotice.detach()
         binding.root.removeCallbacks(autoUpdateCheck)
         binding.root.removeCallbacks(notesSyncCheck)
@@ -1149,14 +1153,35 @@ class MainActivity : AppCompatActivity() {
         }
     }
     
+    /** 연주자가 연결을 시도하는 동안 합주 그림을 초록 ↔ 흐린 초록으로. 시도가 끝나면(연결 · 그만둠) 멈추고 상태를 다시 그린다 */
+    private val ensembleBlink = object : Runnable {
+        var lit = true
+        override fun run() {
+            if (isFinishing || isDestroyed) return
+            if (!GlobalCollaborationManager.getInstance().isPerformerConnecting()) {
+                updateCollaborationStatus()
+                return
+            }
+            lit = !lit
+            val green = ContextCompat.getColor(this@MainActivity, R.color.tv_secondary)
+            val color = if (lit) green else androidx.core.graphics.ColorUtils.setAlphaComponent(green, 0x40)
+            androidx.core.widget.TextViewCompat.setCompoundDrawableTintList(
+                binding.collaborationButton, android.content.res.ColorStateList.valueOf(color)
+            )
+            binding.collaborationButton.postDelayed(this, ENSEMBLE_BLINK_MS)
+        }
+    }
+
     /**
      * 합주 상태는 글 대신 합주 단추로 (사용자 요청 2026-10-12) — 꺼짐 = 흰 그림, 연결됨(지휘자 모드 · 지휘자에 붙은 연주자) = 초록,
-     * 연주자인데 아직 지휘자에 못 붙음 = 빨강. 지휘자는 그림 옆에 연결된 연주자 수. 자세한 상태 글은 단추의 contentDescription 에
+     * 연주자가 지휘자를 찾거나 연결 · 다시 연결하는 중 = 초록 깜박임([ensembleBlink]), 그만두었으면(찾지 못함 · 다시 연결 다 실패) = 빨강.
+     * 지휘자는 그림 옆에 연결된 연주자 수. 자세한 상태 글은 단추의 contentDescription 에
      */
     private fun updateCollaborationStatus() {
         val globalCollaborationManager = GlobalCollaborationManager.getInstance()
         val currentMode = globalCollaborationManager.getCurrentMode()
 
+        var blink = false
         val (color, count, description) = when (currentMode) {
             CollaborationMode.CONDUCTOR -> {
                 val clientCount = globalCollaborationManager.getConnectedClientCount()
@@ -1168,6 +1193,9 @@ class MainActivity : AppCompatActivity() {
                 if (globalCollaborationManager.isClientConnected()) {
                     val displayIp = conductorIp.ifEmpty { getString(R.string.main_status_conductor_fallback) }
                     Triple(R.color.tv_secondary, "", getString(R.string.main_status_performer, displayIp))
+                } else if (globalCollaborationManager.isPerformerConnecting()) {
+                    blink = true
+                    Triple(R.color.tv_secondary, "", getString(R.string.main_status_performer_connecting))
                 } else {
                     Triple(R.color.tv_error, "", getString(R.string.main_status_performer_disconnected))
                 }
@@ -1181,6 +1209,11 @@ class MainActivity : AppCompatActivity() {
         if (tint != null) button.setTextColor(tint)
         button.compoundDrawablePadding = if (count.isEmpty()) 0 else (4 * resources.displayMetrics.density).toInt()
         button.contentDescription = "${getString(R.string.main_ensemble_button)} — $description"
+        button.removeCallbacks(ensembleBlink)
+        if (blink) {
+            ensembleBlink.lit = true
+            button.postDelayed(ensembleBlink, ENSEMBLE_BLINK_MS)
+        }
 
         Log.d("MainActivity", "협업 상태 업데이트: $currentMode")
     }

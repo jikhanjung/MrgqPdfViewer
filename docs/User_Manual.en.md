@@ -105,7 +105,8 @@ The first screen when the app starts.
 - **Ensemble button** at the top right (two people) — start or stop an ensemble (→ chapter 9). Its color shows the ensemble status:
   - White — no ensemble
   - **Green** — in an ensemble (conductor mode, or a performer connected to the conductor). For the conductor, the number of connected performers is shown next to the icon
-  - **Red** — performer mode, but not connected to the conductor yet
+  - **Blinking green** — the performer is looking for or connecting to the conductor
+  - **Red** — performer mode, but not connected to the conductor (not found, or gave up reconnecting; → 9.1 Enter manually)
 - **⚙️** at the top right — Settings.
 
 ### 4.2 Score cards

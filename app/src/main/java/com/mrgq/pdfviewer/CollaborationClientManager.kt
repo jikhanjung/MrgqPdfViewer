@@ -57,6 +57,8 @@ class CollaborationClientManager(
     
     private val gson = Gson()
     private val isConnected = AtomicBoolean(false)
+    /** 연결 · 다시 연결을 시도하는 중(연결되거나 · 그만두거나 · 끊으면 false) — 첫 화면 합주 단추가 깜박인다 */
+    private val connecting = AtomicBoolean(false)
     private val reconnectAttempts = AtomicInteger(0)
     private val maxReconnectAttempts = 5
     private val reconnectHandler = Handler(Looper.getMainLooper())
@@ -80,6 +82,7 @@ class CollaborationClientManager(
             Log.d(TAG, "Already connected to conductor")
             return true
         }
+        connecting.set(true)
         
         this.conductorIpAddress = ipAddress
         this.conductorPort = port
@@ -105,6 +108,7 @@ class CollaborationClientManager(
             true
         } catch (e: Exception) {
             Log.e(TAG, "Failed to connect to conductor", e)
+            connecting.set(false)
             false
         }
     }
@@ -112,6 +116,7 @@ class CollaborationClientManager(
     fun disconnect() {
         try {
             isConnected.set(false)
+            connecting.set(false)
             reconnectAttempts.set(0)
             
             // Cancel any pending reconnect attempts
@@ -140,6 +145,8 @@ class CollaborationClientManager(
     fun isConnected(): Boolean {
         return isConnected.get()
     }
+
+    fun isConnecting(): Boolean = !isConnected.get() && connecting.get()
     
     fun getConductorAddress(): String {
         return if (conductorIpAddress.isNotEmpty()) "$conductorIpAddress:$conductorPort" else ""
@@ -240,6 +247,7 @@ class CollaborationClientManager(
                     }
                     if (status == "success") {
                         isConnected.set(true)
+                        connecting.set(false)
                         reconnectAttempts.set(0)
                         onConnectionStatusChanged(true)
                         startHeartbeat()
@@ -290,9 +298,11 @@ class CollaborationClientManager(
     private fun attemptReconnection() {
         if (reconnectAttempts.get() >= maxReconnectAttempts) {
             Log.e(TAG, "Max reconnection attempts reached, giving up")
+            connecting.set(false)
             return
         }
         
+        connecting.set(true)
         val attempt = reconnectAttempts.incrementAndGet()
         val delay = (2000 * attempt).toLong() // Exponential backoff
         
@@ -341,6 +351,8 @@ class CollaborationClientManager(
             // Attempt reconnection if not intentionally closed
             if (code != 1000) {
                 attemptReconnection()
+            } else {
+                connecting.set(false)
             }
         }
         

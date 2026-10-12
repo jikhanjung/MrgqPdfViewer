@@ -53,6 +53,7 @@
     <string name="main_status_conductor">🎼 지휘자 모드 활성 (연결된 연주자: %1$d명)</string>
     <string name="main_status_performer">🎵 연주자 모드 (지휘자: %1$s)</string>
     <string name="main_status_performer_disconnected">🎵 연주자 모드 (연결 끊김)</string>
+    <string name="main_status_performer_connecting">🎵 연주자 모드 (지휘자에 연결하는 중)</string>
     <string name="main_status_conductor_fallback">지휘자</string>
 
     <!-- 합주 대화상자 · 알림 -->

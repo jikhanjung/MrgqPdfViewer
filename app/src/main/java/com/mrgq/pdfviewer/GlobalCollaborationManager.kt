@@ -400,6 +400,11 @@ class GlobalCollaborationManager private constructor() {
     fun isClientConnected(): Boolean {
         return collaborationClientManager?.isConnected() == true
     }
+
+    /** 연주자가 지휘자를 찾거나 · 연결 · 다시 연결을 시도하는 중 (첫 화면 합주 단추 깜박임) */
+    fun isPerformerConnecting(): Boolean =
+        currentMode == CollaborationMode.PERFORMER && !isClientConnected() &&
+            (conductorDiscovery?.isDiscovering() == true || collaborationClientManager?.isConnecting() == true)
     
     fun connectToConductor(ipAddress: String, port: Int = 9090, deviceName: String = "Android TV Device"): Boolean {
         return collaborationClientManager?.connectToConductor(ipAddress, port, deviceName) == true
