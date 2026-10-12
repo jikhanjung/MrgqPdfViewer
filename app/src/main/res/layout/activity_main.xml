@@ -105,7 +105,7 @@
                 android:contentDescription="@string/main_ensemble_button"
                 android:textSize="13sp"
                 android:textColor="@android:color/white"
-                android:background="@drawable/elegant_button_background"
+                android:background="@drawable/elegant_button_background_light"
                 android:paddingHorizontal="12dp"
                 android:paddingVertical="4dp"
                 android:layout_marginEnd="8dp"
