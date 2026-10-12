@@ -49,6 +49,10 @@ class SettingsAdapter(
     ) {
         fun bind(item: SettingsItem) {
             icon?.text = item.icon
+            // 검은 그림 이모지는 회색 동그라미 위에서 안 보여 밝은 동그라미로
+            icon?.setBackgroundResource(
+                if (item.icon in DARK_GLYPH_ICONS) R.drawable.elegant_icon_background_light else R.drawable.elegant_icon_background
+            )
             title.text = item.title
             // 오른쪽: 지금 값이 있으면 값, 아니면 화살표 (#127)
             val right = item.value.ifEmpty { item.arrow }
@@ -161,5 +165,7 @@ class SettingsAdapter(
         /** 구분줄 굵기 · 색 — 어두운 바탕에서 보일 듯 말 듯 (Android 설정의 outlineVariant 쯤) */
         private const val DIVIDER_DP = 1f
         private const val DIVIDER_COLOR = 0x26FFFFFF
+        /** 그림이 검은 이모지 — 합주 🎼 · 메트로놈 🎵 */
+        private val DARK_GLYPH_ICONS = setOf("🎼", "🎵")
     }
 }

@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 검은 그림 이모지(🎼 · 🎵)용 밝은 동그라미 — 기본(#40FFFFFF) 회색 위에서는 안 보였다 -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="oval">
+
+    <solid android:color="#D6E2F0" />
+
+</shape>
