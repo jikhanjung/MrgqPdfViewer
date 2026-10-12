@@ -111,7 +111,7 @@
 - [x] 설정은 제목만 · 제목 줄임 · 웹서버는 그 칸을 떠나면 멈춤 → v0.8.0-beta.3 (#127)
 - [x] 🎙 도움말 페이지("도움말" · "사용법" · "help") · 조용하면 안내 → v0.8.0-beta.4 (#128) — 태블릿 확인 전
 - [x] User_Manual(한 · 영) 다시 쓰기 1 ~ 3단계(본문 · 영어판 · CI 구조 검사) → [`#133`](devlog/20261012_133_user_manual_rewrite.md), 계획 [`P19`](devlog/20261012_P19_user_manual_rewrite_plan.md)
-- [ ] P19 4단계 게시 — ScoreMate 서버 요청 → 앱 설정 → 앱 정보 "설명서" 줄(TV 는 QR). P15 4단계(private) 전에
+- [ ] P19 4단계 게시 — 서버 요청 [`P20`](devlog/20261012_P20_scoremate_manual_hosting_server_requests.md) 작성(2026-10-12) → 서버 배포 대기 → CI 올리기 단계 · 앱 설정 → 앱 정보 "설명서" 줄(TV 는 QR). P15 4단계(private) 전에
 - [ ] 설명서에서 기기로 확인할 것: 지우개(옆으로 밀기 · 같은 마디 다시 탭 = 시작은 코드로 확인) (낡은 안내 글 `viewer_select_hint_touch` 는 v0.8.1-beta.1 에서 고침)
 
 ## 🧭 악보 화면 메뉴 정리 (P13, 사용자 요청 2026-10-10)
