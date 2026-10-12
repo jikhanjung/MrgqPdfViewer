@@ -146,7 +146,7 @@
     <string name="viewer_analyzing_score">악보 분석 중…</string>
     <string name="viewer_follow_no_meter">악보에서 박자표를 읽지 못해 악보 연동 없이 시작합니다</string>
     <string name="viewer_select_hint_tv">←→ 마디, ↑↓ 줄, OK 시작, 뒤로 취소 (연주 중 ↑ 메뉴)</string>
-    <string name="viewer_select_hint_touch">마디를 탭해 고르고 한 번 더 탭하면 시작, 두 번 탭 = 메뉴(🎤 그 마디부터 듣기)</string>
+    <string name="viewer_select_hint_touch">마디를 탭해 고르고 한 번 더 탭하면 시작 — 🎤 듣기 · 취소는 아래 막대에서</string>
     <string name="viewer_select_start_measure">시작할 마디를 고르세요 — %1$s</string>
     <string name="viewer_voice_measure_n">%1$d마디</string>
     <string name="viewer_voice_the_start">처음</string>

@@ -146,7 +146,7 @@
     <string name="viewer_analyzing_score">Analyzing the score…</string>
     <string name="viewer_follow_no_meter">Couldn\'t read time signatures — starting without following the score</string>
     <string name="viewer_select_hint_tv">←→ measure, ↑↓ line, OK start, Back cancel (↑ menu while playing)</string>
-    <string name="viewer_select_hint_touch">Tap a measure to pick it, tap again to start; double-tap = menu (🎤 listen from that measure)</string>
+    <string name="viewer_select_hint_touch">Tap a measure to pick it, tap again to start — 🎤 listen or cancel on the bottom bar</string>
     <string name="viewer_select_start_measure">Pick a start measure — %1$s</string>
     <string name="viewer_voice_measure_n">measure %1$d</string>
     <string name="viewer_voice_the_start">the beginning</string>
