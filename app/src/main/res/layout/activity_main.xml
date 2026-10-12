@@ -101,15 +101,15 @@
                 android:id="@+id/collaborationButton"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="@string/main_ensemble_icon"
+                android:drawableStart="@drawable/ic_ensemble"
                 android:contentDescription="@string/main_ensemble_button"
                 android:textSize="13sp"
-                android:textColor="@android:color/white"
-                android:background="@drawable/elegant_button_background_light"
+                android:background="@drawable/elegant_button_background"
                 android:paddingHorizontal="12dp"
                 android:paddingVertical="4dp"
                 android:layout_marginEnd="8dp"
                 android:focusable="true"
+                android:minWidth="0dp"
                 android:minHeight="0dp" />
 
             <Button
@@ -124,6 +124,7 @@
                 android:paddingHorizontal="12dp"
                 android:paddingVertical="4dp"
                 android:focusable="true"
+                android:minWidth="0dp"
                 android:minHeight="0dp" />
         </LinearLayout>
     </LinearLayout>
