@@ -2843,13 +2843,18 @@ class PdfViewerActivity : AppCompatActivity() {
         bottomBarKey = key
         bar.removeAllViews()
         val height = (resources.displayMetrics.density * 52).toInt()
+        // 휴대폰은 단추 양옆 여백을 줄인다 — 세로는 🎙 자리(96dp)를 빼면 300dp 남짓이라 16dp 여백이면 마지막 단추가 눌려
+        // "✏️ / 메모" 두 줄이 됐다 (#131). 글은 한 줄 — 그래도 넘치면 줄바꿈 대신 끝을 줄인다
+        val padDp = if (phoneView) 10 else 16
         fun button(label: String, onClick: () -> Unit) {
             bar.addView(android.widget.TextView(this).apply {
                 text = label
                 setTextColor(android.graphics.Color.WHITE)
                 textSize = 18f
                 gravity = android.view.Gravity.CENTER
-                val pad = (resources.displayMetrics.density * 16).toInt()
+                maxLines = 1
+                ellipsize = android.text.TextUtils.TruncateAt.END
+                val pad = (resources.displayMetrics.density * padDp).toInt()
                 setPadding(pad, 0, pad, 0)
                 isFocusable = false
                 val ripple = android.util.TypedValue()
