@@ -28,11 +28,11 @@ data class ReleaseInfo(
     companion object {
         const val APK_SUFFIX = "-release.apk"
         const val CHECKSUMS_NAME = "SHA256SUMS.txt"
-        /** ScoreMate 서버의 앱 릴리스 (P15 §2.2, 서버 P16) — `latest/?channel=` · `<version>/apk/` 가 이 아래 */
-        const val SCOREMATE_RELEASES_PATH = "/api/v1/app-releases/android/"
+        /** ScoreMate 서버의 앱 릴리스 (P15 §2.2, 서버 P16) — `latest/?channel=` · `<version>/apk/` 가 이 아래. 앱 이름을 주소에(서버 0.24.0 다중 앱 — 옛 `/app-releases/android/` 와 같은 뜻, 옛 판 기기는 그것을 계속 쓴다) */
+        const val SCOREMATE_RELEASES_PATH = "/api/v1/app-releases/mrgqpdfviewer/android/"
 
         /**
-         * ScoreMate 서버 `GET …/app-releases/android/latest/?channel=stable|beta` 응답 (P15 §2.2, 서버 P16).
+         * ScoreMate 서버 `GET …/app-releases/mrgqpdfviewer/android/latest/?channel=stable|beta` 응답 (P15 §2.2, 서버 P16).
          * 변경 내용(`notes`) · `sha256` · 판마다 고정된 받기 주소(`download_url` → 받을 때마다 서명 URL 로 302)가 함께 온다 —
          * CHANGELOG raw · `SHA256SUMS.txt` 를 따로 받지 않는다. 받기 주소가 없거나 이상하면 [server] 와 버전으로 만든다.
          * 버전이 없거나 버전 형식이 아니면(응답이 깨짐) [IllegalArgumentException]
