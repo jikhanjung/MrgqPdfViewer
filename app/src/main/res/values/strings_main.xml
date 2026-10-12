@@ -12,6 +12,9 @@
     <!-- 첫 화면 머리줄 · 정렬 줄 -->
     <string name="main_ensemble_button">합주</string>
     <string name="main_settings_button">설정</string>
+    <!-- 합주 · 설정 단추는 모든 언어에서 아이콘(글은 contentDescription). 🎼 는 설정의 합주 칸과 같은 그림 -->
+    <string name="main_ensemble_icon" translatable="false">🎼</string>
+    <string name="main_settings_icon" translatable="false">⚙️</string>
     <string name="main_sync_button">🔄 동기화</string>
     <string name="main_sort">정렬</string>
     <string name="main_sort_by_name">이름순</string>

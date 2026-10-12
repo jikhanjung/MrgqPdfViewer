@@ -13,11 +13,12 @@ Android TV OS용 PDF 악보 리더 앱으로, 무선 파일 업로드와 리모�
 > SurfaceFlinger 가 4K 로 업스케일한다. 4K 관련 작업을 시작하기 전에
 > [`devlog/20260815_040_4k_display_investigation.md`](devlog/20260815_040_4k_display_investigation.md) 를 먼저 읽을 것.
 
-**현재 버전**: v0.8.0-beta.8 (2026-10-12)  
+**현재 버전**: v0.8.0-beta.9 (2026-10-12)  
 **빌드 상태**: 🟢 빌드 가능 (GitHub Actions CI 로 커밋마다 검증)  
 **CI 게이트**: 🟢 단위 테스트 506개 + **화면 글 게이트**(`tools/i18n_gate.py` — 코드 · 레이아웃의 한글 리터럴 · values-en 빠짐, P18) + Android Lint(`MissingTranslation` 오류) + 에뮬레이터 계측 60개·release APK 스모크(API 30/34 — ⚠️ 문서 정보 검사는 모든 매트릭스에서 건너뜀, #047 §5). 계측은 main 푸시와 수동 실행에서만 (회당 5~6분)  
 **테스트 상태**: 🟢 v0.3.x 기능을 Z18TV Pro 에서 확인(2026-09-28): 파트보(한 · 여러 파트, 넓혀 자르기, 번호) · 파트 화면 악보 연동 · MusicXML 반주(K488) · MusicXML · 서버 분석 동기화 · 목록 곡 정보 · 앱 안 업데이트(v0.2.9 → v0.3.3). 🟡 **두 대가 필요한 것만 남음** — 합주 중 파트 보기, 합주 Phase 0 동기 넘김. 렌더 품질 · 키 매핑 등 전반 스모크는 2026-08-15(Google TV Streamer + 4K 모니터)
 **최근 업데이트** (전체는 [`CHANGELOG.md`](CHANGELOG.md), 오늘 작업 요약은 devlog [`065`](devlog/20260928_065_part_view_accompaniment_server_analysis.md)):
+- **v0.8.0-beta.9** — 첫 화면 합주 단추 = 🎼 · 설정 단추 = ⚙️(모든 기기 · 언어)
 - **v0.8.0-beta.8** — 영어 화면 메모 단추 "✏️ Annotate" → "✏️ Mark"(휴대폰 세로 잘림)
 - **v0.8.0-beta.7** — 휴대폰 세로 아래 막대 "✏️ 메모" 두 줄 고침(단추 여백 10dp · 한 줄, #131)
 - **v0.8.0-beta.6** — 휴대폰 회전 때 쪽 일부만 보이던 것(늦게 끝난 렌더를 버림 `showSeq` · 뷰 크기 바뀌면 행렬 다시, #130) · 도움말 안내 띄어쓰기

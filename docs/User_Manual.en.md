@@ -19,7 +19,7 @@ This manual is here to help you get the most out of every feature of the app.
 For security and convenience, the app does not browse folders on the device. Instead, you add files through its built-in web server.
 
 **Step 1: Turn on the web server**
-1.  From the app's main screen, go to **Settings (설정)**.
+1.  From the app's main screen, press the **⚙️ (Settings)** button at the top right.
 2.  Choose the **Web server (웹서버)** menu.
 3.  Choose **Turn on web server (웹서버 켜기)** to start the server.
 4.  Note the **IP address and port** shown on screen (e.g. `http://192.168.1.10:8080`).
