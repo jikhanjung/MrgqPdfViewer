@@ -1,7 +1,7 @@
 # P19 — 사용자 설명서 다시 쓰기
 
 2026-10-12 · 사용자: "매뉴얼은 따로 계획 세워줘."
-상태: 🟡 **1 ~ 3단계 완료**(2026-10-12, [#133](20261012_133_user_manual_rewrite.md)) — §9 모두 추천대로. 다음 4단계(게시)
+상태: 🟢 **1 ~ 4단계 완료**(2026-10-12, [#133](20261012_133_user_manual_rewrite.md) · [#134](20261012_134_manual_row_ci_upload.md) — v0.8.1-beta.2) — §9 모두 추천대로. 남은 것: 5단계(그림, 선택)
 관련: [`P18`](20261011_P18_i18n_language_setting_plan.md)(영어 화면 — 9단계에서 User_Manual 영어판을 옮겼지만 내용은 옛것 그대로), [`P15`](20261010_P15_private_repo_releases_on_scoremate_plan.md)(저장소 private 전환 — 그 뒤엔 GitHub 의 `docs/` 를 사용자가 못 본다),
 [`P16`](20261010_P16_scoremate_app_release_server_requests.md)(ScoreMate 서버 요청 형식), 용어집 [`docs/Glossary_ko_en.md`](../docs/Glossary_ko_en.md)
 

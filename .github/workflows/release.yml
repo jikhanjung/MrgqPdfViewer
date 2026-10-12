@@ -231,3 +231,35 @@ jobs:
             echo "::error::ScoreMate 업로드 실패 (HTTP $code)"; exit 1
           fi
           echo "ScoreMate 다운로드: https://scoremate.noematica.kr/download/ ($(cat scoremate.json))" >> "$GITHUB_STEP_SUMMARY"
+
+      # 사용자 설명서도 이 판으로 올린다 — 서버가 /manual/ 에서 HTML 로 보이고 앱 설정 "설명서" 줄이 연다(P19 4단계 · P20 · 서버 P05).
+      # 조건은 APK 와 같다(토큰 · 릴리스 키 · -test 제외). 같은 (판, 문서, 언어)를 다시 올리면 200 으로 내용만 바뀐다 —
+      # 설명서만 고쳤으면 Release 를 그 태그로 workflow_dispatch 하면 된다(APK 는 같은 sha256 이라 200).
+      - name: Upload manual to ScoreMate
+        env:
+          APP_RELEASE_TOKEN: ${{ secrets.APP_RELEASE_TOKEN }}
+          SIGNED: ${{ needs.build.outputs.signed-with-release-key }}
+          TAG: ${{ needs.verify.outputs.tag }}
+          UPLOAD_URL: https://scoremate.noematica.kr/api/v1/app-manuals/
+        run: |
+          set -euo pipefail
+          if [ -z "${APP_RELEASE_TOKEN:-}" ] || [ "$SIGNED" != "true" ] || [[ "$TAG" == *-test ]]; then
+            echo "::notice::ScoreMate 설명서 올리기를 건너뜁니다 (APK 와 같은 조건)"; exit 0
+          fi
+          # doc lang 파일 — 링크는 서버가 볼 때 이 판에 올라온 filename 끼리 바꾼다
+          while read -r doc lang file; do
+            code=$(curl -sS -o manual.json -w '%{http_code}' --retry 3 --retry-delay 10 \
+              -H "Authorization: Bearer ${APP_RELEASE_TOKEN}" \
+              -F "app=mrgqpdfviewer" -F "version=${TAG}" -F "doc=${doc}" -F "lang=${lang}" \
+              -F "filename=$(basename "$file")" -F "markdown=@${file};type=text/markdown" \
+              "$UPLOAD_URL" </dev/null)
+            echo "$doc/$lang ($file): HTTP $code $(cat manual.json)"
+            if [ "$code" != "201" ] && [ "$code" != "200" ]; then
+              echo "::error::ScoreMate 설명서 올리기 실패 ($doc/$lang, HTTP $code)"; exit 1
+            fi
+          done <<'DOCS'
+          manual ko docs/User_Manual.md
+          manual en docs/User_Manual.en.md
+          voice-commands ko docs/Voice_Commands.md
+          DOCS
+          echo "ScoreMate 설명서: https://scoremate.noematica.kr/manual/?v=${TAG}" >> "$GITHUB_STEP_SUMMARY"

@@ -148,6 +148,10 @@
     <string name="settings_auto_update">자동 확인</string>
     <string name="settings_prerelease">베타 받기</string>
     <string name="settings_prerelease_on_toast">사전 릴리스도 받습니다 — 확인 전 기능이 포함될 수 있습니다</string>
+    <string name="settings_help_header">도움말</string>
+    <string name="settings_manual">설명서</string>
+    <string name="settings_manual_dialog_title">사용 설명서</string>
+    <string name="settings_manual_dialog_message">휴대폰 카메라로 QR 을 찍거나 아래 주소를 브라우저에서 여세요.</string>
 
     <!-- 음성 명령 -->
     <string name="settings_voice_press_header">누르고 말하기</string>

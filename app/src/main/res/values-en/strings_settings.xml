@@ -148,6 +148,10 @@
     <string name="settings_auto_update">Auto check</string>
     <string name="settings_prerelease">Get betas</string>
     <string name="settings_prerelease_on_toast">Getting pre-releases too — they may include unverified features</string>
+    <string name="settings_help_header">Help</string>
+    <string name="settings_manual">User manual</string>
+    <string name="settings_manual_dialog_title">User manual</string>
+    <string name="settings_manual_dialog_message">Scan the QR code with your phone camera, or open this address in a browser.</string>
 
     <!-- Voice commands -->
     <string name="settings_voice_press_header">Push to talk</string>

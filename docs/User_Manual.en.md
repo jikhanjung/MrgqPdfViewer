@@ -3,6 +3,7 @@
 # MRGQ PDF Viewer User Manual
 
 > **As of v0.8** (October 2026). Names are written exactly as they appear in the app's English screens.
+> In the app, open it from **Settings → About → User manual** — tablets and phones open a browser; a TV shows a QR code to scan with your phone.
 
 ---
 
@@ -387,7 +388,7 @@ Several devices read together. One device is the **conductor**; the others are *
 | 🔧 **Display** | Rotation | Phone score screen: Device rotation · Landscape · Portrait |
 | | Per-file settings · Reset all | The two-page · one-page choices remembered in 5.5 |
 | 🔤 **Language (언어)** | Language | 2.3 |
-| 📊 **About** | Version · Check for updates · Auto check · Get betas | 2.2 |
+| 📊 **About** | Version · Check for updates · Auto check · Get betas · User manual | 2.2 · 1 |
 
 ---
 

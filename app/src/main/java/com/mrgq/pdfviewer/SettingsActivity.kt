@@ -821,12 +821,69 @@ class SettingsActivity : AppCompatActivity() {
                 title = getString(R.string.settings_prerelease),
                 type = SettingsType.TOGGLE,
                 checked = UpdateController.isPrereleaseEnabled(this)
+            ),
+            header("help_header", getString(R.string.settings_help_header)),
+            SettingsItem(
+                id = "manual",
+                icon = "📖",
+                title = getString(R.string.settings_manual),
+                type = SettingsType.ACTION,
+                arrow = "▶"
             )
         )
         
         showDetailPanel("info", getString(R.string.settings_cat_info), items)
     }
     
+    /**
+     * 사용자 설명서 (P19 4단계) — ScoreMate 서버의 이 판 · 화면 언어 설명서. 터치 기기는 브라우저로,
+     * TV(브라우저가 없는 경우가 많다) · 브라우저가 없는 기기는 휴대폰으로 찍을 QR 과 주소
+     */
+    private fun openManual() {
+        val url = com.mrgq.pdfviewer.scoremate.ManualLink.url(
+            scoreMateStore.server, com.mrgq.pdfviewer.utils.AppLanguage.locale(this).language, BuildConfig.VERSION_NAME,
+        )
+        if (!isTv) {
+            try {
+                startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(url)))
+                return
+            } catch (e: android.content.ActivityNotFoundException) {
+                Log.w("SettingsActivity", "설명서: 브라우저 없음 — QR 로", e)
+            }
+        }
+        showManualQrDialog(url)
+    }
+
+    private fun showManualQrDialog(url: String) {
+        val density = resources.displayMetrics.density
+        val size = (220 * density).toInt()
+        val qr = android.widget.ImageView(this).apply {
+            setImageBitmap(DeviceLinkDialog.qrBitmap(url, size))
+            setBackgroundColor(android.graphics.Color.WHITE)
+        }
+        val address = TextView(this).apply {
+            text = url
+            textSize = 14f
+            setTextColor(0xFF90CAF9.toInt())
+            gravity = android.view.Gravity.CENTER_HORIZONTAL
+            setPadding(0, (12 * density).toInt(), 0, 0)
+        }
+        val content = android.widget.LinearLayout(this).apply {
+            orientation = android.widget.LinearLayout.VERTICAL
+            gravity = android.view.Gravity.CENTER_HORIZONTAL
+            val pad = (20 * density).toInt()
+            setPadding(pad, pad / 2, pad, 0)
+            addView(qr, android.widget.LinearLayout.LayoutParams(size, size))
+            addView(address)
+        }
+        AlertDialog.Builder(this)
+            .setTitle(R.string.settings_manual_dialog_title)
+            .setMessage(R.string.settings_manual_dialog_message)
+            .setView(content)
+            .setPositiveButton(R.string.settings_close, null)
+            .show()
+    }
+
     /** 언어 고르기 (P18) — 고르면 AppCompat 이 액티비티를 다시 만든다(지금 칸은 [onSaveInstanceState] 로 지킨다) */
     private fun showLanguageDialog() {
         val language = com.mrgq.pdfviewer.utils.AppLanguage
@@ -1175,6 +1232,7 @@ class SettingsActivity : AppCompatActivity() {
             "sync_turn_lead" -> showSyncTurnLeadDialog()
             "message_queue_stats" -> showMessageQueueDisabledDialog()
             "check_update" -> updateController.checkForUpdate()
+            "manual" -> openManual()
             "scoremate_link" -> linkScoreMate()
             "scoremate_check" -> checkScoreMate()
             "scoremate_unlink" -> confirmUnlinkScoreMate()

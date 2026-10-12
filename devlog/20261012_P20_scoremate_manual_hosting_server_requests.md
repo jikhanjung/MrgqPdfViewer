@@ -3,6 +3,7 @@
 작성일: 2026-10-12
 대상: ScoreMateServer `backend/` — 앱 릴리스 보관(P16, 서버 0.21.0 ~)과 같은 자리 · 같은 토큰
 앱 쪽 계획: [`P19`](20261012_P19_user_manual_rewrite_plan.md) 4단계 (1 ~ 3단계는 [#133](20261012_133_user_manual_rewrite.md))
+상태: 🟢 **서버 운영 배포**(ScoreMateServer 0.23.1, 서버 devlog P05) · 앱 · CI 는 [#134](20261012_134_manual_row_ci_upload.md)(v0.8.1-beta.2)
 
 ## 배경
 MrgqPdfViewer 의 사용자 설명서(`docs/User_Manual.md` 한국어 · `docs/User_Manual.en.md` 영어)를 v0.8 에 맞게 다시 썼다.
@@ -132,4 +133,5 @@ curl -s 'https://scoremate.noematica.kr/manual/voice-commands/' | grep -c 'githu
 
 ## 변경 이력
 - 2026-10-12: 처음 작성 (P19 4단계 — 사용자 "서버 요청 문서 써줘")
+- 2026-10-12: 서버 0.23.1 운영 배포 → 앱 · CI #134
 - 2026-10-12: 서버 검토 반영 — 볼 때 링크 바꾸기 · `app` 칸(`/api/v1/app-manuals/`) · `doc` 형식만 · lang 대체 일반 규칙 · 앵커 짝(GitHub 렌더 기준)
