@@ -84,4 +84,49 @@
     <string name="voice_language_title">음성 언어</string>
     <string name="voice_language_follow_app">앱 언어 따름</string>
     <string name="voice_language_follow_app_now">앱 언어 (%1$s)</string>
+
+    <!-- 🎙 도움말 (VoiceHelp, #128) — "도움말" · "사용법"이라고 말하면 뜨는 안내 페이지. 말할 문장은 음성 언어로, 뜻은 여기 -->
+    <string name="voice_help_title">🎙 음성 명령</string>
+    <string name="voice_help_intro">🎙 를 누른 채로 말하세요. 아래 문장은 예시 — 수와 이름은 바꿔 말하면 됩니다</string>
+    <string name="voice_help_hint">\"%1$s\"라고 말하면 쓸 수 있는 명령을 보여 줘요</string>
+    <string name="voice_help_shown">도움말</string>
+    <string name="voice_help_sec_position">마디 · 시작</string>
+    <string name="voice_help_sec_page">쪽</string>
+    <string name="voice_help_sec_metronome">메트로놈</string>
+    <string name="voice_help_sec_parts">파트</string>
+    <string name="voice_help_sec_listen">🎤 연주 듣고 넘기기</string>
+    <string name="voice_help_sec_combined">한 번에 말하기</string>
+    <string name="voice_help_sec_tips">알아 둘 것</string>
+    <string name="voice_help_select_measure">57마디를 시작 마디로 고르기만</string>
+    <string name="voice_help_goto_measure">57마디에서 바로 시작 (예비박 뒤)</string>
+    <string name="voice_help_start">고른 마디부터 시작 (없으면 이 쪽 첫 마디)</string>
+    <string name="voice_help_goto_start">곡 처음부터 시작</string>
+    <string name="voice_help_restart">방금 시작한 마디부터 다시</string>
+    <string name="voice_help_resume">멈춘 마디부터 이어서</string>
+    <string name="voice_help_letter">리허설 마크 B 부터 시작</string>
+    <string name="voice_help_stop">연주 정지 (🎙 를 짧게 눌러도 정지)</string>
+    <string name="voice_help_next_page">다음 쪽</string>
+    <string name="voice_help_previous_page">이전 쪽</string>
+    <string name="voice_help_goto_page">5쪽으로</string>
+    <string name="voice_help_last_page">마지막 쪽으로</string>
+    <string name="voice_help_tempo">빠르기 ♩=72</string>
+    <string name="voice_help_count_in">예비박 한 마디 (한 · 두 마디)</string>
+    <string name="voice_help_metronome">메트로놈 시작</string>
+    <string name="voice_help_part">첼로 파트만 보기</string>
+    <string name="voice_help_part_numbered">번호가 있는 파트</string>
+    <string name="voice_help_parts">여러 파트를 함께</string>
+    <string name="voice_help_staff">이름 없는 보표 — 위에서 둘째</string>
+    <string name="voice_help_full_score">총보로 돌아가기</string>
+    <string name="voice_help_listen">연주를 듣고 쪽 넘기기 (고른 마디 또는 이 쪽부터)</string>
+    <string name="voice_help_listen_from">57마디부터 듣기</string>
+    <string name="voice_help_listen_start">곡 처음부터 듣기</string>
+    <string name="voice_help_listen_resume">지난번 멈춘 마디부터 듣기</string>
+    <string name="voice_help_combo_tempo_measure">빠르기 80 으로 57마디부터 시작</string>
+    <string name="voice_help_combo_part_letter">첼로 파트로 바꿔 레터 C 부터</string>
+    <string name="voice_help_combo_count_in_start">예비박 한 마디로 처음부터</string>
+    <string name="voice_help_combo_part_page">비올라 파트로 바꿔 3쪽</string>
+    <string name="voice_help_tip_hold">다 말한 뒤 손을 떼세요. 짧게 누르면 연주만 멈춥니다</string>
+    <string name="voice_help_tip_number">수만 말하면 마디 고르기 — 메트로놈 설정이 열려 있으면 빠르기</string>
+    <string name="voice_help_tip_blocked">\"%1$s\" · \"두 마디 전\"처럼 헷갈리는 말은 실행하지 않아요 — 다시 말하세요</string>
+    <string name="voice_help_tip_person">보표 이름이 사람 이름이면 이름으로: \"%1$s\"</string>
 </resources>

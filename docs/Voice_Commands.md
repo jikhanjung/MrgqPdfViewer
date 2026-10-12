@@ -17,6 +17,9 @@
 - 🎤 연주 듣고 넘기기가 켜져 있으면 쓸 수 없습니다. 단추가 흐려지고, 누르면 "연주 추적을 멈춘 뒤에 말하세요"라고 뜹니다
 - 기기의 음성 인식(Google)을 쓰므로 대개 **인터넷이 필요합니다**
 - **모르면 실행하지 않습니다.** 못 알아듣거나 악보에 없는 마디 · 파트면 아무것도 하지 않고 이유만 보여 줍니다
+- **"도움말" · "사용법"**(영어 "help")이라고 말하면 자주 쓰는 명령 · 한 번에 말하기 예시를 담은 **도움말 페이지**가 뜹니다(확인으로 닫음, #128).
+  🎙 를 누른 채 2.5초 동안 아무 말도 없거나, 아무것도 못 알아들었으면 상태 줄에 "“도움말”이라고 말하면 쓸 수 있는 명령을 보여 줘요"가 붙습니다.
+  페이지의 문장은 음성 언어로, 뜻은 앱 언어로 보이며, 내용의 정본은 `voice/VoiceHelp`(단위 테스트 `VoiceHelpTest` 가 문장마다 실제 명령이 되는지 · 한 · 영이 같은 명령인지 검사)
 
 ## 👂 계속 듣기 (시험, v0.7.1-beta.1)
 
@@ -202,6 +205,7 @@ MRGQ 설정의 그 줄을 누르면 같은 안내와 스토어 열기 단추가 
 | "letter B" · "rehearsal B" · "rehearsal mark C" · "letter bee" · "from letter A" | 레터 B | 리허설 마크 마디부터 |
 | "count-in one bar" · "count in two bars" · "two bar count-in" | 예비박 한 마디 · 두 마디 | 예비박 |
 | "count-in two bars tempo 72 from measure 57" | 예비박 두 마디 템포 72 57마디부터 | 한 번에 여럿 |
+| "help" · "how to use" · "what can I say" | 도움말 · 사용법 | 🎙 도움말 페이지 (#128) |
 
 - 수는 숫자("57")와 영어 수 낱말 둘 다: "fifty seven" · "fifty-seven" · "one hundred and five" · "a hundred", 템포처럼 "one twenty" = 120
 - 뜻 없는 말("the · to · please · go · set · show me")은 버립니다: "set the tempo to seventy two please" = 템포 72

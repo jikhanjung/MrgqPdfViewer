@@ -142,6 +142,8 @@ class PdfViewerActivity : AppCompatActivity() {
         private const val VOICE_RELEASE_TAIL_MS = 600L
         /** 🎙 를 이보다 짧게 눌렀다 떼면 말하려던 게 아니라 정지 단추로 쓴 것 — 조용히 접는다 (사용자 요청 2026-10-10) */
         private const val VOICE_TAP_MS = 400L
+        /** 🎙 를 누른 채 이만큼 아무 말도 들리지 않으면 "도움말" 안내를 덧붙인다 (#128) */
+        private const val VOICE_HELP_HINT_MS = 2_500L
         /** 👂 한 번 듣기가 끝나면 이만큼 뒤에 다시 듣는다 — 오류가 이어지면 두 배씩, [ALWAYS_BACKOFF_MAX_MS] 까지 */
         private const val ALWAYS_RESTART_MS = 250L
         private const val ALWAYS_BACKOFF_MAX_MS = 10_000L
@@ -5256,6 +5258,18 @@ class PdfViewerActivity : AppCompatActivity() {
     private fun voiceHeldLongEnough() = SystemClock.uptimeMillis() - voicePressedAtMs >= VOICE_TAP_MS
     /** 누른 채로 [VOICE_TAP_MS] 가 지나서야 "듣는 중"을 띄운다 — 짧게 눌러 정지할 때 글자가 번쩍이지 않게 */
     private val showPushListening = Runnable { if (voicePushToTalk && binding.voiceButton.isActivated) showVoiceStatus(getString(R.string.viewer_voice_status_listening)) }
+    /** 이번 🎙 누름에서 말이 들렸다(중간 결과) — 조용하면 [showVoiceHelpHint] */
+    private var voiceHeardSpeech = false
+    /** 누른 채 조용하면: 듣는 중 + "“도움말”이라고 말하면 …" (#128) */
+    private val showVoiceHelpHint = Runnable {
+        if (voicePushToTalk && binding.voiceButton.isActivated && !voiceHeardSpeech) {
+            showVoiceStatus(getString(R.string.viewer_voice_status_listening) + "\n" + voiceHelpHint())
+        }
+    }
+
+    /** "“도움말”이라고 말하면 쓸 수 있는 명령을 보여 줘요" — 부를 말은 음성 언어로 */
+    private fun voiceHelpHint(): String =
+        getString(R.string.voice_help_hint, com.mrgq.pdfviewer.voice.VoiceHelp.word(com.mrgq.pdfviewer.voice.VoiceLanguage.current(this)))
 
     // 👂 계속 듣기 (#085): 🎙 를 누르지 않아도 듣기를 끝없이 다시 걸고, 호출어("메이트") 뒤의 말만 명령으로 실행한다
     /** 화면이 앞에 있다 — onResume ~ onPause */
@@ -5379,6 +5393,7 @@ class PdfViewerActivity : AppCompatActivity() {
         binding.voiceButton.removeCallbacks(stopVoiceListening)
         binding.voiceButton.removeCallbacks(restartAlwaysListening)
         binding.voiceButton.removeCallbacks(showPushListening)
+        binding.voiceButton.removeCallbacks(showVoiceHelpHint)
         if (micFollower != null) return showVoiceStatus(getString(R.string.viewer_voice_mic_busy), VOICE_STATUS_MS)
         if (androidx.core.content.ContextCompat.checkSelfPermission(this, android.Manifest.permission.RECORD_AUDIO) !=
             android.content.pm.PackageManager.PERMISSION_GRANTED
@@ -5394,6 +5409,8 @@ class PdfViewerActivity : AppCompatActivity() {
         binding.voiceButton.isActivated = true
         showVoiceStatus(null)
         binding.voiceButton.postDelayed(showPushListening, VOICE_TAP_MS)
+        voiceHeardSpeech = false
+        binding.voiceButton.postDelayed(showVoiceHelpHint, VOICE_HELP_HINT_MS)
         listener.start(voiceHints())
     }
 
@@ -5404,6 +5421,7 @@ class PdfViewerActivity : AppCompatActivity() {
     private fun onVoiceRelease() {
         binding.voiceButton.isActivated = false
         binding.voiceButton.removeCallbacks(showPushListening)
+        binding.voiceButton.removeCallbacks(showVoiceHelpHint)
         val listener = voiceListener ?: return
         if (!listener.isActive || !voicePushToTalk) return
         // 짧게 눌렀다 뗐다 = 정지 단추 — 누르는 순간 이미 멈췄다. 듣기를 접고 아무것도 띄우지 않는다
@@ -5420,7 +5438,7 @@ class PdfViewerActivity : AppCompatActivity() {
 
     /** 이 악보에서 나올 말 — 인식이 이쪽으로 기울게 (Android 13+). 사람 이름 보표는 부를 말(성 뺀 이름 포함, #094) */
     private fun voiceHints(): List<String> =
-        com.mrgq.pdfviewer.voice.VoiceLanguage.current(this).instrumentHints() +
+        com.mrgq.pdfviewer.voice.VoiceLanguage.current(this).let { it.instrumentHints() + com.mrgq.pdfviewer.voice.VoiceHelp.hints(it) } +
             musicXml?.takeIf { musicXmlFileId == currentPdfFileId }?.parts?.map { it.name }.orEmpty() +
             PartNames.hints(cachedVoiceStaffNames())
 
@@ -5463,7 +5481,10 @@ class PdfViewerActivity : AppCompatActivity() {
         }
 
         override fun onPartial(text: String) {
-            if (voicePushToTalk) return showVoiceStatus("🎙 $text")
+            if (voicePushToTalk) {
+                if (text.isNotBlank()) voiceHeardSpeech = true
+                return showVoiceStatus("🎙 $text")
+            }
             // 👂 호출어가 들렸을 때만 띄운다 — 방 안의 다른 말은 보이지 않는다
             val command = WakeWord.commandAfter(text, wakeWords()) ?: text.takeIf { awaitingCommand() } ?: return
             showVoiceStatus("👂 $command")
@@ -5473,6 +5494,7 @@ class PdfViewerActivity : AppCompatActivity() {
             if (voicePushToTalk) {
                 voicePushToTalk = false
                 binding.voiceButton.isActivated = false
+                binding.voiceButton.removeCallbacks(showVoiceHelpHint)
                 return runVoiceCandidates(candidates, candidates, alwaysListening = false)
             }
             alwaysErrorStreak = 0
@@ -5499,7 +5521,10 @@ class PdfViewerActivity : AppCompatActivity() {
             if (!voicePushToTalk) return onAlwaysListeningError(error)
             voicePushToTalk = false
             binding.voiceButton.isActivated = false
-            showVoiceStatus(message?.let { "🎙 $it" }, VOICE_STATUS_MS)
+            binding.voiceButton.removeCallbacks(showVoiceHelpHint)
+            // 아무 말도 못 들었다 — 무엇을 말할지 몰라서일 수 있다: 도움말 안내를 덧붙인다 (#128)
+            val silent = error == android.speech.SpeechRecognizer.ERROR_NO_MATCH || error == android.speech.SpeechRecognizer.ERROR_SPEECH_TIMEOUT
+            showVoiceStatus(message?.let { "🎙 $it" + if (silent) "\n" + voiceHelpHint() else "" }, VOICE_STATUS_MS)
             scheduleAlwaysListening()
         }
     }
@@ -5519,12 +5544,74 @@ class PdfViewerActivity : AppCompatActivity() {
                 return@launch
             }
             val (text, parsed) = best
+            // "도움말" · "사용법" (#128) — 명령으로 읽힌 후보가 없을 때만(첫 후보가 도움말이면 그것)
+            val help = candidates.firstOrNull()?.takeIf { com.mrgq.pdfviewer.voice.VoiceHelp.isRequest(it) }
+                ?: candidates.firstOrNull { com.mrgq.pdfviewer.voice.VoiceHelp.isRequest(it) }?.takeIf { parsed !is com.mrgq.pdfviewer.voice.ParseResult.Commands }
+            if (help != null) {
+                showVoiceStatus(null)
+                showVoiceHelp()
+                logVoiceCommand(heard, help, VoiceCommandRunner.Report(true, com.mrgq.pdfviewer.voice.VoiceText.of(R.string.voice_help_shown)), alwaysListening)
+                scheduleAlwaysListening()
+                return@launch
+            }
             showVoiceStatus("$icon “$text”")
             val report = runCommand(parsed)
-            showVoiceStatus("$icon “$text”\n" + (if (report.ok) "✓ " else "✗ ") + report.text.resolve(this@PdfViewerActivity), VOICE_STATUS_MS)
+            // 명령을 하나도 못 찾았으면(🎙) 도움말 안내를 덧붙인다
+            val nothing = !alwaysListening && parsed is com.mrgq.pdfviewer.voice.ParseResult.Unrecognized &&
+                parsed.reason == com.mrgq.pdfviewer.voice.ParseResult.Reason.NOTHING
+            showVoiceStatus(
+                "$icon “$text”\n" + (if (report.ok) "✓ " else "✗ ") + report.text.resolve(this@PdfViewerActivity) +
+                    (if (nothing) "\n" + voiceHelpHint() else ""),
+                VOICE_STATUS_MS,
+            )
             logVoiceCommand(heard, text, report, alwaysListening)
             scheduleAlwaysListening()
         }
+    }
+
+    /**
+     * 🎙 도움말 페이지 (#128) — 자주 쓰는 명령과 한 번에 말하기 예시. 말할 문장은 음성 언어, 뜻은 앱 언어([com.mrgq.pdfviewer.voice.VoiceHelp]).
+     * 확인으로 닫는다
+     */
+    private fun showVoiceHelp() {
+        val help = com.mrgq.pdfviewer.voice.VoiceHelp
+        val language = com.mrgq.pdfviewer.voice.VoiceLanguage.current(this)
+        val density = resources.displayMetrics.density
+        val accent = 0xFF8AB4F8.toInt() // 설정 묶음 제목과 같은 연한 파랑 — 어두운 대화상자에서 읽히게
+        val text = android.text.SpannableStringBuilder()
+        fun span(start: Int, vararg what: Any) = what.forEach { text.setSpan(it, start, text.length, android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE) }
+        fun heading(title: String) {
+            if (text.isNotEmpty()) text.append("\n\n")
+            val start = text.length
+            text.append(title)
+            span(start, android.text.style.StyleSpan(android.graphics.Typeface.BOLD), android.text.style.RelativeSizeSpan(1.1f))
+        }
+        text.append(getString(R.string.voice_help_intro))
+        span(0, android.text.style.RelativeSizeSpan(0.9f))
+        for (section in help.SECTIONS) {
+            heading(getString(section.title))
+            for (entry in section.entries) {
+                text.append("\n")
+                val start = text.length
+                text.append("“").append(entry.say(language)).append("”")
+                span(start, android.text.style.StyleSpan(android.graphics.Typeface.BOLD), android.text.style.ForegroundColorSpan(accent))
+                text.append("  ").append(getString(entry.meaning))
+            }
+        }
+        heading(getString(R.string.voice_help_sec_tips))
+        for (tip in help.tips(language)) text.append("\n• ").append(tip.resolve(this))
+        val body = android.widget.TextView(this).apply {
+            setText(text)
+            textSize = 15f
+            setLineSpacing(4 * density, 1f)
+            val pad = (24 * density).toInt()
+            setPadding(pad, (8 * density).toInt(), pad, (8 * density).toInt())
+        }
+        AlertDialog.Builder(this)
+            .setTitle(getString(R.string.voice_help_title))
+            .setView(android.widget.ScrollView(this).apply { addView(body) })
+            .setPositiveButton(getString(R.string.ok), null)
+            .show()
     }
 
     /**

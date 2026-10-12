@@ -84,4 +84,49 @@
     <string name="voice_language_title">Voice language</string>
     <string name="voice_language_follow_app">Same as app language</string>
     <string name="voice_language_follow_app_now">App language (%1$s)</string>
+
+    <!-- 🎙 Help (VoiceHelp, #128) — the page shown when you say "help". Phrases follow the voice language, meanings are here -->
+    <string name="voice_help_title">🎙 Voice commands</string>
+    <string name="voice_help_intro">Hold 🎙 while you speak. The phrases below are examples — change the numbers and names</string>
+    <string name="voice_help_hint">Say \"%1$s\" to see what you can say</string>
+    <string name="voice_help_shown">Help</string>
+    <string name="voice_help_sec_position">Measures · start</string>
+    <string name="voice_help_sec_page">Pages</string>
+    <string name="voice_help_sec_metronome">Metronome</string>
+    <string name="voice_help_sec_parts">Parts</string>
+    <string name="voice_help_sec_listen">🎤 Listen &amp; turn pages</string>
+    <string name="voice_help_sec_combined">Several at once</string>
+    <string name="voice_help_sec_tips">Good to know</string>
+    <string name="voice_help_select_measure">Selects measure 57 as the start only</string>
+    <string name="voice_help_goto_measure">Starts at measure 57 right away (after the count-in)</string>
+    <string name="voice_help_start">Starts at the selected measure (or this page\'s first)</string>
+    <string name="voice_help_goto_start">Starts from the beginning</string>
+    <string name="voice_help_restart">Again from the measure you last started</string>
+    <string name="voice_help_resume">Continues from where you stopped</string>
+    <string name="voice_help_letter">Starts at rehearsal mark B</string>
+    <string name="voice_help_stop">Stops playing (a short tap on 🎙 also stops)</string>
+    <string name="voice_help_next_page">Next page</string>
+    <string name="voice_help_previous_page">Previous page</string>
+    <string name="voice_help_goto_page">Goes to page 5</string>
+    <string name="voice_help_last_page">Goes to the last page</string>
+    <string name="voice_help_tempo">Tempo ♩=72</string>
+    <string name="voice_help_count_in">One-bar count-in (one or two bars)</string>
+    <string name="voice_help_metronome">Starts the metronome</string>
+    <string name="voice_help_part">Shows only the cello part</string>
+    <string name="voice_help_part_numbered">A numbered part</string>
+    <string name="voice_help_parts">Several parts together</string>
+    <string name="voice_help_staff">An unnamed staff — second from the top</string>
+    <string name="voice_help_full_score">Back to the full score</string>
+    <string name="voice_help_listen">Listens and turns pages (from the selected measure or this page)</string>
+    <string name="voice_help_listen_from">Listens from measure 57</string>
+    <string name="voice_help_listen_start">Listens from the beginning</string>
+    <string name="voice_help_listen_resume">Listens from where it last stopped</string>
+    <string name="voice_help_combo_tempo_measure">Tempo 80, then starts at measure 57</string>
+    <string name="voice_help_combo_part_letter">Switches to the cello part and starts at letter C</string>
+    <string name="voice_help_combo_count_in_start">One-bar count-in, from the beginning</string>
+    <string name="voice_help_combo_part_page">Switches to the viola part, page 3</string>
+    <string name="voice_help_tip_hold">Let go when you\'re done. A short tap only stops playback</string>
+    <string name="voice_help_tip_number">A number alone selects a measure — or sets the tempo while the metronome settings are open</string>
+    <string name="voice_help_tip_blocked">Unclear phrases like \"%1$s\" or \"two bars back\" aren\'t run — just say it again</string>
+    <string name="voice_help_tip_person">If a staff is named after a person, use the name: \"%1$s\"</string>
 </resources>
