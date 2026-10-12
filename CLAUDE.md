@@ -13,11 +13,12 @@ Android TV OS용 PDF 악보 리더 앱으로, 무선 파일 업로드와 리모�
 > SurfaceFlinger 가 4K 로 업스케일한다. 4K 관련 작업을 시작하기 전에
 > [`devlog/20260815_040_4k_display_investigation.md`](devlog/20260815_040_4k_display_investigation.md) 를 먼저 읽을 것.
 
-**현재 버전**: v0.8.0-beta.4 (2026-10-12)  
+**현재 버전**: v0.8.0-beta.5 (2026-10-12)  
 **빌드 상태**: 🟢 빌드 가능 (GitHub Actions CI 로 커밋마다 검증)  
 **CI 게이트**: 🟢 단위 테스트 506개 + **화면 글 게이트**(`tools/i18n_gate.py` — 코드 · 레이아웃의 한글 리터럴 · values-en 빠짐, P18) + Android Lint(`MissingTranslation` 오류) + 에뮬레이터 계측 60개·release APK 스모크(API 30/34 — ⚠️ 문서 정보 검사는 모든 매트릭스에서 건너뜀, #047 §5). 계측은 main 푸시와 수동 실행에서만 (회당 5~6분)  
 **테스트 상태**: 🟢 v0.3.x 기능을 Z18TV Pro 에서 확인(2026-09-28): 파트보(한 · 여러 파트, 넓혀 자르기, 번호) · 파트 화면 악보 연동 · MusicXML 반주(K488) · MusicXML · 서버 분석 동기화 · 목록 곡 정보 · 앱 안 업데이트(v0.2.9 → v0.3.3). 🟡 **두 대가 필요한 것만 남음** — 합주 중 파트 보기, 합주 Phase 0 동기 넘김. 렌더 품질 · 키 매핑 등 전반 스모크는 2026-08-15(Google TV Streamer + 4K 모니터)
 **최근 업데이트** (전체는 [`CHANGELOG.md`](CHANGELOG.md), 오늘 작업 요약은 devlog [`065`](devlog/20260928_065_part_view_accompaniment_server_analysis.md)):
+- **v0.8.0-beta.5** — 설정 오른쪽 줄 사이 구분줄(#129)
 - **v0.8.0-beta.4** — 🎙 **도움말 페이지**("도움말" · "사용법" · "help" — 자주 쓰는 명령 · 한 번에 말하기 예시, `voice/VoiceHelp`), 누른 채 조용하면 안내(#128)
 - **v0.8.0-beta.3** — 설정은 **제목만**(설명 줄 뺌 · 지금 값은 오른쪽 · 제목 줄임, 한 · 영) · 웹서버는 그 칸을 떠나면 멈춤(#127). 설명서 다시 쓰기 계획 P19
 - **v0.8.0-beta.2** — 🌐 **영어 화면**(앱 전체 English, 약 840키) · 영어 음성 명령(설정 "음성 명령 언어") · 웹 업로드 페이지 브라우저 언어 · CI 화면 글 게이트 · User_Manual 영어판(P18 1 ~ 9단계 #126)

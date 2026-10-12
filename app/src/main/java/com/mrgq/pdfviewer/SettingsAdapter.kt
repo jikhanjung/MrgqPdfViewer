@@ -115,10 +115,51 @@ class SettingsAdapter(
 
     override fun getItemCount(): Int = items.size
 
+    /** [position] 줄 아래에 구분줄을 긋나 — 줄과 줄 사이만. 묶음 제목의 위 · 아래와 마지막 줄 아래는 긋지 않는다 */
+    fun dividerBelow(position: Int): Boolean =
+        items.getOrNull(position)?.type?.let { it != SettingsType.HEADER } == true &&
+            items.getOrNull(position + 1)?.type?.let { it != SettingsType.HEADER } == true
+
+    /**
+     * 오른쪽(상세) 목록의 줄 사이 구분줄 — Android 설정처럼 가는 선 (#129). 글 시작(28dp)부터 오른쪽 끝 안쪽까지.
+     * 줄 자리를 [DIVIDER_DP] 만큼 띄워 포커스 면과 겹치지 않게 한다
+     */
+    class Divider(context: android.content.Context) : RecyclerView.ItemDecoration() {
+        private val density = context.resources.displayMetrics.density
+        private val height = (DIVIDER_DP * density).toInt().coerceAtLeast(1)
+        private val inset = (28 * density).toInt()
+        private val paint = android.graphics.Paint().apply { color = DIVIDER_COLOR }
+
+        private fun below(parent: RecyclerView, view: View): Boolean {
+            val position = parent.getChildAdapterPosition(view)
+            return position != RecyclerView.NO_POSITION && (parent.adapter as? SettingsAdapter)?.dividerBelow(position) == true
+        }
+
+        override fun getItemOffsets(outRect: android.graphics.Rect, view: View, parent: RecyclerView, state: RecyclerView.State) {
+            outRect.set(0, 0, 0, if (below(parent, view)) height else 0)
+        }
+
+        override fun onDraw(canvas: android.graphics.Canvas, parent: RecyclerView, state: RecyclerView.State) {
+            for (i in 0 until parent.childCount) {
+                val child = parent.getChildAt(i)
+                if (!below(parent, child)) continue
+                val top = child.bottom + child.translationY
+                canvas.drawRect(
+                    (parent.paddingLeft + inset).toFloat(), top,
+                    (parent.width - parent.paddingRight - inset).toFloat(), top + height,
+                    paint,
+                )
+            }
+        }
+    }
+
     companion object {
         private const val TYPE_CARD = 0
         private const val TYPE_ROW = 1
         private const val TYPE_HEADER = 2
         private const val TYPE_BUTTON = 3
+        /** 구분줄 굵기 · 색 — 어두운 바탕에서 보일 듯 말 듯 (Android 설정의 outlineVariant 쯤) */
+        private const val DIVIDER_DP = 1f
+        private const val DIVIDER_COLOR = 0x26FFFFFF
     }
 }

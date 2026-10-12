@@ -1086,6 +1086,8 @@ class SettingsActivity : AppCompatActivity() {
             handleDetailItemClick(item)
         }
         binding.detailRecyclerView.layoutManager = LinearLayoutManager(this)
+        // 줄 사이 구분줄 (#129) — 한 번만 붙인다
+        if (binding.detailRecyclerView.itemDecorationCount == 0) binding.detailRecyclerView.addItemDecoration(SettingsAdapter.Divider(this))
         binding.detailRecyclerView.adapter = detailAdapter
         
         if (!twoPane) binding.settingsRecyclerView.visibility = View.GONE
