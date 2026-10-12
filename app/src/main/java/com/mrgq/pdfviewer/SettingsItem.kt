@@ -4,8 +4,9 @@ data class SettingsItem(
     val id: String,
     val icon: String,
     val title: String,
-    val subtitle: String = "",
     val arrow: String = "",
+    /** 줄 오른쪽에 보일 지금 값(포트 · 언어 · 버전 등) — 설명 줄 대신 (#127). 있으면 [arrow] 대신 */
+    val value: String = "",
     val type: SettingsType = SettingsType.CATEGORY,
     val enabled: Boolean = true,
     val action: (() -> Unit)? = null,
@@ -21,6 +22,6 @@ enum class SettingsType {
     INFO,
     /** 오른쪽 칸의 묶음 제목 (#122) — [SettingsItem.title] 만, 포커스 · 누름 없음 */
     HEADER,
-    /** 누르면 바로 무언가를 하는 줄 — 단추 모양으로 보인다(제목 = 단추 글, 설명은 아래) (#123) */
+    /** 누르면 바로 무언가를 하는 줄 — 단추 모양으로 보인다(제목 = 단추 글) (#123) */
     BUTTON
 }

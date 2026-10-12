@@ -32,17 +32,17 @@
     <string name="error_file_not_found_or_moved">The file was not found or has been moved</string>
 
     <!-- Settings -->
-    <string name="settings_show_page_info">Show page info</string>
+    <string name="settings_show_page_info">Page info</string>
     <string name="settings_show_page_info_desc">Shows the file name and page number at the bottom of the screen</string>
     <string name="settings_animation_speed">Animation speed</string>
     <string name="settings_animation_speed_desc">Adjusts the page-turn animation speed</string>
 
     <!-- Collaboration Settings -->
-    <string name="settings_input_block_time">Input block time</string>
+    <string name="settings_input_block_time">Input block</string>
     <string name="settings_input_block_time_desc">How long to block input on a performer after a sync</string>
     <string name="settings_input_block_time_title">Input block time</string>
     <string name="settings_input_block_time_message">How long to block the performer\'s input after a sync message (milliseconds)</string>
-    <string name="settings_message_queue_stats">Message queue stats</string>
+    <string name="settings_message_queue_stats">Message queue</string>
     <string name="settings_message_queue_stats_desc">Shows ensemble message processing stats</string>
     <string name="settings_reset_queue_stats">Reset stats</string>
     <string name="settings_reset_queue_stats_desc">Resets the message queue stats</string>
@@ -62,6 +62,6 @@
     <string name="settings_language_header">Language</string>
     <string name="settings_language_title">Language (언어)</string>
     <string name="settings_language_system">System default</string>
-    <string name="settings_language_system_with">System default — %1$s</string>
+    <string name="settings_language_system_with">System (%1$s)</string>
     <string name="settings_language_dialog_title">Language</string>
 </resources>

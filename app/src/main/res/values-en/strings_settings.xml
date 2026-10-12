@@ -12,28 +12,20 @@
     <string name="settings_delete">Delete</string>
     <string name="settings_default">Default</string>
     <string name="settings_off">Off</string>
-    <string name="settings_enabled">On</string>
-    <string name="settings_disabled">Off</string>
-    <string name="settings_this_device">this %1$s</string>
+    <string name="settings_ms">%1$d ms</string>
 
     <!-- Categories (left list) -->
-    <string name="settings_cat_files">File management</string>
-    <string name="settings_cat_files_summary">Saved PDF files: %1$d</string>
+    <string name="settings_cat_files">Files</string>
     <string name="settings_cat_web">Web server</string>
-    <string name="settings_cat_collab">Ensemble mode</string>
-    <string name="settings_cat_collab_summary">Ensemble settings</string>
+    <string name="settings_cat_collab">Ensemble</string>
     <string name="settings_cat_animation">Animation &amp; sound</string>
-    <string name="settings_cat_animation_summary">Page-turn effects</string>
     <string name="settings_cat_voice">Voice commands</string>
-    <string name="settings_cat_voice_summary">Push to talk · always listening</string>
     <string name="settings_cat_recordings">Recordings</string>
-    <string name="settings_cat_display">Display mode</string>
-    <string name="settings_cat_display_summary">Saved settings: %1$d</string>
+    <string name="settings_cat_display">Display</string>
     <string name="settings_cat_info">About</string>
 
     <!-- File management -->
-    <string name="settings_delete_all_pdf">Delete all PDF files</string>
-    <string name="settings_delete_all_pdf_desc">Deletes every saved PDF file</string>
+    <string name="settings_delete_all_pdf">Delete all PDFs</string>
     <string name="settings_delete_all_pdf_none">No PDF files to delete</string>
     <string name="settings_delete_all_pdf_confirm">Delete all PDF files (%1$d)?\nThis can\'t be undone.</string>
     <string name="settings_delete_button">Delete</string>
@@ -41,18 +33,8 @@
     <string name="settings_delete_all_pdf_partial">Deleted %1$d files, %2$d failed</string>
 
     <!-- Web server -->
-    <string name="settings_web_unavailable_linked">Not available while linked to ScoreMate</string>
-    <string name="settings_web_running">Running (%1$s:%2$d)</string>
-    <string name="settings_web_stopped">Stopped</string>
-    <string name="settings_web_linked_title">Not available on a TV linked to ScoreMate</string>
-    <string name="settings_web_linked_desc">Upload scores on the ScoreMate web and sync. To use the web server, unlink in Settings → ScoreMate</string>
-    <string name="settings_web_start">Start web server</string>
-    <string name="settings_web_stop">Stop web server</string>
-    <string name="settings_web_status">Status: %1$s</string>
+    <string name="settings_web_unavailable_linked">Off while linked to ScoreMate</string>
     <string name="settings_web_port">Port</string>
-    <string name="settings_web_port_current">Current port: %1$d</string>
-    <string name="settings_web_log">Activity log</string>
-    <string name="settings_web_log_desc">Live web server activity appears below</string>
     <string name="settings_web_log_title">Web server activity log</string>
     <string name="settings_web_log_placeholder">Web server logs appear here...</string>
     <string name="settings_web_log_started">✅ Web server started - http://%1$s:%2$d</string>
@@ -68,63 +50,41 @@
     <string name="settings_web_port_range">The port must be between 1024 and 65535</string>
     <string name="settings_web_port_invalid">Enter a valid port number</string>
     <string name="settings_web_port_empty">Enter a port number</string>
-    <string name="settings_web_running_title">Web server running</string>
-    <string name="settings_web_exit_settings_message">The web server is running (%1$s:%2$d)\n\nLeaving Settings stops the web server.\nContinue?</string>
-    <string name="settings_web_exit_panel_message">The web server is running (%1$s:%2$d)\n\nLeaving the web server settings stops the web server.\nContinue?</string>
-    <string name="settings_web_leave">Leave</string>
-    <string name="settings_web_stay">Stay</string>
 
     <!-- Ensemble mode -->
     <string name="settings_ensemble_header">Ensemble</string>
-    <string name="settings_collab_info">About ensemble mode</string>
-    <string name="settings_collab_info_desc">Start ensemble mode from the main screen</string>
-    <string name="settings_ensemble_sound">Ensemble metronome sound (performer)</string>
-    <string name="settings_ensemble_sound_on">On — performer devices also click along with the conductor\'s metronome</string>
-    <string name="settings_ensemble_sound_off">Off — performer devices follow only the beat display, current measure and page turns</string>
+    <string name="settings_ensemble_sound">Performer metronome</string>
     <string name="settings_ensemble_sound_on_toast">Performer devices play the metronome sound too</string>
     <string name="settings_ensemble_sound_off_toast">Performer devices don\'t play the metronome sound</string>
-    <string name="settings_sync_turn_header">Synced page turn (experimental)</string>
-    <string name="settings_sync_turn">Synced page turn</string>
-    <string name="settings_sync_turn_on_desc">Now: ON · all devices turn together after a delay</string>
-    <string name="settings_sync_turn_off_desc">Now: OFF · turn as soon as the signal arrives (default)</string>
+    <string name="settings_sync_turn_header">Experimental</string>
+    <string name="settings_sync_turn">Synced turns</string>
     <string name="settings_sync_turn_on_toast">Synced page turn ON (all turn together after a delay)</string>
     <string name="settings_sync_turn_off_toast">Synced page turn OFF (turn immediately)</string>
     <string name="settings_sync_lead">Turn delay</string>
-    <string name="settings_sync_lead_desc">Now: %1$d ms · time from press to turn</string>
     <string name="settings_sync_lead_hint">Milliseconds (500-5000)</string>
     <string name="settings_sync_lead_title">Turn delay</string>
     <string name="settings_sync_lead_message">Time (ms) from the conductor pressing page turn until the page actually turns.\nAll devices turn at that moment. (Recommended 1000–2500)</string>
     <string name="settings_sync_lead_saved">Turn delay set to %1$d ms</string>
     <string name="settings_sync_lead_range">Enter a value between 500 and 5000</string>
     <string name="settings_advanced_header">Advanced</string>
-    <string name="settings_input_block_current">Now: %1$d ms</string>
     <string name="settings_input_block_hint">Milliseconds (100-2000)</string>
     <string name="settings_input_block_saved">Input block time set to %1$d ms</string>
     <string name="settings_input_block_range">Enter a value between 100 and 2000</string>
     <string name="settings_invalid_number">Enter a valid number</string>
-    <string name="settings_message_queue_disabled">Disabled (performance)</string>
     <string name="settings_message_queue_title">Message queue system</string>
     <string name="settings_message_queue_message">The message queue system is disabled for performance.\n\nEnsemble messages are now handled directly for a faster response.</string>
 
     <!-- ScoreMate -->
-    <string name="settings_scoremate_linked_summary">Linked — %1$s</string>
-    <string name="settings_scoremate_unlinked_summary">Not linked — link this %1$s to the score server</string>
     <string name="settings_scoremate_link_header">Link</string>
     <string name="settings_scoremate_linked">Linked</string>
     <string name="settings_scoremate_unlinked">Not linked</string>
-    <string name="settings_scoremate_unlinked_desc">Scan the QR code with your phone to link this %1$s to your ScoreMate account</string>
     <string name="settings_scoremate_check">Check link</string>
-    <string name="settings_scoremate_check_desc">Get this %1$s\'s info from the server</string>
     <string name="settings_scoremate_unlink">Unlink</string>
-    <string name="settings_scoremate_unlink_desc">Unlinks this %1$s from ScoreMate</string>
     <string name="settings_scoremate_link">Link this %1$s</string>
-    <string name="settings_scoremate_link_desc">Link from your phone with the on-screen QR code or link code</string>
-    <string name="settings_scoremate_server">Server address</string>
+    <string name="settings_scoremate_server">Server</string>
     <string name="settings_scoremate_scores_header">Scores</string>
     <string name="settings_scoremate_sync">Sync now</string>
-    <string name="settings_scoremate_sync_desc">Downloads ensemble and my scores (also automatically when the app starts). Downloaded scores show ☁️ in the file list</string>
-    <string name="settings_scoremate_unhide">Download hidden scores again</string>
-    <string name="settings_scoremate_unhide_desc">Server scores deleted on the TV are downloaded again at the next sync</string>
+    <string name="settings_scoremate_unhide">Restore hidden scores</string>
     <string name="settings_scoremate_linked_toast">Linked to ScoreMate — the file list now shows ScoreMate scores</string>
     <string name="settings_scoremate_check_title">ScoreMate link</string>
     <string name="settings_scoremate_check_message">This %1$s: %2$s\nServer: %3$s\nLast seen: %4$s</string>
@@ -142,11 +102,9 @@
     <string name="settings_scoremate_server_invalid">Can\'t read the server address</string>
 
     <!-- Animation & sound -->
-    <string name="settings_page_turn_animation">Page-turn animation</string>
-    <string name="settings_page_turn_sound">Page-turn sound</string>
-    <string name="settings_sound_volume">Sound volume</string>
-    <string name="settings_page_info_shown">Shown</string>
-    <string name="settings_page_info_hidden">Hidden</string>
+    <string name="settings_page_turn_animation">Turn animation</string>
+    <string name="settings_page_turn_sound">Turn sound</string>
+    <string name="settings_sound_volume">Volume</string>
     <string name="settings_animation_on_toast">Page-turn animation on</string>
     <string name="settings_animation_off_toast">Page-turn animation off</string>
     <string name="settings_sound_on_toast">Page-turn sound on</string>
@@ -165,17 +123,12 @@
     <string name="settings_speed_saved">Animation speed changed: %1$s</string>
 
     <!-- Display mode -->
-    <string name="settings_phone_orientation">Rotation (score screen)</string>
+    <string name="settings_phone_orientation">Rotation</string>
     <string name="settings_orientation_auto">Device rotation</string>
     <string name="settings_orientation_landscape">Landscape</string>
     <string name="settings_orientation_portrait">Portrait</string>
-    <string name="settings_orientation_auto_desc">Device rotation — follows the phone (auto-rotate and rotation lock)</string>
-    <string name="settings_orientation_landscape_desc">Landscape — stays landscape when you turn the phone (1–2 systems at a time)</string>
-    <string name="settings_orientation_portrait_desc">Portrait — stays portrait when you turn the phone (usually a whole page)</string>
-    <string name="settings_view_display_modes">View saved settings</string>
-    <string name="settings_view_display_modes_desc">Shows the saved display mode of each file</string>
-    <string name="settings_reset_display_modes">Reset settings</string>
-    <string name="settings_reset_display_modes_desc">Resets the display mode of all files</string>
+    <string name="settings_view_display_modes">Per-file settings</string>
+    <string name="settings_reset_display_modes">Reset all</string>
     <string name="settings_reset_display_modes_title">Reset display modes</string>
     <string name="settings_reset_display_modes_confirm">Reset the display mode settings of all files?\nThis can\'t be undone.</string>
     <string name="settings_reset_button">Reset</string>
@@ -190,31 +143,18 @@
 
     <!-- About · updates -->
     <string name="settings_update_header">Updates</string>
-    <string name="settings_app_version">App version</string>
+    <string name="settings_app_version">Version</string>
     <string name="settings_check_update">Check for updates</string>
-    <string name="settings_check_update_desc">Look for a new version on the ScoreMate server</string>
-    <string name="settings_auto_update">Automatic update check</string>
-    <string name="settings_auto_update_on">On — checks every 10 minutes on the file list and settings screens and tells you about a new version</string>
-    <string name="settings_prerelease">Get pre-releases (beta)</string>
-    <string name="settings_prerelease_on">On — also gets test builds. They may include unverified features</string>
-    <string name="settings_prerelease_off">Off — stable releases only</string>
+    <string name="settings_auto_update">Auto check</string>
+    <string name="settings_prerelease">Get betas</string>
     <string name="settings_prerelease_on_toast">Getting pre-releases too — they may include unverified features</string>
-    <string name="settings_about_header">About</string>
-    <string name="settings_app_info_desc">MRGQ PDF Viewer — a smart score reader for TV, tablet and phone</string>
 
     <!-- Voice commands -->
     <string name="settings_voice_press_header">Push to talk</string>
-    <string name="settings_voice_unavailable">This device has no speech recognition service — tap for install help (Google \"Speech Recognition &amp; Synthesis\")</string>
-    <string name="settings_voice_on">On — on the score screen, hold 🎙 at the bottom right and speak: \"start from measure 57\" · \"next page\" · \"cello part\" (see Voice command language below). Uses the device\'s speech recognition (usually online)</string>
-    <string name="settings_voice_off">Off — turn on to get a 🎙 button on the score screen</string>
-    <string name="settings_voice_always">Always listening (experimental)</string>
-    <string name="settings_voice_always_unavailable">Not available right now — being refined</string>
-    <string name="settings_voice_always_needs_voice">Turn on 🎙 voice commands above first</string>
-    <string name="settings_voice_always_on">On — listens all the time on the score screen and runs only what follows the wake word \"%1$s\" (\"%1$s, 57마디부터\" · \"%1$s, 멈춰\"). Also listens while you play. Notification sounds are muted while listening (calls may come as vibration on phones). What it hears keeps going to the device\'s speech recognition (usually Google, online)</string>
-    <string name="settings_voice_always_off">Off — turn on to give commands with \"%1$s, …\" without pressing 🎙</string>
-    <string name="settings_wake_words">Wake word (always listening)</string>
-    <string name="settings_wake_words_desc">%1$s — tap to change</string>
-    <string name="settings_wake_words_desc_default">%1$s (default) — tap to change</string>
+    <string name="settings_voice_unavailable">Not installed</string>
+    <string name="settings_voice_always">Always listen</string>
+    <string name="settings_voice_always_header">Always listening (experimental)</string>
+    <string name="settings_wake_words">Wake word</string>
     <string name="settings_wake_title">🗣 Wake word</string>
     <string name="settings_wake_help">👂 Always listening runs only what you say after this word. Separate several with commas — also add the spellings speech recognition may use (e.g. 마에스트로, maestro). Leave empty for the default (메이트)</string>
     <string name="settings_wake_not_saved">Not saved — %1$s</string>
@@ -224,18 +164,9 @@
     <string name="settings_recognizer_no_store">Can\'t open the store or a browser — find and install %1$s</string>
 
     <!-- Recordings -->
-    <string name="settings_recordings_none">None</string>
-    <string name="settings_recordings_summary">%1$d · %2$s</string>
-    <string name="settings_rec_folder">Location</string>
-    <string name="settings_rec_folder_desc">Internal storage/Android/data/%1$s/files/recordings · %2$d · %3$s</string>
     <string name="settings_rec_empty">No recordings</string>
-    <string name="settings_rec_empty_desc">🎤 Listen &amp; turn pages in the score screen\'s ↑ menu saves the audio and a tracking log</string>
-    <string name="settings_rec_from_measure">from measure %1$d</string>
-    <string name="settings_rec_turns">%1$d page turns</string>
     <string name="settings_rec_to_page">to page %1$d</string>
-    <string name="settings_rec_practice">Practice recording</string>
     <string name="settings_rec_delete_all">Delete all</string>
-    <string name="settings_rec_delete_all_desc">Deletes %1$d recordings (%2$s)</string>
     <string name="settings_rec_recorded">Recorded: %1$s</string>
     <string name="settings_rec_length">Length: %1$s · %2$s</string>
     <string name="settings_rec_tempo">Reference tempo: ♩=%1$s</string>

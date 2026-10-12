@@ -64,7 +64,7 @@ enum class VoiceLanguage(val recognizerTag: String) {
             VoiceLanguageSetting.ENGLISH -> context.getString(R.string.language_name_en)
         }
 
-        /** 설정 줄 부제 — "앱 언어 따름 (지금 한국어)" · "English" */
+        /** 설정 줄 오른쪽 값 — "앱 언어 (한국어)" · "English" */
         fun summary(context: Context): String {
             val setting = setting(context)
             if (setting != VoiceLanguageSetting.FOLLOW_APP) return label(context, setting)

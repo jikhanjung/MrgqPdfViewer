@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-    설정 오른쪽(상세) 줄 — Android 설정의 두 칸 오른쪽처럼 카드 없이 평평한 줄: 제목 · 설명 · 오른쪽 스위치 / 값 (#122).
+    설정 오른쪽(상세) 줄 — Android 설정의 두 칸 오른쪽처럼 카드 없이 평평한 줄: 제목 · 오른쪽 스위치 / 값 (#122).
+    설명 줄은 쓰지 않는다 — 제목만, 지금 값은 오른쪽에 (#127)
     아이콘은 왼쪽 카테고리에만. 포커스 · 누름은 줄 전체가 둥근 밝은 면
 -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
@@ -28,23 +29,17 @@
             android:layout_height="wrap_content"
             android:textSize="17sp"
             android:textColor="@android:color/white" />
-
-        <TextView
-            android:id="@+id/subtitleText"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:textSize="14sp"
-            android:textColor="#A6FFFFFF"
-            android:lineSpacingExtra="2dp"
-            android:layout_marginTop="3dp"
-            android:visibility="gone" />
     </LinearLayout>
 
+    <!-- 지금 값 또는 ▶ — 긴 값(서버 주소 등)은 한 줄로 끝을 줄인다 -->
     <TextView
         android:id="@+id/arrowText"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:textSize="14sp"
+        android:maxWidth="260dp"
+        android:maxLines="1"
+        android:ellipsize="end"
+        android:textSize="15sp"
         android:textColor="#A6FFFFFF"
         android:layout_marginStart="16dp" />
 

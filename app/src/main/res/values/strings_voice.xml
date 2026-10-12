@@ -81,7 +81,7 @@
     <string name="voice_language_name_english">영어</string>
 
     <!-- 설정 "음성 명령 언어" (VoiceLanguage) -->
-    <string name="voice_language_title">음성 명령 언어</string>
+    <string name="voice_language_title">음성 언어</string>
     <string name="voice_language_follow_app">앱 언어 따름</string>
-    <string name="voice_language_follow_app_now">앱 언어 따름 (지금 %1$s)</string>
+    <string name="voice_language_follow_app_now">앱 언어 (%1$s)</string>
 </resources>

@@ -81,7 +81,7 @@
     <string name="voice_language_name_english">English</string>
 
     <!-- Settings "Voice command language" (VoiceLanguage) -->
-    <string name="voice_language_title">Voice command language</string>
+    <string name="voice_language_title">Voice language</string>
     <string name="voice_language_follow_app">Same as app language</string>
-    <string name="voice_language_follow_app_now">Same as app language (now %1$s)</string>
+    <string name="voice_language_follow_app_now">App language (%1$s)</string>
 </resources>

@@ -43,7 +43,6 @@ class SettingsAdapter(
     private inner class RowViews(
         val root: View,
         val title: TextView,
-        val subtitle: TextView,
         val arrow: TextView,
         val toggle: SwitchMaterial,
         val icon: TextView?,
@@ -51,10 +50,10 @@ class SettingsAdapter(
         fun bind(item: SettingsItem) {
             icon?.text = item.icon
             title.text = item.title
-            subtitle.text = item.subtitle
-            subtitle.visibility = if (item.subtitle.isNotEmpty()) View.VISIBLE else View.GONE
-            arrow.text = item.arrow
-            arrow.visibility = if (item.arrow.isNotEmpty()) View.VISIBLE else View.GONE
+            // 오른쪽: 지금 값이 있으면 값, 아니면 화살표 (#127)
+            val right = item.value.ifEmpty { item.arrow }
+            arrow.text = right
+            arrow.visibility = if (right.isNotEmpty()) View.VISIBLE else View.GONE
             // 켜기 · 끄기는 스위치로도 — 카드 줄은 터치 기기만(P17 5단계), 평평한 줄은 TV 도(Android TV 설정처럼, #122)
             val showToggle = item.checked != null && (detail || !com.mrgq.pdfviewer.utils.DeviceForm.isTv(root.context))
             toggle.visibility = if (showToggle) View.VISIBLE else View.GONE
@@ -77,8 +76,6 @@ class SettingsAdapter(
     private inner class ButtonHolder(val binding: ItemSettingsButtonBinding) : RecyclerView.ViewHolder(binding.root) {
         fun bind(item: SettingsItem) {
             binding.buttonText.text = item.title
-            binding.subtitleText.text = item.subtitle
-            binding.subtitleText.visibility = if (item.subtitle.isNotEmpty()) View.VISIBLE else View.GONE
             binding.root.alpha = if (item.enabled) 1.0f else 0.38f
             binding.root.setOnClickListener { if (item.enabled) onItemClick(item) }
             val focus = onItemFocus
@@ -99,10 +96,10 @@ class SettingsAdapter(
             TYPE_HEADER -> HeaderHolder(ItemSettingsHeaderBinding.inflate(inflater, parent, false))
             TYPE_BUTTON -> ButtonHolder(ItemSettingsButtonBinding.inflate(inflater, parent, false))
             TYPE_ROW -> ItemSettingsRowBinding.inflate(inflater, parent, false).let {
-                RowHolder(RowViews(it.root, it.titleText, it.subtitleText, it.arrowText, it.toggleSwitch, icon = null))
+                RowHolder(RowViews(it.root, it.titleText, it.arrowText, it.toggleSwitch, icon = null))
             }
             else -> ItemSettingsBinding.inflate(inflater, parent, false).let {
-                RowHolder(RowViews(it.root, it.titleText, it.subtitleText, it.arrowText, it.toggleSwitch, it.iconText))
+                RowHolder(RowViews(it.root, it.titleText, it.arrowText, it.toggleSwitch, it.iconText))
             }
         }
     }
