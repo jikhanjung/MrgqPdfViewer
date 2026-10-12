@@ -3211,15 +3211,25 @@ class PdfViewerActivity : AppCompatActivity() {
         val p = page - 1
         if (p !in 0 until pageCount) return
         cancelPendingRoll()
+        if (!showStartSpread(p)) handleRemotePageChange(page)
+    }
+
+    /**
+     * [p](순번) 쪽에서 시작하는 펼침이 보통의 짝이 아니면(오른쪽 자리에서 시작 — 4쪽 → 5 | 4) 그것을 그리고 true.
+     * 쪽이 아직 그려지지 않았으면 그려지기를 잠시 기다린다. [onShown] = 그렸을 때
+     */
+    private fun showStartSpread(p: Int, onShown: (() -> Unit)? = null): Boolean {
         val spread = com.mrgq.pdfviewer.follow.RollingTurns.startSpread(p, pageCount)
-        if (spread.isPair) return handleRemotePageChange(page)
-        Log.d("PdfViewerActivity", "🎼 듣기 시작 펼침: 지휘자 ${page}쪽 → ${spread.left + 1} | ${spread.right?.plus(1)}")
+        if (spread.isPair) return false
+        Log.d("PdfViewerActivity", "🎼 시작 펼침: ${p + 1}쪽 → ${spread.left + 1} | ${spread.right?.plus(1)}")
         pageCache?.prerenderAround(p)
         var attempts = 0
         val r = object : Runnable {
             override fun run() {
-                if (showSpread(spread, conductorPage = p) || ++attempts >= ROLL_START_ATTEMPTS) {
+                val shown = showSpread(spread, conductorPage = p)
+                if (shown || ++attempts >= ROLL_START_ATTEMPTS) {
                     pendingRoll = null
+                    if (shown) onShown?.invoke()
                     return
                 }
                 binding.pdfView.postDelayed(this, ROLL_START_RETRY_MS)
@@ -3227,6 +3237,47 @@ class PdfViewerActivity : AppCompatActivity() {
         }
         pendingRoll = r
         r.run()
+        return true
+    }
+
+    // ── 메트로놈 악보 연동의 두 쪽 차례 넘김 — 듣고 넘기기(#068 · #088)와 같게 ─────────────────
+    /** 연주 중인 쪽(순번) — 바뀔 때만 넘김을 정한다. -1 = 이번 연주에서 아직 없음(다음이 시작 펼침) */
+    private var followRollPage = -1
+
+    /**
+     * 메트로놈이 [measure] 를 친다. 두 쪽 전체 악보면 쪽에 들어설 때마다: 처음이면 시작 펼침(오른쪽 자리에서 시작 → 왼쪽을 다음 쪽으로),
+     * 아니면 [ROLL_DELAY_MS] 뒤 다 친 쪽 자리만 다음 쪽으로(1 | 2 → 3 | 2 → 3 | 4). 화면에 없는 쪽이면 [ensureMeasureVisible] 이 짝으로 넘긴다.
+     * 합주 지휘자면 넘긴 쪽을 `page_change.roll` 로 알린다 — 마디로 따라가지 않는 두 쪽 연주자도 같은 차례 넘김을 하게
+     */
+    private fun rollFollow(measure: ScoreMeasure) {
+        if (!isTwoPageMode || partViewLayout != null || phoneView) return
+        val p = measure.pageIndex
+        if (p == followRollPage || p !in 0 until pageCount) return
+        val first = followRollPage < 0
+        followRollPage = p
+        if (first) {
+            cancelPendingRoll()
+            showStartSpread(p) { broadcastFollowRoll(p, start = true) }
+            return
+        }
+        val current = rollSpread ?: com.mrgq.pdfviewer.follow.RollingTurns.Spread.pairOf(pairStart(pageIndex), pageCount)
+        val action = com.mrgq.pdfviewer.follow.RollingTurns.onPage(current, p, pageCount)
+        if (action !is com.mrgq.pdfviewer.follow.RollingTurns.Action.Delayed) return
+        cancelPendingRoll()
+        Log.d("PdfViewerActivity", "🎼 메트로놈 차례 넘김 예약: ${p + 1}쪽 → ${ROLL_DELAY_MS}ms 뒤 ${action.spread.left + 1} | ${action.spread.right?.plus(1)}")
+        val r = Runnable {
+            pendingRoll = null
+            // 그사이 멈췄거나 다른 쪽으로 갔으면 그만
+            if (followState != FollowState.PLAYING || followRollPage != p) return@Runnable
+            if (showSpread(action.spread, conductorPage = p)) broadcastFollowRoll(p, start = false)
+        }
+        pendingRoll = r
+        binding.pdfView.postDelayed(r, ROLL_DELAY_MS)
+    }
+
+    private fun broadcastFollowRoll(p: Int, start: Boolean) {
+        if (collaborationMode != CollaborationMode.CONDUCTOR || ensembleRole == EnsembleRole.FOLLOWING) return
+        globalCollaborationManager.broadcastPageChange(p + 1, pdfFileName, roll = true, rollStart = start)
     }
 
     /** 두 쪽 화면에 [spread] 의 왼 · 오 쪽을 그린다. 보통의 짝이면 [showPage] 로. 쪽이 아직 캐시에 없거나 넘기는 중이면 false */
@@ -4471,6 +4522,7 @@ class PdfViewerActivity : AppCompatActivity() {
             followMeasure = startable[startIndex]
             followInCountIn = true
             turnRequestedTo = -1
+            followRollPage = -1
             schedule.barPosition = { index -> scoreFollower.barPositionAt(index) }
             followState = FollowState.PLAYING
         } else if (run.startMeasure != null) {
@@ -5736,6 +5788,7 @@ class PdfViewerActivity : AppCompatActivity() {
         metronome.accompanimentVolume = preferences.getFloat(PREF_ACCOMPANIMENT_VOLUME, 0.6f)
         followState = FollowState.PLAYING
         turnRequestedTo = -1
+        followRollPage = -1
         startMetronome()
         refreshScoreOverlay()
     }
@@ -5788,10 +5841,14 @@ class PdfViewerActivity : AppCompatActivity() {
         if (beat == null) return
         val position = scoreFollower.positionAt(beat.index)
         when (position) {
-            is ScoreFollower.Position.CountIn -> showCountIn(position.barsLeft)
+            is ScoreFollower.Position.CountIn -> {
+                showCountIn(position.barsLeft)
+                followMeasure?.let { rollFollow(it) } // 예비박부터 시작 펼침
+            }
             is ScoreFollower.Position.InMeasure -> {
                 showCountIn(null)
                 metronome.timeSignature = position.timeSignature
+                rollFollow(position.measure)
                 if (followInCountIn || followMeasure?.measureNumber != position.measure.measureNumber) {
                     followInCountIn = false
                     followMeasure = position.measure
@@ -5815,7 +5872,8 @@ class PdfViewerActivity : AppCompatActivity() {
     }
 
     private fun isMeasureVisible(measure: ScoreMeasure): Boolean =
-        measure.pageIndex == pageIndex || (isTwoPageMode && measure.pageIndex == pageIndex + 1)
+        rollSpread?.takeIf { isTwoPageMode }?.shows(measure.pageIndex)
+            ?: (measure.pageIndex == pageIndex || (isTwoPageMode && measure.pageIndex == pageIndex + 1))
 
     /**
      * [measure] 가 화면에 없으면 그 페이지로 넘긴다. 두 페이지 모드는 지금 펼침의 짝(홀짝)을 유지한다.
@@ -6026,18 +6084,22 @@ class PdfViewerActivity : AppCompatActivity() {
         )
     }
 
-    /** 마디 박스 — 지금 화면(쪽 · 두 쪽 모드 · 클리핑 · 여백)의 표시 비트맵 픽셀 좌표 */
-    private fun overlayBoxes(measures: List<ScoreMeasure>) = ScoreOverlayGeometry.boxes(
-        measures = measures,
-        leftPageIndex = pageIndex,
-        twoPageMode = isTwoPageMode,
-        pageCount = pageCount,
-        screenWidth = screenWidth,
-        screenHeight = screenHeight,
-        topClipping = currentTopClipping,
-        bottomClipping = currentBottomClipping,
-        centerPadding = currentCenterPadding,
-    )
+    /** 마디 박스 — 지금 화면(쪽 · 두 쪽 모드 · 클리핑 · 여백)의 표시 비트맵 픽셀 좌표. 차례 넘김 화면(3 | 2)이면 그 두 쪽으로 */
+    private fun overlayBoxes(measures: List<ScoreMeasure>): List<com.mrgq.pdfviewer.score.OverlayBox> {
+        val spread = rollSpread?.takeIf { isTwoPageMode }
+        return ScoreOverlayGeometry.boxes(
+            measures = measures,
+            leftPageIndex = spread?.left ?: pageIndex,
+            twoPageMode = isTwoPageMode,
+            pageCount = pageCount,
+            screenWidth = screenWidth,
+            screenHeight = screenHeight,
+            topClipping = currentTopClipping,
+            bottomClipping = currentBottomClipping,
+            centerPadding = currentCenterPadding,
+            rightPageIndex = if (spread != null) spread.right else if (isTwoPageMode) (pageIndex + 1).takeIf { it < pageCount } else null,
+        )
+    }
 
     /**
      * 화면 좌표 ([x], [y] — 창 기준)에 있는 시작 가능한 마디 (태블릿: 마디를 탭해 시작 마디 고르기). 없으면 -1.

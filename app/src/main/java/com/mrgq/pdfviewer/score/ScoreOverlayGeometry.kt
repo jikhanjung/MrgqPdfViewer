@@ -43,6 +43,8 @@ object ScoreOverlayGeometry {
         topClipping: Float,
         bottomClipping: Float,
         centerPadding: Float,
+        /** 오른쪽 자리의 쪽 — 보통 왼쪽 + 1, 차례 넘김(3 | 2)이면 다른 쪽 */
+        rightPageIndex: Int? = if (twoPageMode) (leftPageIndex + 1).takeIf { it < pageCount } else null,
     ): List<OverlayBox> {
         if (measures.isEmpty() || screenWidth <= 0 || screenHeight <= 0) return emptyList()
         val byPage = measures.groupBy { it.pageIndex }
@@ -54,9 +56,8 @@ object ScoreOverlayGeometry {
             val m = byPage[page]?.first() ?: anyMeasure
             return rendererPoints(m.pageWidthPt) to rendererPoints(m.pageHeightPt)
         }
-        val right = if (twoPageMode) (leftPageIndex + 1).takeIf { it < pageCount } else null
         return placements(
-            leftPageIndex, right, twoPageMode, ::sizeOf, screenWidth, screenHeight, topClipping, bottomClipping, centerPadding,
+            leftPageIndex, rightPageIndex, twoPageMode, ::sizeOf, screenWidth, screenHeight, topClipping, bottomClipping, centerPadding,
         ).flatMap { mapPage(byPage[it.pageIndex], it) }
     }
 

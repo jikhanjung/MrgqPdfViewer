@@ -98,6 +98,16 @@ class ScoreOverlayGeometryTest {
     }
 
     @Test
+    fun 차례_넘김_화면은_왼쪽_다음_쪽_오른쪽_지금_쪽() {
+        // 3 | 2 (순번 2 | 1) — 메트로놈 · 듣고 넘기기 차례 넘김. 1쪽(순번 0)은 화면에 없다
+        val measures = listOf(measure(1, 0, 75f, 133f, 212f, 411f), measure(8, 1, 54f, 97f, 240f, 382f), measure(15, 2, 54f, 97f, 240f, 382f))
+        val result = ScoreOverlayGeometry.boxes(measures, 2, true, 13, screenW, screenH, 0f, 0f, 0f, rightPageIndex = 1)
+        assertEquals(setOf(8, 15), result.map { it.measureNumber }.toSet())
+        assertTrue("다음 쪽은 왼쪽", result.first { it.measureNumber == 15 }.right < screenW / 2f)
+        assertTrue("지금 쪽은 오른쪽", result.first { it.measureNumber == 8 }.left > screenW / 2f)
+    }
+
+    @Test
     fun 마디가_없으면_빈_결과() {
         assertTrue(boxes(emptyList()).isEmpty())
         assertTrue(ScoreOverlayGeometry.boxes(listOf(measure(1, 0, 1f, 1f, 2f, 2f)), 0, false, 1, 0, 0, 0f, 0f, 0f).isEmpty())

@@ -220,6 +220,8 @@ While the metronome runs you get **Stop**; while paused, **Resume · Pick a meas
 
 If the app can read the time signature and measures of a piece, the metronome follows the score, **highlights the current measure in yellow**, and turns the page 2 beats before the end.
 
+In two-page view on a TV it turns **only the page you have finished**, the way a person would. About 5 seconds after you start the right page, the left page becomes the next page (1 | 2 → 3 | 2 → 3 | 4). If you start from a measure on the right page, the left page shows the next page from the start.
+
 1. **Play → Start — pick a measure on the score**.
 2. Pick the start measure.
 

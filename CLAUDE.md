@@ -13,11 +13,12 @@ Android TV OS용 PDF 악보 리더 앱으로, 무선 파일 업로드와 리모�
 > SurfaceFlinger 가 4K 로 업스케일한다. 4K 관련 작업을 시작하기 전에
 > [`devlog/20260815_040_4k_display_investigation.md`](devlog/20260815_040_4k_display_investigation.md) 를 먼저 읽을 것.
 
-**현재 버전**: v0.8.3-beta.4 (2026-10-13)  
+**현재 버전**: v0.8.3-beta.5 (2026-10-13)  
 **빌드 상태**: 🟢 빌드 가능 (GitHub Actions CI 로 커밋마다 검증)  
-**CI 게이트**: 🟢 단위 테스트 510개 + **화면 글 게이트**(`tools/i18n_gate.py` — 코드 · 레이아웃의 한글 리터럴 · values-en 빠짐, P18) + 설명서 한 · 영 구조(`tools/manual_check.py`, P19) + Android Lint(`MissingTranslation` 오류) + 에뮬레이터 계측 60개·release APK 스모크(API 30/34 — ⚠️ 문서 정보 검사는 모든 매트릭스에서 건너뜀, #047 §5). 계측은 main 푸시와 수동 실행에서만 (회당 5~6분)  
+**CI 게이트**: 🟢 단위 테스트 511개 + **화면 글 게이트**(`tools/i18n_gate.py` — 코드 · 레이아웃의 한글 리터럴 · values-en 빠짐, P18) + 설명서 한 · 영 구조(`tools/manual_check.py`, P19) + Android Lint(`MissingTranslation` 오류) + 에뮬레이터 계측 60개·release APK 스모크(API 30/34 — ⚠️ 문서 정보 검사는 모든 매트릭스에서 건너뜀, #047 §5). 계측은 main 푸시와 수동 실행에서만 (회당 5~6분)  
 **테스트 상태**: 🟢 v0.3.x 기능을 Z18TV Pro 에서 확인(2026-09-28): 파트보(한 · 여러 파트, 넓혀 자르기, 번호) · 파트 화면 악보 연동 · MusicXML 반주(K488) · MusicXML · 서버 분석 동기화 · 목록 곡 정보 · 앱 안 업데이트(v0.2.9 → v0.3.3). 🟡 **두 대가 필요한 것만 남음** — 합주 중 파트 보기, 합주 Phase 0 동기 넘김. 렌더 품질 · 키 매핑 등 전반 스모크는 2026-08-15(Google TV Streamer + 4K 모니터)
 **최근 업데이트** (전체는 [`CHANGELOG.md`](CHANGELOG.md), 오늘 작업 요약은 devlog [`065`](devlog/20260928_065_part_view_accompaniment_server_analysis.md)):
+- **v0.8.3-beta.5** — 🎵 메트로놈 악보 연동도 **두 쪽 차례 넘김**(다 친 쪽만 5초 뒤 다음 쪽 · 오른쪽 쪽에서 시작하면 시작 펼침 — 듣고 넘기기와 같게, #135), 차례 넘김 화면의 마디 박스 자리
 - **v0.8.3-beta.4** — 합주 연주자가 끈 뒤 몰래 다시 연결 · 켤 때 연결 · 해제 되풀이 고침(옛 소켓 알림 버림, 지휘자는 옛 연결이 새 연결을 지우지 않음)
 - **v0.8.3-beta.3** — 확인용: 합주 연주자가 `metronome_run` 을 받고 지나가는 이유 로그(`EnsembleSync`)
 - **v0.8.3-beta.2** — 연주자가 지휘자를 찾거나 연결 · 다시 연결하는 동안 합주 단추 초록 깜박임(`isPerformerConnecting`)
@@ -122,7 +123,7 @@ Android TV OS용 PDF 악보 리더 앱으로, 무선 파일 업로드와 리모�
   - **구간별 빠르기** (#057): 악보 박자가 바뀌는 마디마다 구간(`TempoSections.spans`, 몇~몇 마디 표시). 둘째 구간부터 이어받기(음표 길이 그대로 = 기본 · 박 길이 그대로 · 직접 입력) · 세는 단위를 정한다(`metronomeSections` JSON, v13). 첫 구간 = 기존 파일 설정. 악보 연동은 `ScoreFollower(sections)` 의 `beatTimes` · `BarPosition.bpm` 으로, 합주는 `metronome_run.tempo_sections` 로 연주자가 같은 박 시각을 만든다. 구간이 하나뿐인 곡은 v0.2.4 와 똑같이 동작. 연주 중 세는 단위 변경은 다음 시작부터. 2단계(템포만 바뀌는 곳에 구간 추가)는 미정
   - **박자 선택** (#051): `TimeSignature`(분자/분모) — 흔한 박자 버튼 + 분자 슬라이더·분모 버튼. 박·BPM = 분모 음표. 겹박자(분자 6·9·12)는 1박 강 · 4박 중간(`Accent.MEDIUM`). 고른 적 없는 파일은 악보 박자표로 채움(`metronomeBeatUnit` null = 미선택)
   - **점음표 박** (#052): 겹박자에서 `8분음표 6박` / `점4분음표 2박` 토글(파일별, `metronomeDottedBeat` v11). 바꿀 때 BPM 3배 환산으로 빠르기 유지. `TimeSignature.beatsPerBar(dotted)`, 악보 연동(`ScoreFollower(dottedBeat)`)도 같은 단위. 자동 전환 안 함(곡마다 경계가 달라 사용자 결정). `MIN_BPM` 20
-  - **악보 연동** (#050): 박자표를 읽은 파일이면 시작 시 악보에서 커서(←→ 마디, ↑↓ 줄, OK)로 시작 마디를 고르고, 예비박(**기본 두 마디 · 한 마디 선택**, 박자 상세, 전역 — #060. 화면 가운데에 남은 마디 수 2 → 1, 합주는 `count_in_bars` 로 연주자도 같게) 뒤 현재 마디를 노랗게 표시하며 마지막 마디 끝나기 2박 전(`TURN_LEAD_BEATS`)에 페이지를 넘긴다. 박 = 박자표 분모 음표. 연주 중 뒤로는 메트로놈만 정지. 박자표를 못 읽으면 일반 메트로놈
+  - **악보 연동** (#050): 박자표를 읽은 파일이면 시작 시 악보에서 커서(←→ 마디, ↑↓ 줄, OK)로 시작 마디를 고르고, 예비박(**기본 두 마디 · 한 마디 선택**, 박자 상세, 전역 — #060. 화면 가운데에 남은 마디 수 2 → 1, 합주는 `count_in_bars` 로 연주자도 같게) 뒤 현재 마디를 노랗게 표시하며 마지막 마디 끝나기 2박 전(`TURN_LEAD_BEATS`)에 페이지를 넘긴다 — TV 두 쪽은 듣고 넘기기처럼 **차례 넘김**(새 쪽에 들어서고 5초 뒤 다 친 쪽 자리만 다음 쪽, 오른쪽 쪽에서 시작하면 시작 펼침, `rollFollow`, #135). 박 = 박자표 분모 음표. 연주 중 뒤로는 메트로놈만 정지. 박자표를 못 읽으면 일반 메트로놈
   - **↑ 연주 메뉴 · 일시정지** (#053, 이름은 P13): 뷰어에서 ↑ = 연주 메뉴. 연주 중 ↑ 나 OK 길게(보기 메뉴)면 `FollowState.PAUSED` → 이어서(멈춘 마디부터 예비박) / 마디 골라 다시 / 정지. 메뉴를 모두 닫은 순간은 `onWindowFocusChanged` + 300ms 재확인으로 판단, 고르지 않고 닫으면 정지
 - **합주 메트로놈 동기화** (#055): 연주자가 `clock_ping/pong` 으로 지휘자와의 시계 차이(`ClockSync`, RTT 최소 표본)를 재고, 지휘자는 `metronome_run`(상태 전체: 시간표 `BeatTimeline` · 박자 · 시작 마디 · `focus_measure`)을 상태 변화 · 연결 시 · 5초마다 방송. 연주자는 `EnsembleSchedule` 로 자기 시계에 옮겨 `MetronomeEngine.startScheduled`(AudioTimestamp 로 박을 프레임에 맞춤) — 박 표시 · 현재 마디는 시간표를 따른다. 따라가는 동안 지휘자 `page_change` 무시(마디로 스스로 넘김). 연주자는 소리만 고름(`ensemble_metronome_sound`, 기본 끔). `ensemble/` 패키지. 실측 마디 전환 차이 중앙값 2.5ms. **연결 때 버전 확인**(#061 → #086): `client_connect` · `connect_response` 의 **`ensemble_version`(합주 버전 = 합주 메시지가 바뀐 판의 앱 버전, 지금 0.4.0 — 합주 메시지를 바꾸면 `EnsembleVersion.CURRENT` 를 그 판으로)** 이 다를 때만 양쪽 화면에 업데이트할 기기를 가리키는 안내(`EnsembleVersion`, `VersionNotice`). 필드 없는 옛 기기는 `app_version` 0.4.0 이상이면 같음(v0.2.5 이하는 "v0.1.5" 고정 → "v0.2.5 이하")
 - **파트보 보기** (P07, v0.3.0~): 보기 메뉴 "파트 보기" — 고른 보표(여러 개)만 잘라 세로 A4 로 이은 **벡터 PDF** 를 캐시에 만들어 뷰어가 연다(`PartLayout` · `PartPdfBuilder`). 이웃한 보표는 한 조각, 가운데선을 걸친 슬러 · 빔 · 덧줄 음은 소속에 따라 넓혀 자른다(`PartClip`). 줄마다 원본 마디 · 쪽 번호, 여러 파트면 보표 앞 `Pt. n`. 파트 화면에서도 마디 박스 · 악보 연동(`mapMeasures`), 합주 중에도(쪽 번호는 원본 기준). 파일별 선택 = 보표 비트 마스크(`partStaff`, v17). 이름은 PDF → 못 읽으면 MusicXML 파트 이름

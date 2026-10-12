@@ -198,6 +198,7 @@ MrgqPdfViewer 개발 로그 모음. 구현 기록은 `YYYYMMDD_NNN_` 형식(NNN 
 - [`P19`](20261012_P19_user_manual_rewrite_plan.md) — **계획: 사용자 설명서 다시 쓰기** — TV 전용 시절 User_Manual(한 · 영)을 v0.8 에 맞게: 연주자 독자, 화면 글과 같은 낱말, 기기 차이는 작은 표, 목차 12장(설정 한눈에 — 설정의 설명 줄을 대신), 1차 글만, ScoreMate 서버에 게시 + 앱 "설명서" 줄(TV 는 QR) — private 전환 전에. §9 모두 추천대로(2026-10-12) → 1 ~ 3단계 #133
 - [`133`](20261012_133_user_manual_rewrite.md) — **사용자 설명서 다시 씀**(P19 1 ~ 3단계): 한 · 영 12장, 화면 글과 같은 낱말 · 기기 차이는 작은 표, CI 한 · 영 구조 검사 `tools/manual_check.py`, Viewer_Menus 는 개발용
 - [`P20`](20261012_P20_scoremate_manual_hosting_server_requests.md) — **ScoreMate 서버에 요청: 설명서 보관 · 공개** — `POST /api/v1/app-manuals/android/`(판 · 문서 · 언어마다 Markdown, 릴리스 CI 가 올림) · `GET /manual/?lang=&v=`(HTML, 로그인 없이, 그 판 없으면 정식 최신) · 문서 사이 링크 바꾸기 · 보관(P19 4단계)
+- [`135`](20261013_135_metronome_rolling_turns.md) — **메트로놈도 두 쪽 차례 넘김 · 시작 펼침**(v0.8.3-beta.5): 듣고 넘기기(#068 · #088)와 같은 규칙으로 다 친 쪽 자리만 5초 뒤 다음 쪽, 오른쪽 쪽에서 시작하면 왼쪽을 다음 쪽으로, 차례 넘김 화면의 마디 박스 자리
 - [`134`](20261012_134_manual_row_ci_upload.md) — **📖 설명서 줄 · CI 올리기**(P19 4단계, v0.8.1-beta.2): 설정 → 앱 정보 → 설명서(터치 = 브라우저, TV = QR · 주소, `scoremate/ManualLink`), 릴리스 CI 가 설명서 한 · 영 · 음성 명령을 `POST /api/v1/app-manuals/`
 
 ## 📱 터치 UI 껍질 (2026-10-11)
