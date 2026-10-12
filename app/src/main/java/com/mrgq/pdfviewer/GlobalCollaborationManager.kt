@@ -291,7 +291,9 @@ class GlobalCollaborationManager private constructor() {
                     Log.d(TAG, "Back to list received")
                     onBackToListReceived?.invoke()
                 },
-                onMetronomeRunReceived = { run -> onMetronomeRunReceived?.invoke(run) },
+                onMetronomeRunReceived = { run ->
+                    onMetronomeRunReceived?.invoke(run) ?: Log.w(TAG, "metronome_run 을 받을 화면이 없음: ${run.runId} ${run.state}")
+                },
                 onClockSynced = { onClockSynced?.invoke() },
                 onVersionMismatch = { message -> notifyVersionMismatch(message) },
                 onFollowPositionReceived = { file, measure -> onFollowPositionReceived?.invoke(file, measure) },

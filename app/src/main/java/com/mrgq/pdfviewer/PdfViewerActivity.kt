@@ -4384,6 +4384,8 @@ class PdfViewerActivity : AppCompatActivity() {
 
     /** 연주자: 지휘자 상태를 받았다. [retry] = 같은 상태를 다시 적용해 본다 (시계 동기 완료 · 파일 열림 · 화면 복귀) */
     private fun onEnsembleRunReceived(run: EnsembleRun, retry: Boolean = false) {
+        Log.d("EnsembleSync", "run ${run.runId} ${run.state} focus=${run.focusMeasure} start=${run.startMeasure} retry=$retry " +
+            "mode=$collaborationMode role=$ensembleRole lifecycle=${lifecycle.currentState} sameFile=${run.file == pdfFileName}")
         if (collaborationMode != CollaborationMode.PERFORMER) return
         val previous = performerRun
         performerRun = run
@@ -4391,6 +4393,7 @@ class PdfViewerActivity : AppCompatActivity() {
         if (performerDetachedRunId != null && performerDetachedRunId != run.runId) performerDetachedRunId = null
 
         if (run.file != pdfFileName) {
+            Log.d("EnsembleSync", "다른 파일 — 무시: '${run.file}' ≠ '$pdfFileName'")
             if (ensembleRole == EnsembleRole.FOLLOWING) stopMetronome()
             return
         }
@@ -4404,15 +4407,17 @@ class PdfViewerActivity : AppCompatActivity() {
             }
             EnsembleRun.State.PAUSED, EnsembleRun.State.SELECTING -> showEnsembleFocus(run)
             EnsembleRun.State.PLAYING -> {
-                if (run.runId == performerDetachedRunId) return
+                if (run.runId == performerDetachedRunId) return Unit.also { Log.d("EnsembleSync", "빠져 있는 연주 — 무시") }
                 val following = ensembleRole == EnsembleRole.FOLLOWING && previous?.runId == run.runId && metronome.isRunning
                 if (following) {
                     // 같은 연주 — 템포가 바뀌었으면 시간표만 갈아 끼운다
                     if (previous != run) updatePerformerSchedule(run)
                     return
                 }
-                if (!retry && performerJoiningRunId == run.runId) return
-                if (!lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.RESUMED)) return
+                if (!retry && performerJoiningRunId == run.runId) return Unit.also { Log.d("EnsembleSync", "합류 준비 중 — 기다림") }
+                if (!lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.RESUMED)) {
+                    return Unit.also { Log.d("EnsembleSync", "화면이 앞에 없음(${lifecycle.currentState}) — 돌아오면 합류") }
+                }
                 joinEnsembleRun(run)
             }
         }
@@ -4422,6 +4427,7 @@ class PdfViewerActivity : AppCompatActivity() {
     private fun joinEnsembleRun(run: EnsembleRun) {
         if (globalCollaborationManager.getClockOffsetNs() == null) {
             // 시계 동기는 연결 직후 1초 안에 끝난다 — 끝나면 onClockSynced 가 다시 부른다
+            Log.d("EnsembleSync", "시계 동기 전 — 기다림")
             if (!clockWaitNoticeShown) {
                 clockWaitNoticeShown = true
                 Toast.makeText(this, getString(R.string.viewer_ensemble_clock_syncing), Toast.LENGTH_SHORT).show()
@@ -4434,9 +4440,11 @@ class PdfViewerActivity : AppCompatActivity() {
         if (metronome.isRunning || followState != FollowState.OFF) stopMetronome()
 
         val fileId = currentPdfFileId
+        Log.d("EnsembleSync", "합류 준비 run=${run.runId} fileId=$fileId followingScore=${run.isFollowingScore}")
         lifecycleScope.launch {
             val measures = if (!run.isFollowingScore || fileId == null) null else scoreMeasuresFor(fileId)
             val latest = performerRun
+            Log.d("EnsembleSync", "합류 마디 ${measures?.size} — 지금 run=${latest?.runId} ${latest?.state} joining=$performerJoiningRunId")
             if (performerJoiningRunId != run.runId) return@launch
             performerJoiningRunId = null
             if (latest == null || latest.runId != run.runId || latest.state != EnsembleRun.State.PLAYING ||
@@ -4528,7 +4536,9 @@ class PdfViewerActivity : AppCompatActivity() {
     private fun showEnsembleFocus(run: EnsembleRun) {
         val measureNumber = run.focusMeasure
         val fileId = currentPdfFileId
-        if (measureNumber == null || fileId == null || run.runId == performerDetachedRunId) return
+        if (measureNumber == null || fileId == null || run.runId == performerDetachedRunId) {
+            return Unit.also { Log.d("EnsembleSync", "마디 표시 못 함: focus=$measureNumber fileId=$fileId detached=${run.runId == performerDetachedRunId}") }
+        }
         if (!lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.RESUMED)) return
         if (metronome.isRunning) {
             metronome.stop()
@@ -4548,7 +4558,7 @@ class PdfViewerActivity : AppCompatActivity() {
             return
         }
         lifecycleScope.launch {
-            val measures = scoreMeasuresFor(fileId) ?: return@launch
+            val measures = scoreMeasuresFor(fileId) ?: return@launch Unit.also { Log.d("EnsembleSync", "마디 표시: 이 악보의 마디가 없음") }
             val latest = performerRun ?: return@launch
             if (currentPdfFileId != fileId || latest.file != pdfFileName || latest.runId == performerDetachedRunId) return@launch
             if (latest.state != EnsembleRun.State.PAUSED && latest.state != EnsembleRun.State.SELECTING) return@launch
@@ -4558,6 +4568,7 @@ class PdfViewerActivity : AppCompatActivity() {
 
     private fun applyEnsembleFocus(fileId: String, startable: List<ScoreMeasure>, measureNumber: Int) {
         val index = startable.indexOfFirst { it.measureNumber == measureNumber }
+        Log.d("EnsembleSync", "마디 표시 $measureNumber → ${if (index < 0) "이 악보에 없음" else "칸 $index"} (마디 ${startable.size}개)")
         if (index < 0) return
         followMeasures = startable
         followFileId = fileId
@@ -4573,7 +4584,9 @@ class PdfViewerActivity : AppCompatActivity() {
     private suspend fun scoreMeasuresFor(fileId: String): List<ScoreMeasure>? {
         if (scoreMeasuresFileId == fileId) return scoreMeasures
         val file = File(pdfFilePath)
+        val startedAt = android.os.SystemClock.elapsedRealtime()
         val measures = withContext(Dispatchers.IO) { measuresForView(fileId, file) }
+        Log.d("PdfViewerActivity", "마디 불러옴 ${measures?.size} — ${android.os.SystemClock.elapsedRealtime() - startedAt}ms")
         if (measures != null && currentPdfFileId == fileId) {
             scoreMeasures = measures
             scoreMeasuresFileId = fileId
