@@ -66,6 +66,10 @@ class CollaborationClientManager(
     
     private var heartbeatRunnable: Runnable? = null
     private var reconnectRunnable: Runnable? = null
+    /** 사용자가 끊었다(합주 끄기 · 다른 지휘자) — 늦게 오는 실패 알림으로 다시 연결하지 않는다 */
+    @Volatile private var closedByUser = false
+    /** 연결마다 하나 — 끊었거나 새로 연결한 뒤의 옛 소켓 알림은 버린다 */
+    private val socketGeneration = AtomicInteger(0)
     
     companion object {
         private const val TAG = "CollaborationClient"
@@ -83,6 +87,7 @@ class CollaborationClientManager(
             return true
         }
         connecting.set(true)
+        closedByUser = false
         
         this.conductorIpAddress = ipAddress
         this.conductorPort = port
@@ -102,7 +107,7 @@ class CollaborationClientManager(
                 .url("ws://$ipAddress:$port")
                 .build()
             
-            webSocket = okHttpClient!!.newWebSocket(request, CollaborationWebSocketListener())
+            webSocket = okHttpClient!!.newWebSocket(request, CollaborationWebSocketListener(socketGeneration.incrementAndGet()))
             
             Log.d(TAG, "Attempting WS connection to conductor at $ipAddress:$port")
             true
@@ -115,6 +120,10 @@ class CollaborationClientManager(
     
     fun disconnect() {
         try {
+            // 먼저 표시한다 — close() 뒤 지휘자가 닫는 방식에 따라 onFailure(EOF)가 오는데,
+            // 그때 다시 연결하면 화면은 합주 끔인데 지휘자에게는 연주자가 남는다(2026-10-13 TV 로그)
+            closedByUser = true
+            socketGeneration.incrementAndGet()
             isConnected.set(false)
             connecting.set(false)
             reconnectAttempts.set(0)
@@ -245,8 +254,8 @@ class CollaborationClientManager(
                         Log.w(TAG, "지휘자와 버전이 다르다: $it")
                         onVersionMismatch?.invoke(com.mrgq.pdfviewer.ensemble.EnsembleVersion.performerMessage(it))
                     }
-                    if (status == "success") {
-                        isConnected.set(true)
+                    // 지휘자는 connect_response 를 두 번 보낸다 — 시작은 처음 한 번만(둘째에 시계 표본을 버리지 않게)
+                    if (status == "success" && !isConnected.getAndSet(true)) {
                         connecting.set(false)
                         reconnectAttempts.set(0)
                         onConnectionStatusChanged(true)
@@ -296,6 +305,7 @@ class CollaborationClientManager(
     }
     
     private fun attemptReconnection() {
+        if (closedByUser) return
         if (reconnectAttempts.get() >= maxReconnectAttempts) {
             Log.e(TAG, "Max reconnection attempts reached, giving up")
             connecting.set(false)
@@ -308,7 +318,9 @@ class CollaborationClientManager(
         
         Log.d(TAG, "Attempting reconnection #$attempt in ${delay}ms")
         
+        reconnectRunnable?.let { reconnectHandler.removeCallbacks(it) }
         reconnectRunnable = Runnable {
+            if (closedByUser) return@Runnable
             Log.d(TAG, "Reconnecting to conductor...")
             connectToConductor(conductorIpAddress, conductorPort, deviceName)
         }
@@ -316,9 +328,17 @@ class CollaborationClientManager(
         reconnectHandler.postDelayed(reconnectRunnable!!, delay)
     }
     
-    private inner class CollaborationWebSocketListener : WebSocketListener() {
+    private inner class CollaborationWebSocketListener(private val generation: Int) : WebSocketListener() {
+
+        /** 끊었거나 새 연결로 바뀐 옛 소켓 */
+        private fun stale(webSocket: WebSocket): Boolean {
+            val old = generation != socketGeneration.get()
+            if (old) webSocket.cancel()
+            return old
+        }
         
         override fun onOpen(webSocket: WebSocket, response: Response) {
+            if (stale(webSocket)) { Log.d(TAG, "옛 연결이 열림 — 닫음"); return }
             Log.d(TAG, "WebSocket connection opened")
             
             // Send connection request
@@ -334,16 +354,19 @@ class CollaborationClientManager(
         }
         
         override fun onMessage(webSocket: WebSocket, text: String) {
+            if (stale(webSocket)) return
             handleIncomingMessage(text)
         }
         
         override fun onClosing(webSocket: WebSocket, code: Int, reason: String) {
+            if (stale(webSocket)) return
             Log.d(TAG, "WebSocket connection closing: $code - $reason")
             isConnected.set(false)
             onConnectionStatusChanged(false)
         }
         
         override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
+            if (stale(webSocket)) return
             Log.d(TAG, "WebSocket connection closed: $code - $reason")
             isConnected.set(false)
             onConnectionStatusChanged(false)
@@ -357,6 +380,10 @@ class CollaborationClientManager(
         }
         
         override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
+            if (generation != socketGeneration.get()) {
+                Log.d(TAG, "옛 연결 실패 알림 무시: ${t.javaClass.simpleName}")
+                return
+            }
             Log.e(TAG, "WebSocket connection failed", t)
             isConnected.set(false)
             onConnectionStatusChanged(false)

@@ -16,6 +16,9 @@ class SimpleWebSocketConnection(
     private val serverManager: CollaborationServerManager
 ) {
     private var isConnected = false
+    private val closed = java.util.concurrent.atomic.AtomicBoolean(false)
+    /** 서버 관리자에 올리는 이 연결의 손잡이 — 하나만 만들어 같은 것으로 빼야 옛 연결이 새 연결을 지우지 않는다 */
+    private val handle: okhttp3.WebSocket by lazy { createDummyWebSocket() }
     private var inputStream: InputStream? = null
     private var outputStream: OutputStream? = null
     private val gson = Gson()
@@ -33,7 +36,7 @@ class SimpleWebSocketConnection(
             // Handle WebSocket handshake
             if (performHandshake()) {
                 isConnected = true
-                serverManager.addClient(clientId, createDummyWebSocket(), "Android TV Device")
+                serverManager.addClient(clientId, handle, "Android TV Device")
                 
                 // Start message reading thread
                 Thread {
@@ -261,12 +264,13 @@ class SimpleWebSocketConnection(
     }
     
     fun close() {
+        if (!closed.compareAndSet(false, true)) return
         Log.d(TAG, "Closing connection for $clientId")
         isConnected = false
         
-        // Remove from server collections first
-        server.removeClient(clientId)
-        serverManager.removeClient(clientId)
+        // Remove from server collections first — 이 연결이 아직 그 IP 의 연결일 때만
+        server.removeClient(clientId, this)
+        serverManager.removeClient(clientId, handle)
         
         // Force close the underlying socket
         try {

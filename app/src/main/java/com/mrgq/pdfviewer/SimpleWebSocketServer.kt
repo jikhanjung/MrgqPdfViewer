@@ -167,7 +167,7 @@ class SimpleWebSocketServer(
         
         // Run network operations in background thread
         Thread {
-            val disconnectedClients = mutableListOf<String>()
+            val disconnectedClients = mutableListOf<Pair<String, SimpleWebSocketConnection>>()
             
             // 연결 목록의 복사본을 사용하여 동시성 문제 방지
             val connectionsCopy = connections.toMap()
@@ -175,26 +175,33 @@ class SimpleWebSocketServer(
             connectionsCopy.forEach { (clientId, connection) ->
                 try {
                     if (!connection.sendMessage(message)) {
-                        disconnectedClients.add(clientId)
+                        disconnectedClients.add(clientId to connection)
                     }
                 } catch (e: Exception) {
                     Log.e(TAG, "Error broadcasting to client $clientId", e)
-                    disconnectedClients.add(clientId)
+                    disconnectedClients.add(clientId to connection)
                 }
             }
             
             // Remove disconnected clients
             if (disconnectedClients.isNotEmpty()) {
-                disconnectedClients.forEach { clientId ->
-                    removeClient(clientId)
+                disconnectedClients.forEach { (clientId, connection) ->
+                    removeClient(clientId, connection)
                 }
             }
         }.start()
     }
     
-    fun removeClient(clientId: String) {
-        connections.remove(clientId)
-        Log.d(TAG, "Removed client: $clientId")
+    /**
+     * 그 연결이 아직 이 IP 의 연결일 때만 뺀다 — 같은 IP 가 다시 연결하면 [connections] 는 새 연결로 바뀌고,
+     * 뒤늦게 닫히는 옛 연결이 새 연결을 지우면 연주자가 연결된 채 방송을 못 받는다
+     */
+    fun removeClient(clientId: String, connection: SimpleWebSocketConnection) {
+        if (connections.remove(clientId, connection)) {
+            Log.d(TAG, "Removed client: $clientId")
+        } else {
+            Log.d(TAG, "옛 연결만 정리: $clientId (지금 연결은 그대로)")
+        }
     }
     
     fun getConnectedClientCount(): Int {

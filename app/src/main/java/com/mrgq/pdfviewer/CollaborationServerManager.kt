@@ -260,7 +260,12 @@ class CollaborationServerManager(
     }
     
     @Synchronized
-    internal fun removeClient(clientId: String) {
+    internal fun removeClient(clientId: String, webSocket: WebSocket) {
+        // 같은 IP 가 다시 연결해 바뀐 뒤 옛 연결이 닫히면 지금 연결은 두고 알리지도 않는다
+        if (connectedClients[clientId] !== webSocket) {
+            Log.d(TAG, "옛 연결만 닫힘: $clientId (지금 연결은 그대로)")
+            return
+        }
         connectedClients.remove(clientId)
         val deviceName = clientDeviceNames.remove(clientId)
         
