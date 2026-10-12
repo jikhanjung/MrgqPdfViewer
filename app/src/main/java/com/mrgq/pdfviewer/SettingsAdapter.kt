@@ -48,7 +48,7 @@ class SettingsAdapter(
         val icon: TextView?,
     ) {
         fun bind(item: SettingsItem) {
-            icon?.text = item.iconRes?.let { iconSpan(icon.context, it) } ?: item.icon
+            icon?.let { view -> view.text = item.iconRes?.let { iconSpan(view.context, it) } ?: item.icon }
             // 검은 그림 이모지는 회색 동그라미 위에서 안 보여 밝은 동그라미로
             icon?.setBackgroundResource(
                 if (item.icon in DARK_GLYPH_ICONS) R.drawable.elegant_icon_background_light else R.drawable.elegant_icon_background
