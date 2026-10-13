@@ -13,11 +13,12 @@ Android TV OS용 PDF 악보 리더 앱으로, 무선 파일 업로드와 리모�
 > SurfaceFlinger 가 4K 로 업스케일한다. 4K 관련 작업을 시작하기 전에
 > [`devlog/20260815_040_4k_display_investigation.md`](devlog/20260815_040_4k_display_investigation.md) 를 먼저 읽을 것.
 
-**현재 버전**: v0.8.3 (2026-10-13)  
+**현재 버전**: v0.8.4-beta.1 (2026-10-13)  
 **빌드 상태**: 🟢 빌드 가능 (GitHub Actions CI 로 커밋마다 검증)  
-**CI 게이트**: 🟢 단위 테스트 511개 + **화면 글 게이트**(`tools/i18n_gate.py` — 코드 · 레이아웃의 한글 리터럴 · values-en 빠짐, P18) + 설명서 한 · 영 구조(`tools/manual_check.py`, P19) + Android Lint(`MissingTranslation` 오류) + 에뮬레이터 계측 60개·release APK 스모크(API 30/34 — ⚠️ 문서 정보 검사는 모든 매트릭스에서 건너뜀, #047 §5). 계측은 main 푸시와 수동 실행에서만 (회당 5~6분)  
+**CI 게이트**: 🟢 단위 테스트 516개 + **화면 글 게이트**(`tools/i18n_gate.py` — 코드 · 레이아웃의 한글 리터럴 · values-en 빠짐, P18) + 설명서 한 · 영 구조(`tools/manual_check.py`, P19) + Android Lint(`MissingTranslation` 오류) + 에뮬레이터 계측 60개·release APK 스모크(API 30/34 — ⚠️ 문서 정보 검사는 모든 매트릭스에서 건너뜀, #047 §5). 계측은 main 푸시와 수동 실행에서만 (회당 5~6분)  
 **테스트 상태**: 🟢 v0.3.x 기능을 Z18TV Pro 에서 확인(2026-09-28): 파트보(한 · 여러 파트, 넓혀 자르기, 번호) · 파트 화면 악보 연동 · MusicXML 반주(K488) · MusicXML · 서버 분석 동기화 · 목록 곡 정보 · 앱 안 업데이트(v0.2.9 → v0.3.3). 🟡 **두 대가 필요한 것만 남음** — 합주 중 파트 보기, 합주 Phase 0 동기 넘김. 렌더 품질 · 키 매핑 등 전반 스모크는 2026-08-15(Google TV Streamer + 4K 모니터)
 **최근 업데이트** (전체는 [`CHANGELOG.md`](CHANGELOG.md), 오늘 작업 요약은 devlog [`065`](devlog/20260928_065_part_view_accompaniment_server_analysis.md)):
+- **v0.8.4-beta.1** — 🎹 **반주 파트**를 파트 보기와 따로: 자동(내 파트 빼고) · 전체 · 직접 고르기, 곡마다(DB v19, P21 1단계)
 - **v0.8.3** — 🎼 합주 단추 색(흰 · 초록 + 연주자 수 · 빨강 · 연결 중 깜박임) · 끈 연주자가 몰래 다시 연결 · 연결 되풀이 고침 · 🎵 메트로놈 두 쪽 차례 넘김. beta.1 ~ beta.5 묶음
 - **v0.8.3-beta.5** — 🎵 메트로놈 악보 연동도 **두 쪽 차례 넘김**(다 친 쪽만 5초 뒤 다음 쪽 · 오른쪽 쪽에서 시작하면 시작 펼침 — 듣고 넘기기와 같게, #135), 차례 넘김 화면의 마디 박스 자리
 - **v0.8.3-beta.4** — 합주 연주자가 끈 뒤 몰래 다시 연결 · 켤 때 연결 · 해제 되풀이 고침(옛 소켓 알림 버림, 지휘자는 옛 연결이 새 연결을 지우지 않음)
@@ -128,7 +129,7 @@ Android TV OS용 PDF 악보 리더 앱으로, 무선 파일 업로드와 리모�
   - **↑ 연주 메뉴 · 일시정지** (#053, 이름은 P13): 뷰어에서 ↑ = 연주 메뉴. 연주 중 ↑ 나 OK 길게(보기 메뉴)면 `FollowState.PAUSED` → 이어서(멈춘 마디부터 예비박) / 마디 골라 다시 / 정지. 메뉴를 모두 닫은 순간은 `onWindowFocusChanged` + 300ms 재확인으로 판단, 고르지 않고 닫으면 정지
 - **합주 메트로놈 동기화** (#055): 연주자가 `clock_ping/pong` 으로 지휘자와의 시계 차이(`ClockSync`, RTT 최소 표본)를 재고, 지휘자는 `metronome_run`(상태 전체: 시간표 `BeatTimeline` · 박자 · 시작 마디 · `focus_measure`)을 상태 변화 · 연결 시 · 5초마다 방송. 연주자는 `EnsembleSchedule` 로 자기 시계에 옮겨 `MetronomeEngine.startScheduled`(AudioTimestamp 로 박을 프레임에 맞춤) — 박 표시 · 현재 마디는 시간표를 따른다. 따라가는 동안 지휘자 `page_change` 무시(마디로 스스로 넘김). 연주자는 소리만 고름(`ensemble_metronome_sound`, 기본 끔). `ensemble/` 패키지. 실측 마디 전환 차이 중앙값 2.5ms. **연결 때 버전 확인**(#061 → #086): `client_connect` · `connect_response` 의 **`ensemble_version`(합주 버전 = 합주 메시지가 바뀐 판의 앱 버전, 지금 0.4.0 — 합주 메시지를 바꾸면 `EnsembleVersion.CURRENT` 를 그 판으로)** 이 다를 때만 양쪽 화면에 업데이트할 기기를 가리키는 안내(`EnsembleVersion`, `VersionNotice`). 필드 없는 옛 기기는 `app_version` 0.4.0 이상이면 같음(v0.2.5 이하는 "v0.1.5" 고정 → "v0.2.5 이하")
 - **파트보 보기** (P07, v0.3.0~): 보기 메뉴 "파트 보기" — 고른 보표(여러 개)만 잘라 세로 A4 로 이은 **벡터 PDF** 를 캐시에 만들어 뷰어가 연다(`PartLayout` · `PartPdfBuilder`). 이웃한 보표는 한 조각, 가운데선을 걸친 슬러 · 빔 · 덧줄 음은 소속에 따라 넓혀 자른다(`PartClip`). 줄마다 원본 마디 · 쪽 번호, 여러 파트면 보표 앞 `Pt. n`. 파트 화면에서도 마디 박스 · 악보 연동(`mapMeasures`), 합주 중에도(쪽 번호는 원본 기준). 파일별 선택 = 보표 비트 마스크(`partStaff`, v17). 이름은 PDF → 못 읽으면 MusicXML 파트 이름
-- **반주 연습** (P07 5 · 6단계, v0.3.1~): 악보 연동 메트로놈을 켜면 PDF 옆 `.musicxml` 의 다른 파트(파트 보기면 내 파트 빼고)를 단순 합성으로 — 음을 박 위치로 놓아 클릭과 같은 샘플 시계(`MusicXmlReader` · `MusicXmlMatch` · `Accompaniment` · `AccompanimentVoices`). 마디 수 · 박자가 악보와 같을 때만. 반주 크기는 클릭과 따로, 합주 중에는 끔
+- **반주 연습** (P07 5 · 6단계, v0.3.1~): 악보 연동 메트로놈을 켜면 PDF 옆 `.musicxml` 의 다른 파트(파트 보기면 내 파트 빼고 — **반주 파트**는 곡마다 자동 · 전체 · 직접 고르기, `AccompanimentParts`, P21)를 단순 합성으로 — 음을 박 위치로 놓아 클릭과 같은 샘플 시계(`MusicXmlReader` · `MusicXmlMatch` · `Accompaniment` · `AccompanimentVoices`). 마디 수 · 박자가 악보와 같을 때만. 반주 크기는 클릭과 따로, 합주 중에는 끔
 - **마이크로 듣고 쪽 넘기기** (P10, #067 ~ #071, v0.4.0): 태블릿(지휘자) ↑ 메뉴 **🎤 연주 듣고 넘기기** — `follow/`: STFT 크로마(46ms) → `OnlineAligner`(OLTW + 주기적 재위치, Python 실험과 칸 단위로 같음) → `InertialTracker`(관성: 짧은 헤맴은 고른 빠르기로) → `PageTurnDecider`(반 쪽 넘김: 아래 절반을 칠 때 위만 다음 쪽 · 쪽 끝 + 1초 머무름). 시작은 첫 소리가 아니라 악보 첫머리와 맞는 소리(`StartDetector`). 지금 마디 · 시스템 표시, 손 넘김이면 다시 맞춤, 기록 `recordings/*_follow`. 합주: `page_change.roll` → 두 쪽 연주자는 5초 뒤 다 친 쪽 자리만 +2(`RollingTurns`), `follow_position` 으로 연주자도 지금 시스템 표시, `ensemble_end` 로 지휘자가 끝내면 연주자도 끝. 아르페지오네 실기기: ±1마디 93%, 쪽 넘김 ±2초 91%. 기준 빠르기 = 메트로놈 템포
 - **세로 태블릿** (#066): 같은 APK — TV 가 아니면 세로(`DeviceForm`), 세로는 늘 한 쪽, 넘김 페달 키(PageUp/Down · 미디어 · Home/End), 터치(좌우 탭 · 밀기 = 넘김, **가운데 탭 = 도구 막대**(▶ 연주 · 👁 보기 · ✏️ 메모, P17 #102 — 두 번 탭 없앰), 길게 = 보기 메뉴, 마디 탭 = 시작 마디). 메뉴는 하단 시트(#101). 세로 목록은 제목 · "× ScoreMate ☁️" · 세트리스트 세 줄
 - **휴대폰** (v0.4.2 ~ v0.4.3, `DeviceForm.isPhone` = TV 아님 · 짧은 변 600dp 미만): 첫 화면은 합주 상태를 이름 아래로 · 카드 정보를 이름 아래 줄로. 악보 화면은 **회전 모드**(설정 → 표시 모드: 기기 회전(기본) · 가로 · 세로, #090 — 돌리면 새 폭으로 쪽 캐시를 다시 만든다), 쪽을 화면 폭에 맞춰 한 장으로 렌더(렌더 높이 = 폭 × 3)하고 보이는 **조각**을 행렬로 고른다 — 칸 = 시스템(이웃과의 빈칸 가운데까지), 분석 없으면 반 쪽. 화면 = 칸 `chunkIndex` 부터 들어가는 만큼(가로 보통 1 ~ 2개, 세로는 보통 한 쪽 전체), 화면보다 높을 때만 줄임. → ← 는 화면 단위, **세로로 끌기 → 손 떼면 가까운 시스템에 맞춤**(쪽 끝 넘어 1/4 → 넘김, v0.4.5), 악보 연동 · 마이크 · 시작 마디 커서는 그 마디가 화면 밖일 때만 그 시스템을 맨 위로(`followChunk`). 마디 분석은 휴대폰에서 쪽을 열 때 조용히 불러온다. 마이크 반 쪽 넘김 · 넘김 애니메이션은 휴대폰에서 끔
@@ -157,7 +158,7 @@ Android TV OS용 PDF 악보 리더 앱으로, 무선 파일 업로드와 리모�
 - **아키텍처**: PdfViewerActivity + PageCache 중심 (v0.1.8 의 Manager 분리 시도는 미통합 상태로 남아 있다가 v0.1.11 에서 제거됨)
 - **PDF 렌더링**: PdfRenderer (Android 5.0+ 내장)
 - **PdfBox-Android** 2.0.27.0: 문서 정보(Title/Author), 악보 분석의 스트림 · 글꼴, 파트 PDF 만들기(폼 가져오기). BouncyCastle PQC 리소스는 패키징 제외)
-- **데이터베이스**: Room 2.6.1 (SQLite 기반, 현재 v18 스키마 — `score_measures`(박자표 포함), `score_staves`(보표 띠 · 이름, 파트보 P07), `user_preferences.partStaff`(파트보 선택 — 보표 비트 마스크, 여러 파트, v17), `server_scores`(ScoreMate 받은 악보), 파일별 메트로놈(템포·박자 분자/분모·점음표 박·구간별 빠르기) 포함. ⚠️ `pdf_files` 갱신에 `insertPdfFile`(REPLACE) 금지 — CASCADE 로 표시 설정 삭제)
+- **데이터베이스**: Room 2.6.1 (SQLite 기반, 현재 v19 스키마 — `score_measures`(박자표 포함), `score_staves`(보표 띠 · 이름, 파트보 P07), `user_preferences.partStaff`(파트보 선택 — 보표 비트 마스크, 여러 파트, v17), `user_preferences.accompanimentParts`(반주 파트, v19), `server_scores`(ScoreMate 받은 악보), 파일별 메트로놈(템포·박자 분자/분모·점음표 박·구간별 빠르기) 포함. ⚠️ `pdf_files` 갱신에 `insertPdfFile`(REPLACE) 금지 — CASCADE 로 표시 설정 삭제)
 - **웹 서버**: NanoHTTPD 2.3.1
 - **합주 통신**: WebSocket(WS) — WSS 는 v0.1.8 에 시도했다가 롤백, cleartext 허용
 - **입력 처리**: 리모컨용 KeyEvent 처리
@@ -303,7 +304,7 @@ v0.1.x 시절의 상세 이력(합주 모드 재구조화 · 스플래시 · 설
 - **WSS 는 롤백**(v0.1.8): 인증서 호환 문제로 일반 WebSocket(WS), cleartext 허용
 - 파트 PDF · MusicXML · 서버 분석 파일은 **기기 밖으로 보내지 않는다**(저작권 원칙, P07 §0 · 서버 P01 §2). 지휘자가 나눠 주는 것은 원본 PDF 뿐
 
-### DB (Room v18)
+### DB (Room v19)
 - 마이그레이션은 `MusicDatabase.ALL_MIGRATIONS` 한 곳, 계측 테스트 `MusicDatabaseMigrationTest` 가 v1 부터 검사
 - `pdf_files` 갱신에 `insertPdfFile`(REPLACE) 금지 — CASCADE 로 파일별 설정 삭제
 - 분석 캐시 무효화는 이제 서버 분석 파일(`.layout.json`)이 새로우면 다시 읽는 것으로(`ServerLayouts`) — 연결하지 않은 TV 는 여전히 마이그레이션(v9 · v12 · v15 처럼)으로 비워야 한다
