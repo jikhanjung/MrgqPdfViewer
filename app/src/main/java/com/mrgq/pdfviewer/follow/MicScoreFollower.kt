@@ -25,6 +25,9 @@ import kotlin.math.sqrt
  * 3. 손으로 넘기면 [anchor] — 다음 칸부터 그 쪽 첫 마디에서 다시 시작(첫 소리 기다림 없이)
  * 4. [recordTo] 가 있으면 소리(WAV)와 사건(JSON: 시작 · 위치 · 넘김 · 재위치 · 다시 맞춤)을 남긴다 — 실제 성적을 P08 스크립트로 재는 자료.
  *    사건 시각 `t_ms` 는 WAV 샘플 수로 센다(소리와 정확히 맞는다)
+ * 5. [quietGate] (파트 보기 — 내 파트만 듣기, P21): 조용한 칸은 정렬기에 **빈 칸**으로 넣어 악보의 쉼(내 파트가 쉬는 칸)과 맞춘다.
+ *    조용함 = 소리 크기가 바닥(지금까지 1초 평균의 최소 — 대개 연주 전)의 2배(+6dB) 아래, 그리고 [QUIET_MAX_RMS](−54 dBFS) 아래.
+ *    시끄러운 방이면 조용한 칸이 없어 전과 같다. 시작 찾기에는 늘 그대로 넣는다(조용함이 쉼과 맞아 시작으로 보이지 않게)
  */
 class MicScoreFollower(
     private val score: ScoreChroma,
@@ -35,6 +38,7 @@ class MicScoreFollower(
     private val recordTo: File?,
     private val info: Map<String, String>,
     private val listener: Listener,
+    private val quietGate: Boolean = false,
 ) {
     interface Listener {
         /** 첫 소리를 들었다 — 이제 따라간다 */
@@ -109,6 +113,12 @@ class MicScoreFollower(
         var lastMeasure = -1
         var chunkRms = 0.0
         var lastPosLog = 0L
+        // 조용함 (P21): 1초 평균 소리 크기의 최소 = 바닥
+        val second = (1.0 / FRAME_SEC).toInt()
+        val recentRms = ArrayDeque<Double>()
+        var recentSum = 0.0
+        var floorRms = Double.POSITIVE_INFINITY
+        var quietSinceLog = 0
         val extractor = ChromaExtractor(SAMPLE_RATE, N_FFT, HOP) { raw ->
             val now = samplesIn
             // 손으로 넘김 → 그 자리에서 다시
@@ -140,7 +150,9 @@ class MicScoreFollower(
                 main.post { listener.onListening() }
             }
             val jumpsBefore = al.jumps.size
-            val col = al.feed(raw.normalized())
+            val quiet = quietGate && chunkRms < minOf(floorRms * QUIET_OVER_FLOOR, QUIET_MAX_RMS)
+            if (quiet) quietSinceLog++
+            val col = al.feed(if (quiet) FloatArray(raw.size) else raw.normalized())
             // 관성 항법 (P10 §9) — 짧게 헤매는 추정은 고른 빠르기 예측으로 넘긴다
             val tr = tracker ?: InertialTracker(col.toDouble(), score.frameSec).also { tracker = it }
             val smooth = if (al.frames == 1) col.toDouble() else tr.feed(col.toDouble())
@@ -156,7 +168,10 @@ class MicScoreFollower(
             }
             if (nowMs - lastPosLog >= 250) {
                 lastPosLog = nowMs
-                mark(now, "pos", "%.2f".format(java.util.Locale.US, pos), mapOf("raw" to score.measurePosOf(col), "v" to tr.velocity))
+                val extra = mutableMapOf<String, Any>("raw" to score.measurePosOf(col), "v" to tr.velocity)
+                if (quietGate) extra["quiet"] = quietSinceLog
+                quietSinceLog = 0
+                mark(now, "pos", "%.2f".format(java.util.Locale.US, pos), extra)
             }
             decider.update(pos, nowMs)?.let { turn ->
                 mark(now, "turn", turn.toString(), null)
@@ -175,6 +190,10 @@ class MicScoreFollower(
                 var s = 0.0
                 for (v in chunk) s += v.toDouble() * v
                 chunkRms = sqrt(s / HOP) / 32768.0
+                recentRms.addLast(chunkRms)
+                recentSum += chunkRms
+                if (recentRms.size > second) recentSum -= recentRms.removeFirst()
+                if (recentRms.size == second) floorRms = minOf(floorRms, recentSum / second)
                 wav?.write(chunk, HOP)
                 extractor.push(chunk, HOP)
                 samplesIn += HOP
@@ -214,6 +233,7 @@ class MicScoreFollower(
             addProperty("kind", "mic_follow")
             addProperty("frame_sec", score.frameSec)
             addProperty("start_measure_index", startMeasure)
+            if (quietGate) addProperty("quiet_gate", true)
             add("info", JsonObject().apply { info.forEach { (k, v) -> addProperty(k, v) } })
             add("events", events)
         }
@@ -226,5 +246,11 @@ class MicScoreFollower(
         const val N_FFT = 4096
         const val HOP = 2048
         val FRAME_SEC: Double get() = HOP.toDouble() / SAMPLE_RATE
+
+        /** 조용함 = 바닥의 이 배 아래 (+6dB) */
+        const val QUIET_OVER_FLOOR = 2.0
+
+        /** 그리고 이 아래 (−54 dBFS) — 연주 전 고요 없이 바로 쳐 바닥이 높게 잡혀도 여린 소리를 조용함으로 보지 않게 */
+        const val QUIET_MAX_RMS = 0.002
     }
 }

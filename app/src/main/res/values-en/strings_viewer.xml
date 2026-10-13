@@ -46,7 +46,7 @@
     <string name="viewer_xml_match_meter">Time signature differs at measure %1$d (score %2$s/%3$s · MusicXML %4$d/%5$d)</string>
     <string name="viewer_mic_blocked_opening">The score is still opening</string>
     <string name="viewer_mic_blocked_performer">Not available on a performer device — the conductor turns pages</string>
-    <string name="viewer_mic_blocked_part_view">Only available on the full score (turn off part view)</string>
+    <string name="viewer_mic_part_not_in_xml">Could not find the part you are viewing in the MusicXML</string>
     <string name="viewer_mic_blocked_no_xml">Can\'t listen — this score has no MusicXML</string>
     <string name="viewer_mic_no_measures">Can\'t listen — no measures found in the score</string>
     <string name="viewer_mic_xml_mismatch">The MusicXML doesn\'t match the score: %1$s</string>

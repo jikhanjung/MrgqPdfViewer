@@ -14,7 +14,7 @@ import kotlin.math.min
  *    후보(끝 비용이 최선의 1.1배 안인 국소 최소 — 똑같은 반복이면 여럿) 중 **시작부터의 평균 빠르기로 예상한 곳**에 가까운 것을 고르고,
  *    끝 [relocTailSec] 의 평균 거리가 지금 경로보다 [relocGain] 배 좋고 1초 넘게 다르면 거기로 뛰어 OLTW 를 다시 시작
  *
- * [feed] 에 **정규화한** 녹음 크로마를 넣는다. 첫 칸이 시작 칸([startCol])에 놓인다 — 앱은 시작 마디와 첫 소리 시각을 안다.
+ * [feed] 에 **정규화한** 녹음 크로마를 넣는다 — 조용한 칸은 모두 0 인 칸으로 넣을 수 있다(악보의 쉼과만 맞음, P21 · [cost]). 첫 칸이 시작 칸([startCol])에 놓인다 — 앱은 시작 마디와 첫 소리 시각을 안다.
  */
 class OnlineAligner(
     private val score: Array<FloatArray>,
@@ -38,6 +38,8 @@ class OnlineAligner(
     private val oneSecond = 1.0 / frameSec
 
     private val rec = ArrayList<FloatArray>()
+    private var recEmpty = BooleanArray(1024)
+    private val scoreEmpty = BooleanArray(m) { j -> score[j].all { it == 0f } }
     private var path = IntArray(1024)
     private var prev = DoubleArray(m) { INF }
     private var cur = DoubleArray(m) { INF }
@@ -70,6 +72,8 @@ class OnlineAligner(
         val i = rec.size
         rec += chroma
         if (i >= path.size) path = path.copyOf(path.size * 2)
+        if (i >= recEmpty.size) recEmpty = recEmpty.copyOf(recEmpty.size * 2)
+        recEmpty[i] = chroma.all { it == 0f }
         if (i == 0) {
             prev[startCol] = 2 * cost(0, startCol)
             prevLo = startCol
@@ -113,7 +117,12 @@ class OnlineAligner(
 
     private fun prevAt(j: Int): Double = if (j in prevLo until prevHi) prev[j] else INF
 
+    /**
+     * d = 1 − 코사인. **녹음 칸이 비었으면**(조용함 — [MicScoreFollower] 가 파트만 들을 때 넣는다, P21) 악보도 빈 칸(쉼)일 때만 0, 아니면 1.
+     * 전체 악보는 녹음 칸이 비지 않아 전과 같다
+     */
     private fun cost(i: Int, j: Int): Double {
+        if (recEmpty[i]) return if (scoreEmpty[j]) 0.0 else 1.0
         val a = rec[i]
         val b = score[j]
         var dot = 0.0

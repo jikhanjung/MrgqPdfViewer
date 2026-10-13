@@ -46,7 +46,7 @@
     <string name="viewer_xml_match_meter">%1$d마디 박자가 다릅니다 (악보 %2$s/%3$s · MusicXML %4$d/%5$d)</string>
     <string name="viewer_mic_blocked_opening">악보를 아직 여는 중입니다</string>
     <string name="viewer_mic_blocked_performer">연주자 기기에서는 쓸 수 없습니다 — 지휘자가 넘깁니다</string>
-    <string name="viewer_mic_blocked_part_view">전체 악보에서만 쓸 수 있습니다 (파트 보기를 끄세요)</string>
+    <string name="viewer_mic_part_not_in_xml">보고 있는 파트를 MusicXML 에서 찾지 못했습니다</string>
     <string name="viewer_mic_blocked_no_xml">이 곡의 MusicXML 이 없어 들을 수 없습니다</string>
     <string name="viewer_mic_no_measures">악보에서 마디를 찾지 못해 들을 수 없습니다</string>
     <string name="viewer_mic_xml_mismatch">MusicXML 이 악보와 맞지 않습니다: %1$s</string>

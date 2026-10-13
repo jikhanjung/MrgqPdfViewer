@@ -2630,13 +2630,14 @@ class PdfViewerActivity : AppCompatActivity() {
     private fun micFollowBlocker(): String? = when {
         currentPdfFileId == null -> getString(R.string.viewer_mic_blocked_opening)
         collaborationMode == CollaborationMode.PERFORMER -> getString(R.string.viewer_mic_blocked_performer)
-        partViewLayout != null -> getString(R.string.viewer_mic_blocked_part_view)
         musicXml == null || musicXmlFileId != currentPdfFileId -> getString(R.string.viewer_mic_blocked_no_xml)
         else -> null
     }
 
     /**
-     * [micStartAt](고른 마디) 또는 지금 쪽 첫 마디부터 듣기 시작. 조건: 전체 악보 · 맞는 MusicXML · 악보 분석 마디 (P10 §3.1)
+     * [micStartAt](고른 마디) 또는 지금 쪽 첫 마디부터 듣기 시작. 조건: 맞는 MusicXML · 악보 분석 마디 (P10 §3.1).
+     * **파트 보기**면 내 파트만 듣는다(P21): 기준 크로마는 보고 있는 보표의 MusicXML 파트로만, 조용한 칸은 쉼과 맞추고(`quietGate`),
+     * 쪽 · 반 쪽 넘김은 파트 PDF 의 쪽으로
      */
     private fun startMicFollow() {
         val at = micStartAt.also { micStartAt = null }
@@ -2654,7 +2655,11 @@ class PdfViewerActivity : AppCompatActivity() {
             if (measures.isNullOrEmpty() || currentPdfFileId != fileId) return@launch toast(getString(R.string.viewer_mic_no_measures))
             val match = com.mrgq.pdfviewer.metronome.MusicXmlMatch.check(score, measures)
             if (!match.ok) return@launch toast(getString(R.string.viewer_mic_xml_mismatch, match.reason?.resolve(this@PdfViewerActivity)))
-            val byNumber = measures.associateBy { it.measureNumber }
+            // 파트 보기 (P21) — 내 파트(보고 있는 보표에 걸친 MusicXML 파트)만 듣고, 마디 자리는 파트 PDF 좌표
+            val staves = partViewStaves
+            val myParts = staves?.let { mine -> score.parts.indices.filter { p -> score.stavesOf(p).any { it in mine } }.toSet() }
+            if (myParts != null && myParts.isEmpty()) return@launch toast(getString(R.string.viewer_mic_part_not_in_xml))
+            val byNumber = (partViewLayout?.mapMeasures(measures) ?: measures).associateBy { it.measureNumber }
             val mapped = score.measures.indices.map { byNumber[match.measureNumberOf(it)] }
             var lastPage = 0
             val pageOf = IntArray(mapped.size) { i -> (mapped[i]?.pageIndex ?: lastPage).also { lastPage = it } }
@@ -2672,7 +2677,7 @@ class PdfViewerActivity : AppCompatActivity() {
             val beatQ = 4.0 / meter.denominator * (if (metronome.dottedBeat) 3 else 1)
             val quarterBpm = metronome.bpm * beatQ
             val chroma = withContext(Dispatchers.Default) {
-                com.mrgq.pdfviewer.follow.ScoreChroma.build(score, quarterBpm, com.mrgq.pdfviewer.follow.MicScoreFollower.FRAME_SEC)
+                com.mrgq.pdfviewer.follow.ScoreChroma.build(score, quarterBpm, com.mrgq.pdfviewer.follow.MicScoreFollower.FRAME_SEC, myParts)
             }
             val stamp = java.text.SimpleDateFormat("yyyyMMdd_HHmmss", java.util.Locale.US).format(java.util.Date())
             val base = pdfFileName.substringBeforeLast('.').replace(Regex("[\\\\/:*?\"<>|]"), "_")
@@ -2683,11 +2688,12 @@ class PdfViewerActivity : AppCompatActivity() {
                 "start_measure" to (mapped[startMeasure]?.measureNumber ?: 0).toString(),
                 "start_page" to (pageOf[startMeasure] + 1).toString(),
                 "ensemble" to collaborationMode.name,
+                "parts" to (myParts?.sorted()?.joinToString { score.parts[it].name } ?: "all"),
                 "device" to android.os.Build.MODEL,
                 "app_version" to BuildConfig.VERSION_NAME,
             )
             val follower = com.mrgq.pdfviewer.follow.MicScoreFollower(
-                chroma, pageOf, lowerHalf, startMeasure, pageOf[startMeasure], wav, info, micListener,
+                chroma, pageOf, lowerHalf, startMeasure, pageOf[startMeasure], wav, info, micListener, quietGate = myParts != null,
             )
             if (!follower.start()) return@launch toast(getString(R.string.viewer_mic_open_failed))
             micFollower = follower

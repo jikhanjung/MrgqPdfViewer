@@ -255,7 +255,8 @@ If there is **MusicXML** for the same piece (downloaded from ScoreMate, or a `.m
 
 The device listens through its microphone, follows where you are in the score, and turns pages.
 
-- **You need**: MusicXML for the piece, the full score (turn part view off), and microphone permission.
+- **You need**: MusicXML for the piece, and microphone permission.
+- In **Part view** it listens for **your part only** — for practicing your part alone. While your part rests, staying quiet is understood as the rest.
 - **Play → 🎤 Listen & turn pages — from this page**. While picking a measure, use **🎤 Listen from measure N** on the bottom bar.
 - "Start playing" appears. It starts following when it hears **music that matches the beginning of the score**, not just any first sound.
 - The current measure and line are shown. When you reach the bottom half, only the top half changes to the next page (**half-page turn**; not on phones).

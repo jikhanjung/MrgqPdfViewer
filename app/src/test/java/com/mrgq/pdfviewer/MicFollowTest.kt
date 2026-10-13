@@ -107,6 +107,24 @@ class MicFollowTest {
     }
 
     @Test
+    fun `내 파트만 듣기 — 조용한 칸은 쉼과 맞아 긴 쉼 뒤에도 따라간다 (P21)`() {
+        // 화음 20초 · 쉼(빈 칸) 20초 · 화음 20초. 녹음은 쉬는 동안 빈 칸(조용함)
+        val rnd = Random(11)
+        val frameSec = 0.05
+        val blocks = Array(80) { FloatArray(12) { rnd.nextFloat() }.normalized() }
+        val score = Array(1200) { j -> if (j in 400 until 800) FloatArray(12) else blocks[j / 10 % 80] }
+        val aligner = OnlineAligner(score, startCol = 0, frameSec = frameSec)
+        var maxAfter = 0
+        for (i in 0 until 1199) {
+            val rec = if (i in 400 until 800) FloatArray(12) else FloatArray(12) { score[i][it] + 0.15f * rnd.nextFloat() }.normalized()
+            val est = aligner.feed(rec)
+            if (i in 450 until 800) assertTrue("쉬는 동안 화음에 머물지 않는다 ($i → $est)", est >= 400)
+            if (i > 850) maxAfter = maxOf(maxAfter, abs(est - i))
+        }
+        assertTrue("쉼 뒤 최대 오차 $maxAfter 칸", maxAfter <= 15)
+    }
+
+    @Test
     fun `넘김 판단 — 아래 절반에서 머무르면 반 쪽, 다음 쪽에서 머무르면 쪽`() {
         // 마디 0 ~ 7: 쪽 0 (4 ~ 7 이 아래 절반), 마디 8 ~ 15: 쪽 1
         val pageOf = IntArray(16) { it / 8 }
