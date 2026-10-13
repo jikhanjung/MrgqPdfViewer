@@ -1,8 +1,8 @@
 # HANDOFF — 현재 작업 인계 노트
 
-마지막 갱신: 2026-10-12
+마지막 갱신: 2026-10-14
 브랜치: `main` (origin/main 과 동기화)
-버전: **v0.8.3** (versionCode 125, 2026-10-13 정식 — 첫 화면 합주 단추 색 · 연결 중 깜박임, 끈 연주자가 몰래 다시 연결하던 것 · 연결 되풀이 고침(beta.4), 메트로놈 두 쪽 차례 넘김 · 시작 펼침 #135). 그 앞 v0.8.2 = ScoreMate 서버에 앱 이름(`client` · 업데이트 주소 `…/app-releases/mrgqpdfviewer/android/`). private 전환(P15 4단계)은 사용자가 미룸. 실기기는 앱 안 업데이트로 받는다(태블릿 · TV 모두 사전 릴리스 받기 켜 둠), 급하면 adb 로 릴리스 APK 를 직접
+버전: **v0.8.4** (versionCode 128, 2026-10-14 정식 — P21: 반주 파트를 파트 보기와 따로(자동 · 전체 · 직접 고르기, 곡마다, DB v19, #136) · 파트 보기에서도 🎤 듣고 넘기기 — 내 파트만 듣기, 조용함 = 쉼(#137)). 그 앞 v0.8.3 = 합주 단추 색 · 연결 고침 · 메트로놈 두 쪽 차례 넘김 #135. private 전환(P15 4단계)은 사용자가 미룸. 실기기는 앱 안 업데이트로 받는다(태블릿 · TV 모두 사전 릴리스 받기 켜 둠), 급하면 adb 로 릴리스 APK 를 직접
 관련 문서: [CLAUDE.md](CLAUDE.md) (가이드 · 알아 둘 결정) · [TODOs.md](TODOs.md) (할 일 · **실기기 확인 목록**) · [CHANGELOG.md](CHANGELOG.md) · [devlog 인덱스](devlog/README.md) · [음성 명령 목록](docs/Voice_Commands.md) · [사례집](docs/Voice_Command_Examples.md)
 
 ---
