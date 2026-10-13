@@ -245,6 +245,8 @@ class PdfViewerActivity : AppCompatActivity() {
     // 반주 연습 (P07 5 · 6단계): 이 파일 옆 `.musicxml` 을 읽은 것. 없거나 읽지 못하면 null
     private var musicXml: com.mrgq.pdfviewer.score.MusicXmlScore? = null
     private var musicXmlFileId: String? = null
+    // 반주 파트 (P21) — 이 파일에 저장한 선택. null = 자동(파트 보기면 내 파트 빼고), [AccompanimentParts]
+    private var accompanimentChoice: Long? = null
 
     // 악보 분석 확인용 마디 박스 오버레이 (PDF 표시 옵션에서 켬, 전역 설정)
     private var scoreMeasures: List<ScoreMeasure> = emptyList()
@@ -6329,16 +6331,18 @@ class PdfViewerActivity : AppCompatActivity() {
         val file = com.mrgq.pdfviewer.scoremate.ScoreMateSync.musicXmlFileOf(File(pdfFilePath))
         val score = if (fileId != null && file.isFile) com.mrgq.pdfviewer.score.MusicXmlReader.read(file) else null
         if (file.isFile && score == null) Log.w("PdfViewerActivity", "MusicXML 을 읽지 못함: ${file.name}")
+        val choice = if (score != null && fileId != null) musicRepository.getUserPreference(fileId)?.accompanimentParts else null
         withContext(Dispatchers.Main) {
             musicXml = score
             musicXmlFileId = fileId
+            accompanimentChoice = choice
         }
         score?.let { Log.i("PdfViewerActivity", "MusicXML: ${file.name} — 파트 ${it.parts.map { p -> p.name }}, 마디 ${it.measures.size}") }
     }
 
     /**
      * 악보 연동을 시작할 때 반주 (P07 6단계). 꺼 두었거나 · 합주 중이거나 · MusicXML 이 없거나 · 마디 구조가 악보와 다르면 null.
-     * 파트 보기면 **보고 있는 파트를 빼고** 나머지를, 전체 악보면 모든 파트를 들려준다.
+     * 들려줄 파트는 [accompanimentParts] — 자동이면 파트 보기의 **보고 있는 파트를 빼고**, 전체 악보면 모든 파트 (P21 — 곡마다 바꿀 수 있다).
      */
     private fun accompanimentFor(follower: ScoreFollower): com.mrgq.pdfviewer.metronome.Accompaniment? {
         val score = musicXml?.takeIf { musicXmlFileId == currentPdfFileId } ?: return null
@@ -6349,8 +6353,7 @@ class PdfViewerActivity : AppCompatActivity() {
             toast(getString(R.string.viewer_accompaniment_unavailable, match.reason?.resolve(this)))
             return null
         }
-        val mine = partViewStaves
-        val play = score.parts.indices.filter { p -> mine == null || score.stavesOf(p).none { it in mine } }.toSet()
+        val play = accompanimentParts(score)
         if (play.isEmpty()) return null
         val accompaniment = com.mrgq.pdfviewer.metronome.Accompaniment.build(
             score, follower, play, match::measureNumberOf, dynamics = preferences.getBoolean(PREF_ACCOMPANIMENT_DYNAMICS, true),
@@ -6358,6 +6361,14 @@ class PdfViewerActivity : AppCompatActivity() {
         Toast.makeText(this, getString(R.string.viewer_accompaniment_parts, play.joinToString { score.parts[it].name }), Toast.LENGTH_SHORT).show()
         Log.i("PdfViewerActivity", "반주: 파트 $play, 음 ${accompaniment.size}개")
         return accompaniment
+    }
+
+    /** 반주할 MusicXML 파트 (P21) — 이 곡에 고른 것([accompanimentChoice]), 자동이면 파트 보기의 내 파트를 뺀다 */
+    private fun accompanimentParts(score: com.mrgq.pdfviewer.score.MusicXmlScore): Set<Int> {
+        val mine = partViewStaves
+        return com.mrgq.pdfviewer.metronome.AccompanimentParts.resolve(accompanimentChoice, score.parts.size) { p ->
+            mine != null && score.stavesOf(p).any { it in mine }
+        }
     }
 
     /**
@@ -6376,27 +6387,40 @@ class PdfViewerActivity : AppCompatActivity() {
 
     /**
      * 반주 설정 — 켜기와 **소리 크기(메트로놈 클릭과 따로)**. 바꾸면 바로 들린다: 크기는 엔진에 곧장, 켜고 끄기는 악보 연동 중이면
-     * 지금 박 시간표로 반주를 다시 만들거나 뺀다 (P07 6단계, 사용자 요청 2026-09-28)
+     * 지금 박 시간표로 반주를 다시 만들거나 뺀다 (P07 6단계, 사용자 요청 2026-09-28).
+     * **반주 파트**(P21): 자동(내 파트 빼고) · 전체 · 직접 고르기 — 곡마다 저장, 파트 보기와 따로
      */
     private fun showAccompanimentDialog() {
         val score = musicXml?.takeIf { musicXmlFileId == currentPdfFileId } ?: return
+        val fileId = currentPdfFileId ?: return
         val density = resources.displayMetrics.density
         val layout = android.widget.LinearLayout(this).apply {
             orientation = android.widget.LinearLayout.VERTICAL
             setPadding((24 * density).toInt(), (12 * density).toInt(), (24 * density).toInt(), 0)
         }
         val mine = partViewStaves
-        val playing = score.parts.indices.filter { p -> mine == null || score.stavesOf(p).none { it in mine } }
-        val info = android.widget.TextView(this).apply {
-            text = if (playing.isEmpty()) getString(R.string.viewer_accompaniment_nothing)
-            else getString(R.string.viewer_accompaniment_info, playing.joinToString { score.parts[it].name }) +
-                if (mine == null) getString(R.string.viewer_accompaniment_info_part_hint) else ""
-            textSize = 15f
+        fun isMine(p: Int) = mine != null && score.stavesOf(p).any { it in mine }
+        val info = android.widget.TextView(this).apply { textSize = 15f }
+        fun showInfo() {
+            val playing = accompanimentParts(score)
+            val mode = com.mrgq.pdfviewer.metronome.AccompanimentParts.mode(accompanimentChoice, score.parts.size)
+            info.text = when {
+                playing.isNotEmpty() -> getString(R.string.viewer_accompaniment_info, playing.sorted().joinToString { score.parts[it].name }) +
+                    if (mine == null && mode == com.mrgq.pdfviewer.metronome.AccompanimentParts.Mode.AUTO) getString(R.string.viewer_accompaniment_info_part_hint) else ""
+                mode == com.mrgq.pdfviewer.metronome.AccompanimentParts.Mode.CUSTOM -> getString(R.string.viewer_accompaniment_none_chosen)
+                else -> getString(R.string.viewer_accompaniment_nothing)
+            }
         }
+        showInfo()
         val toggle = android.widget.CheckBox(this).apply {
             text = getString(R.string.viewer_accompaniment_on)
             textSize = 18f
             isChecked = preferences.getBoolean(PREF_ACCOMPANIMENT, true)
+        }
+        // 연주 중이면 지금 박 시간표로 다시 만든다 — 들려줄 파트가 없으면 뺀다
+        fun rebuild() {
+            val current = follower
+            if (toggle.isChecked && current != null && followState == FollowState.PLAYING) metronome.accompaniment = accompanimentFor(current)
         }
         val volumeLabel = android.widget.TextView(this).apply { textSize = 16f }
         val seek = android.widget.SeekBar(this).apply {
@@ -6430,18 +6454,85 @@ class PdfViewerActivity : AppCompatActivity() {
             isChecked = preferences.getBoolean(PREF_ACCOMPANIMENT_DYNAMICS, true)
             setOnCheckedChangeListener { _, on ->
                 preferences.edit().putBoolean(PREF_ACCOMPANIMENT_DYNAMICS, on).apply()
-                val current = follower
-                if (toggle.isChecked && current != null && followState == FollowState.PLAYING) metronome.accompaniment = accompanimentFor(current)
+                rebuild()
             }
         }
+
+        // 반주 파트 (P21) — 자동 · 전체 · 직접 고르기. 직접 고르기를 처음 누르면 지금 들리는 파트에서 시작한다
+        val partsLabel = android.widget.TextView(this).apply {
+            text = getString(R.string.viewer_accompaniment_parts_title)
+            textSize = 16f
+            setPadding(0, (12 * density).toInt(), 0, 0)
+        }
+        val modeGroup = android.widget.RadioGroup(this)
+        val autoButton = android.widget.RadioButton(this).apply { id = View.generateViewId(); text = getString(R.string.viewer_accompaniment_parts_auto); textSize = 16f }
+        val allButton = android.widget.RadioButton(this).apply { id = View.generateViewId(); text = getString(R.string.viewer_accompaniment_parts_all); textSize = 16f }
+        val customButton = android.widget.RadioButton(this).apply { id = View.generateViewId(); text = getString(R.string.viewer_accompaniment_parts_custom); textSize = 16f }
+        modeGroup.addView(autoButton)
+        modeGroup.addView(allButton)
+        modeGroup.addView(customButton)
+        val partBoxes = score.parts.indices.map { p ->
+            android.widget.CheckBox(this).apply {
+                text = if (isMine(p)) getString(R.string.viewer_accompaniment_my_part, score.parts[p].name) else score.parts[p].name
+                textSize = 16f
+                setPadding((8 * density).toInt(), 0, 0, 0)
+            }
+        }
+        fun showParts() {
+            val custom = com.mrgq.pdfviewer.metronome.AccompanimentParts.mode(accompanimentChoice, score.parts.size) ==
+                com.mrgq.pdfviewer.metronome.AccompanimentParts.Mode.CUSTOM
+            val playing = accompanimentParts(score)
+            partBoxes.forEachIndexed { p, box ->
+                box.setOnCheckedChangeListener(null)
+                box.isChecked = p in playing
+                box.isEnabled = custom
+            }
+        }
+        var attachPartListeners: () -> Unit = {}
+        fun choose(choice: Long?) {
+            if (choice == accompanimentChoice) return
+            accompanimentChoice = choice
+            lifecycleScope.launch(Dispatchers.IO) { musicRepository.setAccompanimentPartsForFile(fileId, choice) }
+            showParts()
+            attachPartListeners()
+            showInfo()
+            rebuild()
+        }
+        attachPartListeners = {
+            partBoxes.forEach { box ->
+                box.setOnCheckedChangeListener { _, _ ->
+                    choose(com.mrgq.pdfviewer.metronome.AccompanimentParts.toMask(partBoxes.indices.filter { partBoxes[it].isChecked }.toSet()))
+                }
+            }
+        }
+        modeGroup.check(
+            when (com.mrgq.pdfviewer.metronome.AccompanimentParts.mode(accompanimentChoice, score.parts.size)) {
+                com.mrgq.pdfviewer.metronome.AccompanimentParts.Mode.AUTO -> autoButton.id
+                com.mrgq.pdfviewer.metronome.AccompanimentParts.Mode.ALL -> allButton.id
+                com.mrgq.pdfviewer.metronome.AccompanimentParts.Mode.CUSTOM -> customButton.id
+            }
+        )
+        showParts()
+        attachPartListeners()
+        modeGroup.setOnCheckedChangeListener { _, checkedId ->
+            when (checkedId) {
+                autoButton.id -> choose(null)
+                allButton.id -> choose(com.mrgq.pdfviewer.metronome.AccompanimentParts.ALL)
+                customButton.id -> choose(com.mrgq.pdfviewer.metronome.AccompanimentParts.toMask(accompanimentParts(score)))
+            }
+        }
+
         layout.addView(info)
         layout.addView(toggle)
         layout.addView(dynamicsToggle)
         layout.addView(volumeLabel)
         layout.addView(seek)
+        layout.addView(partsLabel)
+        layout.addView(modeGroup)
+        partBoxes.forEach { layout.addView(it) }
         AlertDialog.Builder(this)
             .setTitle(R.string.viewer_accompaniment_title)
-            .setView(layout)
+            .setView(android.widget.ScrollView(this).apply { addView(layout) })
             .setPositiveButton(R.string.viewer_close, null)
             .show()
     }

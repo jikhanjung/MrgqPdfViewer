@@ -62,6 +62,10 @@ interface UserPreferenceDao {
     @Query("UPDATE user_preferences SET partStaff = :mask, updatedAt = :updatedAt WHERE pdfFileId = :pdfFileId")
     suspend fun updatePartStaves(pdfFileId: String, mask: Long?, updatedAt: Long = System.currentTimeMillis())
 
+    /** 반주 파트 (P21, v19) — null = 자동, -1 = 전체, 그 밖 = MusicXML 파트 순번 마스크 */
+    @Query("UPDATE user_preferences SET accompanimentParts = :choice, updatedAt = :updatedAt WHERE pdfFileId = :pdfFileId")
+    suspend fun updateAccompanimentParts(pdfFileId: String, choice: Long?, updatedAt: Long = System.currentTimeMillis())
+
     @Query("SELECT COUNT(*) FROM user_preferences")
     suspend fun getUserPreferenceCount(): Int
 }

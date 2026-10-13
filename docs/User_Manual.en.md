@@ -198,7 +198,7 @@ When you first open a portrait score on a landscape screen, the app asks **Two p
 | 🎤 Listen & turn pages | Listens to you play and turns pages (6.5, tablet · phone) |
 | Start — pick a measure on the score | Pick a start measure, then start the metronome (6.3) |
 | Metronome settings… | Time signature · tempo · sound (6.2) |
-| Accompaniment (MusicXML) | Accompaniment on · volume (6.4). Only for pieces with MusicXML |
+| Accompaniment (MusicXML) | Accompaniment on · volume · accompaniment parts (6.4). Only for pieces with MusicXML |
 
 While the metronome runs you get **Stop**; while paused, **Resume · Pick a measure and restart · Stop**.
 
@@ -243,7 +243,10 @@ Pieces whose time signature can't be read run as an ordinary metronome without f
 If there is **MusicXML** for the same piece (downloaded from ScoreMate, or a `.musicxml` with the same name next to the PDF), the score-linked metronome **plays the other parts with a simple sound**.
 
 - In **Play → Accompaniment (MusicXML)**: **Accompaniment on**, and the accompaniment volume (separate from the metronome click).
-- If you pick your own part in **Part view**, your part is left out.
+- **Accompaniment parts**: chosen per piece.
+  - **Auto — all but my part** (default): if you picked your part in **Part view**, it is left out; otherwise every part plays.
+  - **All — including my part**: every part plays, yours too.
+  - **Choose parts**: pick the parts to play one by one. Changing Part view keeps your choice.
 - **Follow expression marks**: dynamics (pp–ff) · crescendo · diminuendo · staccato · accents shape the accompaniment. When off, it plays at the chosen volume.
 - Only used when the MusicXML's measure count and time signatures match the score; otherwise the app tells you why.
 - Accompaniment is off during an ensemble.

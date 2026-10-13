@@ -125,6 +125,12 @@ class MusicRepository(context: Context) {
         userPreferenceDao.updatePartStaves(pdfFileId, PartStaves.toMask(staves))
     }
 
+    /** 이 파일의 반주 파트 (P21 — [com.mrgq.pdfviewer.metronome.AccompanimentParts]). 설정 행이 없으면 먼저 만든다. */
+    suspend fun setAccompanimentPartsForFile(pdfFileId: String, choice: Long?) {
+        getOrCreateUserPreference(pdfFileId)
+        userPreferenceDao.updateAccompanimentParts(pdfFileId, choice)
+    }
+
     /** 이 파일의 구간별 빠르기 (둘째 구간부터, #057). 설정 행이 없으면 먼저 만든다. */
     suspend fun setMetronomeSectionsForFile(pdfFileId: String, sections: List<TempoSectionSetting>) {
         getOrCreateUserPreference(pdfFileId)

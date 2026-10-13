@@ -210,6 +210,12 @@
     <string name="viewer_accompaniment_dynamics">Follow expression marks (dynamics · crescendo · staccato)</string>
     <string name="viewer_accompaniment_no_dynamics">" — this piece has no expression marks"</string>
     <string name="viewer_accompaniment_title">Accompaniment (MusicXML)</string>
+    <string name="viewer_accompaniment_parts_title">Accompaniment parts</string>
+    <string name="viewer_accompaniment_parts_auto">Auto — all but my part</string>
+    <string name="viewer_accompaniment_parts_all">All — including my part</string>
+    <string name="viewer_accompaniment_parts_custom">Choose parts</string>
+    <string name="viewer_accompaniment_my_part">%1$s (my part)</string>
+    <string name="viewer_accompaniment_none_chosen">No parts chosen to play</string>
     <string name="viewer_part_build_failed">Couldn\'t build the part — showing the full score</string>
     <string name="viewer_part_building">Building the part…</string>
     <string name="viewer_rotation_landscape">Landscape</string>

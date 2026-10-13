@@ -210,6 +210,12 @@
     <string name="viewer_accompaniment_dynamics">악상기호 따르기 (셈여림 · 크레셴도 · 스타카토)</string>
     <string name="viewer_accompaniment_no_dynamics">" — 이 곡에는 악상기호가 없습니다"</string>
     <string name="viewer_accompaniment_title">반주 (MusicXML)</string>
+    <string name="viewer_accompaniment_parts_title">반주 파트</string>
+    <string name="viewer_accompaniment_parts_auto">자동 — 내 파트 빼고</string>
+    <string name="viewer_accompaniment_parts_all">전체 — 내 파트도</string>
+    <string name="viewer_accompaniment_parts_custom">직접 고르기</string>
+    <string name="viewer_accompaniment_my_part">%1$s (내 파트)</string>
+    <string name="viewer_accompaniment_none_chosen">들려줄 파트를 고르지 않았습니다</string>
     <string name="viewer_part_build_failed">파트보를 만들지 못해 전체 악보로 봅니다</string>
     <string name="viewer_part_building">파트보 만드는 중…</string>
     <string name="viewer_rotation_landscape">가로</string>

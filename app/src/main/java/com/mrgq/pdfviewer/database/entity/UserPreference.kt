@@ -32,6 +32,8 @@ data class UserPreference(
     // 파트보 보기 (P07) — 보여 줄 보표들의 **비트 마스크**(보표 k = 1 shl k, 여러 파트, v17). null = 전체 악보.
     // 칸 이름은 v16 의 partStaff(보표 순번 하나) 그대로 — v17 마이그레이션이 순번을 마스크로 바꿨다
     @ColumnInfo(name = "partStaff") val partStavesMask: Long? = null,
+    // 반주 파트 (P21, v19) — null = 자동(파트 보기면 내 파트 빼고), -1 = 전체, 그 밖 = MusicXML 파트 순번 마스크 (AccompanimentParts)
+    val accompanimentParts: Long? = null,
     val updatedAt: Long = System.currentTimeMillis()
 )
 
