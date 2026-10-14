@@ -194,8 +194,10 @@ Stand two tablets or phones side by side and read like the TV two-page view — 
 
 - Turn on either device and both move two pages at a time. With an odd page count, the last right page is blank.
 - When the waiting device opens another piece, the other device finds and opens the same score (or tells you it doesn't have it).
-- If the connection drops, both go back to showing alone, and line up with the current spread again when it reconnects.
-- To end it: **View → Two-device spread → Unpair**.
+- **Playing** (score-linked metronome · 🎤 listen & turn · accompaniment) runs on the device that waited. Like the TV two-page view, **only the finished page** changes (1 | 2 → 3 | 2 → 3 | 4), and the other device shows the current measure in yellow too.
+- **Ensemble**: when the waiting device joins an ensemble, the pair conducts or follows as one TV two-page device. The other device doesn't take ensemble signals itself.
+- If the connection drops, both go back to showing alone, and line up with the current spread again when it reconnects. The pair is remembered even if the app is closed and reopened. If the other device is on the score list, it opens the score the waiting device opened.
+- To end it: **View → Two-device spread → Unpair** on either device — both are unpaired.
 - Part view is chosen on each device — pick the same part on both so the pages match.
 
 ---

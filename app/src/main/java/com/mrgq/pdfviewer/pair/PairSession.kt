@@ -31,6 +31,8 @@ object PairSession {
 
     /** 앞에 있는 화면이 받는다 — 필요한 것만 구현 */
     interface Listener {
+        /** 악보 화면 — 펼침을 스스로 정해 보낸다. 아니면(목록 등) 주 기기는 기억한 펼침을 다시 보낸다 */
+        val isViewer: Boolean get() = false
         fun onPairConnected(peerName: String) {}
         fun onPairDisconnected() {}
         fun onPairSpread(update: PairProtocol.Message.SpreadUpdate) {}
@@ -204,7 +206,7 @@ object PairSession {
                         is PairProtocol.Message.SpreadUpdate -> if (role == Role.PARTNER) listener?.onPairSpread(message)
                         is PairProtocol.Message.Focus -> if (role == Role.PARTNER) listener?.onPairFocus(message)
                         is PairProtocol.Message.Input -> if (role == Role.MAIN) {
-                            val viewer = listener
+                            val viewer = listener?.takeIf { it.isViewer }
                             if (viewer != null) viewer.onPairInput(message.action)
                             else if (message.action == PairProtocol.Action.SYNC) resendLast()
                         }
@@ -247,6 +249,7 @@ object PairSession {
         log("paired: ${hello.name} ($role, $side)")
         if (!first) return
         val l = listener
-        if (l != null) l.onPairConnected(hello.name) else if (role == Role.MAIN) resendLast()
+        l?.onPairConnected(hello.name)
+        if (l?.isViewer != true && role == Role.MAIN) resendLast()
     }
 }

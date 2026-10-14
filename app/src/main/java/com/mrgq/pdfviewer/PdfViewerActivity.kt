@@ -6411,7 +6411,7 @@ class PdfViewerActivity : AppCompatActivity() {
                 handleRemoteFileChange(update.file, (own ?: update.spread.left) + 1, update.sha256)
                 return@launch
             }
-            if (update.pageCount != pageCount && pairPagesWarned != path) {
+            if (pageCount > 0 && update.pageCount != pageCount && pairPagesWarned != path) { // 아직 여는 중(0)이면 묻지 않는다
                 pairPagesWarned = path
                 toast(getString(R.string.viewer_pair_pages_differ, pageCount, update.pageCount))
             }
@@ -6425,6 +6425,8 @@ class PdfViewerActivity : AppCompatActivity() {
     }
 
     private val pairListener = object : PairSession.Listener {
+        override val isViewer = true
+
         override fun onPairConnected(peerName: String) {
             toast(getString(R.string.viewer_pair_connected, peerName, pairSideName(PairSession.side)))
             pairSeenSeq = -1L
