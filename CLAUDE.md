@@ -13,11 +13,12 @@ Android TV OS용 PDF 악보 리더 앱으로, 무선 파일 업로드와 리모�
 > SurfaceFlinger 가 4K 로 업스케일한다. 4K 관련 작업을 시작하기 전에
 > [`devlog/20260815_040_4k_display_investigation.md`](devlog/20260815_040_4k_display_investigation.md) 를 먼저 읽을 것.
 
-**현재 버전**: v0.9.0-beta.3 (2026-10-14)  
+**현재 버전**: v0.9.0-beta.4 (2026-10-14)  
 **빌드 상태**: 🟢 빌드 가능 (GitHub Actions CI 로 커밋마다 검증)  
-**CI 게이트**: 🟢 단위 테스트 527개 + **화면 글 게이트**(`tools/i18n_gate.py` — 코드 · 레이아웃의 한글 리터럴 · values-en 빠짐, P18) + 설명서 한 · 영 구조(`tools/manual_check.py`, P19) + Android Lint(`MissingTranslation` 오류) + 에뮬레이터 계측 60개·release APK 스모크(API 30/34 — ⚠️ 문서 정보 검사는 모든 매트릭스에서 건너뜀, #047 §5). 계측은 main 푸시와 수동 실행에서만 (회당 5~6분)  
+**CI 게이트**: 🟢 단위 테스트 538개 + **화면 글 게이트**(`tools/i18n_gate.py` — 코드 · 레이아웃의 한글 리터럴 · values-en 빠짐, P18) + 설명서 한 · 영 구조(`tools/manual_check.py`, P19) + Android Lint(`MissingTranslation` 오류) + 에뮬레이터 계측 60개·release APK 스모크(API 30/34 — ⚠️ 문서 정보 검사는 모든 매트릭스에서 건너뜀, #047 §5). 계측은 main 푸시와 수동 실행에서만 (회당 5~6분)  
 **테스트 상태**: 🟢 v0.3.x 기능을 Z18TV Pro 에서 확인(2026-09-28): 파트보(한 · 여러 파트, 넓혀 자르기, 번호) · 파트 화면 악보 연동 · MusicXML 반주(K488) · MusicXML · 서버 분석 동기화 · 목록 곡 정보 · 앱 안 업데이트(v0.2.9 → v0.3.3). 🟡 **두 대가 필요한 것만 남음** — 합주 중 파트 보기, 합주 Phase 0 동기 넘김. 렌더 품질 · 키 매핑 등 전반 스모크는 2026-08-15(Google TV Streamer + 4K 모니터)
 **최근 업데이트** (전체는 [`CHANGELOG.md`](CHANGELOG.md), 오늘 작업 요약은 devlog [`065`](devlog/20260928_065_part_view_accompaniment_server_analysis.md)):
+- **v0.9.0-beta.4** — ☁️ ScoreMate 멤버십(서버 0.25.0): 설정 멤버십 줄 · Lite 의 합주용 악보(`retention: session`)는 합주 동안만 목록에(숨은 캐시 `.ScoreMateSession` 30일 · 500MB), 지휘자 · 짝 기기에서 받은 곡은 연결 안 된 기기도 캐시(30일 · 200MB), DB v20(#141)
 - **v0.9.0-beta.3** — 짝: 다른 기기에 없는 악보는 주 기기에서 받기(HTTP 9095) · 자르기 맞추기 · 다른 기기의 ▶ · 🎤 로 시작(input start · listen · stop) · 휴대폰 세로만(#140)
 - **v0.9.0-beta.2** — 짝 메시지 쪽 번호 1부터(짝 판 3, `docs/protocols/Pair_Protocol.md`)
 - **v0.9.0-beta.1** — 📖 두 대로 펼쳐 보기 끝까지: 주 기기의 연주가 TV 두 쪽처럼 차례 넘김 · 짝 기기 노란 마디(`focus`) · 짝 = 합주의 TV 두 쪽 기기 한 대 · 짝 저장(앱 재시작 · 주소 바뀜) · 짝 풀기 양쪽(`bye`), 합주 연주자가 시작 마디 고르는 중에도 넘김 따름(P22 3 · 4단계 #139). 0.9.0 = 두 대로 펼쳐 보기 판
@@ -165,7 +166,7 @@ Android TV OS용 PDF 악보 리더 앱으로, 무선 파일 업로드와 리모�
 - **아키텍처**: PdfViewerActivity + PageCache 중심 (v0.1.8 의 Manager 분리 시도는 미통합 상태로 남아 있다가 v0.1.11 에서 제거됨)
 - **PDF 렌더링**: PdfRenderer (Android 5.0+ 내장)
 - **PdfBox-Android** 2.0.27.0: 문서 정보(Title/Author), 악보 분석의 스트림 · 글꼴, 파트 PDF 만들기(폼 가져오기). BouncyCastle PQC 리소스는 패키징 제외)
-- **데이터베이스**: Room 2.6.1 (SQLite 기반, 현재 v19 스키마 — `score_measures`(박자표 포함), `score_staves`(보표 띠 · 이름, 파트보 P07), `user_preferences.partStaff`(파트보 선택 — 보표 비트 마스크, 여러 파트, v17), `user_preferences.accompanimentParts`(반주 파트, v19), `server_scores`(ScoreMate 받은 악보), 파일별 메트로놈(템포·박자 분자/분모·점음표 박·구간별 빠르기) 포함. ⚠️ `pdf_files` 갱신에 `insertPdfFile`(REPLACE) 금지 — CASCADE 로 표시 설정 삭제)
+- **데이터베이스**: Room 2.6.1 (SQLite 기반, 현재 v20 스키마 — `score_measures`(박자표 포함), `score_staves`(보표 띠 · 이름, 파트보 P07), `user_preferences.partStaff`(파트보 선택 — 보표 비트 마스크, 여러 파트, v17), `user_preferences.accompanimentParts`(반주 파트, v19), `server_scores`(ScoreMate 받은 악보), 파일별 메트로놈(템포·박자 분자/분모·점음표 박·구간별 빠르기) 포함. ⚠️ `pdf_files` 갱신에 `insertPdfFile`(REPLACE) 금지 — CASCADE 로 표시 설정 삭제)
 - **웹 서버**: NanoHTTPD 2.3.1
 - **합주 통신**: WebSocket(WS) — WSS 는 v0.1.8 에 시도했다가 롤백, cleartext 허용
 - **입력 처리**: 리모컨용 KeyEvent 처리
@@ -312,7 +313,7 @@ v0.1.x 시절의 상세 이력(합주 모드 재구조화 · 스플래시 · 설
 - **WSS 는 롤백**(v0.1.8): 인증서 호환 문제로 일반 WebSocket(WS), cleartext 허용
 - 파트 PDF · MusicXML · 서버 분석 파일은 **기기 밖으로 보내지 않는다**(저작권 원칙, P07 §0 · 서버 P01 §2). 지휘자가 나눠 주는 것은 원본 PDF 뿐
 
-### DB (Room v19)
+### DB (Room v20)
 - 마이그레이션은 `MusicDatabase.ALL_MIGRATIONS` 한 곳, 계측 테스트 `MusicDatabaseMigrationTest` 가 v1 부터 검사
 - `pdf_files` 갱신에 `insertPdfFile`(REPLACE) 금지 — CASCADE 로 파일별 설정 삭제
 - 분석 캐시 무효화는 이제 서버 분석 파일(`.layout.json`)이 새로우면 다시 읽는 것으로(`ServerLayouts`) — 연결하지 않은 TV 는 여전히 마이그레이션(v9 · v12 · v15 처럼)으로 비워야 한다

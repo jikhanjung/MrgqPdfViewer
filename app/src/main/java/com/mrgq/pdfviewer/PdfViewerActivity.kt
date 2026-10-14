@@ -3461,7 +3461,7 @@ class PdfViewerActivity : AppCompatActivity() {
     
     /**
      * 연주자: 지휘자가 파일을 바꿨다 (#063). 찾는 순서는 파일 목록 화면과 같다 (EnsembleFiles) — 연결된 TV 는 내용 해시로 내 ScoreMate,
-     * 없으면 캐시, 없으면 캐시로 받는다. 연결하지 않은 TV 는 이름, 없으면 `PDFs/` 로 받는다. 찾은 파일이 지금 목록에 없으면 끝에 붙인다
+     * 없으면 캐시, 없으면 캐시로 받는다. 연결하지 않은 TV 는 이름, 없으면 캐시에서, 그래도 없으면 캐시로. 찾은 파일이 지금 목록에 없으면 끝에 붙인다
      */
     private fun handleRemoteFileChange(file: String, targetPage: Int, sha256: String? = null) {
         // Update sync time for input blocking
@@ -3598,7 +3598,7 @@ class PdfViewerActivity : AppCompatActivity() {
                     downloadPath.delete()
                     if (!partPath.renameTo(downloadPath)) throw java.io.IOException(getString(R.string.viewer_download_save_failed))
                 }
-                if (cached) com.mrgq.pdfviewer.ensemble.EnsembleFiles.trimCache(downloadPath.parentFile!!, keep = downloadPath)
+                if (cached) com.mrgq.pdfviewer.ensemble.EnsembleFiles.tidyCache(File(cacheDir, "ensemble"), keep = downloadPath)
                 
                 withContext(Dispatchers.Main) {
                     progressDialog.dismiss()

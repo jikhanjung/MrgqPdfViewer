@@ -76,6 +76,7 @@ ScoreMate is a website for managing scores and setlists. A linked device downloa
 - If ScoreMate has MusicXML or analysis data for a piece, it is downloaded too. It is used by accompaniment (6.4), listen & turn pages (6.5) and the letter command (chapter 8).
 
 **Membership**: the **Settings → ☁️ ScoreMate → Membership** row shows your plan (Lite · Pro · Maestro) and when it ends. Tap it to also see this month's score recognition usage. Coupons, trials and other membership changes are made **on the web** (a TV shows a QR code).
+- If hidden scores take more than 500 MB, the ones not opened for the longest are removed first.
 - On the **Lite** plan, ensemble scores from a Maestro leader appear in the list **only during ensemble mode** — they show up when an ensemble (chapter 9) starts and are hidden when it ends. Hidden scores come back right away at the next ensemble (even offline) and are removed if **not opened for 30 days** (downloaded again at the next ensemble). Notes you wrote on them are kept.
 
 **Unlinking**: **Settings → ☁️ ScoreMate → Unlink**. Choose whether to **keep or delete** the downloaded scores. Kept scores become ordinary files on this device.
@@ -396,6 +397,8 @@ Several devices read together. One device is the **conductor**; the others are *
 - A performer can step out with **Play menu → Leave on this device only** and come back with **Rejoin the conductor**.
 - **The conductor always sees the full score.** Performers can use part view for their own part; pages stay in step with the original.
 - If devices have different ensemble versions, the app says which device to update when they connect.
+- Pieces received from the conductor (or from the main device in a two-device spread) are kept apart from the score list — the same piece isn't downloaded again next time, and it is removed if **not opened for 30 days** (when space runs short, the ones not opened for the longest go first).
+- On the ScoreMate **Lite** plan, ensemble scores from a Maestro leader appear only during an ensemble (3.1 Membership).
 
 ---
 

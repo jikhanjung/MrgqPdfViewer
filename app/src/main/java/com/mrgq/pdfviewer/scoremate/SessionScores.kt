@@ -15,7 +15,8 @@ import java.io.File
  * 계산은 [ScoreMateSync.fetchSessionScores] · [ScoreMateSync.evictSessionScores], 여기는 언제 부를지만.
  *
  * - 합주 모드 시작(지휘자 · 연주자, 앱을 켤 때 저장된 합주 모드를 되살릴 때도) → 받기
- * - 합주 모드 끝(직접 끄기 · 지휘자가 끝냄) → 서재에서 숨은 캐시로 (30일 동안 열지 않으면 버림)
+ * - 합주 모드 끝(직접 끄기 · 지휘자가 끝냄) → 서재에서 숨은 캐시로 (30일 동안 열지 않으면 버림). 지휘자 · 짝 기기에서 받은 악보 캐시도
+ *   정리([com.mrgq.pdfviewer.ensemble.EnsembleFiles.tidyCache] — 이것은 연결하지 않은 기기도)
  * - 앱을 켤 때 합주 모드가 아니면 → 캐시로 (합주 중에 앱이 죽었을 때)
  * - 뷰어가 열면 → 마지막 접근 [touch]
  *
@@ -36,7 +37,14 @@ object SessionScores {
         report.downloaded + report.musicXml + report.layouts > 0
     }
 
-    fun onEnsembleEnded(context: Context) = inBackground(context, "evict") { sync ->
+    fun onEnsembleEnded(context: Context) {
+        // 지휘자 · 짝 기기에서 받은 악보 캐시 — 연결과 상관없이 (오래된 것 · 상한)
+        val ensembleCache = File(context.applicationContext.cacheDir, "ensemble")
+        scope.launch { com.mrgq.pdfviewer.ensemble.EnsembleFiles.tidyCache(ensembleCache) }
+        stashSessionScores(context)
+    }
+
+    private fun stashSessionScores(context: Context) = inBackground(context, "evict") { sync ->
         val n = sync.evictSessionScores()
         Log.i(TAG, "stashed $n")
         n > 0

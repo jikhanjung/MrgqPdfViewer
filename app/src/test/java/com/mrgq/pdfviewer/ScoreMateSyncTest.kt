@@ -797,6 +797,23 @@ class ScoreMateSyncTest {
     }
 
     @Test
+    fun 캐시가_상한을_넘으면_오래_안_연_것부터_버린다() = runBlocking {
+        server.put(Score(1, "몰다우", "1234567890", retention = "session"))
+        server.put(Score(2, "아리랑", "1234567890", retention = "session"))
+        sync().sync()
+        ensemble = true
+        clock = 1000 * day
+        sync().fetchSessionScores()
+        clock = 1001 * day
+        sync().touchSession(file("현악 4중주", "아리랑.pdf").path)
+        ensemble = false
+        ScoreMateSync(ScoreMateClient(tokens, server), tokens, db, records, root, now = { clock!! }, inEnsemble = { ensemble },
+            sessionCacheMaxBytes = 15).evictSessionScores()
+        assertFalse("오래 안 연 몰다우", File(cache, "1.pdf").exists())
+        assertTrue(File(cache, "2.pdf").exists())
+    }
+
+    @Test
     fun 캐시의_판이_다르면_버리고_새_판을_받는다() = runBlocking {
         val s = Score(1, "몰다우", "v1", retention = "session")
         server.put(s)

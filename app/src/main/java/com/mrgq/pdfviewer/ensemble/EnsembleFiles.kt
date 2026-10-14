@@ -11,8 +11,14 @@ import java.io.File
  * - **ScoreMate 에 연결된 TV**: 서재는 ScoreMate 악보뿐이다. 내 ScoreMate 에 **같은 내용**이 있으면 그것을 연다(계정이 달라도).
  *   없으면 지휘자에게서 받아 **캐시에만** 둔다 — 파일 목록에는 나오지 않는다. 캐시는 `ensemble/<해시 앞 16자>/<이름>` 이라
  *   경로가 내용마다 일정해 파일별 설정(두 페이지 · 클리핑 · 메트로놈)이 저장된다
- * - **연결하지 않은 TV**: 서재는 로컬 파일(`PDFs/`)뿐이다. 이름으로 찾고, 없으면 `PDFs/` 에 받는다 (지금까지와 같다)
+ * - **연결하지 않은 TV**: 서재는 로컬 파일(`PDFs/`)뿐이다. 이름으로 찾고, 없으면 캐시에서 찾고, 그래도 없으면 **캐시로** 받는다
+ *   (서버 0.25.0 멤버십 때 사용자 결정 — 예전에는 `PDFs/` 에 받아 목록에 남았다)
  * - 지휘자가 해시를 보내지 않으면(v0.2.6 이하) 캐시도 이름으로 (`ensemble/<이름>`)
+ * - 두 대로 펼쳐 보기의 짝 기기가 주 기기에서 받는 악보(P22, HTTP 9095)도 같은 길 · 같은 캐시
+ *
+ * **캐시 정리** (사용자 결정 "둘 다 동일하게 처리해줘. 공간이 문제되면 오래된 것부터 지우고"): 마지막 접근(받은 때 · 연 때 = 파일 수정 시각,
+ * [touch]) 뒤 [CACHE_DAYS] 가 지나면 지운다([purgeCache] — 받은 뒤 · 합주가 끝날 때 · 앱을 켤 때), [CACHE_MAX_BYTES] 를 넘으면 오래 안 쓴
+ * 것부터([trimCache]). ScoreMate 앱과 같은 규칙
  *
  * 파일 이름은 지휘자가 보낸 값이라 **경로로 그대로 쓰지 않는다** — `../` 로 앱 폴더 밖에 쓰지 못하게 이름만 남긴다.
  * Android 에 의존하지 않는다 — JVM 단위 테스트 대상.
@@ -29,6 +35,10 @@ object EnsembleFiles {
 
     /** 캐시 상한 — 넘으면 오래 안 쓴 것부터 지운다 */
     const val CACHE_MAX_BYTES = 200L * 1024 * 1024
+
+    /** 캐시 파일을 마지막 접근 뒤 이만큼 둔다 (ScoreMate 앱 · 서버 합주용 악보와 같게) */
+    const val CACHE_DAYS = 30L
+    private const val DAY_MS = 24L * 60 * 60 * 1000
 
     /**
      * @param sha256 지휘자 파일의 내용 해시 (없으면 이름으로)
@@ -54,7 +64,8 @@ object EnsembleFiles {
             return if (cached.isFile) Resolution.Open(cached.path) else Resolution.Download(cached, cached = true)
         }
         listed.firstOrNull { it.first == fileName || it.first == name }?.let { return Resolution.Open(it.second) }
-        return Resolution.Download(File(pdfRoot, name), cached = false)
+        val cached = cacheFile(cacheDir, name, sha256)
+        return if (cached.isFile) Resolution.Open(cached.path) else Resolution.Download(cached, cached = true)
     }
 
     /** 캐시 자리 — 내용마다 폴더를 달리해 이름이 같은 다른 악보와 섞이지 않고 설정도 내용별로 */
@@ -91,6 +102,22 @@ object EnsembleFiles {
             }
         }
         return removed
+    }
+
+    /** 마지막 접근(수정 시각) 뒤 [CACHE_DAYS] 가 지난 파일을 지운다(하위 폴더까지, 빈 폴더도). [keep] 은 지우지 않는다. @return 지운 파일 */
+    fun purgeCache(cacheDir: File, now: Long = System.currentTimeMillis(), keep: File? = null): List<File> {
+        val limit = now - CACHE_DAYS * DAY_MS
+        val removed = cacheDir.walkTopDown().filter { it.isFile && it.lastModified() < limit && it.path != keep?.path }.toList()
+            .filter { it.delete() }
+        removed.mapNotNull { it.parentFile }.distinct()
+            .forEach { dir -> if (dir != cacheDir && dir.listFiles()?.isEmpty() == true) dir.delete() }
+        return removed
+    }
+
+    /** 캐시 정리 한 번 — 오래된 것 지우고 상한 맞추기 */
+    fun tidyCache(cacheDir: File, keep: File? = null) {
+        purgeCache(cacheDir, keep = keep)
+        trimCache(cacheDir, keep = keep)
     }
 
     // ── 지휘자: 연 파일의 해시 ─────────────────────────────────────────────

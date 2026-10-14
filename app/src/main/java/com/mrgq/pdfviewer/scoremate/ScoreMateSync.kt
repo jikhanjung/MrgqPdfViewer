@@ -133,7 +133,8 @@ data class SyncReport(
  *  - 합주 모드가 시작되면 [fetchSessionScores] — 캐시에서 되돌리고(오프라인도, 판이 다르면 버리고 받음), 캐시에 없던 것은 받는다
  *    (커서는 그대로, 목록을 처음부터 한 번). 끝나면 [evictSessionScores]. 앱을 켤 때 합주 모드가 아니면 서재에 남은 것을 캐시로 — [SessionScores]
  *  - 마지막 접근([SyncedScore.sessionAccessAt] — 합주 중 처음 받음 · 뷰어로 엶 [touchSession], 캐시에서 되돌린 것은 아님) 뒤
- *    [SESSION_CACHE_DAYS] 가 지나면 캐시를 버린다(메모는 보관함, 행은 남아 다음 합주에 다시 받음). 동기화 · 합주 끝에 확인
+ *    [SESSION_CACHE_DAYS] 가 지나면 캐시를 버린다(메모는 보관함, 행은 남아 다음 합주에 다시 받음). 동기화 · 합주 끝에 확인.
+ *    [SESSION_CACHE_MAX_BYTES] 를 넘으면 오래 안 연 것부터
  *  - keep → session 이면 서재 파일을 캐시로(접근 = 지금), session → keep 이면 캐시에서 서재로 되돌린다(다음 동기화)
  *
  * 합주 중 · 악보를 보는 중에는 부르지 않는다 (파일 목록 화면에서만 — 열린 파일을 바꾸지 않게).
@@ -149,6 +150,8 @@ class ScoreMateSync(
     private val now: () -> Long = System::currentTimeMillis,
     /** 지금 합주 모드인가 — 아니면 합주 동안만 두는 악보는 받지 않고 지운다. 일반 동기화는 합주 중에 부르지 않지만, 도중에 합주가 시작될 수 있다 */
     private val inEnsemble: () -> Boolean = { false },
+    /** 합주용 악보 캐시 상한 (테스트가 줄인다) */
+    private val sessionCacheMaxBytes: Long = SESSION_CACHE_MAX_BYTES,
 ) {
     val scoreMateRoot: File get() = File(pdfRoot, FOLDER)
 
@@ -438,6 +441,17 @@ class ScoreMateSync(
                 dropCache(id)
                 n++
             }
+        }
+        // 상한을 넘으면 오래 안 연 것부터 (사용자 결정 "공간이 문제되면 오래된 것부터 지우고")
+        val left = (sessionCacheDir.listFiles() ?: emptyArray()).filter { it.isFile && it.extension == "pdf" }
+            .mapNotNull { pdf -> pdf.nameWithoutExtension.toLongOrNull()?.let { id -> id to (listOf(pdf) + sidecarsOf(pdf)).sumOf { it.length() } } }
+            .sortedBy { (id, _) -> rows[id]?.sessionAccessAt ?: 0L }
+        var total = left.sumOf { it.second }
+        for ((id, size) in left) {
+            if (total <= sessionCacheMaxBytes) break
+            dropCache(id)
+            total -= size
+            n++
         }
         // PDF 없이 남은 곁 파일(메모는 dropCache 가 옮겼다)
         sessionCacheDir.listFiles()?.filter { f -> f.isFile && f.name.substringBefore('.').toLongOrNull()?.let { !cachedPdf(it).exists() } == true }
@@ -803,6 +817,9 @@ class ScoreMateSync(
 
         /** 합주용 악보 캐시를 마지막 접근 뒤 이만큼 둔다 (ScoreMate 앱과 같게) */
         const val SESSION_CACHE_DAYS = 30L
+
+        /** 합주용 악보 캐시 상한 — 넘으면 오래 안 연 것부터 버린다 (ScoreMate 앱과 같게) */
+        const val SESSION_CACHE_MAX_BYTES = 500L * 1024 * 1024
         private const val DAY_MS = 24L * 60 * 60 * 1000
 
         /** 절대 URL 이면 경로(+쿼리)만 */

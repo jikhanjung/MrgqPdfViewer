@@ -64,10 +64,13 @@ class PdfLibraryTest {
     }
 
     @Test
-    fun 연결_안_된_TV_는_이름으로_없으면_PDFs_로() {
+    fun 연결_안_된_TV_는_이름으로_없으면_캐시에서_그래도_없으면_캐시로() {
         val local = File(root, "몰다우.pdf").apply { writeText("x") }
         assertEquals(Resolution.Open(local.path), resolve("몰다우.pdf", shaA, linked = false, listed = listOf(local)))
-        assertEquals(Resolution.Download(File(root, "아리랑.pdf"), cached = false), resolve("아리랑.pdf", null, linked = false, listed = listOf(local)))
+        val cachedB = EnsembleFiles.cacheFile(cache, "아리랑.pdf", shaB)
+        assertEquals(Resolution.Download(cachedB, cached = true), resolve("아리랑.pdf", shaB, linked = false, listed = listOf(local)))
+        cachedB.apply { parentFile!!.mkdirs(); writeText("y") }
+        assertEquals(Resolution.Open(cachedB.path), resolve("아리랑.pdf", shaB, linked = false, listed = listOf(local)))
     }
 
     @Test
@@ -77,7 +80,7 @@ class PdfLibraryTest {
         assertEquals("a_b.pdf", EnsembleFiles.safeName("a:b"))
         assertEquals("악보.pdf", EnsembleFiles.safeName("../"))
         val r = resolve("../../../etc/evil.pdf", null, linked = false) as Resolution.Download
-        assertEquals(root.path, r.target.parentFile!!.path)
+        assertEquals(cache.path, r.target.parentFile!!.path)
     }
 
     @Test
@@ -90,6 +93,19 @@ class PdfLibraryTest {
         assertEquals(listOf(old, mid), removed)
         assertFalse(old.exists())
         assertTrue(now.exists())
+    }
+
+    @Test
+    fun 캐시는_마지막_접근_뒤_30일이_지나면_지운다() {
+        val day = 24L * 60 * 60 * 1000
+        val now = 1000 * day
+        val old = File(cache, "aaaa/old.pdf").apply { parentFile!!.mkdirs(); writeText("o"); setLastModified(now - 31 * day) }
+        val recent = File(cache, "bbbb/recent.pdf").apply { parentFile!!.mkdirs(); writeText("r"); setLastModified(now - 29 * day) }
+        val open = File(cache, "cccc/open.pdf").apply { parentFile!!.mkdirs(); writeText("k"); setLastModified(now - 40 * day) }
+        assertEquals(listOf(old), EnsembleFiles.purgeCache(cache, now, keep = open))
+        assertFalse(old.parentFile!!.exists())
+        assertTrue(recent.exists())
+        assertTrue(open.exists())
     }
 
     @Test

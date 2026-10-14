@@ -961,7 +961,7 @@ class MainActivity : AppCompatActivity() {
     
     /**
      * 연주자: 지휘자가 파일을 바꿨다 (#063). 연결된 TV 는 내용 해시로 내 ScoreMate 에서, 없으면 캐시에서 찾고 없으면 캐시로 받는다.
-     * 연결하지 않은 TV 는 이름으로 찾고 없으면 `PDFs/` 에 받는다 (EnsembleFiles)
+     * 연결하지 않은 TV 는 이름으로 찾고 없으면 캐시에서, 그래도 없으면 캐시로 받는다 (EnsembleFiles)
      */
     private fun handleRemoteFileChange(fileName: String, page: Int = 1, sha256: String? = null) {
         Log.d("MainActivity", "🎼 연주자 모드: 파일 '$fileName' 변경 요청 (페이지 $page, sha256=${sha256?.take(12)})")
@@ -1069,7 +1069,7 @@ class MainActivity : AppCompatActivity() {
                     target.delete()
                     if (!part.renameTo(target)) throw java.io.IOException(this@MainActivity.getString(R.string.main_download_save_failed))
                 }
-                if (cached) com.mrgq.pdfviewer.ensemble.EnsembleFiles.trimCache(ensembleCacheDir, keep = target)
+                if (cached) com.mrgq.pdfviewer.ensemble.EnsembleFiles.tidyCache(ensembleCacheDir, keep = target)
 
                 withContext(Dispatchers.Main) {
                     progressDialog.dismiss()
