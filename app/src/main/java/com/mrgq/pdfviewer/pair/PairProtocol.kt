@@ -8,7 +8,8 @@ import com.mrgq.pdfviewer.follow.RollingTurns.Spread
  * 짝 메시지 (P22) — 한 줄에 JSON 하나(TCP, [PairLink]). 합주 메시지([com.mrgq.pdfviewer.CollaborationProtocol])와 따로라 합주 버전과 무관하다.
  *
  * - `hello` — 연결하면 서로 한 번: 보내는 기기의 자리 · 짝 판([VERSION]) · 이름
- * - `spread` — 주 기기 → 짝 기기: 지금 악보(이름 · sha256 · 쪽 수)와 펼침, [seq] 는 늦게 온 옛 펼침을 버리는 번호
+ * - `spread` — 주 기기 → 짝 기기: 지금 악보(이름 · sha256 · 쪽 수)와 펼침, [seq] 는 늦게 온 옛 펼침을 버리는 번호.
+ *   **쪽은 메시지에서 1부터**(합주 · 화면과 같게) — 앱 안의 [Spread] 는 순번(0부터)이라 여기서만 옮긴다
  * - `input` — 짝 기기 → 주 기기: 넘김(다음 · 이전), `sync` = 지금 펼침을 다시 보내 달라(악보 화면에 돌아왔다)
  * - `focus` — 주 기기 → 짝 기기: 지금 마디(노란 표시 · 고르는 커서)와 연한 시스템 표시 — 짝 기기 쪽에 있으면 그린다(3단계)
  * - `bye` — 짝 풀기(받은 쪽도 푼다 — 다시 붙지 않게)
@@ -18,7 +19,8 @@ import com.mrgq.pdfviewer.follow.RollingTurns.Spread
  */
 object PairProtocol {
     /** 짝 메시지가 바뀌면 올린다 — 다르면 짝을 맺지 않고 업데이트 안내 */
-    const val VERSION = 2
+    /** 3 = 쪽 번호를 1부터로(v0.9.0-beta.2) */
+    const val VERSION = 3
 
     sealed class Message {
         data class Hello(val side: PairSide, val version: Int, val name: String) : Message()
@@ -61,8 +63,8 @@ object PairProtocol {
                 addProperty("file", message.file)
                 message.sha256?.let { addProperty("sha256", it) }
                 addProperty("pages", message.pageCount)
-                addProperty("left", message.spread.left)
-                message.spread.right?.let { addProperty("right", it) }
+                addProperty("left", message.spread.left + 1)
+                message.spread.right?.let { addProperty("right", it + 1) }
                 addProperty("seq", message.seq)
             }
             is Message.Input -> {
@@ -93,8 +95,9 @@ object PairProtocol {
                 )
                 "spread" -> {
                     val pages = json.int("pages") ?: return null
-                    val left = json.int("left") ?: return null
-                    val right = json.int("right")
+                    // 메시지는 1부터 → 순번
+                    val left = (json.int("left") ?: return null) - 1
+                    val right = json.int("right")?.minus(1)
                     if (left !in 0 until pages || (right != null && right !in 0 until pages)) return null
                     Message.SpreadUpdate(json.str("file").orEmpty(), json.str("sha256"), pages, Spread(left, right), json.long("seq") ?: 0)
                 }

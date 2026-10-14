@@ -65,10 +65,18 @@ class PairTest {
     }
 
     @Test
+    fun 펼침의_쪽은_메시지에서_1부터() {
+        val wire = PairProtocol.encode(Message.SpreadUpdate("곡.pdf", null, 5, Spread(4, null), 1L))
+        assertTrue(wire, wire.contains("\"left\":5") && !wire.contains("\"right\""))
+        assertEquals(Spread(0, 1), (PairProtocol.decode("""{"type":"spread","pages":2,"left":1,"right":2,"seq":1}""") as Message.SpreadUpdate).spread)
+    }
+
+    @Test
     fun 깨진_줄_모르는_종류_쪽_밖은_버린다() {
         assertNull(PairProtocol.decode("{"))
         assertNull(PairProtocol.decode("""{"type":"later"}"""))
         assertNull(PairProtocol.decode("""{"type":"spread","pages":3,"left":4}"""))
+        assertNull(PairProtocol.decode("""{"type":"spread","pages":3,"left":0}""")) // 1부터
         assertNull(PairProtocol.decode("""{"type":"hello","side":"up"}"""))
         // 모르는 필드는 무시
         assertEquals(Message.Input(PairProtocol.Action.PREVIOUS), PairProtocol.decode("""{"type":"input","action":"prev","x":1}"""))
