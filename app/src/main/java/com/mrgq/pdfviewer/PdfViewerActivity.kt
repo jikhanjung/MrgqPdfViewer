@@ -3135,10 +3135,8 @@ class PdfViewerActivity : AppCompatActivity() {
                     return@runOnUiThread
                 }
                 // 합주 메트로놈을 따라가는 중에는 마디로 스스로 넘긴다 — 지휘자와 표시 모드가 달라도 맞게 (#055).
-                // 지휘자가 일시정지한 동안에는 지휘자의 넘김을 따른다
-                if (ensembleRole == EnsembleRole.FOLLOWING &&
-                    (metronome.isRunning || performerRun?.state == EnsembleRun.State.SELECTING)
-                ) {
+                // 지휘자가 일시정지 · 시작 마디를 고르는 동안에는 지휘자의 넘김을 따른다 (ScoreMate 앱과 같게 — 메트로놈이 도는 동안만 무시)
+                if (ensembleRole == EnsembleRole.FOLLOWING && metronome.isRunning) {
                     Log.d("PdfViewerActivity", "🎼 합주 메트로놈 연동 중 — 지휘자 page_change($page) 무시")
                     return@runOnUiThread
                 }
@@ -4643,7 +4641,7 @@ class PdfViewerActivity : AppCompatActivity() {
         ensembleSchedule = null
 
         if (followFileId == fileId && followMeasures.isNotEmpty()) {
-            applyEnsembleFocus(fileId, followMeasures, measureNumber)
+            applyEnsembleFocus(fileId, followMeasures, measureNumber, run.runId)
             return
         }
         lifecycleScope.launch {
@@ -4651,11 +4649,14 @@ class PdfViewerActivity : AppCompatActivity() {
             val latest = performerRun ?: return@launch
             if (currentPdfFileId != fileId || latest.file != pdfFileName || latest.runId == performerDetachedRunId) return@launch
             if (latest.state != EnsembleRun.State.PAUSED && latest.state != EnsembleRun.State.SELECTING) return@launch
-            applyEnsembleFocus(fileId, ScoreFollower.startableMeasures(measures), latest.focusMeasure ?: return@launch)
+            applyEnsembleFocus(fileId, ScoreFollower.startableMeasures(measures), latest.focusMeasure ?: return@launch, latest.runId)
         }
     }
 
-    private fun applyEnsembleFocus(fileId: String, startable: List<ScoreMeasure>, measureNumber: Int) {
+    /** 쪽을 그 마디로 옮긴 마지막 표시 ("연주 번호:마디") — 같은 마디의 되풀이 방송(5초마다)은 쪽을 끌어오지 않는다 */
+    private var ensembleFocusShown: String? = null
+
+    private fun applyEnsembleFocus(fileId: String, startable: List<ScoreMeasure>, measureNumber: Int, runId: String) {
         val index = startable.indexOfFirst { it.measureNumber == measureNumber }
         Log.d("EnsembleSync", "마디 표시 $measureNumber → ${if (index < 0) "이 악보에 없음" else "칸 $index"} (마디 ${startable.size}개)")
         if (index < 0) return
@@ -4665,7 +4666,12 @@ class PdfViewerActivity : AppCompatActivity() {
         followMeasure = startable[index]
         ensembleRole = EnsembleRole.FOLLOWING
         followState = FollowState.PAUSED
-        ensureMeasureVisible(startable[index])
+        // 마디가 바뀔 때만 그 쪽으로 — 고르는 중 · 일시정지 중 지휘자가 넘긴 쪽(page_change)을 다음 방송이 되돌리지 않게
+        val key = "$runId:$measureNumber"
+        if (key != ensembleFocusShown) {
+            ensembleFocusShown = key
+            ensureMeasureVisible(startable[index])
+        }
         refreshScoreOverlay()
     }
 
