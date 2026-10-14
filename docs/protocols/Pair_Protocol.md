@@ -8,6 +8,7 @@
 > 설계 · 이유는 [`devlog/P22`](../../devlog/20261014_P22_paired_spread_plan.md) · #138 · #139.
 >
 > 합주(지휘자 ↔ 연주자)와는 **다른 연결**이다 — [`Ensemble_Mode_Protocol.md`](Ensemble_Mode_Protocol.md). 짝 메시지가 바뀌어도 합주 버전은 그대로다.
+> 두 프로토콜의 한눈 비교 · 공통 규칙(쪽 1부터 · 모르는 필드 무시 · sha256 · 원본만 밖으로 · 판 올리기)은 [`README.md`](README.md).
 
 ## 1. 무엇
 
