@@ -164,6 +164,7 @@ The toolbar folds away when playing starts.
 | **Show annotations** | Shows or hides annotations | all |
 | **✏️ Mark** | Annotate mode (chapter 7) | tablet · phone |
 | **Two-page view** | Two pages · One page | TV in landscape |
+| **Two-device spread** | Two tablets · phones as the left and right page — see 5.6 below | tablet · phone |
 | **Top/bottom crop…** | Crops 0–15% of empty space at the top and bottom to make the score bigger. In two-page view it becomes **Crop · gap…** and also sets the center gap. Previews as you move, saved for this file | all |
 | **Rotation** | Device rotation · Landscape · Portrait | phone |
 
@@ -182,6 +183,20 @@ Pick your part (staff) from a full score and read it as a part cut out and joine
 ### 5.5 Two-page view (TV)
 
 When you first open a portrait score on a landscape screen, the app asks **Two pages at a time · One page at a time**. With **Remember this choice** on, it won't ask again for that file. Change it later with **View → Two-page view**, or reset everything with **Settings → 🔧 Display → Reset all**.
+
+### 5.6 Two-device spread (tablet · phone)
+
+Stand two tablets or phones side by side and read like the TV two-page view — one shows the left pages (1 · 3 · 5 …), the other the right pages (2 · 4 · 6 …).
+
+1. Put both devices on the **same Wi-Fi** and open the same score.
+2. On one device: **View → Two-device spread → This device on the left (or right) — wait for a partner**.
+3. On the other: **View → Two-device spread → Find a partner**, and pick the waiting device. It takes the other side.
+
+- Turn on either device and both move two pages at a time. With an odd page count, the last right page is blank.
+- When the waiting device opens another piece, the other device finds and opens the same score (or tells you it doesn't have it).
+- If the connection drops, both go back to showing alone, and line up with the current spread again when it reconnects.
+- To end it: **View → Two-device spread → Unpair**.
+- Part view is chosen on each device — pick the same part on both so the pages match.
 
 ---
 
