@@ -303,6 +303,7 @@ v0.1.x 시절의 상세 이력(합주 모드 재구조화 · 스플래시 · 설
 - **파트보는 벡터 PDF**(P07): 보표를 잘라 이은 PDF 를 캐시에 만들어 같은 렌더 경로로 연다
 
 ### 합주
+- **프로토콜 문서**: 합주 [`docs/protocols/Ensemble_Mode_Protocol.md`](docs/protocols/Ensemble_Mode_Protocol.md) · 두 대로 펼쳐 보기 [`docs/protocols/Pair_Protocol.md`](docs/protocols/Pair_Protocol.md) — 합주 · 짝 메시지를 바꾸는 커밋은 이 문서(필드 · 바뀐 내력)도 고친다. 단일 출처는 코드(`CollaborationProtocol` · `pair/PairProtocol`)
 - **Phase 0 동기 넘김**(#038, 기본 OFF): 예약 방식은 늘 `lead` 만큼 기다려 돌발 대처가 안 된다 — 보류. 재설계한다면 먼저 기기 간 편차의 실체(렌더 지연 가능성)를 잰다
 - **합주 메트로놈**(#055)은 시계 차이 + 시간표 방송으로 실측 마디 전환 차이 중앙값 2.5ms — 넘김도 마디로 스스로 한다
 - **합주 버전**(#086): 합주 메시지 · 명령을 바꾸는 판에서 `EnsembleVersion.CURRENT` 를 **그 판의 앱 버전**으로 올린다(지금 0.4.0). 앱 버전만 다르면 연결 안내가 뜨지 않는다. 옛 기기가 무시해도 어긋나지 않는 선택 필드 추가(예: `roll_start`)는 올리지 않는다
