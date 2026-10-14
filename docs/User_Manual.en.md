@@ -111,6 +111,7 @@ The first screen when the app starts.
   - **Green** — in an ensemble (conductor mode, or a performer connected to the conductor). For the conductor, the number of connected performers is shown next to the icon
   - **Blinking green** — the performer is looking for or connecting to the conductor
   - **Red** — performer mode, but not connected to the conductor (not found, or gave up reconnecting; → 9.1 Enter manually)
+- **Two-device spread button** next to the ensemble button (two sheets, tablet · phone) — choose main or second device (→ 5.6). White = off, **green** = paired, **blinking green** = the main device is waiting · the second device is reconnecting
 - **⚙️** at the top right — Settings.
 
 ### 4.2 Score cards
@@ -192,19 +193,21 @@ When you first open a portrait score on a landscape screen, the app asks **Two p
 
 Stand two tablets or phones side by side and read like the TV two-page view — one shows the left pages (1 · 3 · 5 …), the other the right pages (2 · 4 · 6 …).
 
-1. Put both devices on the **same Wi-Fi** and open the same score.
-2. On one device: **View → Two-device spread → This device on the left (or right) — wait for a partner**.
-3. On the other: **View → Two-device spread → Find a partner**, and pick the waiting device. It takes the other side.
+1. Put both devices on the **same Wi-Fi**.
+2. On one device: the **Two-device spread button** on the score list (or **View → Two-device spread** on the score screen) **→ Main device · left** (or **right**). A two-digit **number** appears — closing it keeps waiting; press the button again to see the number.
+3. On the other device: the same button **→ Second device**. Of the three numbers, tap **the one shown on the main device** to join. It takes the other side.
+
+When the main device opens a score, the second device opens the same score. While paired, **both devices stay in portrait** and show one page each.
 
 - Turn on either device and both move two pages at a time. With an odd page count, the last right page is blank.
-- When the waiting device opens another piece, the other device finds and opens the same score. If it doesn't have it, it offers to **download** it from the waiting device.
-- Both devices use the waiting device's top/bottom cropping (the other device's own setting comes back when the pair ends).
-- **Playing** (score-linked metronome · 🎤 listen & turn · accompaniment) runs on the device that waited. The other device's ▶ · 🎤 can also start and stop it **from the first measure of this spread** (picking a measure to start from is done on the waiting device). Like the TV two-page view, **only the finished page** changes (1 | 2 → 3 | 2 → 3 | 4), and the other device shows the current measure in yellow too.
-- **Ensemble**: when the waiting device joins an ensemble, the pair conducts or follows as one TV two-page device. The other device doesn't take ensemble signals itself.
-- If the connection drops, both go back to showing alone, and line up with the current spread again when it reconnects. The pair is remembered even if the app is closed and reopened. If the other device is on the score list, it opens the score the waiting device opened.
-- To end it: **View → Two-device spread → Unpair** on either device — both are unpaired.
+- When the main device opens another piece, the second device finds and opens the same score. If it doesn't have it, it offers to **download** it from the main device.
+- Both devices use the main device's top/bottom cropping (the second device's own setting comes back when the pair ends).
+- **Playing** (score-linked metronome · 🎤 listen & turn · accompaniment) runs on the main device. The second device's ▶ · 🎤 can also start and stop it **from the first measure of this spread** (picking a measure to start from is done on the main device). Like the TV two-page view, **only the finished page** changes (1 | 2 → 3 | 2 → 3 | 4), and the second device shows the current measure in yellow too.
+- **Ensemble**: when the main device joins an ensemble, the pair conducts or follows as one TV two-page device. The second device doesn't take ensemble signals itself.
+- If the connection drops, both go back to showing alone, and line up with the current spread again when it reconnects. The pair is remembered even if the app is closed and reopened. If the second device is on the score list, it opens the score the main device opened.
+- To end it: the **Two-device spread button** (or **View → Two-device spread**) **→ Unpair** on either device — both are unpaired.
 - Part view is chosen on each device — pick the same part on both so the pages match.
-- Phones stay in portrait while paired.
+- Phones also stay in portrait while paired (the rotation row in the View menu is hidden).
 
 ---
 

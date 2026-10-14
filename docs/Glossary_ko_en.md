@@ -49,6 +49,8 @@
 |---|---|---|
 | 합주 · 협업 모드 | ensemble · ensemble mode | |
 | 지휘자 · 연주자 | conductor · performer | |
+| 두 대로 펼쳐 보기 · 짝 | two-device spread · pair | P22 |
+| 주 기기 · 보조 기기 | main device · second device | 짝의 두 역할(2026-10-14) — 주 기기가 펼침을 정한다 |
 | 세트리스트 · 곡목 | setlist | |
 | 동기화 | sync | |
 | 연결 · 연결 해제 | link · unlink (device) | ScoreMate 계정에 기기 연결 |

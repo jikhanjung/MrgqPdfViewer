@@ -15,14 +15,14 @@ import java.net.SocketTimeoutException
  */
 class PairDiscovery(private val log: (String) -> Unit = {}) {
 
-    /** 짝을 기다리는 기기 — [side] 는 그 기기의 자리(붙는 기기는 반대 자리) */
-    data class Host(val name: String, val address: String, val port: Int, val side: PairSide, val version: Int)
+    /** 짝을 기다리는 기기 — [side] 는 그 기기의 자리(붙는 기기는 반대 자리), [code] 는 그 화면의 번호(옛 판은 없음) */
+    data class Host(val name: String, val address: String, val port: Int, val side: PairSide, val version: Int, val code: String? = null)
 
     @Volatile private var announcing = false
     @Volatile private var finding: DatagramSocket? = null
 
-    /** 주 기기: 짝을 기다리는 동안 알린다 */
-    fun startAnnouncing(name: String, side: PairSide, port: Int = PairLink.PORT) {
+    /** 주 기기: 짝을 기다리는 동안 알린다 — [code] 는 화면에 띄운 번호(보조 기기가 고른다) */
+    fun startAnnouncing(name: String, side: PairSide, code: String? = null, port: Int = PairLink.PORT) {
         stopAnnouncing()
         announcing = true
         val data = JsonObject().apply {
@@ -31,6 +31,7 @@ class PairDiscovery(private val log: (String) -> Unit = {}) {
             addProperty("side", side.wire)
             addProperty("port", port)
             addProperty("version", PairProtocol.VERSION)
+            if (code != null) addProperty("code", code)
         }.toString().toByteArray(Charsets.UTF_8)
         Thread({
             val socket = runCatching { DatagramSocket().apply { broadcast = true } }.getOrNull() ?: return@Thread
@@ -148,6 +149,7 @@ class PairDiscovery(private val log: (String) -> Unit = {}) {
                 port = json.get("port")?.asInt ?: PairLink.PORT,
                 side = PairSide.of(json.get("side")?.asString) ?: return null,
                 version = json.get("version")?.asInt ?: 0,
+                code = json.get("code")?.takeIf { it.isJsonPrimitive }?.asString?.takeIf { it.isNotBlank() },
             )
         }.getOrNull()
     }

@@ -6505,6 +6505,7 @@ class PdfViewerActivity : AppCompatActivity() {
         override val isViewer = true
 
         override fun onPairConnected(peerName: String) {
+            pairDialogs.onConnected()
             toast(getString(R.string.viewer_pair_connected, peerName, pairSideName(PairSession.side)))
             pairSeenSeq = -1L
             if (PairSession.role == PairSession.Role.MAIN) {
@@ -6596,67 +6597,19 @@ class PdfViewerActivity : AppCompatActivity() {
         return com.mrgq.pdfviewer.menu.Text.of(state, pairSideName(PairSession.side))
     }
 
-    /** 보기 메뉴 → 두 대로 펼쳐 보기: 짝이 없으면 기다리기(왼쪽 · 오른쪽) · 찾기, 있으면 지금 상태 · 짝 풀기 */
-    private fun showPairDialog() {
-        if (PairSession.isActive) {
-            val state = pairMenuValue().resolve(this)
-            val peer = PairSession.peerName?.let { "\n" + getString(R.string.viewer_pair_peer, it) }.orEmpty()
-            AlertDialog.Builder(this)
-                .setTitle(R.string.viewer_menu_pair)
-                .setMessage(getString(R.string.viewer_pair_status, pairSideName(PairSession.side), state) + peer)
-                .setPositiveButton(R.string.viewer_pair_stop) { _, _ ->
-                    PairSession.stop()
-                    pairLeft()
-                }
-                .setNegativeButton(R.string.viewer_close, null)
-                .show()
-            return
-        }
-        val options = arrayOf(getString(R.string.viewer_pair_host_left), getString(R.string.viewer_pair_host_right), getString(R.string.viewer_pair_find))
-        AlertDialog.Builder(this)
-            .setTitle(R.string.viewer_menu_pair)
-            .setItems(options) { _, which ->
-                when (which) {
-                    0 -> hostPair(PairSide.LEFT)
-                    1 -> hostPair(PairSide.RIGHT)
-                    else -> findPair()
-                }
-            }
-            .setNegativeButton(R.string.viewer_close, null)
-            .show()
-    }
-
-    private fun hostPair(side: PairSide) {
-        PairSession.listener = pairListener
-        if (phoneView) requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT
-        toast(if (PairSession.startHosting(side)) getString(R.string.viewer_pair_waiting, pairSideName(side)) else getString(R.string.viewer_pair_host_failed))
-    }
-
-    /** 같은 Wi-Fi 에서 짝을 기다리는 기기를 찾아 목록으로 — 고르면 붙는다(자리는 그 기기의 반대) */
-    private fun findPair() {
-        val hosts = mutableListOf<PairDiscovery.Host>()
-        val adapter = android.widget.ArrayAdapter<String>(this, android.R.layout.simple_list_item_1)
-        val dialog = AlertDialog.Builder(this)
-            .setTitle(R.string.viewer_pair_finding)
-            .setAdapter(adapter) { _, which ->
-                PairSession.stopFinding()
+    /** 보기 메뉴 → 두 대로 펼쳐 보기 — 첫 화면 📖 단추와 같은 대화상자(주 기기 번호 · 보조 기기 번호 고르기, `pair/PairDialogs`) */
+    private val pairDialogs by lazy {
+        com.mrgq.pdfviewer.pair.PairDialogs(
+            this,
+            beforeStart = {
                 PairSession.listener = pairListener
-                PairSession.join(hosts[which])
                 if (phoneView) requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT
-                toast(getString(R.string.viewer_pair_connecting))
-            }
-            .setNegativeButton(R.string.cancel) { _, _ -> PairSession.stopFinding() }
-            .setOnCancelListener { PairSession.stopFinding() }
-            .show()
-        PairSession.find(
-            onFound = { host ->
-                hosts += host
-                adapter.add(getString(R.string.viewer_pair_host_item, host.name, pairSideName(host.side.other)))
-                if (dialog.isShowing) dialog.setTitle(R.string.viewer_menu_pair)
             },
-            onDone = { if (hosts.isEmpty() && dialog.isShowing) dialog.setTitle(R.string.viewer_pair_none_found) },
+            onStopped = { pairLeft() },
         )
     }
+
+    private fun showPairDialog() = pairDialogs.show()
 
     private fun showPhoneOrientationDialog() {
         val modes = listOf(PHONE_ORIENTATION_AUTO, PHONE_ORIENTATION_LANDSCAPE, PHONE_ORIENTATION_PORTRAIT)
@@ -6733,7 +6686,8 @@ class PdfViewerActivity : AppCompatActivity() {
             noteEditMode = notePen.editMode,
             twoPageCapable = twoPageCapable,
             twoPage = isTwoPageMode,
-            phoneRotation = if (phoneView) phoneOrientationName(phoneOrientationMode()) else null,
+            // 짝 동안은 두 기기 모두 세로만(한 쪽씩) — 회전 줄을 숨긴다 (사용자 결정 2026-10-14)
+            phoneRotation = if (phoneView && !PairSession.isActive) phoneOrientationName(phoneOrientationMode()) else null,
             // 두 대로 펼쳐 보기 — 한 쪽만 보는 터치 기기 (P22)
             pair = if (!twoPageCapable && !com.mrgq.pdfviewer.utils.DeviceForm.isTv(this)) pairMenuValue() else null,
         ))

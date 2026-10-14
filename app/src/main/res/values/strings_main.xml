@@ -109,5 +109,5 @@
     <string name="main_deleted">파일이 삭제되었습니다</string>
     <string name="main_delete_failed">파일 삭제 실패</string>
     <string name="main_delete_error">삭제 중 오류 발생: %1$s</string>
-    <string name="main_pair_opening">짝이 연 악보를 엽니다</string>
+    <string name="main_pair_opening">주 기기가 연 악보를 엽니다</string>
 </resources>

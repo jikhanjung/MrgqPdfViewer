@@ -63,6 +63,9 @@ object PairSession {
         private set
     var peerName: String? = null
         private set
+    /** 주 기기: 화면에 띄우고 찾기 알림에 싣는 번호 — 기다리기를 시작할 때마다 새로 (보조 기기가 번호로 고른다) */
+    var code: String? = null
+        private set
     /** 짝 기기: 지금 붙는 주 기기 주소 — 악보 받기에 */
     @Volatile var hostAddress: String? = null
         private set
@@ -113,7 +116,8 @@ object PairSession {
         }
         role = Role.MAIN
         side = mySide
-        discovery.startAnnouncing(deviceName, mySide)
+        code = PairCodes.newCode()
+        discovery.startAnnouncing(deviceName, mySide, code)
         fileServer = runCatching { com.mrgq.pdfviewer.FileServerManager(FILE_PORT).also { it.start() } }
             .onFailure { log("file server $FILE_PORT failed: ${it.message}") }.getOrNull()
         prefs?.edit()?.clear()?.putString("role", Role.MAIN.name)?.putString("side", mySide.wire)?.apply()
@@ -169,6 +173,7 @@ object PairSession {
         side = null
         connected = false
         peerName = null
+        code = null
     }
 
     /** 연결 · 듣기 · 알림을 닫는다(저장한 짝은 그대로) */
@@ -181,6 +186,7 @@ object PairSession {
         side = null
         connected = false
         peerName = null
+        code = null
         lastSpread = null
         lastFocus = null
         hostAddress = null
@@ -253,7 +259,7 @@ object PairSession {
                     connected = false
                     log("disconnected")
                     // 주 기기는 다시 기다린다 — 짝 기기가 앱을 다시 켜면 찾아서 붙는다
-                    if (role == Role.MAIN) side?.let { discovery.startAnnouncing(deviceName, it) }
+                    if (role == Role.MAIN) side?.let { discovery.startAnnouncing(deviceName, it, code) }
                     listener?.onPairDisconnected()
                 }
             }

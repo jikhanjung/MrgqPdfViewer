@@ -1,6 +1,8 @@
 package com.mrgq.pdfviewer
 
 import com.mrgq.pdfviewer.follow.RollingTurns.Spread
+import com.mrgq.pdfviewer.pair.PairCodeChoices
+import com.mrgq.pdfviewer.pair.PairCodes
 import com.mrgq.pdfviewer.pair.PairDiscovery
 import com.mrgq.pdfviewer.pair.PairLink
 import com.mrgq.pdfviewer.pair.PairProtocol
@@ -8,12 +10,14 @@ import com.mrgq.pdfviewer.pair.PairProtocol.Message
 import com.mrgq.pdfviewer.pair.PairSide
 import com.mrgq.pdfviewer.pair.PairSpread
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.TimeUnit
+import kotlin.random.Random
 
 /** 두 대로 펼쳐 보기 (P22) — 펼침 계산 · 짝 메시지 · 짝 연결(루프백) */
 class PairTest {
@@ -93,6 +97,52 @@ class PairTest {
         val host = PairDiscovery.parse("""{"type":"pair_announce","name":"Pad","side":"left","port":9093,"version":1}""", "192.168.0.5")
         assertEquals(PairDiscovery.Host("Pad", "192.168.0.5", 9093, PairSide.LEFT, 1), host)
         assertNull(PairDiscovery.parse("""{"type":"conductor_announcement"}""", "1.2.3.4"))
+        val coded = PairDiscovery.parse("""{"type":"pair_announce","name":"Pad","side":"right","port":9093,"version":3,"code":"37"}""", "192.168.0.6")
+        assertEquals("37", coded?.code)
+    }
+
+    // ── 짝 맞추기 번호 ──
+
+    @Test
+    fun 번호는_두_자리() {
+        val random = Random(1)
+        repeat(200) { assertTrue(PairCodes.newCode(random).toInt() in 10..99) }
+    }
+
+    @Test
+    fun 찾은_번호_하나와_미끼_둘_서로_다름() {
+        repeat(50) { seed ->
+            val choices = PairCodeChoices(Random(seed))
+            assertTrue(choices.add("37"))
+            val options = choices.options
+            assertEquals(3, options.size)
+            assertEquals(3, options.toSet().size)
+            assertTrue("37" in options)
+            assertTrue(choices.isReal("37"))
+            assertEquals(1, options.count { choices.isReal(it) })
+        }
+    }
+
+    @Test
+    fun 나중에_찾은_번호는_미끼를_대신하고_보이는_칸은_그대로() {
+        repeat(50) { seed ->
+            val choices = PairCodeChoices(Random(seed))
+            choices.add("37")
+            val first = choices.options
+            assertFalse(choices.add("37")) // 같은 기기를 또 들음
+            val other = (10..99).map { it.toString() }.first { it !in first }
+            assertTrue(choices.add(other))
+            val second = choices.options
+            assertEquals(3, second.size)
+            assertEquals(first.indexOf("37"), second.indexOf("37"))
+            assertTrue(other in second)
+            // 넷째 기기 — 미끼가 없으면 칸을 늘린다
+            choices.add(second.first { !choices.isReal(it) }) // 미끼와 같은 번호를 찾음 → 칸 그대로
+            assertEquals(3, choices.options.size)
+            choices.add("Pad") // 번호 없는 옛 판은 이름으로
+            assertEquals(4, choices.options.size)
+            assertTrue(choices.options.all { choices.isReal(it) })
+        }
     }
 
     // ── 연결 ──

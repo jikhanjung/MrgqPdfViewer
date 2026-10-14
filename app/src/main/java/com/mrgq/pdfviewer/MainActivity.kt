@@ -75,6 +75,7 @@ class MainActivity : AppCompatActivity() {
         setupRecyclerView()
         loadPdfFiles()
         setupCollaborationButton()
+        setupPairButton()
         setupSortButtons()
         setupLibraryHeader()
         setupSettingsButton()
@@ -247,6 +248,7 @@ class MainActivity : AppCompatActivity() {
         com.mrgq.pdfviewer.ensemble.VersionNotice.attach(this) // 합주 상대와 버전이 다르면 대화상자로 (#061)
         pairOpening = false
         com.mrgq.pdfviewer.pair.PairSession.listener = pairListener
+        updatePairButton()
         // 합주 동안만 두는 악보를 받거나 지웠다 — 목록을 다시 (서버 0.25.0 멤버십)
         com.mrgq.pdfviewer.scoremate.SessionScores.onChanged = { if (!isFinishing) loadPdfFiles() }
         // 짝 기기면 주 기기의 지금 펼침을 달라고 한다 — 주 기기가 악보를 열고 있으면 따라 연다 (P22)
@@ -808,6 +810,7 @@ class MainActivity : AppCompatActivity() {
         if (com.mrgq.pdfviewer.pair.PairSession.listener === pairListener) com.mrgq.pdfviewer.pair.PairSession.listener = null
         com.mrgq.pdfviewer.scoremate.SessionScores.onChanged = null
         binding.collaborationButton.removeCallbacks(ensembleBlink)
+        binding.pairButton.removeCallbacks(pairBlink)
         com.mrgq.pdfviewer.ensemble.VersionNotice.detach()
         binding.root.removeCallbacks(autoUpdateCheck)
         binding.root.removeCallbacks(notesSyncCheck)
@@ -828,12 +831,22 @@ class MainActivity : AppCompatActivity() {
             handleRemoteFileChange(update.file, page, update.sha256)
         }
 
+        override fun onPairConnected(peerName: String) {
+            pairDialogs.onConnected()
+            Toast.makeText(this@MainActivity, getString(R.string.viewer_pair_connected, peerName, pairDialogs.sideName(com.mrgq.pdfviewer.pair.PairSession.side)), Toast.LENGTH_SHORT).show()
+            updatePairButton()
+        }
+
+        override fun onPairDisconnected() = updatePairButton()
+
         override fun onPairEnded() {
             Toast.makeText(this@MainActivity, getString(R.string.viewer_pair_ended), Toast.LENGTH_SHORT).show()
+            updatePairButton()
         }
 
         override fun onPairVersionMismatch() {
             Toast.makeText(this@MainActivity, getString(R.string.viewer_pair_version_mismatch), Toast.LENGTH_LONG).show()
+            updatePairButton()
         }
     }
 
@@ -1191,6 +1204,56 @@ class MainActivity : AppCompatActivity() {
         }
     }
     
+    /** 두 대로 펼쳐 보기 (P22) — 합주 단추 옆 📖 단추로 주 기기 · 보조 기기를 고른다 (사용자 요청 2026-10-14). TV 는 짝이 없다 */
+    private val pairDialogs by lazy {
+        com.mrgq.pdfviewer.pair.PairDialogs(
+            this,
+            beforeStart = { com.mrgq.pdfviewer.pair.PairSession.listener = pairListener },
+            onChanged = { updatePairButton() },
+        )
+    }
+
+    private fun setupPairButton() {
+        if (com.mrgq.pdfviewer.utils.DeviceForm.isTv(this)) return
+        binding.pairButton.visibility = View.VISIBLE
+        binding.pairButton.setOnClickListener { pairDialogs.show() }
+        updatePairButton()
+    }
+
+    /** 주 기기가 기다리는 동안 · 보조 기기가 다시 붙는 동안 📖 그림을 초록 ↔ 흐린 초록으로. 맺어지거나 풀리면 멈춘다 */
+    private val pairBlink = object : Runnable {
+        var lit = true
+        override fun run() {
+            if (isFinishing || isDestroyed) return
+            val session = com.mrgq.pdfviewer.pair.PairSession
+            if (!session.isActive || session.connected) {
+                updatePairButton()
+                return
+            }
+            lit = !lit
+            val green = ContextCompat.getColor(this@MainActivity, R.color.tv_secondary)
+            val color = if (lit) green else androidx.core.graphics.ColorUtils.setAlphaComponent(green, 0x40)
+            androidx.core.widget.TextViewCompat.setCompoundDrawableTintList(
+                binding.pairButton, android.content.res.ColorStateList.valueOf(color)
+            )
+            binding.pairButton.postDelayed(this, ENSEMBLE_BLINK_MS)
+        }
+    }
+
+    /** 📖 단추 — 꺼짐 = 흰 그림, 짝 맺음 = 초록, 기다리는 중 · 다시 붙는 중 = 초록 깜박임([pairBlink]) */
+    private fun updatePairButton() {
+        val button = binding.pairButton
+        if (button.visibility != View.VISIBLE) return
+        val session = com.mrgq.pdfviewer.pair.PairSession
+        button.removeCallbacks(pairBlink)
+        val tint = if (session.isActive) android.content.res.ColorStateList.valueOf(ContextCompat.getColor(this, R.color.tv_secondary)) else null
+        androidx.core.widget.TextViewCompat.setCompoundDrawableTintList(button, tint)
+        if (session.isActive && !session.connected) {
+            pairBlink.lit = true
+            button.postDelayed(pairBlink, ENSEMBLE_BLINK_MS)
+        }
+    }
+
     /** 연주자가 연결을 시도하는 동안 합주 그림을 초록 ↔ 흐린 초록으로. 시도가 끝나면(연결 · 그만둠) 멈추고 상태를 다시 그린다 */
     private val ensembleBlink = object : Runnable {
         var lit = true
@@ -1312,7 +1375,7 @@ class MainActivity : AppCompatActivity() {
         (binding.titleText.parent as android.view.View).layoutParams.width = android.view.ViewGroup.LayoutParams.MATCH_PARENT
         binding.titleText.layoutParams = android.widget.LinearLayout.LayoutParams(0, android.view.ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
         binding.titleText.maxLines = 2
-        listOf(binding.collaborationButton, binding.settingsButton, binding.scoreMateSyncBtn,
+        listOf(binding.collaborationButton, binding.pairButton, binding.settingsButton, binding.scoreMateSyncBtn,
             binding.sortByNameBtn, binding.sortByTimeBtn, binding.fileManageBtn).forEach {
             it.minWidth = 0
             it.minimumWidth = 0
