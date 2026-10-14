@@ -98,4 +98,5 @@
     <string name="main_deleted">File deleted</string>
     <string name="main_delete_failed">Couldn\'t delete the file</string>
     <string name="main_delete_error">Error while deleting: %1$s</string>
+    <string name="main_pair_opening">Opening the score your partner opened</string>
 </resources>

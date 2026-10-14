@@ -23,6 +23,9 @@ class PdfViewerApplication : Application() {
         
         // Global collaboration manager 초기화
         GlobalCollaborationManager.getInstance().initialize(this)
+
+        // 두 대로 펼쳐 보기 — 저장된 짝이 있으면 다시 기다리기 · 붙기 (P22 §4: 앱이 죽었다 켜져도)
+        com.mrgq.pdfviewer.pair.PairSession.init(this)
     }
     
     override fun onTerminate() {

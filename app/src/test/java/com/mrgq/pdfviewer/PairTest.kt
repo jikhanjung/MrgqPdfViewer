@@ -56,6 +56,9 @@ class PairTest {
             Message.SpreadUpdate("곡.pdf", null, 7, Spread(2, 3), 43L),
             Message.Input(PairProtocol.Action.NEXT),
             Message.Input(PairProtocol.Action.SYNC),
+            Message.Focus(measure = 57, cursor = false, system = 57, systemStrong = false, waiting = null),
+            Message.Focus(measure = null, cursor = false, system = null, systemStrong = true, waiting = 12),
+            Message.Bye,
             Message.Ping,
         )
         for (m in messages) assertEquals(m, PairProtocol.decode(PairProtocol.encode(m)))

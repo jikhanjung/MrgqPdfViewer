@@ -2658,6 +2658,7 @@ class PdfViewerActivity : AppCompatActivity() {
     /** 연주 듣고 넘기기를 시작할 수 없는 까닭 — 시작할 수 있으면 null (P10 §3.1). 마디 · MusicXML 맞춤은 시작하면서 본다 */
     private fun micFollowBlocker(): String? = when {
         currentPdfFileId == null -> getString(R.string.viewer_mic_blocked_opening)
+        pairPartner -> getString(R.string.viewer_pair_play_on_main)
         collaborationMode == CollaborationMode.PERFORMER -> getString(R.string.viewer_mic_blocked_performer)
         musicXml == null || musicXmlFileId != currentPdfFileId -> getString(R.string.viewer_mic_blocked_no_xml)
         else -> null
@@ -2693,7 +2694,11 @@ class PdfViewerActivity : AppCompatActivity() {
             var lastPage = 0
             val pageOf = IntArray(mapped.size) { i -> (mapped[i]?.pageIndex ?: lastPage).also { lastPage = it } }
             val lowerHalf = BooleanArray(mapped.size) { i -> mapped[i]?.let { it.topPt >= it.pageHeightPt / 2 } ?: false }
-            val here = if (isTwoPageMode) pairStart(pageIndex) else pageIndex
+            val here = when {
+                isTwoPageMode -> pairStart(pageIndex)
+                pairMain -> currentSpread().let { minOf(it.left, it.right ?: it.left) } // 짝: 두 기기 중 앞 쪽부터 (P22)
+                else -> pageIndex
+            }
             val startMeasure = if (at != null) {
                 // 고른 마디 — 같은 쪽의 같은 번호(MusicXML 순서에서 처음 나오는 것)
                 mapped.indexOfFirst { it != null && it.measureNumber == at.measureNumber && it.pageIndex == at.pageIndex }
@@ -2726,6 +2731,8 @@ class PdfViewerActivity : AppCompatActivity() {
             )
             if (!follower.start()) return@launch toast(getString(R.string.viewer_mic_open_failed))
             micFollower = follower
+            // 짝: 오른쪽 자리에서 시작하면 왼쪽 자리를 바로 다음 쪽으로 — TV 두 쪽 연주자의 시작 펼침과 같게 (P22)
+            if (pairMain) showStartSpread(pageOf[startMeasure])
             // 두 쪽 연주자: 시작 쪽이 펼침 오른쪽이면 왼쪽 자리를 바로 다음 쪽으로 — 듣기 시작 신호 (#088)
             if (collaborationMode == CollaborationMode.CONDUCTOR) {
                 globalCollaborationManager.broadcastPageChange(pageOf[startMeasure] + 1, pdfFileName, roll = true, rollStart = true)
@@ -2787,6 +2794,11 @@ class PdfViewerActivity : AppCompatActivity() {
 
         override fun onTurn(turn: com.mrgq.pdfviewer.follow.PageTurnDecider.Turn) {
             if (micFollower == null) return
+            // 짝: 반 쪽 넘김 없이 TV 두 쪽처럼 차례 넘김 — 들어선 쪽이 화면(두 기기)에 있으면 5초 뒤 다 친 쪽 자리만 (P22 3단계)
+            if (pairMain) {
+                if (turn is com.mrgq.pdfviewer.follow.PageTurnDecider.Turn.Page) pairRollTo(turn.page)
+                return
+            }
             when (turn) {
                 is com.mrgq.pdfviewer.follow.PageTurnDecider.Turn.Half -> showHalfPage(turn.page, turn.nextPage)
                 is com.mrgq.pdfviewer.follow.PageTurnDecider.Turn.Page -> {
@@ -3125,10 +3137,10 @@ class PdfViewerActivity : AppCompatActivity() {
     private fun setupPerformerCallbacks() {
         globalCollaborationManager.setOnPageChangeReceived { page, file, turnAt, roll, rollStart ->
             runOnUiThread {
-                if (file != pdfFileName) return@runOnUiThread
+                if (file != pdfFileName || pairPartner) return@runOnUiThread // 짝 기기는 주 기기를 따른다 (P22)
                 // 지휘자가 마이크로 듣고 넘긴 쪽 — 두 쪽 · 전체 악보면 차례 넘김 (P10 §3.3). 한 쪽 · 파트 보기는 지금처럼.
                 // 듣기를 시작한 쪽이면(roll_start) 기다리지 않고 바로 시작 펼침으로 (#088)
-                if (roll && turnAt == null && isTwoPageMode && partViewLayout == null &&
+                if (roll && turnAt == null && (isTwoPageMode || pairMain) && partViewLayout == null &&
                     !(ensembleRole == EnsembleRole.FOLLOWING && metronome.isRunning)
                 ) {
                     if (rollStart) handleRollStart(page) else handleRollPageChange(page)
@@ -3168,7 +3180,7 @@ class PdfViewerActivity : AppCompatActivity() {
 
         globalCollaborationManager.setOnFollowPositionReceived { file, measure ->
             runOnUiThread {
-                if (isDestroyed || file != pdfFileName) return@runOnUiThread
+                if (isDestroyed || file != pdfFileName || pairPartner) return@runOnUiThread
                 conductorMeasure = measure.takeIf { it > 0 }
                 refreshScoreOverlay()
             }
@@ -3176,7 +3188,7 @@ class PdfViewerActivity : AppCompatActivity() {
 
         globalCollaborationManager.setOnFileChangeReceived { file, page, sha256 ->
             runOnUiThread {
-                handleRemoteFileChange(file, page, sha256)
+                if (!pairPartner) handleRemoteFileChange(file, page, sha256)
             }
         }
         
@@ -3197,7 +3209,7 @@ class PdfViewerActivity : AppCompatActivity() {
 
         // 합주 메트로놈 (#055)
         globalCollaborationManager.setOnMetronomeRunReceived { run ->
-            runOnUiThread { if (!isDestroyed) onEnsembleRunReceived(run) }
+            runOnUiThread { if (!isDestroyed && !pairPartner) onEnsembleRunReceived(run) }
         }
         globalCollaborationManager.setOnClockSynced {
             // 시계를 맞추느라 기다리던 연주가 있으면 이제 따라간다
@@ -3222,7 +3234,7 @@ class PdfViewerActivity : AppCompatActivity() {
         val p = page - 1
         if (p !in 0 until pageCount) return
         cancelPendingRoll()
-        val current = rollSpread ?: com.mrgq.pdfviewer.follow.RollingTurns.Spread.pairOf(pairStart(pageIndex), pageCount)
+        val current = currentSpread()
         when (val action = com.mrgq.pdfviewer.follow.RollingTurns.onPage(current, p, pageCount)) {
             is com.mrgq.pdfviewer.follow.RollingTurns.Action.Immediate -> handleRemotePageChange(page)
             is com.mrgq.pdfviewer.follow.RollingTurns.Action.Delayed -> {
@@ -3285,7 +3297,7 @@ class PdfViewerActivity : AppCompatActivity() {
      * 합주 지휘자면 넘긴 쪽을 `page_change.roll` 로 알린다 — 마디로 따라가지 않는 두 쪽 연주자도 같은 차례 넘김을 하게
      */
     private fun rollFollow(measure: ScoreMeasure) {
-        if (!isTwoPageMode || partViewLayout != null || phoneView) return
+        if (!rollCapable()) return
         val p = measure.pageIndex
         if (p == followRollPage || p !in 0 until pageCount) return
         val first = followRollPage < 0
@@ -3295,7 +3307,7 @@ class PdfViewerActivity : AppCompatActivity() {
             showStartSpread(p) { broadcastFollowRoll(p, start = true) }
             return
         }
-        val current = rollSpread ?: com.mrgq.pdfviewer.follow.RollingTurns.Spread.pairOf(pairStart(pageIndex), pageCount)
+        val current = currentSpread()
         val action = com.mrgq.pdfviewer.follow.RollingTurns.onPage(current, p, pageCount)
         if (action !is com.mrgq.pdfviewer.follow.RollingTurns.Action.Delayed) return
         cancelPendingRoll()
@@ -3317,6 +3329,7 @@ class PdfViewerActivity : AppCompatActivity() {
 
     /** 두 쪽 화면에 [spread] 의 왼 · 오 쪽을 그린다. 보통의 짝이면 [showPage] 로. 쪽이 아직 캐시에 없거나 넘기는 중이면 false */
     private fun showSpread(spread: com.mrgq.pdfviewer.follow.RollingTurns.Spread, conductorPage: Int): Boolean {
+        if (pairMain) return showPairSpread(spread)
         if (!isTwoPageMode || isAnimating) return false
         if (spread.isPair) {
             isHandlingRemotePageChange = true
@@ -3386,7 +3399,9 @@ class PdfViewerActivity : AppCompatActivity() {
         
         if (targetIndex >= 0 && targetIndex < pageCount) {
             // Check if already on the same page or screen
-            val isOnSamePage = if (isTwoPageMode) {
+            val isOnSamePage = if (pairMain) {
+                currentSpread().shows(targetIndex) // 짝: 두 기기 중 한 쪽에 있으면 (P22)
+            } else if (isTwoPageMode) {
                 // In two-page mode, check if target is on the same screen
                 val currentScreenStart = (pageIndex / 2) * 2
                 val targetScreenStart = (targetIndex / 2) * 2
@@ -4907,7 +4922,9 @@ class PdfViewerActivity : AppCompatActivity() {
 
     /** [page] 화면(두 쪽이면 펼침)의 첫 마디 — 없으면 그 쪽 뒤의 첫 마디, 그것도 없으면 맨 앞 */
     private fun firstShownMeasure(startable: List<ScoreMeasure>, page: Int = pageIndex): ScoreMeasure =
-        startable.firstOrNull { it.pageIndex == page || (isTwoPageMode && it.pageIndex == page + 1) }
+        // 짝: 두 기기를 합친 펼침의 앞 쪽부터 (P22)
+        (if (pairMain && page == pageIndex) currentSpread().let { s -> startable.firstOrNull { s.shows(it.pageIndex) } } else null)
+            ?: startable.firstOrNull { it.pageIndex == page || (isTwoPageMode && it.pageIndex == page + 1) }
             ?: startable.firstOrNull { it.pageIndex >= page }
             ?: startable.first()
 
@@ -4968,6 +4985,7 @@ class PdfViewerActivity : AppCompatActivity() {
      */
     private fun showMetronomeMenu() {
         if (metronomeMenuShowing) return
+        if (pairPartner) return toast(getString(R.string.viewer_pair_play_on_main)) // 연주는 주 기기에서 (P22)
         if (collaborationMode == CollaborationMode.PERFORMER) return showPerformerEnsembleMenu()
         pauseFollowing()
         val paused = followState == FollowState.PAUSED
@@ -5915,7 +5933,8 @@ class PdfViewerActivity : AppCompatActivity() {
     }
 
     private fun isMeasureVisible(measure: ScoreMeasure): Boolean =
-        rollSpread?.takeIf { isTwoPageMode }?.shows(measure.pageIndex)
+        (if (pairMain) currentSpread().shows(measure.pageIndex) else null) // 짝: 두 기기를 합쳐서 (P22)
+            ?: rollSpread?.takeIf { isTwoPageMode }?.shows(measure.pageIndex)
             ?: (measure.pageIndex == pageIndex || (isTwoPageMode && measure.pageIndex == pageIndex + 1))
 
     /**
@@ -6090,15 +6109,28 @@ class PdfViewerActivity : AppCompatActivity() {
         refreshViewerBars()
         val overlay = binding.scoreOverlay
         val fileId = currentPdfFileId
-        val focus = when (followState) {
+        // 짝 기기: 주 기기가 보낸 마디 표시 (P22 3단계)
+        val partnerFocus = pairFocus?.takeIf { pairPartner }
+        val focus = if (partnerFocus != null) pairPartnerMeasure(partnerFocus.measure) else when (followState) {
             FollowState.SELECTING -> followMeasures.getOrNull(cursorIndex)
             FollowState.PLAYING, FollowState.PAUSED -> followMeasure
             FollowState.OFF -> micFocus // 마이크 추적의 지금 마디 (P10)
         }
+        // 커서 모양: 고르는 중 · 예비박 · 일시정지(여기서 이어진다). 연주 중인 마디만 노란 표시
+        val style = if (partnerFocus != null) {
+            if (partnerFocus.cursor) ScoreOverlayView.FocusStyle.CURSOR else ScoreOverlayView.FocusStyle.CURRENT
+        } else if (followState == FollowState.OFF && micFocus != null) {
+            ScoreOverlayView.FocusStyle.CURRENT
+        } else if (followState != FollowState.PLAYING || followInCountIn) {
+            ScoreOverlayView.FocusStyle.CURSOR
+        } else {
+            ScoreOverlayView.FocusStyle.CURRENT
+        }
+        if (pairMain) sendPairFocus(focus, style == ScoreOverlayView.FocusStyle.CURSOR)
         followChunk(focus) // 휴대폰: 조각을 바꾸면 행렬을 다시 잡고 이 함수가 다시 불린다
         val showAll = isScoreOverlayEnabled()
         val micSystem = micSystemFrame()
-        val systemFrame = micSystem ?: conductorSystemFrame()
+        val systemFrame = micSystem ?: partnerFocus?.let { pairSystemFrame(it) } ?: conductorSystemFrame()
         if (fileId == null || isAnimating || pairBlank || (!showAll && focus == null && systemFrame == null)) {
             overlay.clear()
             return
@@ -6109,21 +6141,13 @@ class PdfViewerActivity : AppCompatActivity() {
             return
         }
         fun mapped(measures: List<ScoreMeasure>) = overlayBoxes(measures)
-        // 커서 모양: 고르는 중 · 예비박 · 일시정지(여기서 이어진다). 연주 중인 마디만 노란 표시
-        val style = if (followState == FollowState.OFF && micFocus != null) {
-            ScoreOverlayView.FocusStyle.CURRENT
-        } else if (followState != FollowState.PLAYING || followInCountIn) {
-            ScoreOverlayView.FocusStyle.CURSOR
-        } else {
-            ScoreOverlayView.FocusStyle.CURRENT
-        }
         overlay.show(
             boxes = if (showAll) mapped(scoreMeasures) else emptyList(),
             imageMatrix = binding.pdfView.imageMatrix,
             focus = focus?.let { mapped(listOf(it)).firstOrNull() },
             focusStyle = style,
             systemFrame = systemFrame,
-            systemStrong = micSystem == null, // 연주자 화면이면 조금 더 진하게
+            systemStrong = partnerFocus?.systemStrong ?: (micSystem == null), // 연주자 화면이면 조금 더 진하게
         )
     }
 
@@ -6270,6 +6294,97 @@ class PdfViewerActivity : AppCompatActivity() {
         }
     }
 
+    /** 두 쪽 단위로 차례 넘김을 하는가 — TV 두 쪽 전체 악보, 또는 짝 주 기기(파트 보기 · 휴대폰도 — 쪽은 그 기기의 것) */
+    private fun rollCapable(): Boolean = pairMain || (isTwoPageMode && partViewLayout == null && !phoneView)
+
+    /** 지금 화면의 펼침 — 짝 주 기기는 두 기기를 합친 펼침, TV 는 두 쪽(차례 넘김이면 그것) */
+    private fun currentSpread(): com.mrgq.pdfviewer.follow.RollingTurns.Spread =
+        if (pairMain) pairSpread?.takeIf { it.left < pageCount && (it.right ?: 0) < pageCount }
+            ?: com.mrgq.pdfviewer.follow.RollingTurns.Spread.pairOf(pageIndex, pageCount)
+        else rollSpread ?: com.mrgq.pdfviewer.follow.RollingTurns.Spread.pairOf(pairStart(pageIndex), pageCount)
+
+    /** 짝 주 기기: [spread] 를 두 기기에 — 짝에 알리고 내 자리 쪽을 그린다. 넘기는 중이면 false(다음에 다시) */
+    private fun showPairSpread(spread: com.mrgq.pdfviewer.follow.RollingTurns.Spread): Boolean {
+        val side = PairSession.side ?: return false
+        if (isAnimating) return false
+        sendPairSpread(spread)
+        val own = PairSpread.pageOf(spread, side)
+        when {
+            own == null -> showPairBlank(spread)
+            own != pageIndex || pairBlank -> if (pairBlank) showPage(own) else showPageWithAnimation(own, if (own > pageIndex) 1 else -1)
+        }
+        Log.d("PdfViewerActivity", "👯 짝 펼침: ${spread.left + 1} | ${spread.right?.plus(1)}")
+        return true
+    }
+
+    /**
+     * 짝 주 기기의 🎤 듣기가 [p] 쪽에 들어섰다 — TV 두 쪽 연주자의 roll 처리와 같게: 화면에 없으면 바로 그 짝, 있으면 [ROLL_DELAY_MS] 뒤
+     * 다 친 쪽 자리만. 합주 지휘자면 넘긴 쪽을 roll 로 알린다
+     */
+    private fun pairRollTo(p: Int) {
+        if (p !in 0 until pageCount) return
+        if (collaborationMode == CollaborationMode.CONDUCTOR) globalCollaborationManager.broadcastPageChange(p + 1, pdfFileName, roll = true)
+        cancelPendingRoll()
+        when (val action = com.mrgq.pdfviewer.follow.RollingTurns.onPage(currentSpread(), p, pageCount)) {
+            is com.mrgq.pdfviewer.follow.RollingTurns.Action.Immediate -> showPairSpread(action.spread)
+            is com.mrgq.pdfviewer.follow.RollingTurns.Action.Delayed -> {
+                val r = Runnable {
+                    pendingRoll = null
+                    if (micFollower != null) showPairSpread(action.spread)
+                }
+                pendingRoll = r
+                binding.pdfView.postDelayed(r, ROLL_DELAY_MS)
+            }
+            com.mrgq.pdfviewer.follow.RollingTurns.Action.None -> Unit
+        }
+    }
+
+    /** 짝 기기: 주 기기가 보낸 마디 표시 */
+    private var pairFocus: PairProtocol.Message.Focus? = null
+    /** 주 기기: 마지막으로 보낸 마디 표시 — 같으면 다시 보내지 않는다 */
+    private var pairFocusSent: PairProtocol.Message.Focus? = null
+
+    /** 주 기기: 지금 마디 표시를 짝에 (바뀔 때만) — [refreshScoreOverlay] 가 부른다 */
+    private fun sendPairFocus(focus: ScoreMeasure?, cursor: Boolean) {
+        val message = PairProtocol.Message.Focus(
+            measure = focus?.measureNumber,
+            cursor = focus != null && cursor,
+            system = micFocus?.measureNumber ?: conductorMeasure,
+            systemStrong = micFocus == null,
+            waiting = micWaitingMeasure?.measureNumber,
+        )
+        if (message == pairFocusSent) return
+        pairFocusSent = message
+        PairSession.send(message)
+    }
+
+    private fun resendPairFocus() {
+        pairFocusSent = null
+        refreshScoreOverlay()
+    }
+
+    /** 짝 기기: 마디 번호 → 이 기기 악보의 마디(지금 쪽의 것 먼저). 분석을 아직 안 불렀으면 부르고(끝나면 다시 그린다) null */
+    private fun pairPartnerMeasure(number: Int?): ScoreMeasure? {
+        number ?: return null
+        val fileId = currentPdfFileId ?: return null
+        if (scoreMeasuresFileId != fileId) {
+            loadScoreMeasures(fileId, announce = false)
+            return null
+        }
+        return scoreMeasures.firstOrNull { it.measureNumber == number && it.pageIndex == pageIndex }
+            ?: scoreMeasures.firstOrNull { it.measureNumber == number }
+    }
+
+    /** 짝 기기: 주 기기의 연한 시스템 표시(듣기 · 지휘자 시스템) — 이 쪽에 있을 때만 */
+    private fun pairSystemFrame(f: PairProtocol.Message.Focus): android.graphics.RectF? {
+        val boxes = f.waiting?.let { n -> pairPartnerMeasure(n)?.let { overlayBoxes(listOf(it)) } }
+            ?: pairPartnerMeasure(f.system)?.let { m ->
+                overlayBoxes(scoreMeasures.filter { it.pageIndex == m.pageIndex && it.systemIndex == m.systemIndex })
+            }
+        if (boxes.isNullOrEmpty()) return null
+        return android.graphics.RectF(boxes.minOf { it.left }, boxes.minOf { it.top }, boxes.maxOf { it.right }, boxes.maxOf { it.bottom })
+    }
+
     /** 내 자리가 빈 펼침 — 쪽 없이 비운다(마디 박스 · 메모도) */
     private fun showPairBlank(spread: com.mrgq.pdfviewer.follow.RollingTurns.Spread) {
         pairSpread = spread
@@ -6316,6 +6431,9 @@ class PdfViewerActivity : AppCompatActivity() {
             if (PairSession.role == PairSession.Role.MAIN) {
                 pairSpread = null
                 if (pageCount > 0) showPage(pageIndex) // 지금 쪽이 든 펼침을 정해 알리고 내 자리로
+                resendPairFocus()
+            } else if (collaborationMode != CollaborationMode.NONE) {
+                toast(getString(R.string.viewer_pair_partner_no_ensemble))
             }
         }
 
@@ -6326,11 +6444,24 @@ class PdfViewerActivity : AppCompatActivity() {
 
         override fun onPairSpread(update: PairProtocol.Message.SpreadUpdate) = applyPairSpread(update)
 
+        override fun onPairFocus(focus: PairProtocol.Message.Focus) {
+            pairFocus = focus
+            refreshScoreOverlay()
+        }
+
+        override fun onPairEnded() {
+            toast(getString(R.string.viewer_pair_ended))
+            pairLeft()
+        }
+
         override fun onPairInput(action: PairProtocol.Action) {
             when (action) {
                 PairProtocol.Action.NEXT -> turnForward()
                 PairProtocol.Action.PREVIOUS -> turnBack()
-                PairProtocol.Action.SYNC -> pairSpread?.let { sendPairSpread(it, force = true) } ?: run { if (pageCount > 0) showPage(pageIndex) }
+                PairProtocol.Action.SYNC -> {
+                    pairSpread?.let { sendPairSpread(it, force = true) } ?: run { if (pageCount > 0) showPage(pageIndex) }
+                    resendPairFocus()
+                }
             }
         }
 
@@ -6351,6 +6482,9 @@ class PdfViewerActivity : AppCompatActivity() {
         val blank = pairBlank
         pairSpread = null
         pairBlank = false
+        pairFocus = null
+        pairFocusSent = null
+        refreshScoreOverlay()
         if (blank && pageCount > 0) showPage(pageIndex)
     }
 
@@ -7625,8 +7759,15 @@ class PdfViewerActivity : AppCompatActivity() {
             Log.d("PdfViewerActivity", "🎵 동기 예약 넘김 실행 중 - 재브로드캐스트 억제")
             return
         }
+        if (pairPartner) return // 짝 기기는 합주에 따로 알리지 않는다 — 주 기기가 (P22)
+        val sent = if (pairMain) {
+            // 짝 주 기기 = TV 두 쪽 지휘자: 보통의 짝이면 펼침의 왼쪽 쪽을, 차례 넘김 펼침(3 | 2)은 roll 신호로만 알린다
+            val spread = currentSpread()
+            if (!spread.isPair) return
+            spread.left
+        } else pageIndex
         if (collaborationMode == CollaborationMode.CONDUCTOR && !isHandlingRemotePageChange) {
-            val actualPageNumber = outgoingPage(pageIndex)
+            val actualPageNumber = outgoingPage(sent)
             Log.d("PdfViewerActivity", "🎵 지휘자 모드: 페이지 $actualPageNumber 브로드캐스트 중..." + if (roll) " (roll)" else "")
             globalCollaborationManager.broadcastPageChange(actualPageNumber, pdfFileName, roll = roll)
         }

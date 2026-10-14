@@ -261,4 +261,7 @@
     <string name="viewer_pair_peer">짝: %1$s</string>
     <string name="viewer_pair_stop">짝 풀기</string>
     <string name="viewer_pair_pages_differ">짝과 쪽 수가 달라요(이 기기 %1$d · 짝 %2$d) — 파트 보기를 같게 하세요</string>
+    <string name="viewer_pair_play_on_main">연주 · 듣기는 짝을 기다린 기기에서 하세요 — 이 기기는 따라갑니다</string>
+    <string name="viewer_pair_ended">짝이 풀렸어요 — 혼자 보기</string>
+    <string name="viewer_pair_partner_no_ensemble">이 기기는 짝을 따라가요 — 합주 신호는 짝을 기다린 기기가 받습니다</string>
 </resources>

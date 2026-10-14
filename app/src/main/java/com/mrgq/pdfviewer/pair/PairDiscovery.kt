@@ -81,6 +81,35 @@ class PairDiscovery(private val log: (String) -> Unit = {}) {
         }, "PairFind").start()
     }
 
+    /**
+     * 짝 기기가 다시 붙지 못할 때: [name] 인 주 기기를 [timeoutMs] 동안 찾아 돌려준다(막는 호출 — 주 스레드가 아닌 곳에서).
+     * 주 기기가 다시 켜져 주소가 바뀌었을 수 있다
+     */
+    fun findHost(name: String, timeoutMs: Long = 4000L): Host? {
+        val socket = runCatching {
+            DatagramSocket(null).apply { reuseAddress = true; broadcast = true; soTimeout = 500; bind(InetSocketAddress(PORT)) }
+        }.getOrNull() ?: return null
+        try {
+            val until = System.currentTimeMillis() + timeoutMs
+            val buffer = ByteArray(1024)
+            while (System.currentTimeMillis() < until) {
+                val packet = DatagramPacket(buffer, buffer.size)
+                try {
+                    socket.receive(packet)
+                } catch (e: SocketTimeoutException) {
+                    continue
+                }
+                val host = parse(String(packet.data, 0, packet.length, Charsets.UTF_8), packet.address.hostAddress ?: continue) ?: continue
+                if (host.name == name) return host
+            }
+            return null
+        } catch (e: Exception) {
+            return null
+        } finally {
+            socket.close()
+        }
+    }
+
     fun stopFinding() {
         finding?.close()
         finding = null

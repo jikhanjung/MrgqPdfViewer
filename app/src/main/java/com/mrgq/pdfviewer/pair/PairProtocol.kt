@@ -10,13 +10,15 @@ import com.mrgq.pdfviewer.follow.RollingTurns.Spread
  * - `hello` — 연결하면 서로 한 번: 보내는 기기의 자리 · 짝 판([VERSION]) · 이름
  * - `spread` — 주 기기 → 짝 기기: 지금 악보(이름 · sha256 · 쪽 수)와 펼침, [seq] 는 늦게 온 옛 펼침을 버리는 번호
  * - `input` — 짝 기기 → 주 기기: 넘김(다음 · 이전), `sync` = 지금 펼침을 다시 보내 달라(악보 화면에 돌아왔다)
+ * - `focus` — 주 기기 → 짝 기기: 지금 마디(노란 표시 · 고르는 커서)와 연한 시스템 표시 — 짝 기기 쪽에 있으면 그린다(3단계)
+ * - `bye` — 짝 풀기(받은 쪽도 푼다 — 다시 붙지 않게)
  * - `ping` — 살아 있음(끊김 알기)
  *
  * 모르는 필드는 무시, 모르는 종류 · 깨진 줄은 null — 나중 판이 필드를 더해도 옛 판이 죽지 않는다
  */
 object PairProtocol {
     /** 짝 메시지가 바뀌면 올린다 — 다르면 짝을 맺지 않고 업데이트 안내 */
-    const val VERSION = 1
+    const val VERSION = 2
 
     sealed class Message {
         data class Hello(val side: PairSide, val version: Int, val name: String) : Message()
@@ -28,6 +30,19 @@ object PairProtocol {
             val seq: Long,
         ) : Message()
         data class Input(val action: Action) : Message()
+
+        /**
+         * 주 기기 화면의 마디 표시 — [measure] 노란 마디(또는 [cursor] 면 고르는 커서 모양), [system] 연한 시스템 표시의 마디,
+         * [systemStrong] = 연주자 화면처럼 조금 진하게, [waiting] = 듣기 시작을 기다리는 마디(그 마디만 연하게). 모두 마디 번호
+         */
+        data class Focus(
+            val measure: Int?,
+            val cursor: Boolean,
+            val system: Int?,
+            val systemStrong: Boolean,
+            val waiting: Int?,
+        ) : Message()
+        object Bye : Message()
         object Ping : Message()
     }
 
@@ -54,6 +69,15 @@ object PairProtocol {
                 addProperty("type", "input")
                 addProperty("action", message.action.wire)
             }
+            is Message.Focus -> {
+                addProperty("type", "focus")
+                message.measure?.let { addProperty("measure", it) }
+                addProperty("cursor", message.cursor)
+                message.system?.let { addProperty("system", it) }
+                addProperty("system_strong", message.systemStrong)
+                message.waiting?.let { addProperty("waiting", it) }
+            }
+            Message.Bye -> addProperty("type", "bye")
             Message.Ping -> addProperty("type", "ping")
         }
     }.toString()
@@ -75,6 +99,14 @@ object PairProtocol {
                     Message.SpreadUpdate(json.str("file").orEmpty(), json.str("sha256"), pages, Spread(left, right), json.long("seq") ?: 0)
                 }
                 "input" -> Message.Input(Action.entries.firstOrNull { it.wire == json.str("action") } ?: return null)
+                "focus" -> Message.Focus(
+                    measure = json.int("measure"),
+                    cursor = json.bool("cursor"),
+                    system = json.int("system"),
+                    systemStrong = json.bool("system_strong"),
+                    waiting = json.int("waiting"),
+                )
+                "bye" -> Message.Bye
                 "ping" -> Message.Ping
                 else -> null
             }
@@ -83,5 +115,6 @@ object PairProtocol {
 
     private fun JsonObject.str(key: String): String? = get(key)?.takeIf { it.isJsonPrimitive }?.asString
     private fun JsonObject.int(key: String): Int? = get(key)?.takeIf { it.isJsonPrimitive }?.let { runCatching { it.asInt }.getOrNull() }
+    private fun JsonObject.bool(key: String): Boolean = get(key)?.takeIf { it.isJsonPrimitive }?.let { runCatching { it.asBoolean }.getOrNull() } ?: false
     private fun JsonObject.long(key: String): Long? = get(key)?.takeIf { it.isJsonPrimitive }?.let { runCatching { it.asLong }.getOrNull() }
 }

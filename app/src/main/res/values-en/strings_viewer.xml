@@ -261,4 +261,7 @@
     <string name="viewer_pair_peer">Partner: %1$s</string>
     <string name="viewer_pair_stop">Unpair</string>
     <string name="viewer_pair_pages_differ">Page counts differ (this device %1$d · partner %2$d) — use the same part view</string>
+    <string name="viewer_pair_play_on_main">Play and listen on the device that waited for the partner — this device follows it</string>
+    <string name="viewer_pair_ended">The pair was ended — showing alone</string>
+    <string name="viewer_pair_partner_no_ensemble">This device follows its partner — the waiting device takes the ensemble signals</string>
 </resources>

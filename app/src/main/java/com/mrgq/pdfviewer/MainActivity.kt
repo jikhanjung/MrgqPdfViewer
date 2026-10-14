@@ -244,6 +244,12 @@ class MainActivity : AppCompatActivity() {
         super.onResume()
         com.mrgq.pdfviewer.voice.NotificationMute.set(this, false) // 👂 계속 듣기가 끈 알림 소리가 남아 있으면 되돌린다 (#092)
         com.mrgq.pdfviewer.ensemble.VersionNotice.attach(this) // 합주 상대와 버전이 다르면 대화상자로 (#061)
+        pairOpening = false
+        com.mrgq.pdfviewer.pair.PairSession.listener = pairListener
+        // 짝 기기면 주 기기의 지금 펼침을 달라고 한다 — 주 기기가 악보를 열고 있으면 따라 연다 (P22)
+        if (com.mrgq.pdfviewer.pair.PairSession.connected && com.mrgq.pdfviewer.pair.PairSession.role == com.mrgq.pdfviewer.pair.PairSession.Role.PARTNER) {
+            com.mrgq.pdfviewer.pair.PairSession.send(com.mrgq.pdfviewer.pair.PairProtocol.Message.Input(com.mrgq.pdfviewer.pair.PairProtocol.Action.SYNC))
+        }
         updateController.onResume()
         scheduleAutoUpdateCheck()
         binding.root.removeCallbacks(notesSyncCheck)
@@ -796,6 +802,7 @@ class MainActivity : AppCompatActivity() {
     
     override fun onPause() {
         super.onPause()
+        if (com.mrgq.pdfviewer.pair.PairSession.listener === pairListener) com.mrgq.pdfviewer.pair.PairSession.listener = null
         binding.collaborationButton.removeCallbacks(ensembleBlink)
         com.mrgq.pdfviewer.ensemble.VersionNotice.detach()
         binding.root.removeCallbacks(autoUpdateCheck)
@@ -803,6 +810,29 @@ class MainActivity : AppCompatActivity() {
         // Note: 웹서버 관리는 이제 설정 화면에서 담당
     }
     
+    /** 짝 기기가 주 기기의 악보를 여는 중 — 펼침이 이어 와도 한 번만 */
+    private var pairOpening = false
+
+    /** 두 대로 펼쳐 보기 (P22) — 목록에 있을 때: 짝 기기는 주 기기가 연 악보를 따라 연다(자리의 쪽으로) */
+    private val pairListener = object : com.mrgq.pdfviewer.pair.PairSession.Listener {
+        override fun onPairSpread(update: com.mrgq.pdfviewer.pair.PairProtocol.Message.SpreadUpdate) {
+            if (pairOpening || isFinishing) return
+            val side = com.mrgq.pdfviewer.pair.PairSession.side ?: return
+            pairOpening = true
+            val page = (com.mrgq.pdfviewer.pair.PairSpread.pageOf(update.spread, side) ?: update.spread.left) + 1
+            Toast.makeText(this@MainActivity, getString(R.string.main_pair_opening), Toast.LENGTH_SHORT).show()
+            handleRemoteFileChange(update.file, page, update.sha256)
+        }
+
+        override fun onPairEnded() {
+            Toast.makeText(this@MainActivity, getString(R.string.viewer_pair_ended), Toast.LENGTH_SHORT).show()
+        }
+
+        override fun onPairVersionMismatch() {
+            Toast.makeText(this@MainActivity, getString(R.string.viewer_pair_version_mismatch), Toast.LENGTH_LONG).show()
+        }
+    }
+
     override fun onNewIntent(intent: Intent?) {
         super.onNewIntent(intent)
         this.intent = intent
