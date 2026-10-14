@@ -50,4 +50,7 @@
     <string name="viewer_menu_pair_waiting">%1$s · waiting</string>
     <string name="viewer_menu_pair_connected">%1$s · connected</string>
     <string name="viewer_menu_pair_reconnecting">%1$s · reconnecting</string>
+    <string name="viewer_menu_pair_play_title">Play — the waiting device plays</string>
+    <string name="viewer_menu_pair_start">▶ Start — from the first measure of this spread</string>
+    <string name="viewer_menu_pair_listen">🎤 Listen &amp; turn — from the first measure of this spread</string>
 </resources>

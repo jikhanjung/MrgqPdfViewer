@@ -26,6 +26,8 @@ object PairSession {
     /** 이만큼 못 붙으면 주 기기를 이름으로 다시 찾는다 */
     private const val REDISCOVER_AFTER = 4
     private const val PREFS = "pair"
+    /** 주 기기의 악보 받기(HTTP) 포트 — 짝 기기에 없는 악보를 받는다. 합주 파일 서버(8090)와 따로 */
+    const val FILE_PORT = 9095
 
     enum class Role { MAIN, PARTNER }
 
@@ -38,6 +40,8 @@ object PairSession {
         fun onPairSpread(update: PairProtocol.Message.SpreadUpdate) {}
         fun onPairFocus(focus: PairProtocol.Message.Focus) {}
         fun onPairInput(action: PairProtocol.Action) {}
+        /** 주 기기가 짝 기기의 명령을 못 했다 — 이유 글 */
+        fun onPairNotice(text: String) {}
         /** 상대가 짝을 풀었다 — 이 기기도 풀었다 */
         fun onPairEnded() {}
         /** 짝의 짝 판([PairProtocol.VERSION])이 다르다 — 짝을 풀었다 */
@@ -59,6 +63,11 @@ object PairSession {
         private set
     var peerName: String? = null
         private set
+    /** 짝 기기: 지금 붙는 주 기기 주소 — 악보 받기에 */
+    @Volatile var hostAddress: String? = null
+        private set
+    /** 주 기기: 지금 악보를 짝 기기가 받을 수 있게 내놓는 HTTP 서버 — 짝을 기다리는 동안 */
+    private var fileServer: com.mrgq.pdfviewer.FileServerManager? = null
 
     var listener: Listener? = null
 
@@ -105,6 +114,8 @@ object PairSession {
         role = Role.MAIN
         side = mySide
         discovery.startAnnouncing(deviceName, mySide)
+        fileServer = runCatching { com.mrgq.pdfviewer.FileServerManager(FILE_PORT).also { it.start() } }
+            .onFailure { log("file server $FILE_PORT failed: ${it.message}") }.getOrNull()
         prefs?.edit()?.clear()?.putString("role", Role.MAIN.name)?.putString("side", mySide.wire)?.apply()
         return true
     }
@@ -121,6 +132,7 @@ object PairSession {
         close()
         role = Role.PARTNER
         side = target.side.other
+        hostAddress = target.address
         val l = newLink()
         prefs?.edit()?.clear()?.putString("role", Role.PARTNER.name)?.putString("side", target.side.other.wire)
             ?.putString("host_name", target.name)?.putString("host_address", target.address)?.putInt("host_port", target.port)?.apply()
@@ -136,6 +148,7 @@ object PairSession {
                         discovery.findHost(host.name)?.takeIf { it.address != host.address }?.let { found ->
                             log("host moved: ${host.address} → ${found.address}")
                             host = found
+                            hostAddress = found.address
                             prefs?.edit()?.putString("host_address", found.address)?.putInt("host_port", found.port)?.apply()
                         }
                     }
@@ -170,9 +183,22 @@ object PairSession {
         peerName = null
         lastSpread = null
         lastFocus = null
+        hostAddress = null
+        fileServer?.let { server -> Thread({ runCatching { server.stop() } }, "PairFileStop").start() }
+        fileServer = null
         l?.close()
         if (wasConnected) main.post { listener?.onPairDisconnected() }
     }
+
+    /** 주 기기: 짝 기기가 받을 수 있게 지금 악보 하나만 내놓는다(원본 PDF — 파트 PDF 는 기기마다 만든다) */
+    fun offerFile(name: String, path: String) {
+        val server = fileServer ?: return
+        server.clearFiles()
+        server.addFile(name, path)
+    }
+
+    /** 짝 기기: 주 기기의 악보 받기 주소 (`/download/<이름>`) */
+    fun fileServerUrl(): String? = hostAddress?.takeIf { role == Role.PARTNER }?.let { "http://$it:$FILE_PORT" }
 
     fun send(message: PairProtocol.Message) {
         if (role == Role.MAIN) {
@@ -205,6 +231,7 @@ object PairSession {
                         is PairProtocol.Message.Hello -> onHello(message)
                         is PairProtocol.Message.SpreadUpdate -> if (role == Role.PARTNER) listener?.onPairSpread(message)
                         is PairProtocol.Message.Focus -> if (role == Role.PARTNER) listener?.onPairFocus(message)
+                        is PairProtocol.Message.Notice -> if (role == Role.PARTNER) listener?.onPairNotice(message.text)
                         is PairProtocol.Message.Input -> if (role == Role.MAIN) {
                             val viewer = listener?.takeIf { it.isViewer }
                             if (viewer != null) viewer.onPairInput(message.action)

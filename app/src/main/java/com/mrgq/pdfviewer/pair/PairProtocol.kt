@@ -12,6 +12,7 @@ import com.mrgq.pdfviewer.follow.RollingTurns.Spread
  *   **쪽은 메시지에서 1부터**(합주 · 화면과 같게) — 앱 안의 [Spread] 는 순번(0부터)이라 여기서만 옮긴다
  * - `input` — 짝 기기 → 주 기기: 넘김(다음 · 이전), `sync` = 지금 펼침을 다시 보내 달라(악보 화면에 돌아왔다)
  * - `focus` — 주 기기 → 짝 기기: 지금 마디(노란 표시 · 고르는 커서)와 연한 시스템 표시 — 짝 기기 쪽에 있으면 그린다(3단계)
+ * - `notice` — 주 기기 → 짝 기기: 짝 기기가 보낸 명령(연주 · 듣기)을 못 했을 때의 이유(화면 글)
  * - `bye` — 짝 풀기(받은 쪽도 푼다 — 다시 붙지 않게)
  * - `ping` — 살아 있음(끊김 알기)
  *
@@ -30,6 +31,9 @@ object PairProtocol {
             val pageCount: Int,
             val spread: Spread,
             val seq: Long,
+            /** 주 기기의 위 · 아래 자르기(%) — 짝 기기가 같게 그린다. 없으면 짝 기기 것 그대로 */
+            val clipTop: Int? = null,
+            val clipBottom: Int? = null,
         ) : Message()
         data class Input(val action: Action) : Message()
 
@@ -43,12 +47,22 @@ object PairProtocol {
             val system: Int?,
             val systemStrong: Boolean,
             val waiting: Int?,
+            /** 주 기기가 하는 것 — [PLAYING_METRONOME] · [PLAYING_MIC] · [PLAYING_SELECTING], 없으면 멈춤. 짝 기기의 ▶ 메뉴가 쓴다 */
+            val playing: String? = null,
         ) : Message()
+        data class Notice(val text: String) : Message()
         object Bye : Message()
         object Ping : Message()
     }
 
-    enum class Action(val wire: String) { NEXT("next"), PREVIOUS("prev"), SYNC("sync") }
+    /** `start` · `listen` · `stop` = 짝 기기에서 연주 · 듣기 시작 · 정지 — 주 기기가 한다 */
+    enum class Action(val wire: String) {
+        NEXT("next"), PREVIOUS("prev"), SYNC("sync"), START("start"), LISTEN("listen"), STOP("stop"),
+    }
+
+    const val PLAYING_METRONOME = "metronome"
+    const val PLAYING_MIC = "mic"
+    const val PLAYING_SELECTING = "selecting"
 
     fun encode(message: Message): String = JsonObject().apply {
         when (message) {
@@ -66,6 +80,8 @@ object PairProtocol {
                 addProperty("left", message.spread.left + 1)
                 message.spread.right?.let { addProperty("right", it + 1) }
                 addProperty("seq", message.seq)
+                message.clipTop?.let { addProperty("clip_top", it) }
+                message.clipBottom?.let { addProperty("clip_bottom", it) }
             }
             is Message.Input -> {
                 addProperty("type", "input")
@@ -78,6 +94,11 @@ object PairProtocol {
                 message.system?.let { addProperty("system", it) }
                 addProperty("system_strong", message.systemStrong)
                 message.waiting?.let { addProperty("waiting", it) }
+                message.playing?.let { addProperty("playing", it) }
+            }
+            is Message.Notice -> {
+                addProperty("type", "notice")
+                addProperty("text", message.text)
             }
             Message.Bye -> addProperty("type", "bye")
             Message.Ping -> addProperty("type", "ping")
@@ -99,7 +120,10 @@ object PairProtocol {
                     val left = (json.int("left") ?: return null) - 1
                     val right = json.int("right")?.minus(1)
                     if (left !in 0 until pages || (right != null && right !in 0 until pages)) return null
-                    Message.SpreadUpdate(json.str("file").orEmpty(), json.str("sha256"), pages, Spread(left, right), json.long("seq") ?: 0)
+                    Message.SpreadUpdate(
+                        json.str("file").orEmpty(), json.str("sha256"), pages, Spread(left, right), json.long("seq") ?: 0,
+                        clipTop = json.int("clip_top")?.coerceIn(0, 50), clipBottom = json.int("clip_bottom")?.coerceIn(0, 50),
+                    )
                 }
                 "input" -> Message.Input(Action.entries.firstOrNull { it.wire == json.str("action") } ?: return null)
                 "focus" -> Message.Focus(
@@ -108,7 +132,9 @@ object PairProtocol {
                     system = json.int("system"),
                     systemStrong = json.bool("system_strong"),
                     waiting = json.int("waiting"),
+                    playing = json.str("playing"),
                 )
+                "notice" -> Message.Notice(json.str("text") ?: return null)
                 "bye" -> Message.Bye
                 "ping" -> Message.Ping
                 else -> null

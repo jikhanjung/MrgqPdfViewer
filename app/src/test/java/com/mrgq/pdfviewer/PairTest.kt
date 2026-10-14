@@ -60,6 +60,12 @@ class PairTest {
             Message.Focus(measure = null, cursor = false, system = null, systemStrong = true, waiting = 12),
             Message.Bye,
             Message.Ping,
+            Message.SpreadUpdate("곡.pdf", "ab12", 7, Spread(2, 1), 44L, clipTop = 5, clipBottom = 3),
+            Message.Input(PairProtocol.Action.START),
+            Message.Input(PairProtocol.Action.LISTEN),
+            Message.Input(PairProtocol.Action.STOP),
+            Message.Focus(measure = 3, cursor = false, system = null, systemStrong = true, waiting = null, playing = PairProtocol.PLAYING_MIC),
+            Message.Notice("이 악보는 마디를 못 읽었어요"),
         )
         for (m in messages) assertEquals(m, PairProtocol.decode(PairProtocol.encode(m)))
     }

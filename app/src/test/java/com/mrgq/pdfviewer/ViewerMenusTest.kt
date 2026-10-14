@@ -186,6 +186,17 @@ class ViewerMenusTest {
     }
 
     @Test
+    fun 짝_기기_연주_메뉴는_주_기기_상태에_따라_P22() {
+        assertEquals(
+            listOf(MenuAction.START, MenuAction.MIC_FROM_PAGE),
+            ViewerMenus.pairPartnerPlay(null, micCapable = true).items.map { it.action },
+        )
+        assertEquals(listOf(MenuAction.STOP), ViewerMenus.pairPartnerPlay("metronome", micCapable = true).items.map { it.action })
+        assertEquals(listOf(MenuAction.STOP), ViewerMenus.pairPartnerPlay("selecting", micCapable = true).items.map { it.action })
+        assertEquals(listOf(MenuAction.MIC_STOP), ViewerMenus.pairPartnerPlay("mic", micCapable = true).items.map { it.action })
+    }
+
+    @Test
     fun 한_항목은_한_메뉴에만() {
         val play = ViewerMenus.play(idle.copy(micCapable = true, accompaniment = Accompaniment(true, 60))).items.map { it.action }
         val viewActions = ViewerMenus.view(view.copy(notesWritable = true, phoneRotation = "가로")).items.map { it.action }

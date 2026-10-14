@@ -139,6 +139,22 @@ object ViewerMenus {
         return Menu(Text.of(title), items)
     }
 
+    /**
+     * 두 대로 펼쳐 보기 **짝 기기**의 연주 메뉴(P22) — 연주는 주 기기가 하고 여기서는 명령만 보낸다. [playing] = 주 기기가 하는 것
+     * (`PairProtocol.PLAYING_*` — metronome · mic · selecting, 없으면 멈춤). 시작은 지금 펼침의 첫 마디부터
+     */
+    fun pairPartnerPlay(playing: String?, micCapable: Boolean): Menu {
+        val items = when (playing) {
+            "mic" -> listOf(MenuItem(MenuAction.MIC_STOP, Text.of(R.string.viewer_menu_mic_stop)))
+            "metronome", "selecting" -> listOf(MenuItem(MenuAction.STOP, Text.of(R.string.viewer_menu_stop)))
+            else -> listOfNotNull(
+                MenuItem(MenuAction.START, Text.of(R.string.viewer_menu_pair_start)),
+                if (micCapable) MenuItem(MenuAction.MIC_FROM_PAGE, Text.of(R.string.viewer_menu_pair_listen)) else null,
+            )
+        }
+        return Menu(Text.of(R.string.viewer_menu_pair_play_title), items)
+    }
+
     /** 보기 메뉴 — 화면에 무엇을 어떻게 보일지만 */
     fun view(s: ViewState): Menu {
         val items = mutableListOf<MenuItem>()

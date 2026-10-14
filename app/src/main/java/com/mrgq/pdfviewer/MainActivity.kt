@@ -977,7 +977,11 @@ class MainActivity : AppCompatActivity() {
                 is com.mrgq.pdfviewer.ensemble.EnsembleFiles.Resolution.Open -> openRemoteFile(resolution.path, page)
                 is com.mrgq.pdfviewer.ensemble.EnsembleFiles.Resolution.Download -> {
                     val conductorAddress = GlobalCollaborationManager.getInstance().getConductorAddress()
-                    if (conductorAddress.isNotEmpty()) {
+                    // 두 대로 펼쳐 보기 짝 기기: 주 기기에서 받는다 (P22)
+                    val pairUrl = com.mrgq.pdfviewer.pair.PairSession.fileServerUrl()
+                    if (pairUrl != null) {
+                        showDownloadDialog(fileName, conductorAddress, resolution.target, resolution.cached, page, pairUrl)
+                    } else if (conductorAddress.isNotEmpty()) {
                         showDownloadDialog(fileName, conductorAddress, resolution.target, resolution.cached, page)
                     } else {
                         Toast.makeText(this@MainActivity, getString(R.string.main_requested_file_not_found, fileName), Toast.LENGTH_LONG).show()
@@ -1008,22 +1012,22 @@ class MainActivity : AppCompatActivity() {
         startActivity(intent)
     }
 
-    private fun showDownloadDialog(fileName: String, conductorAddress: String, target: File, cached: Boolean, page: Int) {
+    private fun showDownloadDialog(fileName: String, conductorAddress: String, target: File, cached: Boolean, page: Int, serverUrl: String? = null) {
         val where = if (cached) "\n" + getString(R.string.main_download_cached_note) else ""
         androidx.appcompat.app.AlertDialog.Builder(this)
             .setTitle(getString(R.string.main_download_title))
             .setMessage(getString(R.string.main_download_message, fileName, where))
             .setPositiveButton(getString(R.string.main_download)) { _, _ ->
-                downloadFileFromConductor(fileName, conductorAddress, target, cached, page)
+                downloadFileFromConductor(fileName, conductorAddress, target, cached, page, serverUrl)
             }
             .setNegativeButton(getString(R.string.cancel), null)
             .show()
     }
 
     /** 지휘자 파일 서버에서 [target] 으로 받는다 (`.part` → 이름 바꾸기). 캐시면 상한을 넘은 오래된 파일을 지운다 */
-    private fun downloadFileFromConductor(fileName: String, conductorAddress: String, target: File, cached: Boolean, page: Int) {
+    private fun downloadFileFromConductor(fileName: String, conductorAddress: String, target: File, cached: Boolean, page: Int, serverUrl: String? = null) {
         val ipAddress = conductorAddress.split(":")[0]
-        val fileServerUrl = "http://$ipAddress:8090"
+        val fileServerUrl = serverUrl ?: "http://$ipAddress:8090"
         Log.d("MainActivity", "🎼 연주자 모드: 파일 다운로드 시작 - $fileServerUrl → $target")
 
         val progressDialog = androidx.appcompat.app.AlertDialog.Builder(this)

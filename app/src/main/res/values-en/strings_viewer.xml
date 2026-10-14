@@ -264,4 +264,6 @@
     <string name="viewer_pair_play_on_main">Play and listen on the device that waited for the partner — this device follows it</string>
     <string name="viewer_pair_ended">The pair was ended — showing alone</string>
     <string name="viewer_pair_partner_no_ensemble">This device follows its partner — the waiting device takes the ensemble signals</string>
+    <string name="viewer_pair_clip_on_main">Change cropping on the waiting device — this device follows it</string>
+    <string name="viewer_pair_portrait_only">Two-device spread shows in portrait only</string>
 </resources>

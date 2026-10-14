@@ -264,4 +264,6 @@
     <string name="viewer_pair_play_on_main">연주 · 듣기는 짝을 기다린 기기에서 하세요 — 이 기기는 따라갑니다</string>
     <string name="viewer_pair_ended">짝이 풀렸어요 — 혼자 보기</string>
     <string name="viewer_pair_partner_no_ensemble">이 기기는 짝을 따라가요 — 합주 신호는 짝을 기다린 기기가 받습니다</string>
+    <string name="viewer_pair_clip_on_main">자르기는 짝을 기다린 기기에서 바꾸세요 — 이 기기도 같게 그립니다</string>
+    <string name="viewer_pair_portrait_only">두 대로 펼쳐 보기 동안은 세로로만 봅니다</string>
 </resources>
