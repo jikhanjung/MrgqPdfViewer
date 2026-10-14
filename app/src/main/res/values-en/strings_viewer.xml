@@ -242,4 +242,23 @@
     <string name="viewer_note_32">32nd note</string>
     <string name="viewer_note_n">1/%1$d note</string>
     <string name="viewer_note_dotted">dotted %1$s</string>
+    <!-- Two-device spread (P22) -->
+    <string name="viewer_pair_side_left">left</string>
+    <string name="viewer_pair_side_right">right</string>
+    <string name="viewer_pair_host_left">This device on the left — wait for a partner</string>
+    <string name="viewer_pair_host_right">This device on the right — wait for a partner</string>
+    <string name="viewer_pair_find">Find a partner — join a waiting device</string>
+    <string name="viewer_pair_waiting">This device is on the %1$s — on the other device: View menu → Two-device spread → Find a partner</string>
+    <string name="viewer_pair_host_failed">Can\'t wait for a partner — check the network</string>
+    <string name="viewer_pair_finding">Looking for a partner…</string>
+    <string name="viewer_pair_none_found">No waiting device — check that the other device is waiting on the same Wi-Fi</string>
+    <string name="viewer_pair_host_item">%1$s — this device on the %2$s</string>
+    <string name="viewer_pair_connecting">Joining the partner…</string>
+    <string name="viewer_pair_connected">Paired with %1$s — this device is on the %2$s</string>
+    <string name="viewer_pair_disconnected">Partner disconnected — showing alone</string>
+    <string name="viewer_pair_version_mismatch">The partner runs a different app version — update both devices to the same version</string>
+    <string name="viewer_pair_status">This device is on the %1$s — %2$s</string>
+    <string name="viewer_pair_peer">Partner: %1$s</string>
+    <string name="viewer_pair_stop">Unpair</string>
+    <string name="viewer_pair_pages_differ">Page counts differ (this device %1$d · partner %2$d) — use the same part view</string>
 </resources>

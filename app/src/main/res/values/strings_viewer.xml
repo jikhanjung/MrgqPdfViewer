@@ -242,4 +242,23 @@
     <string name="viewer_note_32">32분음표</string>
     <string name="viewer_note_n">%1$d분음표</string>
     <string name="viewer_note_dotted">점%1$s</string>
+    <!-- 두 대로 펼쳐 보기 (P22) -->
+    <string name="viewer_pair_side_left">왼쪽</string>
+    <string name="viewer_pair_side_right">오른쪽</string>
+    <string name="viewer_pair_host_left">이 기기가 왼쪽 — 짝 기다리기</string>
+    <string name="viewer_pair_host_right">이 기기가 오른쪽 — 짝 기다리기</string>
+    <string name="viewer_pair_find">짝 찾기 — 기다리는 기기에 붙기</string>
+    <string name="viewer_pair_waiting">이 기기는 %1$s — 다른 기기에서 보기 메뉴 → 두 대로 펼쳐 보기 → 짝 찾기</string>
+    <string name="viewer_pair_host_failed">짝을 기다릴 수 없어요 — 네트워크를 확인하세요</string>
+    <string name="viewer_pair_finding">짝 찾는 중…</string>
+    <string name="viewer_pair_none_found">기다리는 기기가 없어요 — 같은 Wi-Fi 에서 짝 기다리기를 켰는지 보세요</string>
+    <string name="viewer_pair_host_item">%1$s — 이 기기는 %2$s</string>
+    <string name="viewer_pair_connecting">짝에 붙는 중…</string>
+    <string name="viewer_pair_connected">짝 맺음: %1$s — 이 기기는 %2$s</string>
+    <string name="viewer_pair_disconnected">짝이 끊겼어요 — 혼자 보기</string>
+    <string name="viewer_pair_version_mismatch">짝 기기의 앱 판이 달라요 — 두 기기를 같은 판으로 업데이트하세요</string>
+    <string name="viewer_pair_status">이 기기는 %1$s — %2$s</string>
+    <string name="viewer_pair_peer">짝: %1$s</string>
+    <string name="viewer_pair_stop">짝 풀기</string>
+    <string name="viewer_pair_pages_differ">짝과 쪽 수가 달라요(이 기기 %1$d · 짝 %2$d) — 파트 보기를 같게 하세요</string>
 </resources>

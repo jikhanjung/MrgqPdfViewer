@@ -46,4 +46,8 @@
     <string name="viewer_menu_clipping">위/아래 자르기…</string>
     <string name="viewer_menu_clipping_padding">자르기 · 여백…</string>
     <string name="viewer_menu_rotation">회전</string>
+    <string name="viewer_menu_pair">두 대로 펼쳐 보기</string>
+    <string name="viewer_menu_pair_waiting">%1$s · 기다리는 중</string>
+    <string name="viewer_menu_pair_connected">%1$s · 연결됨</string>
+    <string name="viewer_menu_pair_reconnecting">%1$s · 다시 붙는 중</string>
 </resources>

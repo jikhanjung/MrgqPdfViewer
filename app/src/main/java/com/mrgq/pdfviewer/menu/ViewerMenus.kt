@@ -20,7 +20,7 @@ enum class MenuAction {
     // 연주 — 합주 연주자
     DETACH, REJOIN, ENSEMBLE_SOUND,
     // 보기
-    PART_VIEW, MEASURE_BOXES, SHOW_NOTES, NOTE_MODE, TWO_PAGE, CLIPPING, PHONE_ROTATION,
+    PART_VIEW, MEASURE_BOXES, SHOW_NOTES, NOTE_MODE, TWO_PAGE, PAIR, CLIPPING, PHONE_ROTATION,
 }
 
 /**
@@ -68,7 +68,10 @@ object ViewerMenus {
 
     data class PerformerState(val following: Boolean, val canRejoin: Boolean, val soundOn: Boolean)
 
-    /** [twoPageCapable] = TV 가로(세로 화면 · 휴대폰은 늘 한 쪽). [phoneRotation] = 휴대폰이면 지금 회전 모드 이름 */
+    /**
+     * [twoPageCapable] = TV 가로(세로 화면 · 휴대폰은 늘 한 쪽). [phoneRotation] = 휴대폰이면 지금 회전 모드 이름.
+     * [pair] = 두 대로 펼쳐 보기의 지금 값(한 쪽만 보는 터치 기기만, P22) — null 이면 줄을 숨긴다
+     */
     data class ViewState(
         val conductor: Boolean,
         val partViewName: String?,
@@ -79,6 +82,7 @@ object ViewerMenus {
         val twoPageCapable: Boolean,
         val twoPage: Boolean,
         val phoneRotation: String?,
+        val pair: Text? = null,
     )
 
     fun play(s: PlayState): Menu {
@@ -154,6 +158,7 @@ object ViewerMenus {
                 Text.of(if (s.twoPage) R.string.viewer_menu_two_page_double else R.string.viewer_menu_two_page_single),
             )
         }
+        s.pair?.let { items += MenuItem(MenuAction.PAIR, Text.of(R.string.viewer_menu_pair), it) }
         items += MenuItem(
             MenuAction.CLIPPING,
             Text.of(if (s.twoPageCapable && s.twoPage) R.string.viewer_menu_clipping_padding else R.string.viewer_menu_clipping),

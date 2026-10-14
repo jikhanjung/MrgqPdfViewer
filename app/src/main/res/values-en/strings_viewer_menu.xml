@@ -46,4 +46,8 @@
     <string name="viewer_menu_clipping">Top/bottom crop…</string>
     <string name="viewer_menu_clipping_padding">Crop · gap…</string>
     <string name="viewer_menu_rotation">Rotation</string>
+    <string name="viewer_menu_pair">Two-device spread</string>
+    <string name="viewer_menu_pair_waiting">%1$s · waiting</string>
+    <string name="viewer_menu_pair_connected">%1$s · connected</string>
+    <string name="viewer_menu_pair_reconnecting">%1$s · reconnecting</string>
 </resources>

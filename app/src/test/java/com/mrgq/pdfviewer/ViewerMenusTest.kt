@@ -175,6 +175,17 @@ class ViewerMenusTest {
     }
 
     @Test
+    fun 보기_두_대로_펼쳐_보기는_값이_있을_때만_P22() {
+        assertFalse(ViewerMenus.view(view.copy(twoPageCapable = false)).items.any { it.action == MenuAction.PAIR })
+        val value = t(R.string.viewer_menu_pair_connected, "왼쪽")
+        val items = ViewerMenus.view(view.copy(twoPageCapable = false, pair = value)).items
+        assertEquals(
+            listOf(t(R.string.viewer_menu_pair) to value, t(R.string.viewer_menu_clipping) to null),
+            items.takeLast(2).map { it.pair },
+        )
+    }
+
+    @Test
     fun 한_항목은_한_메뉴에만() {
         val play = ViewerMenus.play(idle.copy(micCapable = true, accompaniment = Accompaniment(true, 60))).items.map { it.action }
         val viewActions = ViewerMenus.view(view.copy(notesWritable = true, phoneRotation = "가로")).items.map { it.action }

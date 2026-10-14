@@ -56,6 +56,11 @@ import com.mrgq.pdfviewer.voice.VoiceListener
 import com.mrgq.pdfviewer.voice.VoiceCommandRunner
 import com.mrgq.pdfviewer.voice.WakeWord
 import com.mrgq.pdfviewer.metronome.Accent
+import com.mrgq.pdfviewer.pair.PairDiscovery
+import com.mrgq.pdfviewer.pair.PairProtocol
+import com.mrgq.pdfviewer.pair.PairSession
+import com.mrgq.pdfviewer.pair.PairSide
+import com.mrgq.pdfviewer.pair.PairSpread
 import com.mrgq.pdfviewer.metronome.MetronomeClock
 import com.mrgq.pdfviewer.metronome.MetronomeEngine
 import com.mrgq.pdfviewer.metronome.Beat
@@ -186,6 +191,15 @@ class PdfViewerActivity : AppCompatActivity() {
     
     // Two-page mode
     private var isTwoPageMode = false
+    /** 두 대로 펼쳐 보기 (P22) — 주 기기는 지금 펼침, 짝 기기는 받은 펼침. 짝이 아니면 null */
+    private var pairSpread: com.mrgq.pdfviewer.follow.RollingTurns.Spread? = null
+    /** 내 자리가 빈 펼침(홀수 쪽 끝의 오른쪽) — 쪽을 그리지 않는다 */
+    private var pairBlank = false
+    /** 보낸 · 받은 펼침 번호 — 늦게 온 옛 펼침은 버린다. 화면을 다시 만들어도 줄지 않게 시각에서 */
+    private var pairSentSeq = 0L
+    private var pairSeenSeq = -1L
+    /** 쪽 수가 다르다고 알린 파일 — 한 번만 */
+    private var pairPagesWarned: String? = null
     /**
      * 휴대폰 보기 (사용자 요청 2026-10-06): 가로 화면에 한 쪽을 **조각**으로 나눠 차례로 본다.
      * 악보 분석(마디)이 있으면 조각 = 시스템 하나, 화면 높이가 허락하면 둘. 없으면 위 절반 · 아래 절반.
@@ -854,6 +868,13 @@ class PdfViewerActivity : AppCompatActivity() {
     
     private fun showPage(index: Int) {
         if (index < 0 || index >= pageCount) return
+        // 짝 주 기기: 그 쪽이 든 펼침의 내 자리 쪽으로 (P22)
+        val own = pairRoute(index)
+        if (own != index) {
+            if (own >= 0) showPage(own)
+            return
+        }
+        pairBlank = false
         flushNotePen() // 긋던 획은 지금 쪽에 마저 (P11)
         rollSpread = null
         halfPageShown = false
@@ -1318,7 +1339,9 @@ class PdfViewerActivity : AppCompatActivity() {
         }
         
         val twoPages = isTwoPageMode && pageIndex + 1 < pageCount
-        val pageInfo = if (twoPages) {
+        val pageInfo = if (pairBlank) {
+            "– / $pageCount" // 짝의 빈 자리 (P22)
+        } else if (twoPages) {
             // Two page mode: show "1-2 / 10" format
             "${pageIndex + 1}-${pageIndex + 2} / $pageCount"
         } else {
@@ -1364,6 +1387,7 @@ class PdfViewerActivity : AppCompatActivity() {
     private fun loadFileWithTargetPage(filePath: String, fileName: String, targetPage: Int, originalMode: CollaborationMode) {
         stopMicFollow()
         conductorMeasure = null
+        pairSpread = null // 새 악보 — 짝에도 새로 알린다 (P22)
         // Close current PDF
         Log.d("PdfViewerActivity", "Closing current PDF resources for collaboration file change...")
         try {
@@ -1458,6 +1482,7 @@ class PdfViewerActivity : AppCompatActivity() {
     private fun loadFile(filePath: String, fileName: String, goToLastPage: Boolean = false) {
         stopMicFollow() // 곡이 바뀌면 추적도 끝 (P10)
         conductorMeasure = null
+        pairSpread = null // 새 악보 — 짝에도 새로 알린다 (P22)
         // Close current PDF
         Log.d("PdfViewerActivity", "Closing current PDF resources...")
         try {
@@ -1689,6 +1714,8 @@ class PdfViewerActivity : AppCompatActivity() {
                 loadPreviousFile()
             }
             // 안내가 표시된 상태에서는 일반 페이지 이동 차단
+        } else if (pairTurn(-1)) {
+            // 짝: 펼침 단위로 (P22)
         } else if (phoneView && chunkIndex > 0) {
             showChunk(phoneStartEndingAt(chunkIndex - 1)) // 휴대폰: 같은 쪽 앞 화면
         } else if (pageIndex > 0) {
@@ -1710,6 +1737,8 @@ class PdfViewerActivity : AppCompatActivity() {
                 loadNextFile()
             }
             // 안내가 표시된 상태에서는 일반 페이지 이동 차단
+        } else if (pairTurn(1)) {
+            // 짝: 펼침 단위로 (P22)
         } else if (phoneView && phoneWindowEnd < phoneChunks.lastIndex) {
             showChunk(phoneWindowEnd + 1) // 휴대폰: 같은 쪽 다음 화면
         } else {
@@ -2001,7 +2030,7 @@ class PdfViewerActivity : AppCompatActivity() {
     /** 메모 층을 지금 화면에 맞춰 다시 그린다 — 마디 박스와 같은 때 ([refreshScoreOverlay]) */
     private fun refreshNotes() {
         val layer = binding.noteLayer
-        if (!notesVisible() || isAnimating) {
+        if (!notesVisible() || isAnimating || pairBlank) {
             layer.clear()
             return
         }
@@ -6064,7 +6093,7 @@ class PdfViewerActivity : AppCompatActivity() {
         val showAll = isScoreOverlayEnabled()
         val micSystem = micSystemFrame()
         val systemFrame = micSystem ?: conductorSystemFrame()
-        if (fileId == null || isAnimating || (!showAll && focus == null && systemFrame == null)) {
+        if (fileId == null || isAnimating || pairBlank || (!showAll && focus == null && systemFrame == null)) {
             overlay.clear()
             return
         }
@@ -6182,6 +6211,217 @@ class PdfViewerActivity : AppCompatActivity() {
     }
 
     /** 보기 메뉴의 회전 모드 (P13 3단계) — 고르면 바로 그 방향으로. 돌면 새 폭으로 다시 그린다(#090) */
+    // ── 두 대로 펼쳐 보기 (P22) ─────────────────────────────────────────────
+    // 두 기기 모두 한 쪽 그리기 경로. 주 기기는 쪽 보이기(showPage · showPageWithAnimation)에서 들어온 쪽을 그 쪽이 든 펼침의
+    // 내 자리 쪽으로 바꾸고(pairRoute) 펼침을 짝에 알린다 — 넘김 · 쪽 이동 · 파일 열기 등 모든 길이 저절로 펼침을 따른다.
+    // 짝 기기는 받은 펼침의 내 자리만 그리고, ← → 는 주 기기에 보낸다
+
+    private val pairMain get() = PairSession.connected && PairSession.role == PairSession.Role.MAIN && !isTwoPageMode
+    private val pairPartner get() = PairSession.connected && PairSession.role == PairSession.Role.PARTNER && !isTwoPageMode
+
+    /** 주 기기: [index] 쪽을 보이려 한다 → 그 쪽이 든 펼침을 짝에 알리고 내 자리의 쪽(빈 자리면 빈 화면을 그리고 -1). 짝이 아니면 그대로 */
+    private fun pairRoute(index: Int): Int {
+        val side = PairSession.side
+        if (!pairMain || side == null) return index
+        val current = pairSpread?.takeIf { it.left < pageCount && (it.right ?: 0) < pageCount }
+        val spread = PairSpread.toShow(index, current, pageCount)
+        sendPairSpread(spread)
+        return PairSpread.pageOf(spread, side) ?: run { showPairBlank(spread); -1 }
+    }
+
+    /** 짝일 때 ← → — 짝 기기는 주 기기에 보내고, 주 기기는 펼침 단위로(TV 두 쪽처럼 두 쪽씩). 짝이 아니면 false */
+    private fun pairTurn(direction: Int): Boolean {
+        if (pairPartner) {
+            PairSession.send(PairProtocol.Message.Input(if (direction > 0) PairProtocol.Action.NEXT else PairProtocol.Action.PREVIOUS))
+            return true
+        }
+        val side = PairSession.side
+        if (!pairMain || side == null) return false
+        val current = pairSpread ?: PairSpread.toShow(pageIndex, null, pageCount)
+        val target = if (direction > 0) PairSpread.next(current, pageCount) else PairSpread.previous(current, pageCount)
+        if (target == null) {
+            if (direction > 0) showEndOfFileGuide() else showStartOfFileGuide()
+            return true
+        }
+        sendPairSpread(target)
+        val own = PairSpread.pageOf(target, side)
+        if (own == null) showPairBlank(target) else turnTo(own, direction)
+        return true
+    }
+
+    /** 주 기기: 펼침을 짝에 알린다 — 같은 펼침이면 [force] 일 때만(다시 붙음 · sync) */
+    private fun sendPairSpread(spread: com.mrgq.pdfviewer.follow.RollingTurns.Spread, force: Boolean = false) {
+        if (!force && spread == pairSpread) return
+        pairSpread = spread
+        val path = pdfFilePath
+        val name = pdfFileName
+        val count = pageCount
+        pairSentSeq = maxOf(pairSentSeq + 1, System.currentTimeMillis())
+        val seq = pairSentSeq
+        lifecycleScope.launch {
+            val sha = withContext(Dispatchers.IO) { sha256Of(path) }
+            PairSession.send(PairProtocol.Message.SpreadUpdate(name, sha, count, spread, seq))
+        }
+    }
+
+    /** 내 자리가 빈 펼침 — 쪽 없이 비운다(마디 박스 · 메모도) */
+    private fun showPairBlank(spread: com.mrgq.pdfviewer.follow.RollingTurns.Spread) {
+        pairSpread = spread
+        pairBlank = true
+        pageIndex = spread.left
+        binding.pdfView.setImageDrawable(null)
+        binding.scoreOverlay.clear()
+        binding.noteLayer.clear()
+        updatePageInfo()
+    }
+
+    /** 짝 기기: 주 기기의 펼침 — 다른 악보면 같은 악보를 찾아 열고, 아니면 내 자리의 쪽으로 */
+    private fun applyPairSpread(update: PairProtocol.Message.SpreadUpdate) {
+        if (update.seq <= pairSeenSeq) return
+        pairSeenSeq = update.seq
+        val side = PairSession.side ?: return
+        val path = pdfFilePath
+        lifecycleScope.launch {
+            val mine = withContext(Dispatchers.IO) { sha256Of(path) }
+            if (update.seq != pairSeenSeq || !pairPartner) return@launch // 그새 더 새 펼침이 왔다
+            val own = PairSpread.pageOf(update.spread, side)
+            if (update.sha256 != null && mine != null && update.sha256 != mine) {
+                // 합주 연주자가 지휘자의 곡을 찾는 것과 같은 순서 (EnsembleFiles) — 없으면 안내
+                handleRemoteFileChange(update.file, (own ?: update.spread.left) + 1, update.sha256)
+                return@launch
+            }
+            if (update.pageCount != pageCount && pairPagesWarned != path) {
+                pairPagesWarned = path
+                toast(getString(R.string.viewer_pair_pages_differ, pageCount, update.pageCount))
+            }
+            pairSpread = update.spread
+            when {
+                own == null -> showPairBlank(update.spread)
+                own >= pageCount -> Unit
+                own != pageIndex || pairBlank -> if (isAnimating || pairBlank) showPage(own) else showPageWithAnimation(own, if (own > pageIndex) 1 else -1)
+            }
+        }
+    }
+
+    private val pairListener = object : PairSession.Listener {
+        override fun onPairConnected(peerName: String) {
+            toast(getString(R.string.viewer_pair_connected, peerName, pairSideName(PairSession.side)))
+            pairSeenSeq = -1L
+            if (PairSession.role == PairSession.Role.MAIN) {
+                pairSpread = null
+                if (pageCount > 0) showPage(pageIndex) // 지금 쪽이 든 펼침을 정해 알리고 내 자리로
+            }
+        }
+
+        override fun onPairDisconnected() {
+            toast(getString(R.string.viewer_pair_disconnected))
+            pairLeft()
+        }
+
+        override fun onPairSpread(update: PairProtocol.Message.SpreadUpdate) = applyPairSpread(update)
+
+        override fun onPairInput(action: PairProtocol.Action) {
+            when (action) {
+                PairProtocol.Action.NEXT -> turnForward()
+                PairProtocol.Action.PREVIOUS -> turnBack()
+                PairProtocol.Action.SYNC -> pairSpread?.let { sendPairSpread(it, force = true) } ?: run { if (pageCount > 0) showPage(pageIndex) }
+            }
+        }
+
+        override fun onPairVersionMismatch() {
+            toast(getString(R.string.viewer_pair_version_mismatch))
+            pairLeft()
+        }
+    }
+
+    /** 악보 화면이 앞에 왔다 — 짝 알림을 받고, 짝 기기면 지금 펼침을 달라고 한다(떠나 있는 동안 넘겼을 수 있다) */
+    private fun attachPair() {
+        PairSession.listener = pairListener
+        if (pairPartner) PairSession.send(PairProtocol.Message.Input(PairProtocol.Action.SYNC))
+    }
+
+    /** 짝이 끊겼거나 풀었다 — 혼자 보기. 빈 자리였으면 그 펼침의 왼쪽 쪽을 */
+    private fun pairLeft() {
+        val blank = pairBlank
+        pairSpread = null
+        pairBlank = false
+        if (blank && pageCount > 0) showPage(pageIndex)
+    }
+
+    private fun pairSideName(side: PairSide?): String =
+        getString(if (side == PairSide.RIGHT) R.string.viewer_pair_side_right else R.string.viewer_pair_side_left)
+
+    /** 보기 메뉴 줄의 값 — 끔 · 자리 + 기다리는 중 · 연결됨 · 다시 붙는 중 */
+    private fun pairMenuValue(): com.mrgq.pdfviewer.menu.Text {
+        val role = PairSession.role ?: return com.mrgq.pdfviewer.menu.Text.of(R.string.viewer_menu_off)
+        val state = when {
+            PairSession.connected -> R.string.viewer_menu_pair_connected
+            role == PairSession.Role.MAIN -> R.string.viewer_menu_pair_waiting
+            else -> R.string.viewer_menu_pair_reconnecting
+        }
+        return com.mrgq.pdfviewer.menu.Text.of(state, pairSideName(PairSession.side))
+    }
+
+    /** 보기 메뉴 → 두 대로 펼쳐 보기: 짝이 없으면 기다리기(왼쪽 · 오른쪽) · 찾기, 있으면 지금 상태 · 짝 풀기 */
+    private fun showPairDialog() {
+        if (PairSession.isActive) {
+            val state = pairMenuValue().resolve(this)
+            val peer = PairSession.peerName?.let { "\n" + getString(R.string.viewer_pair_peer, it) }.orEmpty()
+            AlertDialog.Builder(this)
+                .setTitle(R.string.viewer_menu_pair)
+                .setMessage(getString(R.string.viewer_pair_status, pairSideName(PairSession.side), state) + peer)
+                .setPositiveButton(R.string.viewer_pair_stop) { _, _ ->
+                    PairSession.stop()
+                    pairLeft()
+                }
+                .setNegativeButton(R.string.viewer_close, null)
+                .show()
+            return
+        }
+        val options = arrayOf(getString(R.string.viewer_pair_host_left), getString(R.string.viewer_pair_host_right), getString(R.string.viewer_pair_find))
+        AlertDialog.Builder(this)
+            .setTitle(R.string.viewer_menu_pair)
+            .setItems(options) { _, which ->
+                when (which) {
+                    0 -> hostPair(PairSide.LEFT)
+                    1 -> hostPair(PairSide.RIGHT)
+                    else -> findPair()
+                }
+            }
+            .setNegativeButton(R.string.viewer_close, null)
+            .show()
+    }
+
+    private fun hostPair(side: PairSide) {
+        PairSession.listener = pairListener
+        toast(if (PairSession.startHosting(side)) getString(R.string.viewer_pair_waiting, pairSideName(side)) else getString(R.string.viewer_pair_host_failed))
+    }
+
+    /** 같은 Wi-Fi 에서 짝을 기다리는 기기를 찾아 목록으로 — 고르면 붙는다(자리는 그 기기의 반대) */
+    private fun findPair() {
+        val hosts = mutableListOf<PairDiscovery.Host>()
+        val adapter = android.widget.ArrayAdapter<String>(this, android.R.layout.simple_list_item_1)
+        val dialog = AlertDialog.Builder(this)
+            .setTitle(R.string.viewer_pair_finding)
+            .setAdapter(adapter) { _, which ->
+                PairSession.stopFinding()
+                PairSession.listener = pairListener
+                PairSession.join(hosts[which])
+                toast(getString(R.string.viewer_pair_connecting))
+            }
+            .setNegativeButton(R.string.cancel) { _, _ -> PairSession.stopFinding() }
+            .setOnCancelListener { PairSession.stopFinding() }
+            .show()
+        PairSession.find(
+            onFound = { host ->
+                hosts += host
+                adapter.add(getString(R.string.viewer_pair_host_item, host.name, pairSideName(host.side.other)))
+                if (dialog.isShowing) dialog.setTitle(R.string.viewer_menu_pair)
+            },
+            onDone = { if (hosts.isEmpty() && dialog.isShowing) dialog.setTitle(R.string.viewer_pair_none_found) },
+        )
+    }
+
     private fun showPhoneOrientationDialog() {
         val modes = listOf(PHONE_ORIENTATION_AUTO, PHONE_ORIENTATION_LANDSCAPE, PHONE_ORIENTATION_PORTRAIT)
         val current = modes.indexOf(phoneOrientationMode()).coerceAtLeast(0)
@@ -6258,6 +6498,8 @@ class PdfViewerActivity : AppCompatActivity() {
             twoPageCapable = twoPageCapable,
             twoPage = isTwoPageMode,
             phoneRotation = if (phoneView) phoneOrientationName(phoneOrientationMode()) else null,
+            // 두 대로 펼쳐 보기 — 한 쪽만 보는 터치 기기 (P22)
+            pair = if (!twoPageCapable && !com.mrgq.pdfviewer.utils.DeviceForm.isTv(this)) pairMenuValue() else null,
         ))
         // 시트의 스위치는 스스로 상태를 보이므로 알림(토스트)을 띄우지 않는다
         val announce = !touchShell()
@@ -6272,6 +6514,7 @@ class PdfViewerActivity : AppCompatActivity() {
                 MenuAction.CLIPPING -> showClippingDialog()
                 // 휴대폰 회전 모드 (#090) — 앱 설정 → 표시 모드와 같은 값, 악보를 보다가 바로 바꾼다
                 MenuAction.PHONE_ROTATION -> showPhoneOrientationDialog()
+                MenuAction.PAIR -> showPairDialog()
                 else -> Unit
             }
         }
@@ -6912,6 +7155,7 @@ class PdfViewerActivity : AppCompatActivity() {
 
     override fun onPause() {
         super.onPause()
+        if (PairSession.listener === pairListener) PairSession.listener = null // 짝은 남는다 — 화면이 없으면 알림만 안 받는다 (P22)
         voiceResumed = false
         commitPendingNote() // 그리던 메모 묶음은 확정해 저장 (P11)
         com.mrgq.pdfviewer.ensemble.VersionNotice.detach()
@@ -6941,6 +7185,7 @@ class PdfViewerActivity : AppCompatActivity() {
         voiceResumed = true
         refreshVoiceButton() // 설정에서 켜고 돌아왔을 수 있다 — 👂 계속 듣기도 여기서 건다
         if (phoneView) requestedOrientation = phoneOrientationRequest() // 회전 모드를 바꾸고 돌아왔을 수 있다 (#090)
+        attachPair()
     }
     
     override fun onDestroy() {
@@ -7059,6 +7304,12 @@ class PdfViewerActivity : AppCompatActivity() {
      */
     private fun showPageWithAnimation(index: Int, direction: Int) {
         if (index < 0 || index >= pageCount || isAnimating) return
+        val own = pairRoute(index) // P22
+        if (own != index) {
+            if (own >= 0) showPageWithAnimation(own, direction)
+            return
+        }
+        if (pairBlank) return showPage(index) // 빈 화면에서는 넘김 그림 없이
         flushNotePen()
         rollSpread = null
         halfPageShown = false
