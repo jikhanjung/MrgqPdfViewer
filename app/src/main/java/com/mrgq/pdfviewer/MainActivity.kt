@@ -821,7 +821,7 @@ class MainActivity : AppCompatActivity() {
     private var pairOpening = false
 
     /** 두 대로 펼쳐 보기 (P22) — 목록에 있을 때: 짝 기기는 주 기기가 연 악보를 따라 연다(자리의 쪽으로) */
-    private val pairListener = object : com.mrgq.pdfviewer.pair.PairSession.Listener {
+    private val pairListener: com.mrgq.pdfviewer.pair.PairSession.Listener = object : com.mrgq.pdfviewer.pair.PairSession.Listener {
         override fun onPairSpread(update: com.mrgq.pdfviewer.pair.PairProtocol.Message.SpreadUpdate) {
             if (pairOpening || isFinishing) return
             val side = com.mrgq.pdfviewer.pair.PairSession.side ?: return
@@ -1205,7 +1205,7 @@ class MainActivity : AppCompatActivity() {
     }
     
     /** 두 대로 펼쳐 보기 (P22) — 합주 단추 옆 📖 단추로 주 기기 · 보조 기기를 고른다 (사용자 요청 2026-10-14). TV 는 짝이 없다 */
-    private val pairDialogs by lazy {
+    private val pairDialogs: com.mrgq.pdfviewer.pair.PairDialogs by lazy {
         com.mrgq.pdfviewer.pair.PairDialogs(
             this,
             beforeStart = { com.mrgq.pdfviewer.pair.PairSession.listener = pairListener },

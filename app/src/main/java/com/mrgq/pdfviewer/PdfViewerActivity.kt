@@ -6501,7 +6501,7 @@ class PdfViewerActivity : AppCompatActivity() {
         }
     }
 
-    private val pairListener = object : PairSession.Listener {
+    private val pairListener: PairSession.Listener = object : PairSession.Listener {
         override val isViewer = true
 
         override fun onPairConnected(peerName: String) {
@@ -6598,7 +6598,7 @@ class PdfViewerActivity : AppCompatActivity() {
     }
 
     /** 보기 메뉴 → 두 대로 펼쳐 보기 — 첫 화면 📖 단추와 같은 대화상자(주 기기 번호 · 보조 기기 번호 고르기, `pair/PairDialogs`) */
-    private val pairDialogs by lazy {
+    private val pairDialogs: com.mrgq.pdfviewer.pair.PairDialogs by lazy {
         com.mrgq.pdfviewer.pair.PairDialogs(
             this,
             beforeStart = {
