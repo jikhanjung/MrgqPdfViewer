@@ -205,6 +205,7 @@ class MainActivity : AppCompatActivity() {
         return com.mrgq.pdfviewer.scoremate.ScoreMateSync(
             com.mrgq.pdfviewer.scoremate.ScoreMateClient(store), store, scoreMateLocal, scoreMateLocal,
             File(getExternalFilesDir(null), "PDFs"),
+            inEnsemble = com.mrgq.pdfviewer.scoremate.SessionScores::inEnsemble,
         )
     }
 
@@ -246,6 +247,8 @@ class MainActivity : AppCompatActivity() {
         com.mrgq.pdfviewer.ensemble.VersionNotice.attach(this) // 합주 상대와 버전이 다르면 대화상자로 (#061)
         pairOpening = false
         com.mrgq.pdfviewer.pair.PairSession.listener = pairListener
+        // 합주 동안만 두는 악보를 받거나 지웠다 — 목록을 다시 (서버 0.25.0 멤버십)
+        com.mrgq.pdfviewer.scoremate.SessionScores.onChanged = { if (!isFinishing) loadPdfFiles() }
         // 짝 기기면 주 기기의 지금 펼침을 달라고 한다 — 주 기기가 악보를 열고 있으면 따라 연다 (P22)
         if (com.mrgq.pdfviewer.pair.PairSession.connected && com.mrgq.pdfviewer.pair.PairSession.role == com.mrgq.pdfviewer.pair.PairSession.Role.PARTNER) {
             com.mrgq.pdfviewer.pair.PairSession.send(com.mrgq.pdfviewer.pair.PairProtocol.Message.Input(com.mrgq.pdfviewer.pair.PairProtocol.Action.SYNC))
@@ -803,6 +806,7 @@ class MainActivity : AppCompatActivity() {
     override fun onPause() {
         super.onPause()
         if (com.mrgq.pdfviewer.pair.PairSession.listener === pairListener) com.mrgq.pdfviewer.pair.PairSession.listener = null
+        com.mrgq.pdfviewer.scoremate.SessionScores.onChanged = null
         binding.collaborationButton.removeCallbacks(ensembleBlink)
         com.mrgq.pdfviewer.ensemble.VersionNotice.detach()
         binding.root.removeCallbacks(autoUpdateCheck)

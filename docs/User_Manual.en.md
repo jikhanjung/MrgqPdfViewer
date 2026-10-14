@@ -75,6 +75,9 @@ ScoreMate is a website for managing scores and setlists. A linked device downloa
 - Deleting a ScoreMate score on the device only hides it. To get it back: **Settings → ☁️ ScoreMate → Restore hidden scores**.
 - If ScoreMate has MusicXML or analysis data for a piece, it is downloaded too. It is used by accompaniment (6.4), listen & turn pages (6.5) and the letter command (chapter 8).
 
+**Membership**: the **Settings → ☁️ ScoreMate → Membership** row shows your plan (Lite · Pro · Maestro) and when it ends. Tap it to also see this month's score recognition usage. Coupons, trials and other membership changes are made **on the web** (a TV shows a QR code).
+- On the **Lite** plan, ensemble scores from a Maestro leader stay on this device **only during ensemble mode** — they are downloaded when an ensemble (chapter 9) starts and removed when it ends. Notes you wrote on them are kept and come back next time.
+
 **Unlinking**: **Settings → ☁️ ScoreMate → Unlink**. Choose whether to **keep or delete** the downloaded scores. Kept scores become ordinary files on this device.
 
 > A linked device **doesn't use the web server.** While linked, the score list only shows ScoreMate scores, so files uploaded through the web server would not appear.
@@ -407,7 +410,7 @@ Several devices read together. One device is the **conductor**; the others are *
 | **Ensemble** | Performer metronome | 9.2 |
 | | Experimental: Synced turns · Turn delay | chapter 12 |
 | | Advanced: Input block · Message queue | e.g. how long a performer can't turn right after the conductor turns — usually leave as is |
-| ☁️ **ScoreMate** | Link: Linked/Not linked · Check link · Unlink · Link this device · Server | 3.1. The server address normally doesn't need changing |
+| ☁️ **ScoreMate** | Link: Linked/Not linked · Check link · Membership · Unlink · Link this device · Server | 3.1. The server address normally doesn't need changing |
 | | Scores: Sync now · Restore hidden scores | 3.1 |
 | 🎵 **Animation & sound** | Turn animation · Turn sound · Volume · Page info | Page-turn effects, page number on screen |
 | 🎙 **Voice commands** | Voice commands · Voice language | chapter 8 (tablet · phone) |

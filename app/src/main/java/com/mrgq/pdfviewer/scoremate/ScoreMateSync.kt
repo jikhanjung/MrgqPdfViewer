@@ -29,6 +29,11 @@ data class RemoteScore(
     val musicXml: RemoteFile? = null,
     /** 서버가 이 판을 분석한 보표 · 마디 (서버 0.10.x, P06 §12 — 앱 ScoreLayout 모양). null = 아직 없음 → 앱이 분석한다 */
     val layout: RemoteFile? = null,
+    /**
+     * 합주 동안만 둔다 (서버 0.25.0 멤버십, 서버 devlog 084 — `retention: "session"`). Lite 사용자에게 가는 앙상블 악보 —
+     * 합주 모드가 아니면 받지 않고 있으면 지운다. 없으면 keep
+     */
+    val session: Boolean = false,
 )
 
 /** 동기화 응답의 `musicxml` · `layout` — 받기는 PDF 와 같이 Bearer → 302 서명 URL. [sha256] 은 그 파일의 것 */
@@ -51,6 +56,8 @@ data class SyncedScore(
     val syncedAt: Long = 0L,
     /** 편곡자 (v18) */
     val arranger: String = "",
+    /** 합주 동안만 두는 악보 (v20, [RemoteScore.session]) — 합주 모드가 아니면 파일이 없다(행 · 레코드는 남는다) */
+    val session: Boolean = false,
 )
 
 /** 받아 둔 서버 악보 저장소 (Room 구현은 repository, 테스트는 메모리) */
@@ -84,13 +91,15 @@ data class SyncReport(
     val updated: Int = 0,
     /** 세트리스트(곡목 · 순서 · 메모)가 바뀌었다 (#064) */
     val setlistsChanged: Boolean = false,
+    /** 합주 동안만 두는 악보라 지운 것 (서버 0.25.0 멤버십) — 목록을 다시 그려야 한다 */
+    val evicted: Int = 0,
     /** 실패마다 화면 글 (P18 — 키 + 인자, [ScoreMateSyncText.summary] 가 첫 것을 보인다) */
     val errors: List<UiText> = emptyList(),
     /** 서버로 올린 · 서버에서 받은 메모 문서 (악보 수, P11 §6) — 목록을 다시 그릴 일은 아니다 */
     val notesUploaded: Int = 0,
     val notesDownloaded: Int = 0,
 ) {
-    val changed: Boolean get() = downloaded + moved + removed + musicXml + layouts + updated > 0 || setlistsChanged
+    val changed: Boolean get() = downloaded + moved + removed + musicXml + layouts + updated + evicted > 0 || setlistsChanged
 }
 
 /**
@@ -114,6 +123,13 @@ data class SyncReport(
  * 4. 모두 성공했을 때만 커서를 저장한다 — 중간에 실패하면 다음에 같은 자리부터 다시 (이미 받은 것은 sha 가 같아 건너뛴다)
  * 5. 세트리스트, 6. 악보 메모(개인) 올리기 · 받기 — [ScoreNotesSync] (P11 §6, 서버 0.17.0)
  *
+ * **합주 동안만 두는 악보**(`retention: session`, 서버 0.25.0 멤버십 · 서버 devlog 084) — Lite 사용자가 Maestro 리더의 앙상블에서 받는 악보.
+ * 행(곡 정보 + [SyncedScore.session])은 늘 두고 **파일은 합주 모드 동안만**:
+ *  - 합주 모드가 아니면([inEnsemble] false) 받지 않고, 있으면 지운다 — 개인 메모는 보관함으로, `pdf_files` 레코드는 남긴다(곡목에서 빠질 때와 같게)
+ *  - 합주 모드가 시작되면 [fetchSessionScores] (커서는 그대로, 목록을 처음부터 한 번 받아 session 악보만 + 곁 파일),
+ *    끝나면 [evictSessionScores]. 앱을 켤 때 합주 모드가 아니면 남은 것을 지운다(비정상 종료 대비) — [SessionScores]
+ *  - keep ↔ session 이 바뀌면 다음 동기화가 맞춘다(서버가 그 악보의 updated_at 을 올린다)
+ *
  * 합주 중 · 악보를 보는 중에는 부르지 않는다 (파일 목록 화면에서만 — 열린 파일을 바꾸지 않게).
  * Android 에 의존하지 않는다 — JVM 단위 테스트 대상 (임시 폴더 + 가짜 서버).
  */
@@ -125,6 +141,8 @@ class ScoreMateSync(
     /** `PDFs` — 받은 악보는 그 아래 `ScoreMate/` */
     private val pdfRoot: File,
     private val now: () -> Long = System::currentTimeMillis,
+    /** 지금 합주 모드인가 — 아니면 합주 동안만 두는 악보는 받지 않고 지운다. 일반 동기화는 합주 중에 부르지 않지만, 도중에 합주가 시작될 수 있다 */
+    private val inEnsemble: () -> Boolean = { false },
 ) {
     val scoreMateRoot: File get() = File(pdfRoot, FOLDER)
 
@@ -158,6 +176,7 @@ class ScoreMateSync(
         var musicXml = 0
         var layouts = 0
         var updated = 0
+        var evicted = 0
 
         // 3 먼저 판단: 지울 것 — 서버가 지금 이 TV 에 주는 것(ids) 밖
         val local = store.all().associateBy { it.serverId }
@@ -173,12 +192,17 @@ class ScoreMateSync(
             if (existing?.hidden == true) {
                 // TV 에서 지운 악보 — 메타데이터만 따라간다
                 store.upsert(existing.copy(title = remote.title, partName = remote.partName, composer = remote.composer, arranger = remote.arranger,
-                    ensembleId = remote.ensembleId, ensembleName = remote.ensembleName))
+                    ensembleId = remote.ensembleId, ensembleName = remote.ensembleName, session = remote.session))
                 continue
             }
             val sha = remote.sha256?.lowercase()
             if (sha == null) {
                 pending++
+                continue
+            }
+            if (remote.session && !inEnsemble()) {
+                // 합주 동안만 두는 악보 — 행만 (파일이 있으면 지운다)
+                if (keepSessionRow(remote, sha, existing, File(target))) evicted++
                 continue
             }
             try {
@@ -197,7 +221,7 @@ class ScoreMateSync(
 
         // 제목만 바뀌지 않았어도 겹침이 풀리거나 생기면 옮겨야 한다 — 이번에 오지 않은 악보도 새 이름으로
         for (existing in keep.values) {
-            if (existing.serverId in incoming || existing.hidden) continue
+            if (existing.serverId in incoming || existing.hidden || !File(existing.filePath).isFile) continue
             val target = names[existing.serverId] ?: continue
             if (target == existing.filePath) continue
             try {
@@ -246,8 +270,82 @@ class ScoreMateSync(
         } catch (e: ScoreMateException) {
             errors += UiText(R.string.scoremate_error_notes, e.text)
         }
-        return SyncReport(downloaded, moved, removed, pending, musicXml, layouts, updated, setlistsChanged, errors,
+        return SyncReport(downloaded, moved, removed, pending, musicXml, layouts, updated, setlistsChanged, evicted = evicted, errors = errors,
             notesUploaded = notes.uploaded, notesDownloaded = notes.downloaded)
+    }
+
+    /**
+     * 합주 모드가 시작됐다 — 합주 동안만 두는 악보를 모두 받는다(곁 파일까지). 커서는 건드리지 않고 목록을 처음부터 한 번 받아 session 악보만.
+     * 다른 악보는 그대로 둔다(일반 동기화가 맡는다). [inEnsemble] 이 false 면 아무것도 안 한다
+     */
+    suspend fun fetchSessionScores(): SyncReport = RUNNING.withLock {
+        if (!inEnsemble()) return@withLock SyncReport() // 차례를 기다리는 동안 합주가 끝났다
+        val pages = fetchAll(null)
+        val incoming = LinkedHashMap<Long, RemoteScore>()
+        pages.forEach { page -> page.scores.forEach { incoming[it.id] = it } }
+        val ids = pages.last().ids
+        val keep = store.all().associateBy { it.serverId }.filterKeys { it in ids }
+        val names = assignPaths(keep, incoming)
+        val errors = mutableListOf<UiText>()
+        var downloaded = 0
+        var musicXml = 0
+        var layouts = 0
+        for (remote in incoming.values) {
+            if (!remote.session) continue
+            val target = names[remote.id] ?: continue
+            val existing = keep[remote.id]
+            if (existing?.hidden == true) continue
+            val sha = remote.sha256?.lowercase() ?: continue
+            try {
+                if (applyScore(remote, sha, existing, File(target)) == Change.DOWNLOADED) downloaded++
+                if (applySidecar(remote.musicXml, musicXmlFileOf(File(target)), "MusicXML")) musicXml++
+                if (applySidecar(remote.layout, layoutFileOf(File(target)), UiText(R.string.scoremate_sidecar_layout))) layouts++
+            } catch (e: ScoreMateUnlinkedException) {
+                throw e
+            } catch (e: Exception) {
+                errors += UiText(R.string.scoremate_error_item, remote.title, e.uiArg())
+            }
+        }
+        SyncReport(downloaded = downloaded, musicXml = musicXml, layouts = layouts, errors = errors)
+    }
+
+    /**
+     * 합주 모드가 끝났다(또는 앱을 켰는데 합주 모드가 아니다) — 합주 동안만 두는 악보의 파일을 지운다. 지운 수.
+     * 행 · `pdf_files` 레코드는 남기고 개인 메모는 보관함으로(다시 받으면 돌아온다). [inEnsemble] 이면 아무것도 안 한다
+     */
+    suspend fun evictSessionScores(): Int = RUNNING.withLock {
+        if (inEnsemble()) return@withLock 0 // 차례를 기다리는 동안 합주가 다시 시작됐다 (지휘자 ↔ 연주자 바꾸기 등)
+        var n = 0
+        for (score in store.all()) {
+            if (!score.session || score.hidden) continue
+            if (evictFile(score.serverId, File(score.filePath))) n++
+        }
+        removeEmptyFolders()
+        n
+    }
+
+    /** 합주 동안만 두는 악보를 합주 밖에서 — 곡 정보 · session 표시만 맞추고 파일은 지운다. 지웠으면 true */
+    private suspend fun keepSessionRow(remote: RemoteScore, sha: String, existing: SyncedScore?, target: File): Boolean {
+        val removed = existing != null && evictFile(remote.id, File(existing.filePath))
+        // 이름이 바뀌었으면 파일별 설정(레코드)을 새 자리로 — 합주 때 그 자리로 받는다
+        if (existing != null && existing.filePath != target.path) records.beforeMove(existing.filePath, target.path)
+        store.upsert(
+            SyncedScore(
+                serverId = remote.id, filePath = target.path, versionNumber = remote.versionNumber, sha256 = sha,
+                title = remote.title, composer = remote.composer, partName = remote.partName, arranger = remote.arranger,
+                ensembleId = remote.ensembleId, ensembleName = remote.ensembleName, syncedAt = now(), session = true,
+            ),
+        )
+        return removed
+    }
+
+    /** PDF 와 서버 곁 파일을 지운다 — 개인 메모(· 올리지 못한 지휘자 메모)는 보관함으로, `pdf_files` 레코드는 남긴다 */
+    private fun evictFile(serverId: Long, pdf: File): Boolean {
+        if (!pdf.isFile) return false
+        keepNotes(serverId, pdf)
+        pdf.delete()
+        serverSidecarsOf(pdf).forEach { it.delete() }
+        return true
     }
 
     /** TV 에서 지운 서버 악보 — 목록에서 빼고 다시 받지 않는다. 파일은 호출한 쪽이 지웠다 */
@@ -312,7 +410,7 @@ class ScoreMateSync(
         val record = SyncedScore(
             serverId = remote.id, filePath = target.path, versionNumber = remote.versionNumber, sha256 = sha,
             title = remote.title, composer = remote.composer, partName = remote.partName, arranger = remote.arranger,
-            ensembleId = remote.ensembleId, ensembleName = remote.ensembleName, syncedAt = now(),
+            ensembleId = remote.ensembleId, ensembleName = remote.ensembleName, syncedAt = now(), session = remote.session,
         )
         val currentFile = existing?.let { File(it.filePath) }
         val haveContent = existing != null && existing.sha256 == sha && currentFile!!.isFile
@@ -508,8 +606,14 @@ class ScoreMateSync(
         /** `PDFs/` 아래 서버 악보 폴더 */
         const val FOLDER = "ScoreMate"
 
-        /** 앱 동기화 형식 — 1: MusicXML (P06 §11, v0.3.0), 2: 편곡자 · 분석 파일(P06 §10 · §12). 올리면 기존 TV 가 한 번 처음부터 다시 받는다 */
-        const val SYNC_FORMAT = 2
+        /**
+         * 앱 동기화 형식 — 1: MusicXML (P06 §11, v0.3.0), 2: 편곡자 · 분석 파일(P06 §10 · §12), 3: `retention`(서버 0.25.0 멤버십).
+         * 올리면 기존 TV 가 한 번 처음부터 다시 받는다
+         */
+        const val SYNC_FORMAT = 3
+
+        /** `retention` — 합주 동안만 (없거나 `keep` 이면 늘 둔다) */
+        const val RETENTION_SESSION = "session"
         private const val MAX_PAGES = 100
 
         fun parsePage(body: String): SyncPage? {
@@ -545,6 +649,7 @@ class ScoreMateSync(
                 downloadUrl = o.str("download_url") ?: "/api/v1/scores/${o.get("id").asLong}/download/",
                 musicXml = remoteFile(o, "musicxml"),
                 layout = remoteFile(o, "layout"),
+                session = o.str("retention") == RETENTION_SESSION,
             )
         } catch (e: RuntimeException) {
             null
@@ -630,6 +735,7 @@ object ScoreMateSyncText {
         if (report.downloaded > 0) parts += count(R.plurals.scoremate_summary_downloaded, report.downloaded)
         if (report.moved > 0) parts += count(R.plurals.scoremate_summary_moved, report.moved)
         if (report.removed > 0) parts += count(R.plurals.scoremate_summary_removed, report.removed)
+        if (report.evicted > 0) parts += count(R.plurals.scoremate_summary_evicted, report.evicted)
         if (report.pending > 0) parts += count(R.plurals.scoremate_summary_pending, report.pending)
         if (report.musicXml > 0) parts += count(R.plurals.scoremate_summary_musicxml, report.musicXml)
         if (report.layouts > 0) parts += count(R.plurals.scoremate_summary_layouts, report.layouts)

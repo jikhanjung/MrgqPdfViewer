@@ -83,6 +83,17 @@
     <string name="settings_scoremate_link">Link this %1$s</string>
     <string name="settings_scoremate_server">Server</string>
     <string name="settings_scoremate_scores_header">Scores</string>
+    <string name="settings_scoremate_membership">Membership</string>
+    <string name="settings_scoremate_membership_trial">%1$s trial</string>
+    <string name="settings_scoremate_membership_value_until">%1$s · until %2$s</string>
+    <string name="settings_scoremate_membership_tier">Plan: %1$s</string>
+    <string name="settings_scoremate_membership_until">Ends: %1$s</string>
+    <string name="settings_scoremate_membership_no_end">No end date</string>
+    <string name="settings_scoremate_membership_omr">Score recognition this month: %1$d pages</string>
+    <string name="settings_scoremate_membership_omr_limit">Score recognition this month: %1$d / %2$d pages</string>
+    <string name="settings_scoremate_membership_lite_session">Ensemble scores stay on this device only during ensemble mode (removed when the ensemble ends — your notes are kept).</string>
+    <string name="settings_scoremate_membership_manage">Coupons, trials and other membership changes are made on the web.</string>
+    <string name="settings_scoremate_membership_web">Manage on the web</string>
     <string name="settings_scoremate_sync">Sync now</string>
     <string name="settings_scoremate_unhide">Restore hidden scores</string>
     <string name="settings_scoremate_linked_toast">Linked to ScoreMate — the file list now shows ScoreMate scores</string>

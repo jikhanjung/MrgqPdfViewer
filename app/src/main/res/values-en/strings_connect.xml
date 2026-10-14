@@ -13,6 +13,7 @@
     <string name="scoremate_sync_list_failed">Couldn\'t get the sync list (HTTP %1$d)</string>
     <string name="scoremate_sync_bad_response">Couldn\'t read the sync response</string>
     <string name="scoremate_setlists_failed">Couldn\'t get setlists (HTTP %1$d)</string>
+    <string name="scoremate_membership_failed">Couldn\'t get membership (HTTP %1$d)</string>
     <string name="scoremate_notes_list_failed">Couldn\'t get the annotations list (HTTP %1$d)</string>
     <string name="scoremate_no_download_location">No download address (HTTP %1$d)</string>
     <string name="scoremate_download_failed">Couldn\'t download the score (HTTP %1$d)</string>
@@ -67,6 +68,10 @@
     <plurals name="scoremate_summary_removed">
         <item quantity="one">%1$d removed</item>
         <item quantity="other">%1$d removed</item>
+    </plurals>
+    <plurals name="scoremate_summary_evicted">
+        <item quantity="one">%1$d ensemble-only score removed</item>
+        <item quantity="other">%1$d ensemble-only scores removed</item>
     </plurals>
     <plurals name="scoremate_summary_pending">
         <item quantity="one">%1$d still processing on the server</item>

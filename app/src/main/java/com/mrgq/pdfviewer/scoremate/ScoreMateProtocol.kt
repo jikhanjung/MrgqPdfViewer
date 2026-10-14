@@ -27,6 +27,9 @@ object ScoreMateProtocol {
     const val PATH_SYNC_NOTES = "/api/v1/sync/notes/"
     fun pathNotes(scoreId: Long, layer: String) = "/api/v1/scores/$scoreId/notes/$layer/"
     fun pathDevice(deviceId: String) = "/api/v1/devices/$deviceId/"
+    /** 멤버십 (서버 0.25.0, 서버 devlog 084) — 기기 토큰으로 읽기만. 쿠폰 · 체험은 웹 [PATH_MEMBERSHIP_WEB] 에서 */
+    const val PATH_MEMBERSHIP = "/api/v1/membership/"
+    const val PATH_MEMBERSHIP_WEB = "/account/membership/"
 
     /** 코드 받기 응답 */
     data class DeviceCode(
@@ -55,6 +58,25 @@ object ScoreMateProtocol {
         data class Linked(val tokens: Tokens) : PollResult
         /** [text] = 화면에 보일 글 (P18 — 키 + 인자) */
         data class Failed(val text: UiText) : PollResult
+    }
+
+    /**
+     * 멤버십 (`GET /membership/`, 서버 0.25.0) — 등급 Lite · Pro · Maestro.
+     * [name] 화면에 보일 등급 이름, [source] trial · migration · coupon · manual · null, [until] ISO 시각(null = 기한 없음),
+     * 이번 달 악보 인식(OMR) 쪽 수 — [omrLimit] null 이면 한도 없음
+     */
+    data class Membership(
+        val tier: String,
+        val name: String,
+        val source: String?,
+        val until: String?,
+        val omrUsed: Int?,
+        val omrRemaining: Int?,
+        val omrLimit: Int?,
+    ) {
+        val isTrial: Boolean get() = source == "trial"
+        /** [until] 의 날짜(yyyy-MM-dd)만 */
+        val untilDate: String? get() = until?.take(10)?.takeIf { it.length == 10 }
     }
 
     /** 이 TV 의 정보 (`GET /devices/me/`) */
@@ -138,6 +160,23 @@ object ScoreMateProtocol {
             id = o.string("id") ?: return null,
             name = o.string("name") ?: "",
             lastSeenAt = o.string("last_seen_at"),
+        )
+    }
+
+    /** 멤버십 응답. `tier` 가 없으면 null */
+    fun parseMembership(body: String): Membership? {
+        val o = parseObject(body) ?: return null
+        val tier = o.string("tier") ?: return null
+        val omr = o.get("omr")?.takeIf { it.isJsonObject }?.asJsonObject
+        val limits = o.get("limits")?.takeIf { it.isJsonObject }?.asJsonObject
+        return Membership(
+            tier = tier,
+            name = o.string("name") ?: tier,
+            source = o.string("source"),
+            until = o.string("until"),
+            omrUsed = omr?.int("used"),
+            omrRemaining = omr?.int("remaining"),
+            omrLimit = limits?.int("omr_pages_month"),
         )
     }
 

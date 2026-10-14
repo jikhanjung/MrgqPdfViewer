@@ -85,6 +85,7 @@ class SettingsActivity : AppCompatActivity() {
     private val scoreMateSync by lazy {
         com.mrgq.pdfviewer.scoremate.ScoreMateSync(
             scoreMateClient, scoreMateStore, scoreMateLocal, scoreMateLocal, File(getExternalFilesDir(null), "PDFs"),
+            inEnsemble = com.mrgq.pdfviewer.scoremate.SessionScores::inEnsemble,
         )
     }
     
@@ -462,6 +463,10 @@ class SettingsActivity : AppCompatActivity() {
     
     // ── ScoreMate (P05 C1) ──────────────────────────────────────────────────
 
+    /** 멤버십 (서버 0.25.0) — ScoreMate 칸을 처음 열 때 한 번 받는다. null = 아직 · 모르는 서버 · 실패(줄을 숨긴다) */
+    private var membership: ScoreMateProtocol.Membership? = null
+    private var membershipRequested = false
+
     private fun showScoreMatePanel() {
         val linked = scoreMateClient.isLinked
         val server = scoreMateStore.server.removePrefix("https://")
@@ -482,12 +487,22 @@ class SettingsActivity : AppCompatActivity() {
                 title = getString(R.string.settings_scoremate_check),
                 type = SettingsType.ACTION
             )
+            membership?.let { m ->
+                items += SettingsItem(
+                    id = "scoremate_membership",
+                    icon = "⭐",
+                    title = getString(R.string.settings_scoremate_membership),
+                    value = m.untilDate?.let { getString(R.string.settings_scoremate_membership_value_until, membershipName(m), it) } ?: membershipName(m),
+                    type = SettingsType.ACTION
+                )
+            }
             items += SettingsItem(
                 id = "scoremate_unlink",
                 icon = "⛔",
                 title = getString(R.string.settings_scoremate_unlink),
                 type = SettingsType.ACTION
             )
+            if (!membershipRequested) loadMembership()
         } else {
             items += SettingsItem(
                 id = "scoremate_link",
@@ -519,6 +534,53 @@ class SettingsActivity : AppCompatActivity() {
             )
         }
         showDetailPanel("scoremate", "ScoreMate", items)
+    }
+
+    private fun loadMembership() {
+        membershipRequested = true
+        lifecycleScope.launch {
+            membership = try {
+                scoreMateClient.membership()
+            } catch (e: ScoreMateException) {
+                Log.i("SettingsActivity", "membership failed: ${e.message}")
+                null
+            }
+            if (membership != null && detailCategory == "scoremate") showScoreMatePanel()
+        }
+    }
+
+    private fun membershipName(m: ScoreMateProtocol.Membership): String =
+        if (m.isTrial) getString(R.string.settings_scoremate_membership_trial, m.name) else m.name
+
+    /** 등급 · 끝나는 날 · 이번 달 악보 인식 — 관리(쿠폰 · 체험)는 웹에서만 (앱 스토어 정책을 확인하기 전까지, 서버 devlog 084) */
+    private fun showMembership() {
+        val m = membership ?: return
+        val lines = mutableListOf(
+            getString(R.string.settings_scoremate_membership_tier, membershipName(m)),
+            getString(R.string.settings_scoremate_membership_until, m.untilDate ?: getString(R.string.settings_scoremate_membership_no_end)),
+        )
+        m.omrUsed?.let { used ->
+            lines += m.omrLimit?.let { getString(R.string.settings_scoremate_membership_omr_limit, used, it) }
+                ?: getString(R.string.settings_scoremate_membership_omr, used)
+        }
+        if (m.tier == "lite") lines += getString(R.string.settings_scoremate_membership_lite_session)
+        lines += ""
+        lines += getString(R.string.settings_scoremate_membership_manage)
+        val message = lines.joinToString("\n")
+        val url = scoreMateStore.server.trimEnd('/') + ScoreMateProtocol.PATH_MEMBERSHIP_WEB
+        if (isTv) return showQrDialog(url, getString(R.string.settings_scoremate_membership), message)
+        AlertDialog.Builder(this)
+            .setTitle(R.string.settings_scoremate_membership)
+            .setMessage(message)
+            .setPositiveButton(R.string.settings_close, null)
+            .setNeutralButton(R.string.settings_scoremate_membership_web) { _, _ ->
+                try {
+                    startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(url)))
+                } catch (e: android.content.ActivityNotFoundException) {
+                    showQrDialog(url, getString(R.string.settings_scoremate_membership), message)
+                }
+            }
+            .show()
     }
 
     private fun linkScoreMate() {
@@ -591,6 +653,8 @@ class SettingsActivity : AppCompatActivity() {
         lifecycleScope.launch {
             scoreMateSync.forgetAll(deleteFiles)
             val notified = scoreMateClient.unlink()
+            membership = null
+            membershipRequested = false
             Toast.makeText(
                 this@SettingsActivity,
                 if (notified) getString(R.string.settings_scoremate_unlinked_toast) else getString(R.string.settings_scoremate_unlinked_local_toast, device),
@@ -851,10 +915,11 @@ class SettingsActivity : AppCompatActivity() {
                 Log.w("SettingsActivity", "설명서: 브라우저 없음 — QR 로", e)
             }
         }
-        showManualQrDialog(url)
+        showQrDialog(url, getString(R.string.settings_manual_dialog_title), getString(R.string.settings_manual_dialog_message))
     }
 
-    private fun showManualQrDialog(url: String) {
+    /** 주소를 QR 로 (TV — 휴대폰으로 연다) */
+    private fun showQrDialog(url: String, title: String, message: String) {
         val density = resources.displayMetrics.density
         val size = (220 * density).toInt()
         val qr = android.widget.ImageView(this).apply {
@@ -877,8 +942,8 @@ class SettingsActivity : AppCompatActivity() {
             addView(address)
         }
         AlertDialog.Builder(this)
-            .setTitle(R.string.settings_manual_dialog_title)
-            .setMessage(R.string.settings_manual_dialog_message)
+            .setTitle(title)
+            .setMessage(message)
             .setView(content)
             .setPositiveButton(R.string.settings_close, null)
             .show()
@@ -1236,6 +1301,7 @@ class SettingsActivity : AppCompatActivity() {
             "scoremate_link" -> linkScoreMate()
             "scoremate_check" -> checkScoreMate()
             "scoremate_unlink" -> confirmUnlinkScoreMate()
+            "scoremate_membership" -> showMembership()
             "scoremate_sync" -> syncScoreMateNow()
             "scoremate_unhide" -> unhideScoreMate()
             "scoremate_server" -> showScoreMateServerDialog()

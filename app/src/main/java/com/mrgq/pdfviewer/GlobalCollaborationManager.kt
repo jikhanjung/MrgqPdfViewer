@@ -99,6 +99,9 @@ class GlobalCollaborationManager private constructor() {
                 Log.d(TAG, "No collaboration mode to restore")
             }
         }
+        // 합주 동안만 두는 악보 (서버 0.25.0 멤버십) — 합주 모드면 받고, 아니면 남은 것을 지운다(합주 중에 앱이 죽었을 때)
+        if (currentMode != CollaborationMode.NONE) com.mrgq.pdfviewer.scoremate.SessionScores.onEnsembleStarted(context)
+        else com.mrgq.pdfviewer.scoremate.SessionScores.onEnsembleEnded(context)
     }
     
     fun getCurrentMode(): CollaborationMode = currentMode
@@ -114,6 +117,7 @@ class GlobalCollaborationManager private constructor() {
         
         currentMode = CollaborationMode.CONDUCTOR
         preferences?.edit()?.putString("collaboration_mode", "conductor")?.apply()
+        applicationContext?.let { com.mrgq.pdfviewer.scoremate.SessionScores.onEnsembleStarted(it) }
         
         return initializeConductorMode()
     }
@@ -126,12 +130,14 @@ class GlobalCollaborationManager private constructor() {
         
         currentMode = CollaborationMode.PERFORMER
         preferences?.edit()?.putString("collaboration_mode", "performer")?.apply()
+        applicationContext?.let { com.mrgq.pdfviewer.scoremate.SessionScores.onEnsembleStarted(it) }
         
         return initializePerformerMode()
     }
     
     fun deactivateCollaborationMode() {
         Log.d(TAG, "Deactivating collaboration mode - Force cleanup initiated")
+        val wasActive = currentMode != CollaborationMode.NONE
         // 지휘자가 끝내면 연주자들에게 먼저 알린다 — 연주자도 합주 모드를 끝낸다
         if (currentMode == CollaborationMode.CONDUCTOR) {
             try {
@@ -214,6 +220,9 @@ class GlobalCollaborationManager private constructor() {
         
         // Clear callbacks
         clearCallbacks()
+
+        // 합주 동안만 두는 악보를 지운다 (서버 0.25.0 멤버십 — 직접 끄기 · 지휘자가 끝냄 모두 여기로)
+        if (wasActive) applicationContext?.let { com.mrgq.pdfviewer.scoremate.SessionScores.onEnsembleEnded(it) }
         
         Log.d(TAG, "Collaboration mode deactivation complete")
     }

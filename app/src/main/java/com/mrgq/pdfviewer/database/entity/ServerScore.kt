@@ -7,6 +7,7 @@ import androidx.room.PrimaryKey
 /**
  * ScoreMate 서버에서 받은 악보 (v14, P05 C2) — 서버 악보 id ↔ 이 TV 의 파일. `pdf_files` 와는 경로로 이어진다
  * (파일별 설정은 `pdf_files` 쪽). [hidden] 이면 TV 에서 지운 악보 — 파일이 없고 다시 받지 않는다.
+ * [session] 이면 합주 동안만 두는 악보(서버 `retention: session`, v20) — 합주 모드가 아니면 파일이 없다.
  */
 @Entity(tableName = "server_scores")
 data class ServerScore(
@@ -23,4 +24,6 @@ data class ServerScore(
     val syncedAt: Long,
     /** 편곡자 (서버 0.9.0, P06 §10 — v18). 없으면 빈 문자열 */
     @ColumnInfo(defaultValue = "") val arranger: String = "",
+    /** 합주 동안만 (서버 0.25.0 멤버십 — Lite 사용자가 받는 앙상블 악보, v20) */
+    @ColumnInfo(defaultValue = "0") val session: Boolean = false,
 )

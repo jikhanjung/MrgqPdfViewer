@@ -13,6 +13,7 @@
     <string name="scoremate_sync_list_failed">동기화 목록을 받지 못했습니다 (HTTP %1$d)</string>
     <string name="scoremate_sync_bad_response">동기화 응답을 해석하지 못했습니다</string>
     <string name="scoremate_setlists_failed">세트리스트를 받지 못했습니다 (HTTP %1$d)</string>
+    <string name="scoremate_membership_failed">멤버십을 받지 못했습니다 (HTTP %1$d)</string>
     <string name="scoremate_notes_list_failed">메모 목록을 받지 못했습니다 (HTTP %1$d)</string>
     <string name="scoremate_no_download_location">받기 주소가 없습니다 (HTTP %1$d)</string>
     <string name="scoremate_download_failed">악보를 받지 못했습니다 (HTTP %1$d)</string>
@@ -66,6 +67,9 @@
     </plurals>
     <plurals name="scoremate_summary_removed">
         <item quantity="other">%1$d개 지움</item>
+    </plurals>
+    <plurals name="scoremate_summary_evicted">
+        <item quantity="other">합주 때만 두는 악보 %1$d개 지움</item>
     </plurals>
     <plurals name="scoremate_summary_pending">
         <item quantity="other">%1$d개는 서버 처리 중</item>

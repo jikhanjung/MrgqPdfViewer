@@ -157,6 +157,15 @@ class ScoreMateClient(
         return response.body
     }
 
+    /** 멤버십 (서버 0.25.0) — 모르는 서버(404)면 null */
+    suspend fun membership(): ScoreMateProtocol.Membership? {
+        val response = authorized("GET", ScoreMateProtocol.PATH_MEMBERSHIP)
+        if (response.code == 404) return null
+        if (response.code != 200) throw ScoreMateException(UiText(R.string.scoremate_membership_failed, response.code))
+        return ScoreMateProtocol.parseMembership(response.body)
+            ?: throw ScoreMateException(UiText(R.string.scoremate_membership_failed, response.code))
+    }
+
     // ── 악보 메모 (서버 0.17.0, P11 §6) ────────────────────────────────────
 
     /** 메모 목록 원문 — `{"notes": [{score_id, layer, revision, …}], "conductor_writable": […]}`. 서버가 모르면(404) null */

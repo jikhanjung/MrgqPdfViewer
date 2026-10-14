@@ -458,6 +458,27 @@ class MusicDatabaseMigrationTest {
     }
 
     @Test
+    fun v19_에서_v20_은_session_칸을_0_으로_더하고_받은_악보를_보존한다() {
+        helper.createDatabase(TEST_DB, 19).apply {
+            execSQL(
+                "INSERT INTO server_scores (serverId, filePath, versionNumber, sha256, title, composer, partName, ensembleId, " +
+                    "ensembleName, hidden, syncedAt, arranger) VALUES (6, '/x/K488.pdf', 1, 'abc', 'K488', 'Mozart', 'Full Score', 3, '현악', 0, 1000, 'X')"
+            )
+            close()
+        }
+
+        val db = helper.runMigrationsAndValidate(TEST_DB, 20, true, *MusicDatabase.ALL_MIGRATIONS)
+
+        db.query("SELECT title, arranger, session FROM server_scores").use { c ->
+            assertEquals(1, c.count)
+            c.moveToFirst()
+            assertEquals("K488", c.getString(0))
+            assertEquals("X", c.getString(1))
+            assertEquals("늘 두는 악보(keep)로 시작한다", 0L, c.getLong(2))
+        }
+    }
+
+    @Test
     fun v2_to_v3_중앙여백_픽셀이_비율로_변환된다() {
         val db = createDbAt(2, V2_USER_PREFERENCES) {
             it.execSQL(INSERT_FILE)

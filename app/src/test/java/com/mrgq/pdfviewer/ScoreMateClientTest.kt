@@ -100,6 +100,41 @@ class ScoreMateClientTest {
         assertNull(ScoreMateProtocol.normalizeServer("https://"))
     }
 
+    @Test
+    fun 멤버십_응답을_읽는다() {
+        val m = ScoreMateProtocol.parseMembership(
+            """{"tier":"pro","name":"Pro","source":"trial","until":"2026-11-13T09:00:00+09:00",
+               "features":["cloud","notes_sync","omr"],"limits":{"quota_mb":100,"max_devices":null,"omr_pages_month":300},
+               "omr":{"month":"2026-10","used":12,"remaining":288},"trial_available":false}""",
+        )!!
+        assertEquals("pro", m.tier)
+        assertEquals("Pro", m.name)
+        assertTrue(m.isTrial)
+        assertEquals("2026-11-13", m.untilDate)
+        assertEquals(12, m.omrUsed)
+        assertEquals(288, m.omrRemaining)
+        assertEquals(300, m.omrLimit)
+
+        val lite = ScoreMateProtocol.parseMembership("""{"tier":"lite","source":null,"until":null,"limits":{"omr_pages_month":null}}""")!!
+        assertEquals("이름이 없으면 등급", "lite", lite.name)
+        assertFalse(lite.isTrial)
+        assertNull(lite.untilDate)
+        assertNull(lite.omrUsed)
+        assertNull("한도 없음", lite.omrLimit)
+        assertNull(ScoreMateProtocol.parseMembership("""{"name":"Pro"}"""))
+    }
+
+    @Test
+    fun 멤버십을_모르는_서버면_null() = runBlocking {
+        val store = MemoryStore(Tokens("a1", "r1", "d-1"))
+        val old = ScoreMateClient(store) { HttpResponse(404, "") }
+        assertNull(old.membership())
+        val new = ScoreMateClient(store) { r ->
+            if (r.url.endsWith(ScoreMateProtocol.PATH_MEMBERSHIP)) HttpResponse(200, """{"tier":"maestro","name":"Maestro"}""") else HttpResponse(404, "")
+        }
+        assertEquals("Maestro", new.membership()!!.name)
+    }
+
     // ── 클라이언트 ──────────────────────────────────────────────────────────
 
     /** 서버 흉내: access 는 현재 것만 받고, refresh 는 회전(이전 것은 무효 — 쓰면 401) */

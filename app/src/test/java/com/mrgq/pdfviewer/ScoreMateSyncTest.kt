@@ -83,6 +83,8 @@ class ScoreMateSyncTest {
         var layout: String? = null,
         var composer: String = "",
         var arranger: String = "",
+        /** `retention` (서버 0.25.0 멤버십) — null 이면 싣지 않는다(= keep) */
+        var retention: String? = null,
     )
 
     /** 서버 흉내: 커서 = 마지막으로 보낸 변경 번호. 받기는 302 → 서명 URL(인증 없이만 받아 준다) */
@@ -186,7 +188,7 @@ class ScoreMateSyncTest {
                 """{"id":${s.id},"title":"${s.title}","composer":"${s.composer}","arranger":"${s.arranger}","part_name":"${s.part}","ensemble":$ensemble,
                    "version":{"number":${s.version},"sha256":$sha,"size_bytes":${s.content.length}},
                    "download_url":"http://internal:8000/api/v1/scores/${s.id}/download/",
-                   "musicxml":${xmlJson(s)},"layout":${layoutJson(s)}}"""
+                   "musicxml":${xmlJson(s)},"layout":${layoutJson(s)}${s.retention?.let { ",\"retention\":\"$it\"" } ?: ""}}"""
             }
             val ids = scores.keys.joinToString(",")
             return HttpResponse(200, """{"cursor":"$end","has_more":${end < changes.size},"scores":[$items],"ids":[$ids]}""")
@@ -252,7 +254,8 @@ class ScoreMateSyncTest {
     private val tokens = Tok()
     private val db = Db()
     private val records = Records()
-    private fun sync() = ScoreMateSync(ScoreMateClient(tokens, server), tokens, db, records, root)
+    private var ensemble = false
+    private fun sync() = ScoreMateSync(ScoreMateClient(tokens, server), tokens, db, records, root, inEnsemble = { ensemble })
     private fun file(vararg parts: String) = File(root, (listOf("ScoreMate") + parts).joinToString("/"))
 
     @Test
@@ -637,6 +640,101 @@ class ScoreMateSyncTest {
         notesOf(file("현악 4중주", "몰다우.pdf")).writeText("mine")
         sync().forgetAll(deleteFiles = false)
         assertEquals("mine", File(root, "몰다우.notes.json").readText())
+    }
+
+    // ── 합주 동안만 두는 악보 (서버 0.25.0 멤버십 retention: session) ──
+
+    @Test
+    fun 합주_밖에서는_session_악보를_받지_않고_행만_둔다() = runBlocking {
+        server.put(Score(1, "몰다우", "v1", retention = "session"))
+        server.put(Score(2, "아리랑", "a", retention = "keep"))
+        val report = sync().sync()
+        assertEquals(1, report.downloaded)
+        assertFalse(file("현악 4중주", "몰다우.pdf").exists())
+        assertTrue(file("현악 4중주", "아리랑.pdf").exists())
+        val row = db.rows.getValue(1)
+        assertTrue(row.session)
+        assertEquals(file("현악 4중주", "몰다우.pdf").path, row.filePath)
+        assertFalse(db.rows.getValue(2).session)
+        assertEquals("커서는 그대로 넘긴다", "2", tokens.syncCursor)
+        assertFalse("다시 해도 받지 않는다", sync().sync().changed)
+        assertEquals(1, server.downloads)
+    }
+
+    @Test
+    fun keep_이_session_이_되면_파일을_지우고_메모는_보관_레코드는_남긴다() = runBlocking {
+        val s = Score(1, "몰다우", "v1", xml = "<x/>")
+        server.put(s)
+        sync().sync()
+        val pdf = file("현악 4중주", "몰다우.pdf")
+        notesOf(pdf).writeText("mine")
+        s.retention = "session"
+        server.put(s)
+        val report = sync().sync()
+        assertEquals(1, report.evicted)
+        assertTrue(report.changed)
+        assertFalse(pdf.exists())
+        assertFalse(ScoreMateSync.musicXmlFileOf(pdf).exists())
+        assertEquals("mine", File(root, ".ScoreMateNotes/1.notes.json").readText())
+        assertTrue("파일별 설정(레코드)은 남긴다", records.deletes.isEmpty())
+        assertTrue(db.rows.getValue(1).session)
+        // session → keep: 파일이 없으니 그냥 받고 메모가 돌아온다
+        s.retention = null
+        server.put(s)
+        assertEquals(1, sync().sync().downloaded)
+        assertTrue(pdf.exists())
+        assertEquals("mine", notesOf(pdf).readText())
+        assertFalse(db.rows.getValue(1).session)
+    }
+
+    @Test
+    fun 합주가_시작되면_session_악보만_곁_파일까지_받고_끝나면_지운다() = runBlocking {
+        server.put(Score(1, "몰다우", "v1", xml = "<x/>", layout = "{}", retention = "session"))
+        server.put(Score(2, "아리랑", "a"))
+        sync().sync()
+        val pdf = file("현악 4중주", "몰다우.pdf")
+        // 앞선 합주에서 쓴 메모가 보관함에 있다
+        File(root, ".ScoreMateNotes").mkdirs()
+        File(root, ".ScoreMateNotes/1.notes.json").writeText("mine")
+        val cursor = tokens.syncCursor
+        val downloadsBefore = server.downloads
+
+        assertEquals("합주 모드가 아니면 아무것도 안 한다", 0, sync().fetchSessionScores().downloaded)
+        ensemble = true
+        val report = sync().fetchSessionScores()
+        assertEquals(1, report.downloaded)
+        assertEquals(1, report.musicXml)
+        assertEquals(1, report.layouts)
+        assertEquals("session 악보만", downloadsBefore + 1, server.downloads)
+        assertEquals("v1", pdf.readText())
+        assertEquals("mine", notesOf(pdf).readText())
+        assertEquals("커서는 건드리지 않는다", cursor, tokens.syncCursor)
+        server.put(server.scores.getValue(1))
+        assertEquals("합주 중 일반 동기화는 지우지 않는다", 0, sync().sync().evicted)
+        assertTrue(pdf.exists())
+
+        assertEquals("합주 중에는 지우지 않는다", 0, sync().evictSessionScores())
+        ensemble = false
+        assertEquals(1, sync().evictSessionScores())
+        assertFalse(pdf.exists())
+        assertFalse(ScoreMateSync.musicXmlFileOf(pdf).exists())
+        assertFalse(ScoreMateSync.layoutFileOf(pdf).exists())
+        assertEquals("mine", File(root, ".ScoreMateNotes/1.notes.json").readText())
+        assertTrue(file("현악 4중주", "아리랑.pdf").exists())
+        assertTrue("행은 남는다", db.rows.getValue(1).session)
+        assertTrue(records.deletes.isEmpty())
+        assertEquals(0, sync().evictSessionScores())
+    }
+
+    @Test
+    fun retention_이_없으면_keep() {
+        val page = ScoreMateSync.parsePage(
+            """{"cursor":"1","has_more":false,"ids":[1,2,3],"scores":[
+              {"id":1,"title":"a","version":{"sha256":"x"}},
+              {"id":2,"title":"b","version":{"sha256":"x"},"retention":"keep"},
+              {"id":3,"title":"c","version":{"sha256":"x"},"retention":"session"}]}""",
+        )!!
+        assertEquals(listOf(false, false, true), page.scores.map { it.session })
     }
 
     // ── 메모 서버 동기화 (P11 §6, 서버 0.17.0) — 개인 메모 ──
