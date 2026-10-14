@@ -33,10 +33,10 @@ class ScoreMateLocal(context: Context) : SyncedScoreStore, LocalPdfRecords {
     override suspend fun afterDelete(path: String) = pdfFiles.deleteByPath(path)
 
     private fun ServerScore.toModel() = SyncedScore(
-        serverId, filePath, versionNumber, sha256, title, composer, partName, ensembleId, ensembleName, hidden, syncedAt, arranger, session,
+        serverId, filePath, versionNumber, sha256, title, composer, partName, ensembleId, ensembleName, hidden, syncedAt, arranger, session, sessionAccessAt,
     )
 
     private fun SyncedScore.toEntity() = ServerScore(
-        serverId, filePath, versionNumber, sha256, title, composer, partName, ensembleId, ensembleName, hidden, syncedAt, arranger, session,
+        serverId, filePath, versionNumber, sha256, title, composer, partName, ensembleId, ensembleName, hidden, syncedAt, arranger, session, sessionAccessAt,
     )
 }

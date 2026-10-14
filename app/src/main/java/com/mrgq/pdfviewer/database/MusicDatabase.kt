@@ -257,11 +257,12 @@ abstract class MusicDatabase : RoomDatabase() {
             }
         }
 
-        // Migration from version 19 to 20 (server_scores.session — 합주 동안만 두는 악보, 서버 0.25.0 멤버십 retention)
+        // Migration from version 19 to 20 (server_scores.session · sessionAccessAt — 합주 동안만 두는 악보와 그 캐시의 마지막 접근, 서버 0.25.0 멤버십 retention)
         // 0 으로 둔다 — 서버가 범위가 바뀐 앙상블 악보의 updated_at 을 올려 다음 동기화가 채운다
         private val MIGRATION_19_20 = object : Migration(19, 20) {
             override fun migrate(database: SupportSQLiteDatabase) {
                 database.execSQL("ALTER TABLE server_scores ADD COLUMN session INTEGER NOT NULL DEFAULT 0")
+                database.execSQL("ALTER TABLE server_scores ADD COLUMN sessionAccessAt INTEGER NOT NULL DEFAULT 0")
             }
         }
 

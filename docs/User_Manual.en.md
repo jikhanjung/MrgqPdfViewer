@@ -76,7 +76,7 @@ ScoreMate is a website for managing scores and setlists. A linked device downloa
 - If ScoreMate has MusicXML or analysis data for a piece, it is downloaded too. It is used by accompaniment (6.4), listen & turn pages (6.5) and the letter command (chapter 8).
 
 **Membership**: the **Settings → ☁️ ScoreMate → Membership** row shows your plan (Lite · Pro · Maestro) and when it ends. Tap it to also see this month's score recognition usage. Coupons, trials and other membership changes are made **on the web** (a TV shows a QR code).
-- On the **Lite** plan, ensemble scores from a Maestro leader stay on this device **only during ensemble mode** — they are downloaded when an ensemble (chapter 9) starts and removed when it ends. Notes you wrote on them are kept and come back next time.
+- On the **Lite** plan, ensemble scores from a Maestro leader appear in the list **only during ensemble mode** — they show up when an ensemble (chapter 9) starts and are hidden when it ends. Hidden scores come back right away at the next ensemble (even offline) and are removed if **not opened for 30 days** (downloaded again at the next ensemble). Notes you wrote on them are kept.
 
 **Unlinking**: **Settings → ☁️ ScoreMate → Unlink**. Choose whether to **keep or delete** the downloaded scores. Kept scores become ordinary files on this device.
 

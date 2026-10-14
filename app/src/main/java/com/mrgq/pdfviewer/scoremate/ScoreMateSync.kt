@@ -56,8 +56,10 @@ data class SyncedScore(
     val syncedAt: Long = 0L,
     /** 편곡자 (v18) */
     val arranger: String = "",
-    /** 합주 동안만 두는 악보 (v20, [RemoteScore.session]) — 합주 모드가 아니면 파일이 없다(행 · 레코드는 남는다) */
+    /** 합주 동안만 두는 악보 (v20, [RemoteScore.session]) — 합주 모드가 아니면 서재에 없다(숨은 캐시에 있거나 없다, 행 · 레코드는 남는다) */
     val session: Boolean = false,
+    /** 합주용 악보의 마지막 접근(합주 중 처음 받음 · 뷰어로 엶, 밀리초, v20) — 그 뒤 [ScoreMateSync.SESSION_CACHE_DAYS] 지나면 캐시를 버린다 */
+    val sessionAccessAt: Long = 0L,
 )
 
 /** 받아 둔 서버 악보 저장소 (Room 구현은 repository, 테스트는 메모리) */
@@ -91,7 +93,7 @@ data class SyncReport(
     val updated: Int = 0,
     /** 세트리스트(곡목 · 순서 · 메모)가 바뀌었다 (#064) */
     val setlistsChanged: Boolean = false,
-    /** 합주 동안만 두는 악보라 지운 것 (서버 0.25.0 멤버십) — 목록을 다시 그려야 한다 */
+    /** 합주 동안만 두는 악보라 서재에서 숨은 캐시로 옮긴 것 (서버 0.25.0 멤버십) — 목록을 다시 그려야 한다 */
     val evicted: Int = 0,
     /** 실패마다 화면 글 (P18 — 키 + 인자, [ScoreMateSyncText.summary] 가 첫 것을 보인다) */
     val errors: List<UiText> = emptyList(),
@@ -124,11 +126,15 @@ data class SyncReport(
  * 5. 세트리스트, 6. 악보 메모(개인) 올리기 · 받기 — [ScoreNotesSync] (P11 §6, 서버 0.17.0)
  *
  * **합주 동안만 두는 악보**(`retention: session`, 서버 0.25.0 멤버십 · 서버 devlog 084) — Lite 사용자가 Maestro 리더의 앙상블에서 받는 악보.
- * 행(곡 정보 + [SyncedScore.session])은 늘 두고 **파일은 합주 모드 동안만**:
- *  - 합주 모드가 아니면([inEnsemble] false) 받지 않고, 있으면 지운다 — 개인 메모는 보관함으로, `pdf_files` 레코드는 남긴다(곡목에서 빠질 때와 같게)
- *  - 합주 모드가 시작되면 [fetchSessionScores] (커서는 그대로, 목록을 처음부터 한 번 받아 session 악보만 + 곁 파일),
- *    끝나면 [evictSessionScores]. 앱을 켤 때 합주 모드가 아니면 남은 것을 지운다(비정상 종료 대비) — [SessionScores]
- *  - keep ↔ session 이 바뀌면 다음 동기화가 맞춘다(서버가 그 악보의 updated_at 을 올린다)
+ * 행(곡 정보 + [SyncedScore.session])은 늘 두고 **서재(목록)에는 합주 모드 동안만** (사용자 결정 — "합주가 끝나면 바로 지우지는 말고
+ * 캐시처럼 가지고 있되 보여주지는 마. 정해진 기간 동안 액세스가 없으면 그때 지우고, 다시 접근하면 리셋"):
+ *  - 합주 모드가 아니면([inEnsemble] false) 받지 않고, 서재에 있으면 숨은 캐시(`PDFs/.ScoreMateSession/<서버 id>.pdf`, 곁 파일 · 메모 함께)로
+ *    옮긴다. `pdf_files` 레코드는 원래 경로에 남겨 되돌리면 설정이 그대로
+ *  - 합주 모드가 시작되면 [fetchSessionScores] — 캐시에서 되돌리고(오프라인도, 판이 다르면 버리고 받음), 캐시에 없던 것은 받는다
+ *    (커서는 그대로, 목록을 처음부터 한 번). 끝나면 [evictSessionScores]. 앱을 켤 때 합주 모드가 아니면 서재에 남은 것을 캐시로 — [SessionScores]
+ *  - 마지막 접근([SyncedScore.sessionAccessAt] — 합주 중 처음 받음 · 뷰어로 엶 [touchSession], 캐시에서 되돌린 것은 아님) 뒤
+ *    [SESSION_CACHE_DAYS] 가 지나면 캐시를 버린다(메모는 보관함, 행은 남아 다음 합주에 다시 받음). 동기화 · 합주 끝에 확인
+ *  - keep → session 이면 서재 파일을 캐시로(접근 = 지금), session → keep 이면 캐시에서 서재로 되돌린다(다음 동기화)
  *
  * 합주 중 · 악보를 보는 중에는 부르지 않는다 (파일 목록 화면에서만 — 열린 파일을 바꾸지 않게).
  * Android 에 의존하지 않는다 — JVM 단위 테스트 대상 (임시 폴더 + 가짜 서버).
@@ -241,6 +247,8 @@ class ScoreMateSync(
             removed++
         }
         removeEmptyFolders()
+        // 합주용 악보 캐시 — 오래 안 연 것 · 서버가 이제 주지 않는 것을 버린다
+        if (!inEnsemble()) purgeCache(ids)
 
         // 4. 모두 됐을 때만 커서를 넘긴다
         if (errors.isEmpty()) {
@@ -275,21 +283,35 @@ class ScoreMateSync(
     }
 
     /**
-     * 합주 모드가 시작됐다 — 합주 동안만 두는 악보를 모두 받는다(곁 파일까지). 커서는 건드리지 않고 목록을 처음부터 한 번 받아 session 악보만.
-     * 다른 악보는 그대로 둔다(일반 동기화가 맡는다). [inEnsemble] 이 false 면 아무것도 안 한다
+     * 합주 모드가 시작됐다 — 합주 동안만 두는 악보를 서재에 둔다. 먼저 숨은 캐시에서 되돌리고(네트워크 없이), 이어서 커서는 건드리지 않고
+     * 목록을 처음부터 한 번 받아 캐시에 없던 session 악보를 받는다(곁 파일까지). 다른 악보는 그대로(일반 동기화가 맡는다).
+     * 목록을 못 받아도(오프라인) 되돌린 것은 남는다 — 실패는 [SyncReport.errors]. [inEnsemble] 이 false 면 아무것도 안 한다
      */
     suspend fun fetchSessionScores(): SyncReport = RUNNING.withLock {
         if (!inEnsemble()) return@withLock SyncReport() // 차례를 기다리는 동안 합주가 끝났다
-        val pages = fetchAll(null)
+        // 1. 캐시에서 되돌리기 — 내용(sha)이 행의 판과 같을 때만, 다르면 캐시를 버린다(새 판은 아래에서 받는다)
+        var downloaded = 0
+        for (row in store.all()) {
+            if (!row.session || row.hidden || File(row.filePath).isFile) continue
+            if (unstash(row.serverId, row.sha256, File(row.filePath))) downloaded++
+        }
+        // 2. 캐시에 없던 것 받기
+        val errors = mutableListOf<UiText>()
+        var musicXml = 0
+        var layouts = 0
+        val pages = try {
+            fetchAll(null)
+        } catch (e: ScoreMateUnlinkedException) {
+            throw e
+        } catch (e: ScoreMateException) {
+            errors += e.text
+            return@withLock SyncReport(downloaded = downloaded, errors = errors)
+        }
         val incoming = LinkedHashMap<Long, RemoteScore>()
         pages.forEach { page -> page.scores.forEach { incoming[it.id] = it } }
         val ids = pages.last().ids
         val keep = store.all().associateBy { it.serverId }.filterKeys { it in ids }
         val names = assignPaths(keep, incoming)
-        val errors = mutableListOf<UiText>()
-        var downloaded = 0
-        var musicXml = 0
-        var layouts = 0
         for (remote in incoming.values) {
             if (!remote.session) continue
             val target = names[remote.id] ?: continue
@@ -310,42 +332,129 @@ class ScoreMateSync(
     }
 
     /**
-     * 합주 모드가 끝났다(또는 앱을 켰는데 합주 모드가 아니다) — 합주 동안만 두는 악보의 파일을 지운다. 지운 수.
-     * 행 · `pdf_files` 레코드는 남기고 개인 메모는 보관함으로(다시 받으면 돌아온다). [inEnsemble] 이면 아무것도 안 한다
+     * 합주 모드가 끝났다(또는 앱을 켰는데 합주 모드가 아니다) — 합주 동안만 두는 악보를 서재에서 숨은 캐시로 옮긴다(곁 파일 · 메모 함께,
+     * `pdf_files` 레코드는 원래 경로에 남아 되돌리면 설정이 돌아온다). 오래 열지 않은 캐시는 버린다. 옮긴 수. [inEnsemble] 이면 아무것도 안 한다
      */
     suspend fun evictSessionScores(): Int = RUNNING.withLock {
         if (inEnsemble()) return@withLock 0 // 차례를 기다리는 동안 합주가 다시 시작됐다 (지휘자 ↔ 연주자 바꾸기 등)
         var n = 0
         for (score in store.all()) {
             if (!score.session || score.hidden) continue
-            if (evictFile(score.serverId, File(score.filePath))) n++
+            if (stash(score.serverId, File(score.filePath))) {
+                n++
+                if (score.sessionAccessAt == 0L) store.upsert(score.copy(sessionAccessAt = now()))
+            }
         }
         removeEmptyFolders()
+        purgeCache(ids = null)
         n
     }
 
-    /** 합주 동안만 두는 악보를 합주 밖에서 — 곡 정보 · session 표시만 맞추고 파일은 지운다. 지웠으면 true */
+    /** 뷰어가 [filePath] 를 열었다 — 합주 동안만 두는 악보면 마지막 접근을 지금으로(캐시가 [SESSION_CACHE_DAYS] 동안 남는다) */
+    suspend fun touchSession(filePath: String) = RUNNING.withLock {
+        val row = store.all().firstOrNull { it.filePath == filePath && it.session && !it.hidden } ?: return@withLock
+        store.upsert(row.copy(sessionAccessAt = now()))
+    }
+
+    /** 합주 동안만 두는 악보를 합주 밖에서 — 곡 정보 · session 표시만 맞추고, 서재에 파일이 있으면 캐시로 옮긴다. 옮겼으면 true */
     private suspend fun keepSessionRow(remote: RemoteScore, sha: String, existing: SyncedScore?, target: File): Boolean {
-        val removed = existing != null && evictFile(remote.id, File(existing.filePath))
-        // 이름이 바뀌었으면 파일별 설정(레코드)을 새 자리로 — 합주 때 그 자리로 받는다
+        val stashed = existing != null && stash(remote.id, File(existing.filePath))
+        // 이름이 바뀌었으면 파일별 설정(레코드)을 새 자리로 — 합주 때 그 자리로 되돌린다
         if (existing != null && existing.filePath != target.path) records.beforeMove(existing.filePath, target.path)
         store.upsert(
             SyncedScore(
                 serverId = remote.id, filePath = target.path, versionNumber = remote.versionNumber, sha256 = sha,
                 title = remote.title, composer = remote.composer, partName = remote.partName, arranger = remote.arranger,
                 ensembleId = remote.ensembleId, ensembleName = remote.ensembleName, syncedAt = now(), session = true,
+                // keep → session(등급이 내려감)이면 지금부터 센다
+                sessionAccessAt = existing?.takeIf { it.session && it.sessionAccessAt > 0 }?.sessionAccessAt ?: now(),
             ),
         )
-        return removed
+        return stashed
     }
 
-    /** PDF 와 서버 곁 파일을 지운다 — 개인 메모(· 올리지 못한 지휘자 메모)는 보관함으로, `pdf_files` 레코드는 남긴다 */
-    private fun evictFile(serverId: Long, pdf: File): Boolean {
+    // ── 합주용 악보의 숨은 캐시 `PDFs/.ScoreMateSession/<서버 id>.pdf` + 같은 이름 곁 파일 (목록에 안 보인다) ──
+
+    private val sessionCacheDir: File get() = File(pdfRoot, SESSION_CACHE_FOLDER)
+    private fun cachedPdf(serverId: Long) = File(sessionCacheDir, "$serverId.pdf")
+
+    /** 서재 → 캐시 (서버 곁 파일 · 메모 함께). 옮겼으면 true. 못 옮기면 지운다 — 합주 밖에서는 서재에 두지 않는다(메모는 보관함) */
+    private fun stash(serverId: Long, pdf: File): Boolean {
         if (!pdf.isFile) return false
-        keepNotes(serverId, pdf)
-        pdf.delete()
-        serverSidecarsOf(pdf).forEach { it.delete() }
+        dropCache(serverId) // 남은 옛 캐시 — 서재 것이 새것
+        sessionCacheDir.mkdirs()
+        val cached = cachedPdf(serverId)
+        if (!pdf.renameTo(cached)) {
+            keepNotes(serverId, pdf)
+            pdf.delete()
+            serverSidecarsOf(pdf).forEach { it.delete() }
+            return true
+        }
+        moveSidecars(pdf, cached)
         return true
+    }
+
+    /** 캐시 → 서재 [target]. 내용이 [sha] 와 같을 때만 — 다르면(새 판) 캐시를 버린다(메모는 보관함 — 받으면 돌아온다). 되돌렸으면 true */
+    private fun unstash(serverId: Long, sha: String, target: File): Boolean {
+        val cached = cachedPdf(serverId)
+        if (!cached.isFile) return false
+        if (target.exists() || sha256Of(cached) != sha.lowercase()) {
+            dropCache(serverId)
+            return false
+        }
+        target.parentFile?.mkdirs()
+        if (!cached.renameTo(target)) {
+            dropCache(serverId)
+            return false
+        }
+        moveSidecars(cached, target)
+        sessionCacheDir.takeIf { it.listFiles()?.isEmpty() == true }?.delete()
+        return true
+    }
+
+    /** 캐시를 버린다 — 개인 메모 · 올리지 못한 지휘자 메모는 보관함으로(다시 받으면 돌아온다) */
+    private fun dropCache(serverId: Long) {
+        val cached = cachedPdf(serverId)
+        keepNotes(serverId, cached)
+        cached.delete()
+        serverSidecarsOf(cached).forEach { it.delete() }
+        sessionCacheDir.takeIf { it.listFiles()?.isEmpty() == true }?.delete()
+    }
+
+    /**
+     * 캐시 정리 — 마지막 접근 뒤 [SESSION_CACHE_DAYS] 가 지났거나, 행이 없거나 · 숨겼거나 · session 이 아니거나, [ids](지금 서버가 주는 것) 밖이면
+     * 버린다. 행은 남는다(다음 합주에 다시 받는다). 버린 수
+     */
+    private suspend fun purgeCache(ids: Set<Long>?): Int {
+        val files = sessionCacheDir.listFiles() ?: return 0
+        val rows = store.all().associateBy { it.serverId }
+        var n = 0
+        for (pdf in files.filter { it.isFile && it.extension == "pdf" }) {
+            val id = pdf.nameWithoutExtension.toLongOrNull() ?: continue
+            val row = rows[id]
+            val stale = row == null || row.hidden || !row.session || (ids != null && id !in ids) ||
+                now() - row.sessionAccessAt > SESSION_CACHE_DAYS * DAY_MS
+            if (stale) {
+                dropCache(id)
+                n++
+            }
+        }
+        // PDF 없이 남은 곁 파일(메모는 dropCache 가 옮겼다)
+        sessionCacheDir.listFiles()?.filter { f -> f.isFile && f.name.substringBefore('.').toLongOrNull()?.let { !cachedPdf(it).exists() } == true }
+            ?.forEach { f ->
+                val id = f.name.substringBefore('.').toLong()
+                if (f.name.endsWith(ScoreNotesFile.SUFFIX) && !f.name.endsWith(ScoreNotesFile.CONDUCTOR_SUFFIX)) moveToKept(f, File(keptNotesDir, "$id${ScoreNotesFile.SUFFIX}"))
+                else f.delete()
+            }
+        sessionCacheDir.takeIf { it.listFiles()?.isEmpty() == true }?.delete()
+        return n
+    }
+
+    /** 연결을 끊을 때 — 캐시를 모두 버린다(메모는 보관함) */
+    private fun dropAllCache() {
+        sessionCacheDir.listFiles()?.mapNotNull { it.takeIf { f -> f.extension == "pdf" }?.nameWithoutExtension?.toLongOrNull() }
+            ?.forEach { dropCache(it) }
+        sessionCacheDir.deleteRecursively()
     }
 
     /** TV 에서 지운 서버 악보 — 목록에서 빼고 다시 받지 않는다. 파일은 호출한 쪽이 지웠다 */
@@ -370,6 +479,7 @@ class ScoreMateSync(
      * 로컬 파일뿐이라(#063) 그대로 두면 보이지 않는다. 레코드를 먼저 옮겨 파일별 설정이 따라간다. 이름이 겹치면 ` (2)`
      */
     suspend fun forgetAll(deleteFiles: Boolean) {
+        dropAllCache()
         for (score in store.all()) {
             if (!score.hidden) {
                 val file = File(score.filePath)
@@ -411,6 +521,7 @@ class ScoreMateSync(
             serverId = remote.id, filePath = target.path, versionNumber = remote.versionNumber, sha256 = sha,
             title = remote.title, composer = remote.composer, partName = remote.partName, arranger = remote.arranger,
             ensembleId = remote.ensembleId, ensembleName = remote.ensembleName, syncedAt = now(), session = remote.session,
+            sessionAccessAt = if (remote.session) existing?.sessionAccessAt ?: 0L else 0L,
         )
         val currentFile = existing?.let { File(it.filePath) }
         val haveContent = existing != null && existing.sha256 == sha && currentFile!!.isFile
@@ -437,6 +548,13 @@ class ScoreMateSync(
             return Change.DOWNLOADED
         }
 
+        // 합주용 악보 캐시에 같은 판이 있다 — 받지 않고 되돌린다(곁 파일 · 메모 함께)
+        if (currentFile?.isFile != true && unstash(remote.id, sha, target)) {
+            store.upsert(record)
+            restoreNotes(remote.id, target)
+            return Change.DOWNLOADED
+        }
+
         val part = File(target.path + ".part")
         target.parentFile?.mkdirs()
         client.downloadScore(remote.downloadUrl, part)
@@ -456,7 +574,8 @@ class ScoreMateSync(
             target.delete()
             if (!part.renameTo(target)) throw ScoreMateException(UiText(R.string.scoremate_save_failed))
         }
-        store.upsert(record)
+        // 합주 중에 처음 받았다 = 접근
+        store.upsert(if (remote.session) record.copy(sessionAccessAt = now()) else record)
         restoreNotes(remote.id, target)
         return Change.DOWNLOADED
     }
@@ -678,6 +797,13 @@ class ScoreMateSync(
 
         /** 동기화가 지운 악보의 메모 보관함 (`PDFs/` 아래, 점으로 시작해 목록에 안 보인다) */
         const val NOTES_KEPT_FOLDER = ".ScoreMateNotes"
+
+        /** 합주 동안만 두는 악보의 숨은 캐시 (`PDFs/` 아래, 목록에 안 보인다) */
+        const val SESSION_CACHE_FOLDER = ".ScoreMateSession"
+
+        /** 합주용 악보 캐시를 마지막 접근 뒤 이만큼 둔다 (ScoreMate 앱과 같게) */
+        const val SESSION_CACHE_DAYS = 30L
+        private const val DAY_MS = 24L * 60 * 60 * 1000
 
         /** 절대 URL 이면 경로(+쿼리)만 */
         fun pathOf(url: String): String {

@@ -11,12 +11,13 @@ import kotlinx.coroutines.launch
 import java.io.File
 
 /**
- * 합주 동안만 두는 악보 (서버 0.25.0 멤버십 `retention: session`, 서버 devlog 084) — 합주 모드가 바뀔 때 받고 지운다.
+ * 합주 동안만 두는 악보 (서버 0.25.0 멤버십 `retention: session`, 서버 devlog 084) — 합주 모드가 바뀔 때 서재에 두고 숨긴다.
  * 계산은 [ScoreMateSync.fetchSessionScores] · [ScoreMateSync.evictSessionScores], 여기는 언제 부를지만.
  *
  * - 합주 모드 시작(지휘자 · 연주자, 앱을 켤 때 저장된 합주 모드를 되살릴 때도) → 받기
- * - 합주 모드 끝(직접 끄기 · 지휘자가 끝냄) → 지우기
- * - 앱을 켤 때 합주 모드가 아니면 → 지우기 (합주 중에 앱이 죽었을 때)
+ * - 합주 모드 끝(직접 끄기 · 지휘자가 끝냄) → 서재에서 숨은 캐시로 (30일 동안 열지 않으면 버림)
+ * - 앱을 켤 때 합주 모드가 아니면 → 캐시로 (합주 중에 앱이 죽었을 때)
+ * - 뷰어가 열면 → 마지막 접근 [touch]
  *
  * 순서는 [ScoreMateSync] 의 잠금이 지킨다(받기 · 지우기 · 일반 동기화가 차례로). 연결 안 된 기기는 아무것도 안 한다.
  * 바뀐 것이 있으면 [onChanged] (주 스레드 — 목록 화면이 다시 읽는다)
@@ -37,8 +38,14 @@ object SessionScores {
 
     fun onEnsembleEnded(context: Context) = inBackground(context, "evict") { sync ->
         val n = sync.evictSessionScores()
-        Log.i(TAG, "evicted $n")
+        Log.i(TAG, "stashed $n")
         n > 0
+    }
+
+    /** 뷰어가 파일을 열었다 — 합주용 악보면 마지막 접근을 지금으로 (캐시가 30일 더 남는다) */
+    fun touch(context: Context, filePath: String) = inBackground(context, "touch") { sync ->
+        sync.touchSession(filePath)
+        false
     }
 
     /** 지금 합주 모드인가 (지휘자 · 연주자) — [ScoreMateSync] 의 `inEnsemble` */

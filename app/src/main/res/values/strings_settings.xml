@@ -91,7 +91,7 @@
     <string name="settings_scoremate_membership_no_end">기한 없음</string>
     <string name="settings_scoremate_membership_omr">이번 달 악보 인식: %1$d쪽</string>
     <string name="settings_scoremate_membership_omr_limit">이번 달 악보 인식: %1$d / %2$d쪽</string>
-    <string name="settings_scoremate_membership_lite_session">합주 악보는 합주 모드 동안만 이 기기에 둡니다(합주가 끝나면 지움 — 메모는 남습니다).</string>
+    <string name="settings_scoremate_membership_lite_session">합주 악보는 합주 모드 동안만 목록에 보입니다. 합주가 끝나면 숨겨 두었다가 30일 동안 열지 않으면 지웁니다(메모는 남습니다).</string>
     <string name="settings_scoremate_membership_manage">쿠폰 입력 · 체험 시작 등 멤버십 관리는 웹에서 합니다.</string>
     <string name="settings_scoremate_membership_web">웹에서 관리</string>
     <string name="settings_scoremate_sync">지금 동기화</string>

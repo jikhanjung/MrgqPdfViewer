@@ -91,7 +91,7 @@
     <string name="settings_scoremate_membership_no_end">No end date</string>
     <string name="settings_scoremate_membership_omr">Score recognition this month: %1$d pages</string>
     <string name="settings_scoremate_membership_omr_limit">Score recognition this month: %1$d / %2$d pages</string>
-    <string name="settings_scoremate_membership_lite_session">Ensemble scores stay on this device only during ensemble mode (removed when the ensemble ends — your notes are kept).</string>
+    <string name="settings_scoremate_membership_lite_session">Ensemble scores appear in the list only during ensemble mode. When the ensemble ends they are hidden, and removed if not opened for 30 days (your notes are kept).</string>
     <string name="settings_scoremate_membership_manage">Coupons, trials and other membership changes are made on the web.</string>
     <string name="settings_scoremate_membership_web">Manage on the web</string>
     <string name="settings_scoremate_sync">Sync now</string>

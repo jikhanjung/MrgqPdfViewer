@@ -535,6 +535,7 @@ class PdfViewerActivity : AppCompatActivity() {
     }
     
     private fun loadPdf() {
+        com.mrgq.pdfviewer.scoremate.SessionScores.touch(this, pdfFilePath) // 합주용 악보면 캐시를 30일 더 (서버 0.25.0 멤버십)
         CoroutineScope(Dispatchers.IO).launch {
             try {
                 Log.d("PdfViewerActivity", "Loading PDF: $pdfFilePath")
@@ -3653,6 +3654,7 @@ class PdfViewerActivity : AppCompatActivity() {
     }
     
     private fun loadPdfWithTargetPage(targetPage: Int) {
+        com.mrgq.pdfviewer.scoremate.SessionScores.touch(this, pdfFilePath) // 합주용 악보면 캐시를 30일 더 (서버 0.25.0 멤버십)
         CoroutineScope(Dispatchers.IO).launch {
             try {
                 Log.d("PdfViewerActivity", "Loading PDF with target page: $pdfFilePath (target: $targetPage)")

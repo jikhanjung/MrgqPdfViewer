@@ -343,7 +343,7 @@
       },
       {
         "tableName": "server_scores",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`serverId` INTEGER NOT NULL, `filePath` TEXT NOT NULL, `versionNumber` INTEGER NOT NULL, `sha256` TEXT NOT NULL, `title` TEXT NOT NULL, `composer` TEXT NOT NULL, `partName` TEXT NOT NULL, `ensembleId` INTEGER, `ensembleName` TEXT, `hidden` INTEGER NOT NULL, `syncedAt` INTEGER NOT NULL, `arranger` TEXT NOT NULL DEFAULT '', `session` INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(`serverId`))",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`serverId` INTEGER NOT NULL, `filePath` TEXT NOT NULL, `versionNumber` INTEGER NOT NULL, `sha256` TEXT NOT NULL, `title` TEXT NOT NULL, `composer` TEXT NOT NULL, `partName` TEXT NOT NULL, `ensembleId` INTEGER, `ensembleName` TEXT, `hidden` INTEGER NOT NULL, `syncedAt` INTEGER NOT NULL, `arranger` TEXT NOT NULL DEFAULT '', `session` INTEGER NOT NULL DEFAULT 0, `sessionAccessAt` INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(`serverId`))",
         "fields": [
           {
             "fieldPath": "serverId",
@@ -421,6 +421,13 @@
           {
             "fieldPath": "session",
             "columnName": "session",
+            "affinity": "INTEGER",
+            "notNull": true,
+            "defaultValue": "0"
+          },
+          {
+            "fieldPath": "sessionAccessAt",
+            "columnName": "sessionAccessAt",
             "affinity": "INTEGER",
             "notNull": true,
             "defaultValue": "0"

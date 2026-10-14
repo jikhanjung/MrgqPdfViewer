@@ -70,8 +70,8 @@
         <item quantity="other">%1$d removed</item>
     </plurals>
     <plurals name="scoremate_summary_evicted">
-        <item quantity="one">%1$d ensemble-only score removed</item>
-        <item quantity="other">%1$d ensemble-only scores removed</item>
+        <item quantity="one">%1$d ensemble-only score hidden</item>
+        <item quantity="other">%1$d ensemble-only scores hidden</item>
     </plurals>
     <plurals name="scoremate_summary_pending">
         <item quantity="one">%1$d still processing on the server</item>

@@ -99,7 +99,7 @@ class GlobalCollaborationManager private constructor() {
                 Log.d(TAG, "No collaboration mode to restore")
             }
         }
-        // 합주 동안만 두는 악보 (서버 0.25.0 멤버십) — 합주 모드면 받고, 아니면 남은 것을 지운다(합주 중에 앱이 죽었을 때)
+        // 합주 동안만 두는 악보 (서버 0.25.0 멤버십) — 합주 모드면 서재에, 아니면 남은 것을 숨은 캐시로(합주 중에 앱이 죽었을 때)
         if (currentMode != CollaborationMode.NONE) com.mrgq.pdfviewer.scoremate.SessionScores.onEnsembleStarted(context)
         else com.mrgq.pdfviewer.scoremate.SessionScores.onEnsembleEnded(context)
     }
@@ -221,7 +221,7 @@ class GlobalCollaborationManager private constructor() {
         // Clear callbacks
         clearCallbacks()
 
-        // 합주 동안만 두는 악보를 지운다 (서버 0.25.0 멤버십 — 직접 끄기 · 지휘자가 끝냄 모두 여기로)
+        // 합주 동안만 두는 악보를 서재에서 숨은 캐시로 (서버 0.25.0 멤버십 — 직접 끄기 · 지휘자가 끝냄 모두 여기로)
         if (wasActive) applicationContext?.let { com.mrgq.pdfviewer.scoremate.SessionScores.onEnsembleEnded(it) }
         
         Log.d(TAG, "Collaboration mode deactivation complete")

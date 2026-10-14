@@ -255,7 +255,10 @@ class ScoreMateSyncTest {
     private val db = Db()
     private val records = Records()
     private var ensemble = false
-    private fun sync() = ScoreMateSync(ScoreMateClient(tokens, server), tokens, db, records, root, inEnsemble = { ensemble })
+    /** null = 지금 시각 */
+    private var clock: Long? = null
+    private fun sync() = ScoreMateSync(ScoreMateClient(tokens, server), tokens, db, records, root,
+        now = { clock ?: System.currentTimeMillis() }, inEnsemble = { ensemble })
     private fun file(vararg parts: String) = File(root, (listOf("ScoreMate") + parts).joinToString("/"))
 
     @Test
@@ -661,8 +664,11 @@ class ScoreMateSyncTest {
         assertEquals(1, server.downloads)
     }
 
+    private val cache get() = File(root, ".ScoreMateSession")
+    private val day = 24L * 60 * 60 * 1000
+
     @Test
-    fun keep_이_session_이_되면_파일을_지우고_메모는_보관_레코드는_남긴다() = runBlocking {
+    fun keep_이_session_이_되면_숨은_캐시로_옮기고_keep_이_되면_받지_않고_되돌린다() = runBlocking {
         val s = Score(1, "몰다우", "v1", xml = "<x/>")
         server.put(s)
         sync().sync()
@@ -674,56 +680,140 @@ class ScoreMateSyncTest {
         assertEquals(1, report.evicted)
         assertTrue(report.changed)
         assertFalse(pdf.exists())
-        assertFalse(ScoreMateSync.musicXmlFileOf(pdf).exists())
-        assertEquals("mine", File(root, ".ScoreMateNotes/1.notes.json").readText())
+        assertTrue(PdfLibrary.listPdfFiles(root, scoreMate = true).isEmpty())
+        assertEquals("v1", File(cache, "1.pdf").readText())
+        assertTrue(File(cache, "1.musicxml").exists())
+        assertEquals("mine", File(cache, "1.notes.json").readText())
         assertTrue("파일별 설정(레코드)은 남긴다", records.deletes.isEmpty())
         assertTrue(db.rows.getValue(1).session)
-        // session → keep: 파일이 없으니 그냥 받고 메모가 돌아온다
+        assertTrue("접근 시각 = 지금", db.rows.getValue(1).sessionAccessAt > 0)
+        // session → keep: 캐시에서 되돌린다 (받지 않는다)
         s.retention = null
         server.put(s)
         assertEquals(1, sync().sync().downloaded)
-        assertTrue(pdf.exists())
+        assertEquals(1, server.downloads)
+        assertEquals(1, server.xmlDownloads)
         assertEquals("mine", notesOf(pdf).readText())
+        assertFalse(cache.exists())
         assertFalse(db.rows.getValue(1).session)
     }
 
     @Test
-    fun 합주가_시작되면_session_악보만_곁_파일까지_받고_끝나면_지운다() = runBlocking {
+    fun 합주가_시작되면_받고_끝나면_숨기고_다음_합주에는_오프라인으로도_되돌린다() = runBlocking {
         server.put(Score(1, "몰다우", "v1", xml = "<x/>", layout = "{}", retention = "session"))
         server.put(Score(2, "아리랑", "a"))
         sync().sync()
         val pdf = file("현악 4중주", "몰다우.pdf")
-        // 앞선 합주에서 쓴 메모가 보관함에 있다
+        assertFalse(pdf.exists())
         File(root, ".ScoreMateNotes").mkdirs()
-        File(root, ".ScoreMateNotes/1.notes.json").writeText("mine")
+        File(root, ".ScoreMateNotes/1.notes.json").writeText("mine") // 예전에 쓴 메모
         val cursor = tokens.syncCursor
-        val downloadsBefore = server.downloads
 
         assertEquals("합주 모드가 아니면 아무것도 안 한다", 0, sync().fetchSessionScores().downloaded)
         ensemble = true
+        clock = 1000 * day
         val report = sync().fetchSessionScores()
         assertEquals(1, report.downloaded)
         assertEquals(1, report.musicXml)
         assertEquals(1, report.layouts)
-        assertEquals("session 악보만", downloadsBefore + 1, server.downloads)
-        assertEquals("v1", pdf.readText())
+        assertEquals("session 악보만", 2, server.downloads)
         assertEquals("mine", notesOf(pdf).readText())
         assertEquals("커서는 건드리지 않는다", cursor, tokens.syncCursor)
+        assertEquals("처음 받음 = 접근", 1000 * day, db.rows.getValue(1).sessionAccessAt)
         server.put(server.scores.getValue(1))
-        assertEquals("합주 중 일반 동기화는 지우지 않는다", 0, sync().sync().evicted)
-        assertTrue(pdf.exists())
+        assertEquals("합주 중 일반 동기화는 숨기지 않는다", 0, sync().sync().evicted)
+        assertEquals("합주 중에는 숨기지 않는다", 0, sync().evictSessionScores())
 
-        assertEquals("합주 중에는 지우지 않는다", 0, sync().evictSessionScores())
         ensemble = false
         assertEquals(1, sync().evictSessionScores())
         assertFalse(pdf.exists())
         assertFalse(ScoreMateSync.musicXmlFileOf(pdf).exists())
-        assertFalse(ScoreMateSync.layoutFileOf(pdf).exists())
-        assertEquals("mine", File(root, ".ScoreMateNotes/1.notes.json").readText())
+        assertEquals("v1", File(cache, "1.pdf").readText())
+        assertTrue(File(cache, "1.layout.json").exists())
+        assertEquals("mine", File(cache, "1.notes.json").readText())
         assertTrue(file("현악 4중주", "아리랑.pdf").exists())
-        assertTrue("행은 남는다", db.rows.getValue(1).session)
         assertTrue(records.deletes.isEmpty())
-        assertEquals(0, sync().evictSessionScores())
+
+        // 다음 합주 — 서버에 닿지 않아도 캐시에서
+        ensemble = true
+        val offline = ScoreMateSync(ScoreMateClient(tokens) { throw java.io.IOException("offline") }, tokens, db, records, root,
+            now = { clock!! }, inEnsemble = { ensemble }).fetchSessionScores()
+        assertEquals(1, offline.downloaded)
+        assertEquals(1, offline.errors.size)
+        assertEquals("v1", pdf.readText())
+        assertTrue(ScoreMateSync.layoutFileOf(pdf).exists())
+        assertEquals("mine", notesOf(pdf).readText())
+        assertEquals(2, server.downloads)
+        assertEquals("되돌린 것은 접근이 아니다", 1000 * day, db.rows.getValue(1).sessionAccessAt)
+    }
+
+    @Test
+    fun 캐시는_마지막_접근_뒤_30일이_지나면_버리고_뷰어로_열면_다시_센다() = runBlocking {
+        server.put(Score(1, "몰다우", "v1", retention = "session"))
+        sync().sync()
+        val pdf = file("현악 4중주", "몰다우.pdf")
+        ensemble = true
+        clock = 1000 * day
+        sync().fetchSessionScores()
+        notesOf(pdf).writeText("mine")
+        clock = 1025 * day
+        sync().touchSession(pdf.path) // 뷰어로 엶
+        assertEquals(1025 * day, db.rows.getValue(1).sessionAccessAt)
+        ensemble = false
+        sync().evictSessionScores()
+
+        clock = 1050 * day // 접근 뒤 25일
+        sync().sync()
+        assertTrue(File(cache, "1.pdf").exists())
+        clock = 1056 * day // 31일
+        sync().sync()
+        assertFalse(cache.exists())
+        assertEquals("메모는 보관함으로", "mine", File(root, ".ScoreMateNotes/1.notes.json").readText())
+        assertTrue("행은 남는다", db.rows.getValue(1).session)
+
+        // 다음 합주에는 다시 받고 메모가 돌아온다
+        ensemble = true
+        assertEquals(1, sync().fetchSessionScores().downloaded)
+        assertEquals(2, server.downloads)
+        assertEquals("mine", notesOf(pdf).readText())
+    }
+
+    @Test
+    fun 서버가_더_주지_않거나_연결을_끊으면_캐시를_버린다() = runBlocking {
+        server.put(Score(1, "몰다우", "v1", retention = "session"))
+        server.put(Score(2, "아리랑", "a", retention = "session"))
+        sync().sync()
+        ensemble = true
+        sync().fetchSessionScores()
+        ensemble = false
+        assertEquals(2, sync().evictSessionScores())
+        server.remove(1)
+        server.put(server.scores.getValue(2))
+        sync().sync()
+        assertFalse(File(cache, "1.pdf").exists())
+        assertTrue(File(cache, "2.pdf").exists())
+        sync().forgetAll(deleteFiles = false)
+        assertFalse(cache.exists())
+    }
+
+    @Test
+    fun 캐시의_판이_다르면_버리고_새_판을_받는다() = runBlocking {
+        val s = Score(1, "몰다우", "v1", retention = "session")
+        server.put(s)
+        sync().sync()
+        ensemble = true
+        sync().fetchSessionScores()
+        ensemble = false
+        sync().evictSessionScores()
+        s.content = "v2"
+        s.version = 2
+        server.put(s)
+        sync().sync() // 합주 밖 — 행만 새 판으로
+        ensemble = true
+        assertEquals(1, sync().fetchSessionScores().downloaded)
+        assertEquals("v2", file("현악 4중주", "몰다우.pdf").readText())
+        assertEquals(2, server.downloads)
+        assertFalse(cache.exists())
     }
 
     @Test
