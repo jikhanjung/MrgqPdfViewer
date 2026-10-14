@@ -154,7 +154,7 @@ The first screen when the app starts.
 - Top: **←** list · title · page
 - Bottom: **▶ Play** (chapter 6) · **👁 View** (5.3) · **✏️ Mark** (chapter 7)
 
-The toolbar folds away when playing starts.
+The toolbar folds away when playing starts. Tap the middle again while playing to bring it back — **▶ Play** pauses or stops.
 
 ### 5.3 View menu
 

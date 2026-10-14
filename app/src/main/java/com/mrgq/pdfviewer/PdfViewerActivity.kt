@@ -2853,6 +2853,8 @@ class PdfViewerActivity : AppCompatActivity() {
 
     /** 가운데 탭으로 막대를 열어 두었다 — 연주가 시작되면 접힌다(§9-2) */
     private var barsRequested = false
+    /** 지난 [refreshViewerBars] 때 연주 중이었다 — 연주가 **시작되는 순간**에만 접는다. 연주 중에도 가운데 탭으로 다시 연다(멈추기 · 일시정지는 ▶ 로) */
+    private var barsSawPlaying = false
     /** 아래 막대를 마지막으로 채운 모양 — 같으면 다시 만들지 않는다 */
     private var bottomBarKey: String? = null
     /** 막대 글 — [updatePageInfo] 가 채운다 */
@@ -2868,6 +2870,7 @@ class PdfViewerActivity : AppCompatActivity() {
 
     private fun toggleViewerBars() {
         barsRequested = !barsRequested
+        if (isPlayingNow()) barsSawPlaying = true // 연주 중에 연 막대 — 바로 접지 않는다
         refreshViewerBars()
     }
 
@@ -2878,7 +2881,9 @@ class PdfViewerActivity : AppCompatActivity() {
      */
     private fun refreshViewerBars() {
         if (!touchShell()) return
-        if (isPlayingNow()) barsRequested = false
+        val playing = isPlayingNow()
+        if (playing && !barsSawPlaying) barsRequested = false
+        barsSawPlaying = playing
         val selected = followMeasures.getOrNull(cursorIndex)?.takeIf { followState == FollowState.SELECTING }
         val editing = notePen.editMode
         val showBottom = !editing && (barsRequested || selected != null)
