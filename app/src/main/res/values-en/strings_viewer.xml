@@ -188,6 +188,7 @@
     <string name="viewer_voice_wake_heard">👂 Yes? — say a command</string>
     <string name="viewer_voice_not_understood_always">👂 Didn\'t catch that</string>
     <string name="viewer_voice_not_understood">🎙 Didn\'t catch that — hold the button while speaking</string>
+    <string name="viewer_voice_sent_to_main">%1$s “%2$s” → main device</string>
     <string name="viewer_mic_error">Microphone error</string>
     <string name="viewer_follow_beat_unit_deferred">Sections with a changed beat unit apply from the next start (resume)</string>
     <string name="viewer_follow_reached_end">Reached the end of the score</string>

@@ -42,6 +42,12 @@ object PairSession {
         fun onPairInput(action: PairProtocol.Action) {}
         /** 주 기기가 짝 기기의 명령을 못 했다 — 이유 글 */
         fun onPairNotice(text: String) {}
+        /** 짝 기기: 주 기기가 악보를 닫았다(곡 목록으로) */
+        fun onPairClose() {}
+        /** 주 기기: 짝 기기 🎙 가 알아들은 말 — 명령으로 읽어 한다 */
+        fun onPairVoice(voice: PairProtocol.Message.Voice) {}
+        /** 짝 기기: 보낸 말을 주 기기가 한 결과 */
+        fun onPairVoiceReport(text: String) {}
         /** 상대가 짝을 풀었다 — 이 기기도 풀었다 */
         fun onPairEnded() {}
         /** 짝의 짝 판([PairProtocol.VERSION])이 다르다 — 짝을 풀었다 */
@@ -189,6 +195,7 @@ object PairSession {
         code = null
         lastSpread = null
         lastFocus = null
+        closeUnsent = false
         hostAddress = null
         fileServer?.let { server -> Thread({ runCatching { server.stop() } }, "PairFileStop").start() }
         fileServer = null
@@ -210,11 +217,19 @@ object PairSession {
         if (role == Role.MAIN) {
             if (message is PairProtocol.Message.SpreadUpdate) lastSpread = message
             if (message is PairProtocol.Message.Focus) lastFocus = message
+            if (message is PairProtocol.Message.Close) {
+                lastSpread = null
+                lastFocus = null
+            }
+            if (message is PairProtocol.Message.SpreadUpdate || message is PairProtocol.Message.Close) closeUnsent = message is PairProtocol.Message.Close && !connected
         }
         val l = link ?: return
         if (!connected) return
         Thread({ l.send(message) }, "PairSend").start()
     }
+
+    /** 주 기기: 끊긴 동안 악보를 닫았다 — 다시 붙으면 `close` 를 보낸다(짝 기기가 옛 악보에 남지 않게) */
+    private var closeUnsent = false
 
     /** 주 기기: 기억한 펼침 · 마디 표시를 다시 보낸다 (화면이 없을 때 — 있으면 화면이 지금 것을 보낸다) */
     private fun resendLast() {
@@ -238,6 +253,9 @@ object PairSession {
                         is PairProtocol.Message.SpreadUpdate -> if (role == Role.PARTNER) listener?.onPairSpread(message)
                         is PairProtocol.Message.Focus -> if (role == Role.PARTNER) listener?.onPairFocus(message)
                         is PairProtocol.Message.Notice -> if (role == Role.PARTNER) listener?.onPairNotice(message.text)
+                        PairProtocol.Message.Close -> if (role == Role.PARTNER) listener?.onPairClose()
+                        is PairProtocol.Message.VoiceReport -> if (role == Role.PARTNER) listener?.onPairVoiceReport(message.text)
+                        is PairProtocol.Message.Voice -> if (role == Role.MAIN) listener?.takeIf { it.isViewer }?.onPairVoice(message)
                         is PairProtocol.Message.Input -> if (role == Role.MAIN) {
                             val viewer = listener?.takeIf { it.isViewer }
                             if (viewer != null) viewer.onPairInput(message.action)
@@ -283,6 +301,8 @@ object PairSession {
         if (!first) return
         val l = listener
         l?.onPairConnected(hello.name)
-        if (l?.isViewer != true && role == Role.MAIN) resendLast()
+        if (l?.isViewer != true && role == Role.MAIN) {
+            if (closeUnsent) send(PairProtocol.Message.Close) else resendLast()
+        }
     }
 }

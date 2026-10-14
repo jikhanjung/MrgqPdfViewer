@@ -70,8 +70,19 @@ class PairTest {
             Message.Input(PairProtocol.Action.STOP),
             Message.Focus(measure = 3, cursor = false, system = null, systemStrong = true, waiting = null, playing = PairProtocol.PLAYING_MIC),
             Message.Notice("이 악보는 마디를 못 읽었어요"),
+            Message.Close,
+            Message.Voice(listOf("57마디부터", "57 마디부터"), "ko-KR"),
+            Message.Voice(listOf("next page")),
+            Message.VoiceReport("🎙 “57마디부터”\n✓ 57마디부터 시작"),
         )
         for (m in messages) assertEquals(m, PairProtocol.decode(PairProtocol.encode(m)))
+    }
+
+    @Test
+    fun 음성_후보가_없으면_버린다() {
+        assertNull(PairProtocol.decode("""{"type":"voice","candidates":[]}"""))
+        assertNull(PairProtocol.decode("""{"type":"voice","candidates":"57마디"}"""))
+        assertEquals(Message.Voice(listOf("시작")), PairProtocol.decode("""{"type":"voice","candidates":["", "시작", 3, {}]}"""))
     }
 
     @Test

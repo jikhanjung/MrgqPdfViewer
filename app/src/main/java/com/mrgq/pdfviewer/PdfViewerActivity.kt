@@ -5448,10 +5448,23 @@ class PdfViewerActivity : AppCompatActivity() {
     private var alwaysErrorStreak = 0
     private val restartAlwaysListening = Runnable { startAlwaysListening() }
 
-    /** 설정 → 🎙 음성 명령을 켰고, TV 가 아니고, 마이크와 음성 인식 서비스가 있으면 단추를 보인다. 🎤 추적 중에는 흐리게(§4.1) */
+    /**
+     * 짝일 때 🎙 는 오른쪽 기기에만 (사용자 요청 2026-10-14) — 마이크 둘이 따로 알아듣지 않게. 오른쪽이 보조 기기면 알아들은 말을 주 기기에 보낸다
+     * ([runVoiceCandidates], P22)
+     */
+    private val pairHidesVoice get() = PairSession.connected && PairSession.side == PairSide.LEFT && !isTwoPageMode
+
+    /** 설정 → 🎙 음성 명령을 켰고, TV 가 아니고, 마이크와 음성 인식 서비스가 있으면 단추를 보인다(짝의 왼쪽 기기 빼고). 🎤 추적 중에는 흐리게(§4.1) */
     private fun refreshVoiceButton() {
-        val show = preferences.getBoolean(PREF_VOICE_COMMANDS, false) && micFollowCapable() && VoiceListener.isAvailable(this)
+        val show = preferences.getBoolean(PREF_VOICE_COMMANDS, false) && micFollowCapable() && VoiceListener.isAvailable(this) && !pairHidesVoice
         binding.voiceButton.visibility = if (show) View.VISIBLE else View.GONE
+        if (!show && voicePushToTalk) {
+            // 누른 채 말하는 중에 단추가 사라졌다(짝이 붙었다) — 듣기를 접는다
+            voicePushToTalk = false
+            binding.voiceButton.isActivated = false
+            voiceListener?.cancel()
+            showVoiceStatus(null)
+        }
         binding.voiceButton.alpha = if (micFollower != null) 0.4f else 1f
         refreshViewerBars() // 🎤 듣기를 켜고 끌 때마다 여기를 지난다 — 듣기가 시작되면 막대를 접는다
         // 👂 = 계속 듣는 중 (단추는 그대로 누른 채 말하기로도 쓴다)
@@ -5568,7 +5581,9 @@ class PdfViewerActivity : AppCompatActivity() {
             requestPermissions(arrayOf(android.Manifest.permission.RECORD_AUDIO), REQUEST_VOICE)
             return
         }
-        stopForCommand()
+        if (!pairPartner) stopForCommand()
+        // 보조 기기: 연주는 주 기기가 — 누르는 순간 멈춤도 주 기기에 (P22)
+        else if (pairFocus?.playing == PairProtocol.PLAYING_METRONOME) PairSession.send(PairProtocol.Message.Input(PairProtocol.Action.STOP))
         val listener = voiceListener ?: VoiceListener(this, voiceCallback).also { voiceListener = it }
         if (listener.isActive) listener.cancel() // 👂 계속 듣는 중이었으면 접고 단추로
         voicePushToTalk = true
@@ -5698,14 +5713,27 @@ class PdfViewerActivity : AppCompatActivity() {
 
     /**
      * 후보들 → 명령 실행 → 결과 표시 · 기록. 끝나면 👂 계속 듣기를 다시 건다. [heard] 는 기록할 원래 후보(👂 면 호출어 포함),
-     * [candidates] 는 명령으로 읽을 말(👂 면 호출어 뒤)
+     * [candidates] 는 명령으로 읽을 말(👂 면 호출어 뒤).
+     * 짝의 보조 기기는 도움말만 스스로 띄우고 말은 주 기기에 보낸다 — 주 기기는 [fromPartner] 로 받아 하고 결과를 돌려준다(P22)
      */
-    private fun runVoiceCandidates(candidates: List<String>, heard: List<String>, alwaysListening: Boolean) {
+    private fun runVoiceCandidates(
+        candidates: List<String>,
+        heard: List<String>,
+        alwaysListening: Boolean,
+        fromPartner: PairProtocol.Message.Voice? = null,
+    ) {
         val icon = if (alwaysListening) "👂" else "🎙"
+        val language = fromPartner?.language?.let { tag -> com.mrgq.pdfviewer.voice.VoiceLanguage.entries.firstOrNull { it.recognizerTag == tag } }
+            ?: com.mrgq.pdfviewer.voice.VoiceLanguage.current(this)
+        // 결과 글 — 보조 기기가 들은 말이면 그 기기에도
+        fun showResult(text: String) {
+            showVoiceStatus(text, VOICE_STATUS_MS)
+            if (fromPartner != null) PairSession.send(PairProtocol.Message.VoiceReport(text))
+        }
         lifecycleScope.launch {
-            val best = com.mrgq.pdfviewer.voice.VoiceLanguage.current(this@PdfViewerActivity).parseBest(candidates, voiceStaffNames(), voiceStaffCount())
+            val best = language.parseBest(candidates, voiceStaffNames(), voiceStaffCount())
             if (best == null) {
-                showVoiceStatus(getString(if (alwaysListening) R.string.viewer_voice_not_understood_always else R.string.viewer_voice_not_understood), VOICE_STATUS_MS)
+                showResult(getString(if (alwaysListening) R.string.viewer_voice_not_understood_always else R.string.viewer_voice_not_understood))
                 logVoiceCommand(heard, null, null, alwaysListening)
                 scheduleAlwaysListening()
                 return@launch
@@ -5714,10 +5742,17 @@ class PdfViewerActivity : AppCompatActivity() {
             // "도움말" · "사용법" (#128) — 명령으로 읽힌 후보가 없을 때만(첫 후보가 도움말이면 그것)
             val help = candidates.firstOrNull()?.takeIf { com.mrgq.pdfviewer.voice.VoiceHelp.isRequest(it) }
                 ?: candidates.firstOrNull { com.mrgq.pdfviewer.voice.VoiceHelp.isRequest(it) }?.takeIf { parsed !is com.mrgq.pdfviewer.voice.ParseResult.Commands }
-            if (help != null) {
+            if (help != null && fromPartner == null) {
                 showVoiceStatus(null)
                 showVoiceHelp()
                 logVoiceCommand(heard, help, VoiceCommandRunner.Report(true, com.mrgq.pdfviewer.voice.VoiceText.of(R.string.voice_help_shown)), alwaysListening)
+                scheduleAlwaysListening()
+                return@launch
+            }
+            if (pairPartner && fromPartner == null) {
+                // 보조 기기: 명령은 주 기기가 — 결과는 voice_report 로 온다
+                PairSession.send(PairProtocol.Message.Voice(candidates, language.recognizerTag))
+                showVoiceStatus(getString(R.string.viewer_voice_sent_to_main, icon, text), VOICE_STATUS_MS)
                 scheduleAlwaysListening()
                 return@launch
             }
@@ -5726,10 +5761,9 @@ class PdfViewerActivity : AppCompatActivity() {
             // 명령을 하나도 못 찾았으면(🎙) 도움말 안내를 덧붙인다
             val nothing = !alwaysListening && parsed is com.mrgq.pdfviewer.voice.ParseResult.Unrecognized &&
                 parsed.reason == com.mrgq.pdfviewer.voice.ParseResult.Reason.NOTHING
-            showVoiceStatus(
+            showResult(
                 "$icon “$text”\n" + (if (report.ok) "✓ " else "✗ ") + report.text.resolve(this@PdfViewerActivity) +
                     (if (nothing) "\n" + voiceHelpHint() else ""),
-                VOICE_STATUS_MS,
             )
             logVoiceCommand(heard, text, report, alwaysListening)
             scheduleAlwaysListening()
@@ -6508,6 +6542,7 @@ class PdfViewerActivity : AppCompatActivity() {
             pairDialogs.onConnected()
             toast(getString(R.string.viewer_pair_connected, peerName, pairSideName(PairSession.side)))
             pairSeenSeq = -1L
+            refreshVoiceButton() // 왼쪽 기기는 🎙 를 숨긴다
             if (PairSession.role == PairSession.Role.MAIN) {
                 pairSpread = null
                 if (pageCount > 0) showPage(pageIndex) // 지금 쪽이 든 펼침을 정해 알리고 내 자리로
@@ -6530,6 +6565,13 @@ class PdfViewerActivity : AppCompatActivity() {
         }
 
         override fun onPairNotice(text: String) = toast(text)
+
+        override fun onPairVoice(voice: PairProtocol.Message.Voice) =
+            runVoiceCandidates(voice.candidates, voice.candidates, alwaysListening = false, fromPartner = voice)
+
+        override fun onPairVoiceReport(text: String) = showVoiceStatus(text, VOICE_STATUS_MS)
+
+        override fun onPairClose() = finish() // 주 기기가 곡 목록으로 갔다 — 따라간다
 
         override fun onPairEnded() {
             toast(getString(R.string.viewer_pair_ended))
@@ -6580,6 +6622,7 @@ class PdfViewerActivity : AppCompatActivity() {
             if (!blank && pageCount > 0) showPage(pageIndex)
         }
         refreshScoreOverlay()
+        refreshVoiceButton()
         if (blank && pageCount > 0) showPage(pageIndex)
     }
 
@@ -7350,6 +7393,7 @@ class PdfViewerActivity : AppCompatActivity() {
     override fun onPause() {
         super.onPause()
         if (PairSession.listener === pairListener) PairSession.listener = null // 짝은 남는다 — 화면이 없으면 알림만 안 받는다 (P22)
+        if (isFinishing && PairSession.role == PairSession.Role.MAIN) PairSession.send(PairProtocol.Message.Close) // 곡 목록으로 — 보조 기기도
         voiceResumed = false
         commitPendingNote() // 그리던 메모 묶음은 확정해 저장 (P11)
         com.mrgq.pdfviewer.ensemble.VersionNotice.detach()

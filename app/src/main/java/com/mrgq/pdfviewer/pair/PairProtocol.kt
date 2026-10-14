@@ -13,6 +13,9 @@ import com.mrgq.pdfviewer.follow.RollingTurns.Spread
  * - `input` — 짝 기기 → 주 기기: 넘김(다음 · 이전), `sync` = 지금 펼침을 다시 보내 달라(악보 화면에 돌아왔다)
  * - `focus` — 주 기기 → 짝 기기: 지금 마디(노란 표시 · 고르는 커서)와 연한 시스템 표시 — 짝 기기 쪽에 있으면 그린다(3단계)
  * - `notice` — 주 기기 → 짝 기기: 짝 기기가 보낸 명령(연주 · 듣기)을 못 했을 때의 이유(화면 글)
+ * - `close` — 주 기기 → 짝 기기: 악보를 닫았다(곡 목록으로) — 짝 기기도 악보 화면을 닫는다
+ * - `voice` — 짝 기기 → 주 기기: 짝 기기 🎙 가 알아들은 말(인식 후보들) — 명령은 주 기기가 읽고 한다
+ * - `voice_report` — 주 기기 → 짝 기기: 그 말을 한 결과(화면 글) — 짝 기기의 🎙 자리에 띄운다
  * - `bye` — 짝 풀기(받은 쪽도 푼다 — 다시 붙지 않게)
  * - `ping` — 살아 있음(끊김 알기)
  *
@@ -51,6 +54,11 @@ object PairProtocol {
             val playing: String? = null,
         ) : Message()
         data class Notice(val text: String) : Message()
+
+        /** 짝 기기 🎙 의 인식 후보 [candidates] — [language] 는 인식 언어 태그(`ko-KR` · `en-US`), 주 기기가 그 문법으로 읽는다 */
+        data class Voice(val candidates: List<String>, val language: String? = null) : Message()
+        data class VoiceReport(val text: String) : Message()
+        object Close : Message()
         object Bye : Message()
         object Ping : Message()
     }
@@ -100,6 +108,16 @@ object PairProtocol {
                 addProperty("type", "notice")
                 addProperty("text", message.text)
             }
+            is Message.Voice -> {
+                addProperty("type", "voice")
+                add("candidates", com.google.gson.JsonArray().apply { message.candidates.forEach { add(it) } })
+                message.language?.let { addProperty("lang", it) }
+            }
+            is Message.VoiceReport -> {
+                addProperty("type", "voice_report")
+                addProperty("text", message.text)
+            }
+            Message.Close -> addProperty("type", "close")
             Message.Bye -> addProperty("type", "bye")
             Message.Ping -> addProperty("type", "ping")
         }
@@ -135,6 +153,14 @@ object PairProtocol {
                     playing = json.str("playing"),
                 )
                 "notice" -> Message.Notice(json.str("text") ?: return null)
+                "voice" -> {
+                    val candidates = json.get("candidates")?.takeIf { it.isJsonArray }?.asJsonArray
+                        ?.mapNotNull { e -> e.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isString }?.asString?.takeIf { it.isNotBlank() } }
+                    if (candidates.isNullOrEmpty()) return null
+                    Message.Voice(candidates, json.str("lang"))
+                }
+                "voice_report" -> Message.VoiceReport(json.str("text") ?: return null)
+                "close" -> Message.Close
                 "bye" -> Message.Bye
                 "ping" -> Message.Ping
                 else -> null

@@ -203,6 +203,8 @@ When the main device opens a score, the second device opens the same score. Whil
 - When the main device opens another piece, the second device finds and opens the same score. If it doesn't have it, it offers to **download** it from the main device.
 - Both devices use the main device's top/bottom cropping (the second device's own setting comes back when the pair ends).
 - **Playing** (score-linked metronome · 🎤 listen & turn · accompaniment) runs on the main device. The second device's ▶ · 🎤 can also start and stop it **from the first measure of this spread** (picking a measure to start from is done on the main device). Like the TV two-page view, **only the finished page** changes (1 | 2 → 3 | 2 → 3 | 4), and the second device shows the current measure in yellow too.
+- **🎙 Voice commands** appear **only on the right-side device** (so two mics don't act separately). If the right side is the second device, what it hears is sent to the main device, which carries it out; the result shows on both.
+- When the main device closes the score and goes back to the score list, the second device goes back too.
 - **Ensemble**: when the main device joins an ensemble, the pair conducts or follows as one TV two-page device. The second device doesn't take ensemble signals itself.
 - If the connection drops, both go back to showing alone, and line up with the current spread again when it reconnects. The pair is remembered even if the app is closed and reopened. If the second device is on the score list, it opens the score the main device opened.
 - To end it: the **Two-device spread button** (or **View → Two-device spread**) **→ Unpair** on either device — both are unpaired.

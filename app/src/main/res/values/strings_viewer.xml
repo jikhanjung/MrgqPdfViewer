@@ -188,6 +188,7 @@
     <string name="viewer_voice_wake_heard">👂 네? — 명령을 말하세요</string>
     <string name="viewer_voice_not_understood_always">👂 못 알아들었어요</string>
     <string name="viewer_voice_not_understood">🎙 못 알아들었어요 — 누른 채로 말하세요</string>
+    <string name="viewer_voice_sent_to_main">%1$s “%2$s” → 주 기기</string>
     <string name="viewer_mic_error">마이크 오류</string>
     <string name="viewer_follow_beat_unit_deferred">세는 단위를 바꾼 구간은 다음 시작(이어서)부터 적용됩니다</string>
     <string name="viewer_follow_reached_end">악보 끝까지 따라왔습니다</string>
