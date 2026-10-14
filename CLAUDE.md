@@ -13,11 +13,12 @@ Android TV OS용 PDF 악보 리더 앱으로, 무선 파일 업로드와 리모�
 > SurfaceFlinger 가 4K 로 업스케일한다. 4K 관련 작업을 시작하기 전에
 > [`devlog/20260815_040_4k_display_investigation.md`](devlog/20260815_040_4k_display_investigation.md) 를 먼저 읽을 것.
 
-**현재 버전**: v0.9.0-beta.6 (2026-10-14)  
+**현재 버전**: v0.9.0 (2026-10-14)  
 **빌드 상태**: 🟢 빌드 가능 (GitHub Actions CI 로 커밋마다 검증)  
-**CI 게이트**: 🟢 단위 테스트 542개 + **화면 글 게이트**(`tools/i18n_gate.py` — 코드 · 레이아웃의 한글 리터럴 · values-en 빠짐, P18) + 설명서 한 · 영 구조(`tools/manual_check.py`, P19) + Android Lint(`MissingTranslation` 오류) + 에뮬레이터 계측 60개·release APK 스모크(API 30/34 — ⚠️ 문서 정보 검사는 모든 매트릭스에서 건너뜀, #047 §5). 계측은 main 푸시와 수동 실행에서만 (회당 5~6분)  
+**CI 게이트**: 🟢 단위 테스트 543개 + **화면 글 게이트**(`tools/i18n_gate.py` — 코드 · 레이아웃의 한글 리터럴 · values-en 빠짐, P18) + 설명서 한 · 영 구조(`tools/manual_check.py`, P19) + Android Lint(`MissingTranslation` 오류) + 에뮬레이터 계측 60개·release APK 스모크(API 30/34 — ⚠️ 문서 정보 검사는 모든 매트릭스에서 건너뜀, #047 §5). 계측은 main 푸시와 수동 실행에서만 (회당 5~6분)  
 **테스트 상태**: 🟢 v0.3.x 기능을 Z18TV Pro 에서 확인(2026-09-28): 파트보(한 · 여러 파트, 넓혀 자르기, 번호) · 파트 화면 악보 연동 · MusicXML 반주(K488) · MusicXML · 서버 분석 동기화 · 목록 곡 정보 · 앱 안 업데이트(v0.2.9 → v0.3.3). 🟡 **두 대가 필요한 것만 남음** — 합주 중 파트 보기, 합주 Phase 0 동기 넘김. 렌더 품질 · 키 매핑 등 전반 스모크는 2026-08-15(Google TV Streamer + 4K 모니터)
 **최근 업데이트** (전체는 [`CHANGELOG.md`](CHANGELOG.md), 오늘 작업 요약은 devlog [`065`](devlog/20260928_065_part_view_accompaniment_server_analysis.md)):
+- **v0.9.0** — 📖 **두 대로 펼쳐 보기**(태블릿 · 휴대폰 두 대 = TV 두 쪽, 주 기기 번호 · 연주 차례 넘김 · 합주 · 🎙 오른쪽만 · 시작 마디 두 기기 어디서든, P22) · ☁️ ScoreMate 멤버십 · 연주 중에도 도구 막대(#144). v0.8.5-beta.1 · beta.1 ~ beta.6 묶음
 - **v0.9.0-beta.6** — 📖 짝 동안 🎙 는 **오른쪽 기기에만** · 오른쪽 보조 기기가 들은 말은 주 기기가(`voice` · `voice_report`) · 주 기기가 악보를 닫으면 보조 기기도 곡 목록으로(`close`, #143)
 - **v0.9.0-beta.5** — 📖 두 대로 펼쳐 보기를 **첫 화면 단추**로(합주 단추 옆, 주 기기 · 왼/오 · 보조 기기) · 주 기기 **두 자리 번호**(`pair_announce.code`) · 보조 기기는 세 개 중 고르기(`pair/PairDialogs` · `PairCodeChoices`) · 화면 이름 주 기기 · 보조 기기 · 짝 동안 회전 줄 숨김(#142)
 - **v0.9.0-beta.4** — ☁️ ScoreMate 멤버십(서버 0.25.0): 설정 멤버십 줄 · Lite 의 합주용 악보(`retention: session`)는 합주 동안만 목록에(숨은 캐시 `.ScoreMateSession` 30일 · 500MB), 지휘자 · 짝 기기에서 받은 곡은 연결 안 된 기기도 캐시(30일 · 200MB), DB v20(#141)
