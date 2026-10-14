@@ -8,7 +8,7 @@ MrgqPdfViewer 기기끼리(그리고 같은 말을 하는 다른 앱 — 예: Sc
 | 역할 | 지휘자(서버) · 연주자(클라이언트) | 주 기기(짝을 기다림 — 펼침을 정함) · 짝 기기(찾아서 붙음 — 자기 자리만 그림) |
 | 찾기 | UDP **9091** `conductor_announcement` (2초마다) | UDP **9094** `pair_announce` (1.5초마다) |
 | 메시지 | WebSocket(평문) **9090**, 종류는 `action` | TCP **9093** 한 줄 JSON, 종류는 `type` |
-| 그 밖 | 악보 받기 HTTP **8090** `/download/<이름>` | — |
+| 악보 받기 | HTTP **8090** `/download/<이름>` (지휘자의 악보들) | HTTP **9095** `/download/<이름>` (주 기기의 지금 악보 하나) |
 | 판 | **합주 버전** `ensemble_version` — 지금 `0.4.0` | **짝 판** `version` — 지금 `3` |
 | 판이 다르면 | 연결은 하고 양쪽에 업데이트 안내 | 짝을 맺지 않고 업데이트 안내 |
 | 코드 (단일 출처) | `CollaborationProtocol` · `ensemble/` | `pair/PairProtocol` · `PairLink` · `PairDiscovery` · `PairSession` |

@@ -193,12 +193,14 @@ Stand two tablets or phones side by side and read like the TV two-page view — 
 3. On the other: **View → Two-device spread → Find a partner**, and pick the waiting device. It takes the other side.
 
 - Turn on either device and both move two pages at a time. With an odd page count, the last right page is blank.
-- When the waiting device opens another piece, the other device finds and opens the same score (or tells you it doesn't have it).
-- **Playing** (score-linked metronome · 🎤 listen & turn · accompaniment) runs on the device that waited. Like the TV two-page view, **only the finished page** changes (1 | 2 → 3 | 2 → 3 | 4), and the other device shows the current measure in yellow too.
+- When the waiting device opens another piece, the other device finds and opens the same score. If it doesn't have it, it offers to **download** it from the waiting device.
+- Both devices use the waiting device's top/bottom cropping (the other device's own setting comes back when the pair ends).
+- **Playing** (score-linked metronome · 🎤 listen & turn · accompaniment) runs on the device that waited. The other device's ▶ · 🎤 can also start and stop it **from the first measure of this spread** (picking a measure to start from is done on the waiting device). Like the TV two-page view, **only the finished page** changes (1 | 2 → 3 | 2 → 3 | 4), and the other device shows the current measure in yellow too.
 - **Ensemble**: when the waiting device joins an ensemble, the pair conducts or follows as one TV two-page device. The other device doesn't take ensemble signals itself.
 - If the connection drops, both go back to showing alone, and line up with the current spread again when it reconnects. The pair is remembered even if the app is closed and reopened. If the other device is on the score list, it opens the score the waiting device opened.
 - To end it: **View → Two-device spread → Unpair** on either device — both are unpaired.
 - Part view is chosen on each device — pick the same part on both so the pages match.
+- Phones stay in portrait while paired.
 
 ---
 
