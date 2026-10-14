@@ -53,4 +53,5 @@
     <string name="viewer_menu_pair_play_title">Play — the main device plays</string>
     <string name="viewer_menu_pair_start">▶ Start — from the first measure of this spread</string>
     <string name="viewer_menu_pair_listen">🎤 Listen &amp; turn — from the first measure of this spread</string>
+    <string name="viewer_menu_pair_pick">▶ Pick a starting measure — tap it on either device</string>
 </resources>

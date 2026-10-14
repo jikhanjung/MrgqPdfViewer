@@ -71,11 +71,22 @@ class PairTest {
             Message.Focus(measure = 3, cursor = false, system = null, systemStrong = true, waiting = null, playing = PairProtocol.PLAYING_MIC),
             Message.Notice("이 악보는 마디를 못 읽었어요"),
             Message.Close,
+            Message.Input(PairProtocol.Action.PICK),
+            Message.Input(PairProtocol.Action.SELECT, 57),
+            Message.Input(PairProtocol.Action.START_SELECTED),
+            Message.Input(PairProtocol.Action.LISTEN_SELECTED),
+            Message.Input(PairProtocol.Action.CANCEL),
             Message.Voice(listOf("57마디부터", "57 마디부터"), "ko-KR"),
             Message.Voice(listOf("next page")),
             Message.VoiceReport("🎙 “57마디부터”\n✓ 57마디부터 시작"),
         )
         for (m in messages) assertEquals(m, PairProtocol.decode(PairProtocol.encode(m)))
+    }
+
+    @Test
+    fun 마디_고르기는_마디_번호가_있어야() {
+        assertNull(PairProtocol.decode("""{"type":"input","action":"select"}"""))
+        assertEquals(Message.Input(PairProtocol.Action.SELECT, 12), PairProtocol.decode("""{"type":"input","action":"select","measure":12}"""))
     }
 
     @Test

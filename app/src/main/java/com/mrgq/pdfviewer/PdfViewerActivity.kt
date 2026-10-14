@@ -1829,6 +1829,14 @@ class PdfViewerActivity : AppCompatActivity() {
                         return true
                     }
                 }
+                // 보조 기기: 주 기기가 시작 마디를 고르는 중이면 이 쪽의 마디도 고른다 — 주 기기가 한다 (P22)
+                if (pairSelecting != null) {
+                    val hit = pairMeasureAt(e.x, e.y)
+                    if (hit != null) {
+                        PairSession.send(PairProtocol.Message.Input(PairProtocol.Action.SELECT, hit.measureNumber))
+                        return true
+                    }
+                }
                 when (zone(e)) {
                     -1 -> press(KeyEvent.KEYCODE_DPAD_LEFT)
                     1 -> press(KeyEvent.KEYCODE_DPAD_RIGHT)
@@ -2884,7 +2892,8 @@ class PdfViewerActivity : AppCompatActivity() {
         val playing = isPlayingNow()
         if (playing && !barsSawPlaying) barsRequested = false
         barsSawPlaying = playing
-        val selected = followMeasures.getOrNull(cursorIndex)?.takeIf { followState == FollowState.SELECTING }
+        // 고르는 중인 마디 — 보조 기기는 주 기기가 고르는 마디 (P22)
+        val selected = followMeasures.getOrNull(cursorIndex)?.takeIf { followState == FollowState.SELECTING }?.measureNumber ?: pairSelecting
         val editing = notePen.editMode
         val showBottom = !editing && (barsRequested || selected != null)
         val showTop = !editing && barsRequested && selected == null && !phoneLandscape()
@@ -2899,12 +2908,15 @@ class PdfViewerActivity : AppCompatActivity() {
         if (showBottom) renderBottomBar(selected)
     }
 
-    /** 아래 막대 단추 — 보통은 ▶ 연주 · 👁 보기 · ✏️ 메모, 시작 마디를 고르는 중이면 ▶ N마디부터 시작 · 🎤 N마디부터 듣기 · 취소 · ⋯(연주 메뉴) */
-    private fun renderBottomBar(selected: ScoreMeasure?) {
+    /**
+     * 아래 막대 단추 — 보통은 ▶ 연주 · 👁 보기 · ✏️ 메모, 시작 마디([selected] 번)를 고르는 중이면 ▶ N마디부터 시작 · 🎤 N마디부터 듣기 · 취소 · ⋯(연주 메뉴).
+     * 보조 기기는 고르는 중 단추를 주 기기에 보낸다 (P22)
+     */
+    private fun renderBottomBar(selected: Int?) {
         val bar = binding.viewerBottomBar
         val canListen = selected != null && micFollowCapable() && micFollower == null && collaborationMode != CollaborationMode.PERFORMER
         val pageShown = selected == null && phoneLandscape()
-        val key = "${selected?.measureNumber}|$canListen|${notesWritable()}|${if (pageShown) barPageText else ""}"
+        val key = "$selected|$canListen|${notesWritable()}|$pairPartner|${if (pageShown) barPageText else ""}"
         if (key == bottomBarKey && bar.childCount > 0) return
         bottomBarKey = key
         bar.removeAllViews()
@@ -2929,9 +2941,16 @@ class PdfViewerActivity : AppCompatActivity() {
                 setOnClickListener { onClick() }
             }, android.widget.LinearLayout.LayoutParams(android.view.ViewGroup.LayoutParams.WRAP_CONTENT, height))
         }
+        if (selected != null && pairPartner) {
+            fun send(action: PairProtocol.Action) = PairSession.send(PairProtocol.Message.Input(action))
+            button(getString(R.string.viewer_bar_start_from, selected)) { send(PairProtocol.Action.START_SELECTED) }
+            if (canListen) button(getString(R.string.viewer_bar_listen_from, selected)) { send(PairProtocol.Action.LISTEN_SELECTED) }
+            button(getString(R.string.cancel)) { send(PairProtocol.Action.CANCEL) }
+            return
+        }
         if (selected != null) {
-            button(getString(R.string.viewer_bar_start_from, selected.measureNumber)) { startFollowing() }
-            if (canListen) button(getString(R.string.viewer_bar_listen_from, selected.measureNumber)) { startMicFollowFromSelection() }
+            button(getString(R.string.viewer_bar_start_from, selected)) { startFollowing() }
+            if (canListen) button(getString(R.string.viewer_bar_listen_from, selected)) { startMicFollowFromSelection() }
             button(getString(R.string.cancel)) { cancelMeasureSelection() }
             button("⋯") { showMetronomeMenu() } // 연주 메뉴(메트로놈 설정 · 반주) — 예전 고르는 중 두 번 탭
             return
@@ -6419,6 +6438,8 @@ class PdfViewerActivity : AppCompatActivity() {
         showViewerMenu(::build) { action ->
             val command = when (action) {
                 MenuAction.START -> PairProtocol.Action.START
+                MenuAction.PICK_MEASURE -> PairProtocol.Action.PICK
+                MenuAction.CANCEL_SELECTION -> PairProtocol.Action.CANCEL
                 MenuAction.MIC_FROM_PAGE -> PairProtocol.Action.LISTEN
                 MenuAction.STOP, MenuAction.MIC_STOP -> PairProtocol.Action.STOP
                 else -> null
@@ -6458,6 +6479,16 @@ class PdfViewerActivity : AppCompatActivity() {
     }
 
     /** 짝 기기: 마디 번호 → 이 기기 악보의 마디(지금 쪽의 것 먼저). 분석을 아직 안 불렀으면 부르고(끝나면 다시 그린다) null */
+    /** 보조 기기: 주 기기가 시작 마디를 고르는 중이면 고른 마디 번호 — 이 기기에서도 마디를 탭해 고른다 */
+    private val pairSelecting: Int?
+        get() = pairFocus?.takeIf { pairPartner && it.playing == PairProtocol.PLAYING_SELECTING }?.measure
+
+    /** 보조 기기: 화면 (x, y) 의 이 쪽 마디 — 마디를 아직 못 읽었으면 null */
+    private fun pairMeasureAt(x: Float, y: Float): ScoreMeasure? {
+        if (scoreMeasuresFileId != currentPdfFileId) return null
+        return measureAt(scoreMeasures.filter { it.pageIndex == pageIndex }, x, y)
+    }
+
     private fun pairPartnerMeasure(number: Int?): ScoreMeasure? {
         number ?: return null
         val fileId = currentPdfFileId ?: return null
@@ -6583,8 +6614,9 @@ class PdfViewerActivity : AppCompatActivity() {
             pairLeft()
         }
 
-        override fun onPairInput(action: PairProtocol.Action) {
-            when (action) {
+        override fun onPairInput(input: PairProtocol.Message.Input) {
+            val selecting = followState == FollowState.SELECTING
+            when (input.action) {
                 PairProtocol.Action.NEXT -> turnForward()
                 PairProtocol.Action.PREVIOUS -> turnBack()
                 PairProtocol.Action.SYNC -> {
@@ -6595,6 +6627,17 @@ class PdfViewerActivity : AppCompatActivity() {
                 PairProtocol.Action.START -> runPairCommand { viewerCommands.start() }
                 PairProtocol.Action.LISTEN -> runPairCommand { viewerCommands.listen(ListenFrom.HERE) }
                 PairProtocol.Action.STOP -> if (micFollower != null) stopMicFollow(announce = true) else runPairCommand { viewerCommands.stop() }
+                // 시작 마디 고르기 — 보조 기기 쪽의 마디 탭 · 막대 단추. 주 기기에서 마디를 탭할 때와 같다
+                PairProtocol.Action.SELECT -> if (selecting) {
+                    val index = followMeasures.indexOfFirst { it.measureNumber == input.measure }
+                    if (index >= 0) {
+                        if (index == cursorIndex) startFollowing() else moveCursor(index - cursorIndex)
+                    }
+                }
+                PairProtocol.Action.PICK -> if (followState == FollowState.OFF && micFollower == null) startMetronomeWithSavedSettings()
+                PairProtocol.Action.START_SELECTED -> if (selecting) startFollowing()
+                PairProtocol.Action.LISTEN_SELECTED -> if (selecting) startMicFollowFromSelection()
+                PairProtocol.Action.CANCEL -> if (selecting) cancelMeasureSelection()
             }
         }
 

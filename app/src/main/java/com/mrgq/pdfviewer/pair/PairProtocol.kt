@@ -10,7 +10,8 @@ import com.mrgq.pdfviewer.follow.RollingTurns.Spread
  * - `hello` — 연결하면 서로 한 번: 보내는 기기의 자리 · 짝 판([VERSION]) · 이름
  * - `spread` — 주 기기 → 짝 기기: 지금 악보(이름 · sha256 · 쪽 수)와 펼침, [seq] 는 늦게 온 옛 펼침을 버리는 번호.
  *   **쪽은 메시지에서 1부터**(합주 · 화면과 같게) — 앱 안의 [Spread] 는 순번(0부터)이라 여기서만 옮긴다
- * - `input` — 짝 기기 → 주 기기: 넘김(다음 · 이전), `sync` = 지금 펼침을 다시 보내 달라(악보 화면에 돌아왔다)
+ * - `input` — 짝 기기 → 주 기기: 넘김(다음 · 이전), `sync` = 지금 펼침을 다시 보내 달라(악보 화면에 돌아왔다),
+ *   `pick` = 시작 마디 고르기 열기, 고르는 중이면 `select`(+ `measure`) · `start_selected` · `listen_selected` · `cancel`
  * - `focus` — 주 기기 → 짝 기기: 지금 마디(노란 표시 · 고르는 커서)와 연한 시스템 표시 — 짝 기기 쪽에 있으면 그린다(3단계)
  * - `notice` — 주 기기 → 짝 기기: 짝 기기가 보낸 명령(연주 · 듣기)을 못 했을 때의 이유(화면 글)
  * - `close` — 주 기기 → 짝 기기: 악보를 닫았다(곡 목록으로) — 짝 기기도 악보 화면을 닫는다
@@ -38,7 +39,8 @@ object PairProtocol {
             val clipTop: Int? = null,
             val clipBottom: Int? = null,
         ) : Message()
-        data class Input(val action: Action) : Message()
+        /** [measure] = `select` 의 마디 번호 */
+        data class Input(val action: Action, val measure: Int? = null) : Message()
 
         /**
          * 주 기기 화면의 마디 표시 — [measure] 노란 마디(또는 [cursor] 면 고르는 커서 모양), [system] 연한 시스템 표시의 마디,
@@ -63,9 +65,15 @@ object PairProtocol {
         object Ping : Message()
     }
 
-    /** `start` · `listen` · `stop` = 짝 기기에서 연주 · 듣기 시작 · 정지 — 주 기기가 한다 */
+    /**
+     * `start` · `listen` · `stop` = 짝 기기에서 연주 · 듣기 시작 · 정지 — 주 기기가 한다.
+     * `pick` = 주 기기에서 시작 마디 고르기를 연다(주 기기 ▶ 시작과 같다).
+     * 주 기기가 시작 마디를 고르는 중(`focus.playing` = selecting)이면 짝 기기에서도 고른다: `select` = 그 마디로(이미 고른 마디면 시작 —
+     * 주 기기에서 마디를 탭할 때와 같다), `start_selected` · `listen_selected` = 고른 마디부터 시작 · 듣기, `cancel` = 고르기 접기
+     */
     enum class Action(val wire: String) {
         NEXT("next"), PREVIOUS("prev"), SYNC("sync"), START("start"), LISTEN("listen"), STOP("stop"),
+        PICK("pick"), SELECT("select"), START_SELECTED("start_selected"), LISTEN_SELECTED("listen_selected"), CANCEL("cancel"),
     }
 
     const val PLAYING_METRONOME = "metronome"
@@ -94,6 +102,7 @@ object PairProtocol {
             is Message.Input -> {
                 addProperty("type", "input")
                 addProperty("action", message.action.wire)
+                message.measure?.let { addProperty("measure", it) }
             }
             is Message.Focus -> {
                 addProperty("type", "focus")
@@ -143,7 +152,12 @@ object PairProtocol {
                         clipTop = json.int("clip_top")?.coerceIn(0, 50), clipBottom = json.int("clip_bottom")?.coerceIn(0, 50),
                     )
                 }
-                "input" -> Message.Input(Action.entries.firstOrNull { it.wire == json.str("action") } ?: return null)
+                "input" -> {
+                    val action = Action.entries.firstOrNull { it.wire == json.str("action") } ?: return null
+                    val measure = json.int("measure")
+                    if (action == Action.SELECT && measure == null) return null
+                    Message.Input(action, measure)
+                }
                 "focus" -> Message.Focus(
                     measure = json.int("measure"),
                     cursor = json.bool("cursor"),

@@ -39,7 +39,7 @@ object PairSession {
         fun onPairDisconnected() {}
         fun onPairSpread(update: PairProtocol.Message.SpreadUpdate) {}
         fun onPairFocus(focus: PairProtocol.Message.Focus) {}
-        fun onPairInput(action: PairProtocol.Action) {}
+        fun onPairInput(input: PairProtocol.Message.Input) {}
         /** 주 기기가 짝 기기의 명령을 못 했다 — 이유 글 */
         fun onPairNotice(text: String) {}
         /** 짝 기기: 주 기기가 악보를 닫았다(곡 목록으로) */
@@ -258,7 +258,7 @@ object PairSession {
                         is PairProtocol.Message.Voice -> if (role == Role.MAIN) listener?.takeIf { it.isViewer }?.onPairVoice(message)
                         is PairProtocol.Message.Input -> if (role == Role.MAIN) {
                             val viewer = listener?.takeIf { it.isViewer }
-                            if (viewer != null) viewer.onPairInput(message.action)
+                            if (viewer != null) viewer.onPairInput(message)
                             else if (message.action == PairProtocol.Action.SYNC) resendLast()
                         }
                         PairProtocol.Message.Bye -> {

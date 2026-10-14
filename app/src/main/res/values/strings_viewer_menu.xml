@@ -53,4 +53,5 @@
     <string name="viewer_menu_pair_play_title">연주 — 주 기기가 합니다</string>
     <string name="viewer_menu_pair_start">▶ 시작 — 이 펼침 첫 마디부터</string>
     <string name="viewer_menu_pair_listen">🎤 연주 듣고 넘기기 — 이 펼침 첫 마디부터</string>
+    <string name="viewer_menu_pair_pick">▶ 마디 골라 시작 — 두 기기 어디서든 마디를 탭</string>
 </resources>

@@ -188,11 +188,11 @@ class ViewerMenusTest {
     @Test
     fun 짝_기기_연주_메뉴는_주_기기_상태에_따라_P22() {
         assertEquals(
-            listOf(MenuAction.START, MenuAction.MIC_FROM_PAGE),
+            listOf(MenuAction.START, MenuAction.PICK_MEASURE, MenuAction.MIC_FROM_PAGE),
             ViewerMenus.pairPartnerPlay(null, micCapable = true).items.map { it.action },
         )
         assertEquals(listOf(MenuAction.STOP), ViewerMenus.pairPartnerPlay("metronome", micCapable = true).items.map { it.action })
-        assertEquals(listOf(MenuAction.STOP), ViewerMenus.pairPartnerPlay("selecting", micCapable = true).items.map { it.action })
+        assertEquals(listOf(MenuAction.CANCEL_SELECTION), ViewerMenus.pairPartnerPlay("selecting", micCapable = true).items.map { it.action })
         assertEquals(listOf(MenuAction.MIC_STOP), ViewerMenus.pairPartnerPlay("mic", micCapable = true).items.map { it.action })
     }
 

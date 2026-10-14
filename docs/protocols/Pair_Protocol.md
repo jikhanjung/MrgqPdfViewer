@@ -84,6 +84,9 @@
 | `start` | 짝 기기의 ▶ — 주 기기가 **지금 펼침의 첫 마디부터** 메트로놈 악보 연동을 시작(주 기기에서 마디를 고르는 중이면 고른 마디부터) |
 | `listen` | 짝 기기의 🎤 — 주 기기가 지금 펼침의 첫 마디부터 연주 듣고 넘기기(마이크도 주 기기) |
 | `stop` | 짝 기기의 정지 — 주 기기가 듣기 · 메트로놈 · 마디 고르기를 멈춤 |
+| `pick` | (v0.9.0-beta.7~) 짝 기기의 "마디 골라 시작" — 주 기기가 시작 마디 고르기를 연다(주 기기 ▶ 시작과 같다) |
+| `select` + `measure` | (v0.9.0-beta.7~) 주 기기가 고르는 중(`focus.playing` = `selecting`)에 짝 기기에서 그 쪽의 마디를 탭했다 — 주 기기가 그 마디로 커서를 옮기고, 이미 고른 마디면 시작(주 기기에서 마디를 탭할 때와 같다). `measure` 없으면 줄을 버림 |
+| `start_selected` · `listen_selected` · `cancel` | (v0.9.0-beta.7~) 고르는 중 짝 기기 아래 막대의 "N마디부터 시작" · "🎤 N마디부터 듣기" · "취소" — 주 기기가 고르는 중이 아니면 무시 |
 
 `start` · `listen` · `stop` 은 주 기기가 음성 명령과 같은 길로 한다. 못 하면(마디 못 읽음 · MusicXML 없음 등) 주 기기가 이유를 `notice` 로 돌려준다.
 
@@ -192,3 +195,4 @@
 | v0.9.0-beta.3 | 3 | 선택 필드 · 새 동작(옛 판은 무시 — 판 그대로): `spread.clip_top` · `clip_bottom`, `input` 의 `start` · `listen` · `stop`, `focus.playing`, `notice`, 악보 받기 HTTP 9095 |
 | v0.9.0-beta.5 | 3 | 선택 필드(판 그대로): `pair_announce.code` — 주 기기 화면의 번호, 보조 기기는 세 개 중 고르기 |
 | v0.9.0-beta.6 | 3 | 새 종류(옛 판은 무시 — 판 그대로): `close`(주 기기가 악보를 닫음), `voice` · `voice_report`(오른쪽 보조 기기의 🎙 를 주 기기가) |
+| v0.9.0-beta.7 | 3 | `input` 의 새 동작(옛 판은 무시 — 판 그대로): `pick` · `select`(+ `measure`) · `start_selected` · `listen_selected` · `cancel` — 시작 마디를 두 기기 어디서든 고르기 |

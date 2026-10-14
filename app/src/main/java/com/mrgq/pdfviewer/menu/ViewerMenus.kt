@@ -16,6 +16,8 @@ enum class MenuAction {
     MIC_STOP, MIC_FROM_SELECTION, MIC_FROM_PAGE,
     START_SELECTED, CANCEL_SELECTION,
     RESUME, RESELECT, STOP, START,
+    /** 짝 기기: 주 기기에서 시작 마디 고르기를 연다 (P22) */
+    PICK_MEASURE,
     METRONOME_SETTINGS, ACCOMPANIMENT,
     // 연주 — 합주 연주자
     DETACH, REJOIN, ENSEMBLE_SOUND,
@@ -146,9 +148,12 @@ object ViewerMenus {
     fun pairPartnerPlay(playing: String?, micCapable: Boolean): Menu {
         val items = when (playing) {
             "mic" -> listOf(MenuItem(MenuAction.MIC_STOP, Text.of(R.string.viewer_menu_mic_stop)))
-            "metronome", "selecting" -> listOf(MenuItem(MenuAction.STOP, Text.of(R.string.viewer_menu_stop)))
+            "metronome" -> listOf(MenuItem(MenuAction.STOP, Text.of(R.string.viewer_menu_stop)))
+            // 고르기는 두 기기 모두에서 — 마디 탭 · 아래 막대. 메뉴에는 접기만
+            "selecting" -> listOf(MenuItem(MenuAction.CANCEL_SELECTION, Text.of(R.string.viewer_menu_cancel_selection)))
             else -> listOfNotNull(
                 MenuItem(MenuAction.START, Text.of(R.string.viewer_menu_pair_start)),
+                MenuItem(MenuAction.PICK_MEASURE, Text.of(R.string.viewer_menu_pair_pick)),
                 if (micCapable) MenuItem(MenuAction.MIC_FROM_PAGE, Text.of(R.string.viewer_menu_pair_listen)) else null,
             )
         }
