@@ -293,7 +293,8 @@ class MainActivity : AppCompatActivity() {
         CoroutineScope(Dispatchers.IO).launch {
             val store = com.mrgq.pdfviewer.scoremate.ScoreMateStore(this@MainActivity)
             val linked = store.tokens != null
-            val pdfFiles = getCurrentPdfFiles(linked)
+            val unanalyzed = mutableListOf<Pair<String, File>>()
+            val pdfFiles = getCurrentPdfFiles(linked, unanalyzed)
             val lists = if (linked) com.mrgq.pdfviewer.scoremate.ScoreMateSetlists.parse(store.setlistsBody) else emptyList()
             val rows = if (linked) scoreMateLocal.all() else emptyList()
 
@@ -302,6 +303,40 @@ class MainActivity : AppCompatActivity() {
                 scoreMateLinked = linked
                 setlists = lists
                 syncedRows = rows
+                showLibrary()
+                analyzeForStars(unanalyzed)
+            }
+        }
+    }
+
+    /** 곡 목록의 별을 위해 아직 분석하지 않은 악보를 하나씩 분석하는 일 — 악보를 열면(onPause) 멈춘다 */
+    private var starJob: kotlinx.coroutines.Job? = null
+
+    /**
+     * 아직 마디를 분석하지 않은 악보([files] = 레코드 id · 파일)를 뒤에서 하나씩 분석해 별을 채운다 (사용자 요청 2026-10-15).
+     * 분석은 파일마다 한 번 — 결과는 악보 화면도 그대로 쓴다(ScoreLayoutStore)
+     */
+    private fun analyzeForStars(files: List<Pair<String, File>>) {
+        starJob?.cancel()
+        if (files.isEmpty()) return
+        // 보이는 차례대로 — 위의 곡부터 별이 찬다
+        val order = pdfAdapter.currentList.mapIndexed { index, item -> item.path to index }.toMap()
+        val queue = files.sortedBy { (_, file) -> order[file.absolutePath] ?: Int.MAX_VALUE }
+        starJob = lifecycleScope.launch {
+            for ((id, file) in queue) {
+                val measures = withContext(Dispatchers.IO) {
+                    try {
+                        musicRepository.getOrAnalyzeScoreMeasures(id, file)
+                    } catch (e: Exception) {
+                        Log.w("MainActivity", "별: 분석 실패 ${file.name}", e)
+                        null
+                    }
+                } ?: continue
+                val hasMusicXml = withContext(Dispatchers.IO) { com.mrgq.pdfviewer.scoremate.ScoreMateSync.musicXmlFileOf(file).isFile }
+                val level = com.mrgq.pdfviewer.score.ScoreLevel.of(measures, hasMusicXml)
+                val path = file.absolutePath
+                if (allPdfFiles.none { it.path == path && it.scoreLevel != level }) continue
+                allPdfFiles = allPdfFiles.map { if (it.path == path) it.copy(scoreLevel = level) else it }
                 showLibrary()
             }
         }
@@ -732,8 +767,15 @@ class MainActivity : AppCompatActivity() {
         startActivity(intent)
     }
     
-    private suspend fun getCurrentPdfFiles(linked: Boolean): List<PdfFile> {
+    /** [unanalyzed] 에는 아직 마디를 분석하지 않은 파일(레코드 id · 파일)을 채운다 — 별은 그 뒤 [analyzeForStars] 가 */
+    private suspend fun getCurrentPdfFiles(linked: Boolean, unanalyzed: MutableList<Pair<String, File>>): List<PdfFile> {
         val pdfFiles = mutableListOf<PdfFile>()
+        // 곡 목록의 별 — 메트로놈 악보 연동이 되는 파일 (분석이 끝난 것)
+        val followable = try {
+            musicRepository.followableFileIds()
+        } catch (e: Exception) {
+            emptySet()
+        }
         
         // Load from app's external files directory (uploaded via web server)
         val appPdfDir = File(getExternalFilesDir(null), "PDFs")
@@ -753,6 +795,10 @@ class MainActivity : AppCompatActivity() {
                     null
                 }
                 val badge = com.mrgq.pdfviewer.scoremate.ScoreNotesSync.badgeOf(file)
+                if (record != null && com.mrgq.pdfviewer.score.ScoreLayoutStore.needsAnalysis(record.scoreAnalyzedAt, file)) {
+                    unanalyzed += record.id to file
+                }
+                val hasMusicXml = com.mrgq.pdfviewer.scoremate.ScoreMateSync.musicXmlFileOf(file).isFile
                 pdfFiles.add(PdfFile(
                     name = file.name,
                     path = file.absolutePath,
@@ -771,6 +817,7 @@ class MainActivity : AppCompatActivity() {
                     hasNotes = badge.hasNotes,
                     // 서버에서 받은 악보만 메모를 주고받는다
                     notesUnsent = badge.unsent && synced[file.path] != null,
+                    scoreLevel = com.mrgq.pdfviewer.score.ScoreLevel.of(record != null && record.id in followable, hasMusicXml),
                 ))
             }
         }
@@ -807,6 +854,7 @@ class MainActivity : AppCompatActivity() {
     
     override fun onPause() {
         super.onPause()
+        starJob?.cancel()
         if (com.mrgq.pdfviewer.pair.PairSession.listener === pairListener) com.mrgq.pdfviewer.pair.PairSession.listener = null
         com.mrgq.pdfviewer.scoremate.SessionScores.onChanged = null
         binding.collaborationButton.removeCallbacks(ensembleBlink)

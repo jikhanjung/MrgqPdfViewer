@@ -121,6 +121,10 @@ The first screen when the app starts.
 | ScoreMate score | First line: title + part. Second line: composer · arranger. On the right: size · pages · date |
 | File on the device | File name, pages · size · date |
 | ✏️ Needs sync | Annotations not yet uploaded to ScoreMate (they go up on the next sync) |
+| ★ at the right end | Measures were found (vector PDF) — metronome score follow and automatic page turns work (chapter 6) |
+| ★★ at the right end | MusicXML as well — part view, accompaniment and 🎤 listen and turn also work |
+
+- Scores without stars (scanned PDFs and the like) can still be viewed, turned, annotated and used with the plain metronome. New scores are checked one by one from the top after the list appears, so their stars may show up a moment later.
 
 - **Setlist row**: on a linked device, setlist names appear in a row above the list, and the chosen setlist's pieces are shown **in order, numbered**. If no setlist has been received, a hint tells you to choose one for this device on the website and press 🔄 Sync.
 - Unlinked devices have **Sort** (Name · Date) and **Manage files** (delete) buttons.

@@ -110,4 +110,7 @@
     <string name="main_delete_failed">파일 삭제 실패</string>
     <string name="main_delete_error">삭제 중 오류 발생: %1$s</string>
     <string name="main_pair_opening">주 기기가 연 악보를 엽니다</string>
+    <!-- 곡 목록의 별 (ScoreLevel) — 화면 읽기용 -->
+    <string name="main_score_level_follow">★ 악보 연동</string>
+    <string name="main_score_level_musicxml">★★ 악보 연동 · MusicXML</string>
 </resources>

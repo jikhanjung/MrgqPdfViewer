@@ -42,10 +42,7 @@ object ScoreLayoutStore {
             Log.w(TAG, "레코드와 파일이 다름 — 분석하지 않음: ${record.filePath} ≠ ${file.absolutePath}")
             return@withLock null
         }
-        val analyzedAt = record.scoreAnalyzedAt
-        val serverFile = ServerLayouts.fileFor(file)
-        val newerServerLayout = analyzedAt != null && serverFile.isFile && serverFile.lastModified() > analyzedAt
-        if (analyzedAt != null && !newerServerLayout) {
+        if (!needsAnalysis(record.scoreAnalyzedAt, file)) {
             return@withLock db.scoreMeasureDao().getMeasures(pdfFileId)
         }
 
@@ -61,6 +58,16 @@ object ScoreLayoutStore {
         }
         Log.i(TAG, "마디 ${measures.size}개 · 보표 ${staves.size}개 저장: ${file.name} — 파트 ${ScoreParts.of(staves).summary()}")
         measures
+    }
+
+    /**
+     * 캐시를 그대로 못 쓰나 — 아직 분석 안 함이거나, 서버 분석 파일이 캐시([analyzedAt])보다 새로움.
+     * 곡 목록이 별을 위해 미리 분석할 파일을 고를 때도 쓴다
+     */
+    fun needsAnalysis(analyzedAt: Long?, file: File): Boolean {
+        if (analyzedAt == null) return true
+        val serverFile = ServerLayouts.fileFor(file)
+        return serverFile.isFile && serverFile.lastModified() > analyzedAt
     }
 
     /** 이 파일의 보표 (분석이 끝났을 때만 — [getOrAnalyze] 가 먼저 불려야 한다). 레코드와 파일이 어긋나면 null */

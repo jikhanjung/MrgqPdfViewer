@@ -56,6 +56,18 @@
         android:ellipsize="end"
         android:layout_marginEnd="12dp" />
 
+    <!-- 별 — ★ 메트로놈 악보 연동 · ★★ MusicXML 까지 (ScoreLevel). 칸 폭을 정해 두어 크기 · 날짜 줄이 줄마다 맞는다 -->
+    <TextView
+        android:id="@+id/scoreLevelText"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:minWidth="34dp"
+        android:gravity="end"
+        android:textColor="#FFFFD54F"
+        android:textSize="15sp"
+        android:maxLines="1"
+        android:importantForAccessibility="yes" />
+
     <!-- Delete Button -->
     <Button
         android:id="@+id/deleteButton"

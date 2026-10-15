@@ -20,6 +20,8 @@ data class PdfFile(
     // 악보 메모 (P11) — 곁 파일에 메모가 있나 · ScoreMate 에 올리지 못한 것이 있나 (목록 표시)
     val hasNotes: Boolean = false,
     val notesUnsent: Boolean = false,
+    // 곡 목록의 별 — 0 · ★ 악보 연동 · ★★ MusicXML 까지 ([com.mrgq.pdfviewer.score.ScoreLevel])
+    val scoreLevel: Int = 0,
 ) {
     /** 목록에 보이는 이름 — 서버 제목이 있으면 그것, 없으면 파일 이름 */
     val shownName: String get() = serverTitle?.takeIf { it.isNotBlank() } ?: name

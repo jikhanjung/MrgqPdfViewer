@@ -10,6 +10,7 @@ import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
 import com.mrgq.pdfviewer.R
 import com.mrgq.pdfviewer.model.PdfFile
+import com.mrgq.pdfviewer.score.ScoreLevel
 import com.mrgq.pdfviewer.utils.AppLanguage
 import com.mrgq.pdfviewer.utils.PdfDocumentInfo
 import java.text.SimpleDateFormat
@@ -72,6 +73,7 @@ class PdfFileAdapter(
         private val fileNameText: TextView = itemView.findViewById(R.id.fileNameText)
         private val fileInfoText: TextView = itemView.findViewById(R.id.fileInfoText)
         private val docInfoText: TextView = itemView.findViewById(R.id.docInfoText)
+        private val scoreLevelText: TextView = itemView.findViewById(R.id.scoreLevelText)
         private val deleteButton: Button = itemView.findViewById(R.id.deleteButton)
         private var currentItem: PdfFile? = null
         private var currentPosition: Int = -1
@@ -144,6 +146,14 @@ class PdfFileAdapter(
             // ScoreMate 악보여도 ☁️ · 앙상블 · 파트 · 판은 싣지 않는다 — 서재가 이미 ScoreMate 이고 파트는 제목 옆에 (사용자 요청 2026-09-28)
             val notes = pdfFile.setlistNotes?.takeIf { it.isNotBlank() }?.let { "📝 $it • " } ?: ""
             fileInfoText.text = "$notes$fileSize • $pageInfo • $modifiedDate"
+
+            // 별 — ★ 메트로놈 악보 연동(벡터 PDF · 박자표) · ★★ MusicXML 까지(파트 보기 · 반주 · 듣고 넘기기) (사용자 요청 2026-10-15)
+            scoreLevelText.text = "★".repeat(pdfFile.scoreLevel)
+            scoreLevelText.contentDescription = when (pdfFile.scoreLevel) {
+                ScoreLevel.MUSICXML -> context.getString(R.string.main_score_level_musicxml)
+                ScoreLevel.FOLLOW -> context.getString(R.string.main_score_level_follow)
+                else -> null
+            }
             
             // 파일 관리 모드에 따라 삭제 버튼 표시/숨김
             deleteButton.visibility = if (isFileManagementMode) View.VISIBLE else View.GONE

@@ -36,6 +36,9 @@ class MusicRepository(context: Context) {
     suspend fun getOrAnalyzeScoreMeasures(pdfFileId: String, file: java.io.File): List<ScoreMeasure>? =
         ScoreLayoutStore.getOrAnalyze(database, pdfFileId, file)
 
+    /** 메트로놈 악보 연동이 되는 파일 (곡 목록의 별) — 분석이 끝난 것만 */
+    suspend fun followableFileIds(): Set<String> = database.scoreMeasureDao().followableFileIds().toSet()
+
     /** 악보 보표 (파트보 보기, P07) — 분석 캐시는 마디와 같다 */
     suspend fun getOrAnalyzeScoreStaves(pdfFileId: String, file: java.io.File): List<com.mrgq.pdfviewer.database.entity.ScoreStaff>? =
         ScoreLayoutStore.getOrAnalyzeStaves(database, pdfFileId, file)
