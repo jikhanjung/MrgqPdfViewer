@@ -25,7 +25,7 @@
             android:src="@mipmap/ic_launcher_round"
             android:layout_marginEnd="16dp" />
 
-        <!-- 제목 칸: 가로면 [앱 이름 · 버전 · × ScoreMate] 한 줄, 세로(태블릿)면 그 아래 줄에 × ScoreMate -->
+        <!-- 제목 칸: 가로면 [앱 이름 · 버전 · × Notavela] 한 줄, 세로(태블릿)면 그 아래 줄에 × Notavela -->
         <LinearLayout
             android:layout_width="0dp"
             android:layout_height="wrap_content"
@@ -56,13 +56,13 @@
                 android:textSize="12sp"
                 android:layout_marginStart="8dp" />
 
-            <!-- ScoreMate 에 연결된 TV: 앱 이름 옆에 "× ScoreMate ☁️" (사용자 요청 2026-09-28) — 서재가 ScoreMate 라는 표시.
+            <!-- Notavela 에 연결된 TV: 앱 이름 옆에 "× Notavela ☁️" (사용자 요청 2026-09-28) — 서재가 Notavela 라는 표시.
                  색은 휴대폰 제목과 같은 연한 파랑 (사용자 요청 2026-10-09) -->
             <TextView
                 android:id="@+id/scoreMateBadge"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="×  ScoreMate ☁️"
+                android:text="×  Notavela ☁️"
                 android:textColor="#FF90CAF9"
                 android:textSize="20sp"
                 android:layout_marginStart="14dp"
@@ -74,7 +74,7 @@
                 android:id="@+id/scoreMateBadgeBelow"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="× ScoreMate ☁️"
+                android:text="× Notavela ☁️"
                 android:textColor="#FF90CAF9"
                 android:textSize="15sp"
                 android:visibility="gone" />
@@ -181,7 +181,7 @@
                 android:orientation="horizontal" />
         </HorizontalScrollView>
 
-        <!-- ScoreMate 동기화 (#062) — 연결된 TV 에서만. 주기적 동기화 대신 필요할 때 누른다 (사용자 결정).
+        <!-- Notavela 동기화 (#062) — 연결된 TV 에서만. 주기적 동기화 대신 필요할 때 누른다 (사용자 결정).
              연결된 TV 는 아래 정렬 · 파일관리 줄을 통째로 숨기므로 이 줄 오른쪽 끝에 둔다 -->
         <Button
             android:id="@+id/scoreMateSyncBtn"
@@ -199,7 +199,7 @@
             android:minHeight="0dp" />
     </LinearLayout>
 
-    <!-- Control Strip — 정렬 · 파일관리. ScoreMate 에 연결된 TV 에서는 숨긴다(곡 순서 · 서버가 관리) -->
+    <!-- Control Strip — 정렬 · 파일관리. Notavela 에 연결된 TV 에서는 숨긴다(곡 순서 · 서버가 관리) -->
     <LinearLayout
         android:id="@+id/controlStrip"
         android:layout_width="0dp"
@@ -267,7 +267,7 @@
             android:minHeight="0dp" />
     </LinearLayout>
 
-    <!-- File List — 태블릿 · 휴대폰은 당겨서 ScoreMate 동기화 (P17 4단계). 빈 화면 안내도 같은 틀 안이라 당길 수 있다 -->
+    <!-- File List — 태블릿 · 휴대폰은 당겨서 Notavela 동기화 (P17 4단계). 빈 화면 안내도 같은 틀 안이라 당길 수 있다 -->
     <androidx.swiperefreshlayout.widget.SwipeRefreshLayout
         android:id="@+id/listRefresh"
         android:layout_width="0dp"

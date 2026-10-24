@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- English (P18 step 5): ScoreMate link · sync · ensemble notices. Base: values/strings_connect.xml -->
+<!-- English (P18 step 5): Notavela link · sync · ensemble notices. Base: values/strings_connect.xml -->
 <resources>
-    <!-- ScoreMate errors -->
-    <string name="scoremate_unlinked">The ScoreMate link was removed — link again in Settings</string>
+    <!-- Notavela errors -->
+    <string name="scoremate_unlinked">The Notavela link was removed — link again in Settings</string>
     <string name="scoremate_bad_cursor">Sync cursor doesn\'t match</string>
     <string name="scoremate_code_too_many">Too many link codes requested. Try again in a moment</string>
     <string name="scoremate_code_failed">Couldn\'t get a link code (HTTP %1$d)</string>
@@ -20,14 +20,14 @@
     <string name="scoremate_download_interrupted">Connection lost while downloading the score</string>
     <string name="scoremate_refresh_bad_response">Couldn\'t read the token refresh response</string>
     <string name="scoremate_refresh_failed">Couldn\'t refresh the token (HTTP %1$d)</string>
-    <string name="scoremate_unreachable">Can\'t reach the ScoreMate server</string>
+    <string name="scoremate_unreachable">Can\'t reach the Notavela server</string>
     <string name="scoremate_poll_no_token">No token in the server response</string>
     <string name="scoremate_poll_error">Link error: %1$s</string>
 
     <!-- Link dialog — %1$s = device noun -->
-    <string name="scoremate_link_title">Link this %1$s to ScoreMate</string>
+    <string name="scoremate_link_title">Link this %1$s to Notavela</string>
     <string name="scoremate_link_new_code">New code</string>
-    <string name="scoremate_link_requesting">Getting a link code from the ScoreMate server…</string>
+    <string name="scoremate_link_requesting">Getting a link code from the Notavela server…</string>
     <string name="scoremate_link_retry_hint">Try again with \"New code\" (%1$s)</string>
     <string name="scoremate_link_steps">"1. Scan the QR code with your phone, or\n    go to %1$s\n2. Sign in, check this code and tap \"Link\""</string>
     <string name="scoremate_link_waiting">Waiting for the link on your phone… (%1$d:%2$02d left)%3$s</string>
@@ -56,7 +56,7 @@
     <string name="scoremate_notes_put_failed">Couldn\'t upload annotations (HTTP %1$d)</string>
     <string name="scoremate_notes_conflict">Annotations kept conflicting and couldn\'t be uploaded</string>
 
-    <!-- Sync summary — joined as "ScoreMate: a, b, c" -->
+    <!-- Sync summary — joined as "Notavela: a, b, c" -->
     <plurals name="scoremate_summary_downloaded">
         <item quantity="one">%1$d score downloaded</item>
         <item quantity="other">%1$d scores downloaded</item>

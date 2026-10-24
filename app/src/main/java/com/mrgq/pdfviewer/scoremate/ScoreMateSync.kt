@@ -889,6 +889,6 @@ object ScoreMateSyncText {
         if (report.errors.isNotEmpty()) {
             parts += context.getString(R.string.scoremate_summary_failed, report.errors.size, report.errors.first().resolve(context))
         }
-        return if (parts.isEmpty()) null else "ScoreMate: " + parts.joinToString(", ")
+        return if (parts.isEmpty()) null else "Notavela: " + parts.joinToString(", ")
     }
 }

@@ -150,7 +150,7 @@ jobs:
           if [ -z "$(echo "$BODY" | tr -d '[:space:]-')" ]; then
             BODY="_(CHANGELOG 에 해당 섹션이 없거나 비어 있습니다 — 테스트 태그일 수 있음)_"
           fi
-          # ScoreMate 서버에 올릴 변경 내용 — CHANGELOG 섹션만(빌드 정보 빼고, 앱 업데이트 알림에 그대로 보인다, P15 §2.3)
+          # Notavela 서버에 올릴 변경 내용 — CHANGELOG 섹션만(빌드 정보 빼고, 앱 업데이트 알림에 그대로 보인다, P15 §2.3)
           echo "$BODY" > changelog-section.md
 
           {
@@ -197,54 +197,54 @@ jobs:
           fi
           echo "릴리스: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/releases/tag/${TAG}" >> "$GITHUB_STEP_SUMMARY"
 
-      # ScoreMate 서버에도 올린다 — 앱 안 업데이트 · 다운로드 페이지의 정본(P15 · 서버 P16).
+      # Notavela 서버에도 올린다 — 앱 안 업데이트 · 다운로드 페이지의 정본(P15 · 서버 P16).
       # 정식 · 사전 릴리스 모두(사전 릴리스는 /download/beta/ 와 앱의 "사전 릴리스 받기"), 시험 태그(-test)는 빼고(서버가 400).
       # 릴리스 키 서명일 때만 — 서버도 서명 인증서를 고정 값과 비교한다. 같은 버전 · 같은 sha256 재실행은 200(성공).
-      - name: Upload APK to ScoreMate
+      - name: Upload APK to Notavela
         env:
           APP_RELEASE_TOKEN: ${{ secrets.APP_RELEASE_TOKEN }}
           SIGNED: ${{ needs.build.outputs.signed-with-release-key }}
           TAG: ${{ needs.verify.outputs.tag }}
-          UPLOAD_URL: https://scoremate.noematica.kr/api/v1/app-releases/mrgqpdfviewer/android/  # 앱 이름을 주소에(서버 0.24.0) — 옛 …/app-releases/android/ 와 같은 뜻
+          UPLOAD_URL: https://notavela.noematica.kr/api/v1/app-releases/mrgqpdfviewer/android/  # 앱 이름을 주소에(서버 0.24.0) — 옛 …/app-releases/android/ 와 같은 뜻
         run: |
           set -euo pipefail
           if [ -z "${APP_RELEASE_TOKEN:-}" ]; then
-            echo "::notice::APP_RELEASE_TOKEN secret 이 없어 ScoreMate 업로드를 건너뜁니다"; exit 0
+            echo "::notice::APP_RELEASE_TOKEN secret 이 없어 Notavela 업로드를 건너뜁니다"; exit 0
           fi
           if [ "$SIGNED" != "true" ]; then
-            echo "::notice::릴리스 키로 서명되지 않아 ScoreMate 업로드를 건너뜁니다"; exit 0
+            echo "::notice::릴리스 키로 서명되지 않아 Notavela 업로드를 건너뜁니다"; exit 0
           fi
           if [[ "$TAG" == *-test ]]; then
-            echo "::notice::시험 태그($TAG)는 ScoreMate 에 올리지 않습니다"; exit 0
+            echo "::notice::시험 태그($TAG)는 Notavela 에 올리지 않습니다"; exit 0
           fi
           APK=$(ls dist/*-release.apk | head -n 1)
           SHA=$(sha256sum "$APK" | cut -d' ' -f1)
           CODE=$(grep -oP 'versionCode\s*=\s*\K\d+' app/build.gradle.kts)
-          code=$(curl -sS -o scoremate.json -w '%{http_code}' --retry 3 --retry-delay 10 \
+          code=$(curl -sS -o notavela.json -w '%{http_code}' --retry 3 --retry-delay 10 \
             -H "Authorization: Bearer ${APP_RELEASE_TOKEN}" \
             -F "apk=@${APK}" -F "version=${TAG}" -F "sha256=${SHA}" \
             -F "version_code=${CODE}" -F "notes=<changelog-section.md" \
             "$UPLOAD_URL")
-          cat scoremate.json; echo
+          cat notavela.json; echo
           # 201 = 새 판(또는 같은 버전 · 다른 파일), 200 = 같은 버전 · 같은 sha256 재실행
           if [ "$code" != "201" ] && [ "$code" != "200" ]; then
-            echo "::error::ScoreMate 업로드 실패 (HTTP $code)"; exit 1
+            echo "::error::Notavela 업로드 실패 (HTTP $code)"; exit 1
           fi
-          echo "ScoreMate 다운로드: https://scoremate.noematica.kr/download/ ($(cat scoremate.json))" >> "$GITHUB_STEP_SUMMARY"
+          echo "Notavela 다운로드: https://notavela.noematica.kr/download/mrgqpdfviewer/ ($(cat notavela.json))" >> "$GITHUB_STEP_SUMMARY"
 
       # 사용자 설명서도 이 판으로 올린다 — 서버가 /manual/ 에서 HTML 로 보이고 앱 설정 "설명서" 줄이 연다(P19 4단계 · P20 · 서버 P05).
       # 조건은 APK 와 같다(토큰 · 릴리스 키 · -test 제외). 같은 (판, 문서, 언어)를 다시 올리면 200 으로 내용만 바뀐다 —
       # 설명서만 고쳤으면 Release 를 그 태그로 workflow_dispatch 하면 된다(APK 는 같은 sha256 이라 200).
-      - name: Upload manual to ScoreMate
+      - name: Upload manual to Notavela
         env:
           APP_RELEASE_TOKEN: ${{ secrets.APP_RELEASE_TOKEN }}
           SIGNED: ${{ needs.build.outputs.signed-with-release-key }}
           TAG: ${{ needs.verify.outputs.tag }}
-          UPLOAD_URL: https://scoremate.noematica.kr/api/v1/app-manuals/
+          UPLOAD_URL: https://notavela.noematica.kr/api/v1/app-manuals/
         run: |
           set -euo pipefail
           if [ -z "${APP_RELEASE_TOKEN:-}" ] || [ "$SIGNED" != "true" ] || [[ "$TAG" == *-test ]]; then
-            echo "::notice::ScoreMate 설명서 올리기를 건너뜁니다 (APK 와 같은 조건)"; exit 0
+            echo "::notice::Notavela 설명서 올리기를 건너뜁니다 (APK 와 같은 조건)"; exit 0
           fi
           # doc lang 파일 — 링크는 서버가 볼 때 이 판에 올라온 filename 끼리 바꾼다
           while read -r doc lang file; do
@@ -255,11 +255,11 @@ jobs:
               "$UPLOAD_URL" </dev/null)
             echo "$doc/$lang ($file): HTTP $code $(cat manual.json)"
             if [ "$code" != "201" ] && [ "$code" != "200" ]; then
-              echo "::error::ScoreMate 설명서 올리기 실패 ($doc/$lang, HTTP $code)"; exit 1
+              echo "::error::Notavela 설명서 올리기 실패 ($doc/$lang, HTTP $code)"; exit 1
             fi
           done <<'DOCS'
           manual ko docs/User_Manual.md
           manual en docs/User_Manual.en.md
           voice-commands ko docs/Voice_Commands.md
           DOCS
-          echo "ScoreMate 설명서: https://scoremate.noematica.kr/manual/?v=${TAG}" >> "$GITHUB_STEP_SUMMARY"
+          echo "Notavela 설명서: https://notavela.noematica.kr/manual/?v=${TAG}" >> "$GITHUB_STEP_SUMMARY"

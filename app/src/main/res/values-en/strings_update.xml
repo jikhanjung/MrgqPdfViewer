@@ -21,7 +21,7 @@
     <string name="update_up_to_date_title">You\'re up to date</string>
     <string name="update_up_to_date_message">v%1$s is the latest version.\n\nChecked at: %2$s</string>
     <string name="update_install_blocked">Install permission is off, so the update wasn\'t installed</string>
-    <string name="update_source_scoremate">ScoreMate server (%1$s)</string>
+    <string name="update_source_scoremate">Notavela server (%1$s)</string>
     <string name="update_unavailable_title">Can\'t update</string>
     <string name="update_no_apk_message">Release %1$s has no APK to install (%2$s).</string>
     <string name="update_offer_source">From: %1$s</string>

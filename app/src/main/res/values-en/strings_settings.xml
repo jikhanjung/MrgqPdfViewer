@@ -33,7 +33,7 @@
     <string name="settings_delete_all_pdf_partial">Deleted %1$d files, %2$d failed</string>
 
     <!-- Web server -->
-    <string name="settings_web_unavailable_linked">Off while linked to ScoreMate</string>
+    <string name="settings_web_unavailable_linked">Off while linked to Notavela</string>
     <string name="settings_web_port">Port</string>
     <string name="settings_web_log_title">Web server activity log</string>
     <string name="settings_web_log_placeholder">Web server logs appear here...</string>
@@ -43,7 +43,7 @@
     <string name="settings_web_started_toast">Web server started\nhttp://%1$s:%2$d</string>
     <string name="settings_web_start_failed">Couldn\'t start the web server</string>
     <string name="settings_web_stopped_toast">Web server stopped</string>
-    <string name="settings_web_linked_toast">The web server isn\'t available on a TV linked to ScoreMate</string>
+    <string name="settings_web_linked_toast">The web server isn\'t available on a TV linked to Notavela</string>
     <string name="settings_web_port_hint">Port number (1024-65535)</string>
     <string name="settings_web_port_title">Web server port</string>
     <string name="settings_web_port_saved">Port saved: %1$d</string>
@@ -74,7 +74,7 @@
     <string name="settings_message_queue_title">Message queue system</string>
     <string name="settings_message_queue_message">The message queue system is disabled for performance.\n\nEnsemble messages are now handled directly for a faster response.</string>
 
-    <!-- ScoreMate -->
+    <!-- Notavela -->
     <string name="settings_scoremate_link_header">Link</string>
     <string name="settings_scoremate_linked">Linked</string>
     <string name="settings_scoremate_unlinked">Not linked</string>
@@ -96,19 +96,19 @@
     <string name="settings_scoremate_membership_web">Manage on the web</string>
     <string name="settings_scoremate_sync">Sync now</string>
     <string name="settings_scoremate_unhide">Restore hidden scores</string>
-    <string name="settings_scoremate_linked_toast">Linked to ScoreMate — the file list now shows ScoreMate scores</string>
-    <string name="settings_scoremate_check_title">ScoreMate link</string>
+    <string name="settings_scoremate_linked_toast">Linked to Notavela — the file list now shows Notavela scores</string>
+    <string name="settings_scoremate_check_title">Notavela link</string>
     <string name="settings_scoremate_check_message">This %1$s: %2$s\nServer: %3$s\nLast seen: %4$s</string>
-    <string name="settings_scoremate_syncing">Syncing ScoreMate…</string>
-    <string name="settings_scoremate_no_changes">ScoreMate: no changed scores</string>
+    <string name="settings_scoremate_syncing">Syncing Notavela…</string>
+    <string name="settings_scoremate_no_changes">Notavela: no changed scores</string>
     <string name="settings_scoremate_no_hidden">No hidden scores</string>
-    <string name="settings_scoremate_unlink_title">Unlink ScoreMate</string>
-    <string name="settings_scoremate_unlink_message">This unlinks this %1$s from ScoreMate. To use it again, link it again from your phone.\n\nWhat about the downloaded scores? If you keep them, they move to this device\'s files and show in the file list after unlinking.</string>
+    <string name="settings_scoremate_unlink_title">Unlink Notavela</string>
+    <string name="settings_scoremate_unlink_message">This unlinks this %1$s from Notavela. To use it again, link it again from your phone.\n\nWhat about the downloaded scores? If you keep them, they move to this device\'s files and show in the file list after unlinking.</string>
     <string name="settings_scoremate_unlink_keep">Unlink · keep scores</string>
     <string name="settings_scoremate_unlink_delete">Unlink · delete scores</string>
-    <string name="settings_scoremate_unlinked_toast">Unlinked from ScoreMate</string>
+    <string name="settings_scoremate_unlinked_toast">Unlinked from Notavela</string>
     <string name="settings_scoremate_unlinked_local_toast">Unlinked on this %1$s (couldn\'t reach the server — also unlink it on the web\'s TV page)</string>
-    <string name="settings_scoremate_server_title">ScoreMate server address</string>
+    <string name="settings_scoremate_server_title">Notavela server address</string>
     <string name="settings_scoremate_server_message">Usually no need to change this (for development servers). Leave empty for the default.</string>
     <string name="settings_scoremate_server_invalid">Can\'t read the server address</string>
 

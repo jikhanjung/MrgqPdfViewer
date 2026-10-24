@@ -33,7 +33,7 @@
     <string name="settings_delete_all_pdf_partial">%1$d개 파일 삭제 완료, %2$d개 파일 삭제 실패</string>
 
     <!-- 웹서버 -->
-    <string name="settings_web_unavailable_linked">ScoreMate 연결 중에는 쓸 수 없음</string>
+    <string name="settings_web_unavailable_linked">Notavela 연결 중에는 쓸 수 없음</string>
     <string name="settings_web_port">포트</string>
     <string name="settings_web_log_title">웹서버 활동 로그</string>
     <string name="settings_web_log_placeholder">웹서버 로그가 여기에 표시됩니다...</string>
@@ -43,7 +43,7 @@
     <string name="settings_web_started_toast">웹서버가 시작되었습니다\nhttp://%1$s:%2$d</string>
     <string name="settings_web_start_failed">웹서버 시작 실패</string>
     <string name="settings_web_stopped_toast">웹서버가 중지되었습니다</string>
-    <string name="settings_web_linked_toast">ScoreMate 에 연결된 TV 에서는 웹서버를 쓸 수 없습니다</string>
+    <string name="settings_web_linked_toast">Notavela 에 연결된 TV 에서는 웹서버를 쓸 수 없습니다</string>
     <string name="settings_web_port_hint">포트 번호 (1024-65535)</string>
     <string name="settings_web_port_title">웹서버 포트 설정</string>
     <string name="settings_web_port_saved">포트 설정이 저장되었습니다: %1$d</string>
@@ -74,7 +74,7 @@
     <string name="settings_message_queue_title">메시지 큐 시스템</string>
     <string name="settings_message_queue_message">메시지 큐 시스템은 성능 최적화를 위해 비활성화되었습니다.\n\n협업 메시지는 이제 직접 처리되어 더 빠른 반응 속도를 제공합니다.</string>
 
-    <!-- ScoreMate -->
+    <!-- Notavela -->
     <string name="settings_scoremate_link_header">연결</string>
     <string name="settings_scoremate_linked">연결됨</string>
     <string name="settings_scoremate_unlinked">연결 안 됨</string>
@@ -96,19 +96,19 @@
     <string name="settings_scoremate_membership_web">웹에서 관리</string>
     <string name="settings_scoremate_sync">지금 동기화</string>
     <string name="settings_scoremate_unhide">숨긴 악보 다시 받기</string>
-    <string name="settings_scoremate_linked_toast">ScoreMate 에 연결되었습니다 — 파일 목록에는 ScoreMate 악보가 보입니다</string>
-    <string name="settings_scoremate_check_title">ScoreMate 연결 확인</string>
+    <string name="settings_scoremate_linked_toast">Notavela 에 연결되었습니다 — 파일 목록에는 Notavela 악보가 보입니다</string>
+    <string name="settings_scoremate_check_title">Notavela 연결 확인</string>
     <string name="settings_scoremate_check_message">이 %1$s: %2$s\n서버: %3$s\n마지막 접속: %4$s</string>
-    <string name="settings_scoremate_syncing">ScoreMate 동기화 중…</string>
-    <string name="settings_scoremate_no_changes">ScoreMate: 바뀐 악보가 없습니다</string>
+    <string name="settings_scoremate_syncing">Notavela 동기화 중…</string>
+    <string name="settings_scoremate_no_changes">Notavela: 바뀐 악보가 없습니다</string>
     <string name="settings_scoremate_no_hidden">숨긴 악보가 없습니다</string>
-    <string name="settings_scoremate_unlink_title">ScoreMate 연결 해제</string>
-    <string name="settings_scoremate_unlink_message">이 %1$s 의 ScoreMate 연결을 끊습니다. 다시 쓰려면 휴대폰으로 다시 연결해야 합니다.\n\n받아 둔 악보는 어떻게 할까요? 남기면 이 기기 파일로 옮겨져 연결 해제 뒤의 파일 목록에 보입니다.</string>
+    <string name="settings_scoremate_unlink_title">Notavela 연결 해제</string>
+    <string name="settings_scoremate_unlink_message">이 %1$s 의 Notavela 연결을 끊습니다. 다시 쓰려면 휴대폰으로 다시 연결해야 합니다.\n\n받아 둔 악보는 어떻게 할까요? 남기면 이 기기 파일로 옮겨져 연결 해제 뒤의 파일 목록에 보입니다.</string>
     <string name="settings_scoremate_unlink_keep">해제 · 악보 남기기</string>
     <string name="settings_scoremate_unlink_delete">해제 · 악보 지우기</string>
-    <string name="settings_scoremate_unlinked_toast">ScoreMate 연결을 해제했습니다</string>
+    <string name="settings_scoremate_unlinked_toast">Notavela 연결을 해제했습니다</string>
     <string name="settings_scoremate_unlinked_local_toast">이 %1$s 에서 연결을 해제했습니다 (서버에 닿지 못함 — 웹의 TV 화면에서도 해제하세요)</string>
-    <string name="settings_scoremate_server_title">ScoreMate 서버 주소</string>
+    <string name="settings_scoremate_server_title">Notavela 서버 주소</string>
     <string name="settings_scoremate_server_message">보통은 바꿀 필요가 없습니다 (개발 서버용). 비우면 기본값.</string>
     <string name="settings_scoremate_server_invalid">서버 주소를 해석할 수 없습니다</string>
 

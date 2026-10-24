@@ -6,6 +6,11 @@
 
 ## [Unreleased]
 
+### ☁️ 서버 이름이 Notavela 로
+- 악보 서버(옛 이름 ScoreMate)가 **Notavela** 가 되었다 — 화면 글("× Notavela ☁️", 설정 칸, 연결 · 동기화 · 업데이트 안내) · 기본 서버 `https://notavela.noematica.kr`
+- 이미 연결한 기기는 그대로 — 옛 주소 `scoremate.noematica.kr` 도 같은 서버라 다시 연결할 필요 없다. 기기에 저장된 것(연결 · 설정 키 · 받은 악보 폴더 `ScoreMate/`)은 이름을 바꾸지 않는다
+- 릴리스 CI 는 APK · 설명서를 새 주소로 올린다 (ScoreMateServer devlog 088)
+
 ---
 
 ## [0.9.1] - 2026-10-15

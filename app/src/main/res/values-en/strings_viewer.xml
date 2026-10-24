@@ -76,7 +76,7 @@
     <string name="viewer_ensemble_file_not_found">Requested file not found: %1$s</string>
     <string name="viewer_download_title">Download file</string>
     <string name="viewer_download_message">\'%1$s\' isn\'t on this device.\nDownload it from the conductor?</string>
-    <string name="viewer_download_cached_note">\n(This score isn\'t in this device\'s ScoreMate — it\'s kept for the ensemble only, not added to the list)</string>
+    <string name="viewer_download_cached_note">\n(This score isn\'t in this device\'s Notavela — it\'s kept for the ensemble only, not added to the list)</string>
     <string name="viewer_download">Download</string>
     <string name="viewer_downloading">Downloading...</string>
     <string name="viewer_download_save_failed">Couldn\'t save the downloaded file</string>

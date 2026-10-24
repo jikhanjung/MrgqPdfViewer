@@ -16,9 +16,9 @@
     <string name="main_file_manage">Manage files</string>
     <string name="main_file_manage_done">Done</string>
 
-    <string name="main_sync_running">Syncing with ScoreMate…</string>
-    <string name="main_sync_already_running">ScoreMate sync is already running</string>
-    <string name="main_sync_no_changes">ScoreMate: no changed scores</string>
+    <string name="main_sync_running">Syncing with Notavela…</string>
+    <string name="main_sync_already_running">Notavela sync is already running</string>
+    <string name="main_sync_no_changes">Notavela: no changed scores</string>
     <string name="main_cloud_my_scores">My scores</string>
     <string name="main_cloud_version">v%1$d</string>
 
@@ -86,7 +86,7 @@
     <string name="main_requested_file_not_found">Requested file not found: %1$s</string>
     <string name="main_download_title">Download file</string>
     <string name="main_download_message">\'%1$s\' isn\'t on this device.\nDownload it from the conductor?%2$s</string>
-    <string name="main_download_cached_note">(Not in this device\'s ScoreMate — kept for the ensemble only, not added to the list)</string>
+    <string name="main_download_cached_note">(Not in this device\'s Notavela — kept for the ensemble only, not added to the list)</string>
     <string name="main_download">Download</string>
     <string name="main_downloading">Downloading...</string>
     <string name="main_download_save_failed">Couldn\'t save the downloaded file</string>

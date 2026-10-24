@@ -274,7 +274,7 @@ class SettingsActivity : AppCompatActivity() {
         currentItems.add(SettingsItem(
             id = "scoremate",
             icon = "☁️",
-            title = "ScoreMate",
+            title = "Notavela",
             arrow = "▶"
         ))
 
@@ -533,7 +533,7 @@ class SettingsActivity : AppCompatActivity() {
                 type = SettingsType.ACTION
             )
         }
-        showDetailPanel("scoremate", "ScoreMate", items)
+        showDetailPanel("scoremate", "Notavela", items)
     }
 
     private fun loadMembership() {

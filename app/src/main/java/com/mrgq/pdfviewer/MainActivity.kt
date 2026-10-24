@@ -1380,7 +1380,7 @@ class MainActivity : AppCompatActivity() {
         val name = getString(R.string.app_name)
         val cut = name.indexOf(' ').takeIf { it > 0 } ?: name.length
         // × 와 ScoreMate 사이는 좁은 공백, 구름 앞은 줄바꿈 없는 공백 — 구름만 다음 줄로 넘어가지 않게 (2026-10-06)
-        val badge = if (linked) " ×\u202FScoreMate\u00A0☁️" else ""
+        val badge = if (linked) " ×\u202FNotavela\u00A0☁️" else ""
         val version = " v${BuildConfig.VERSION_NAME}"
         val first = name.substring(0, cut)
         val rest = name.substring(cut).trimStart()

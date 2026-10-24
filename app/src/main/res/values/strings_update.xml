@@ -23,7 +23,7 @@
     <string name="update_up_to_date_message">현재 v%1$s 이 최신입니다.\n\n확인한 곳: %2$s</string>
     <string name="update_install_blocked">설치 허용이 꺼져 있어 설치하지 않았습니다</string>
     <!-- %1$s = 서버 주소(https:// 뺌) -->
-    <string name="update_source_scoremate">ScoreMate 서버 (%1$s)</string>
+    <string name="update_source_scoremate">Notavela 서버 (%1$s)</string>
     <string name="update_unavailable_title">업데이트할 수 없음</string>
     <!-- %1$s = 태그, %2$s = APK 이름 끝 -->
     <string name="update_no_apk_message">%1$s 릴리스에 설치할 APK(%2$s)가 없습니다.</string>

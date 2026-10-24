@@ -11,7 +11,7 @@ import com.mrgq.pdfviewer.update.UiText
  */
 object ScoreMateProtocol {
 
-    const val DEFAULT_SERVER = "https://scoremate.noematica.kr"
+    const val DEFAULT_SERVER = "https://notavela.noematica.kr"   // 옛 이름 scoremate.noematica.kr 도 같은 서버(ScoreMateServer devlog 088)
 
     /** 이 앱의 이름 — 서버가 앱을 나눈 뒤(서버 0.24.0) 연결 · heartbeat 에 붙여 웹 "기기 관리"에 앱 이름이 보이게 한다. 빈 칸 = 옛 앱 */
     const val CLIENT = "mrgqpdfviewer"
