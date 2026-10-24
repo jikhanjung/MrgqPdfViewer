@@ -24,7 +24,7 @@ It is the same app on every device; it adapts to each one. Where the controls di
 ### 1.2 Three ways to use it
 
 - **On your own** — put PDFs on the device and read them (→ 3.2 Uploading through the web server).
-- **With ScoreMate** — the device downloads the scores and setlists you keep on the ScoreMate website (→ 3.1).
+- **With Notavela** — the device downloads the scores and setlists you keep on the Notavela website (→ 3.1).
 - **Ensemble** — one device (the conductor) chooses the piece, page and metronome; the other devices (performers) follow (→ chapter 9).
 
 ---
@@ -58,30 +58,30 @@ In **Settings → 🔤 Language (언어)**, choose **System default · 한국어
 
 ## 3. Adding scores
 
-### 3.1 Linking to ScoreMate
+### 3.1 Linking to Notavela
 
-ScoreMate is a website for managing scores and setlists. A linked device downloads its scores from there.
+Notavela is a website for managing scores and setlists. A linked device downloads its scores from there.
 
 **Linking**
-1. **Settings → ☁️ ScoreMate → Link this TV** (on a tablet or phone: "Link this tablet" · "Link this phone").
+1. **Settings → ☁️ Notavela → Link this TV** (on a tablet or phone: "Link this tablet" · "Link this phone").
 2. A QR code and a link code appear.
 3. Scan the QR code with your phone, or go to the address shown.
 4. Sign in, check the code and tap **Link**.
 5. When the device shows "Linked", you're done. The code is valid only for a few minutes — after that, press **New code**.
 
 **Sync**
-- The app syncs when it starts. To sync right away, press **🔄 Sync** in the score list (on a tablet or phone you can also pull the list down) or **Settings → ☁️ ScoreMate → Sync now**.
+- The app syncs when it starts. To sync right away, press **🔄 Sync** in the score list (on a tablet or phone you can also pull the list down) or **Settings → ☁️ Notavela → Sync now**.
 - **Setlists**: when you choose setlists to send to this device on the website, their names appear as a row above the score list. A linked device shows **only the pieces in its setlists**. Removing a piece from a setlist also removes it from the device — that's expected.
-- Deleting a ScoreMate score on the device only hides it. To get it back: **Settings → ☁️ ScoreMate → Restore hidden scores**.
-- If ScoreMate has MusicXML or analysis data for a piece, it is downloaded too. It is used by accompaniment (6.4), listen & turn pages (6.5) and the letter command (chapter 8).
+- Deleting a Notavela score on the device only hides it. To get it back: **Settings → ☁️ Notavela → Restore hidden scores**.
+- If Notavela has MusicXML or analysis data for a piece, it is downloaded too. It is used by accompaniment (6.4), listen & turn pages (6.5) and the letter command (chapter 8).
 
-**Membership**: the **Settings → ☁️ ScoreMate → Membership** row shows your plan (Lite · Pro · Maestro) and when it ends. Tap it to also see this month's score recognition usage. Coupons, trials and other membership changes are made **on the web** (a TV shows a QR code).
+**Membership**: the **Settings → ☁️ Notavela → Membership** row shows your plan (Lite · Pro · Maestro) and when it ends. Tap it to also see this month's score recognition usage. Coupons, trials and other membership changes are made **on the web** (a TV shows a QR code).
 - If hidden scores take more than 500 MB, the ones not opened for the longest are removed first.
 - On the **Lite** plan, ensemble scores from a Maestro leader appear in the list **only during ensemble mode** — they show up when an ensemble (chapter 9) starts and are hidden when it ends. Hidden scores come back right away at the next ensemble (even offline) and are removed if **not opened for 30 days** (downloaded again at the next ensemble). Notes you wrote on them are kept.
 
-**Unlinking**: **Settings → ☁️ ScoreMate → Unlink**. Choose whether to **keep or delete** the downloaded scores. Kept scores become ordinary files on this device.
+**Unlinking**: **Settings → ☁️ Notavela → Unlink**. Choose whether to **keep or delete** the downloaded scores. Kept scores become ordinary files on this device.
 
-> A linked device **doesn't use the web server.** While linked, the score list only shows ScoreMate scores, so files uploaded through the web server would not appear.
+> A linked device **doesn't use the web server.** While linked, the score list only shows Notavela scores, so files uploaded through the web server would not appear.
 
 ### 3.2 Uploading through the web server (unlinked devices)
 
@@ -105,7 +105,7 @@ The first screen when the app starts.
 
 ### 4.1 Header
 
-- **× ScoreMate ☁️** next to (or below) the app name — the device is linked to ScoreMate.
+- **× Notavela ☁️** next to (or below) the app name — the device is linked to Notavela.
 - **Ensemble button** at the top right (two people) — start or stop an ensemble (→ chapter 9). Its color shows the ensemble status:
   - White — no ensemble
   - **Green** — in an ensemble (conductor mode, or a performer connected to the conductor). For the conductor, the number of connected performers is shown next to the icon
@@ -118,9 +118,9 @@ The first screen when the app starts.
 
 | | What you see |
 |---|---|
-| ScoreMate score | First line: title + part. Second line: composer · arranger. On the right: size · pages · date |
+| Notavela score | First line: title + part. Second line: composer · arranger. On the right: size · pages · date |
 | File on the device | File name, pages · size · date |
-| ✏️ Needs sync | Annotations not yet uploaded to ScoreMate (they go up on the next sync) |
+| ✏️ Needs sync | Annotations not yet uploaded to Notavela (they go up on the next sync) |
 | ★ at the right end | Measures were found (vector PDF) — metronome score follow and automatic page turns work (chapter 6) |
 | ★★ at the right end | MusicXML as well — part view, accompaniment and 🎤 listen and turn also work |
 
@@ -272,7 +272,7 @@ Pieces whose time signature can't be read run as an ordinary metronome without f
 
 ### 6.4 Accompaniment (MusicXML)
 
-If there is **MusicXML** for the same piece (downloaded from ScoreMate, or a `.musicxml` with the same name next to the PDF), the score-linked metronome **plays the other parts with a simple sound**.
+If there is **MusicXML** for the same piece (downloaded from Notavela, or a `.musicxml` with the same name next to the PDF), the score-linked metronome **plays the other parts with a simple sound**.
 
 - In **Play → Accompaniment (MusicXML)**: **Accompaniment on**, and the accompaniment volume (separate from the metronome click).
 - **Accompaniment parts**: chosen per piece.
@@ -301,7 +301,7 @@ The device listens through its microphone, follows where you are in the score, a
 
 ## 7. Annotations (tablet · phone)
 
-Write on the score with a finger or stylus. Annotations travel with the score file (a companion file with the same name), and on a linked device your annotations sync with ScoreMate.
+Write on the score with a finger or stylus. Annotations travel with the score file (a companion file with the same name), and on a linked device your annotations sync with Notavela.
 
 ### 7.1 Writing
 
@@ -328,14 +328,14 @@ The annotate toolbar:
 
 ### 7.2 Conductor annotations
 
-The owner and leaders of a ScoreMate ensemble can write **conductor annotations**, which everyone in the ensemble sees. In annotate mode, press **👤 Mine ↔ 🎼 Conductor** to switch. Selecting a conductor annotation briefly shows who wrote it.
+The owner and leaders of a Notavela ensemble can write **conductor annotations**, which everyone in the ensemble sees. In annotate mode, press **👤 Mine ↔ 🎼 Conductor** to switch. Selecting a conductor annotation briefly shows who wrote it.
 
 ### 7.3 Sync
 
-- A linked device exchanges your annotations and conductor annotations with ScoreMate when it syncs, merging annotations from several devices.
+- A linked device exchanges your annotations and conductor annotations with Notavela when it syncs, merging annotations from several devices.
 - The score list checks for annotation changes about every 10 minutes, and syncs when you return from a score.
 - Annotations not yet uploaded show **✏️ Needs sync** on the score card.
-- When a new edition of a score arrives from ScoreMate, the app warns that "annotations may be out of place".
+- When a new edition of a score arrives from Notavela, the app warns that "annotations may be out of place".
 
 ---
 
@@ -407,7 +407,7 @@ Several devices read together. One device is the **conductor**; the others are *
 - **The conductor always sees the full score.** Performers can use part view for their own part; pages stay in step with the original.
 - If devices have different ensemble versions, the app says which device to update when they connect.
 - Pieces received from the conductor (or from the main device in a two-device spread) are kept apart from the score list — the same piece isn't downloaded again next time, and it is removed if **not opened for 30 days** (when space runs short, the ones not opened for the longest go first).
-- On the ScoreMate **Lite** plan, ensemble scores from a Maestro leader appear only during an ensemble (3.1 Membership).
+- On the Notavela **Lite** plan, ensemble scores from a Maestro leader appear only during an ensemble (3.1 Membership).
 
 ---
 
@@ -418,11 +418,11 @@ Several devices read together. One device is the **conductor**; the others are *
 | Section | Rows | What they do |
 |---|---|---|
 | 📂 **Files** | Delete all PDFs | Deletes every PDF on this device (can't be undone) |
-| 🌐 **Web server** | Web server · Port | 3.2. Not available on a device linked to ScoreMate |
+| 🌐 **Web server** | Web server · Port | 3.2. Not available on a device linked to Notavela |
 | **Ensemble** | Performer metronome | 9.2 |
 | | Experimental: Synced turns · Turn delay | chapter 12 |
 | | Advanced: Input block · Message queue | e.g. how long a performer can't turn right after the conductor turns — usually leave as is |
-| ☁️ **ScoreMate** | Link: Linked/Not linked · Check link · Membership · Unlink · Link this device · Server | 3.1. The server address normally doesn't need changing |
+| ☁️ **Notavela** | Link: Linked/Not linked · Check link · Membership · Unlink · Link this device · Server | 3.1. The server address normally doesn't need changing |
 | | Scores: Sync now · Restore hidden scores | 3.1 |
 | 🎵 **Animation & sound** | Turn animation · Turn sound · Volume · Page info | Page-turn effects, page number on screen |
 | 🎙 **Voice commands** | Voice commands · Voice language | chapter 8 (tablet · phone) |
@@ -448,7 +448,7 @@ Several devices read together. One device is the **conductor**; the others are *
 - Make sure the browser device and this device are on **the same Wi-Fi**.
 - Put `http://` in front, and type the address and port exactly as shown on the right of the row.
 - **The web server stops when you leave its section.** Stay in that section while uploading.
-- Devices linked to ScoreMate can't use the web server (3.1).
+- Devices linked to Notavela can't use the web server (3.1).
 
 ### 11.3 An update won't install
 
