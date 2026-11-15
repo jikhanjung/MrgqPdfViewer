@@ -102,6 +102,7 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: instrumentation-report-api${{ matrix.api-level }}
+          retention-days: 3
           path: |
             app/build/reports/androidTests/
             app/build/outputs/androidTest-results/
